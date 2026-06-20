@@ -37,12 +37,14 @@ import {
   readFile,
   reanchorFile,
   writeFile,
+  gitBlame,
   type Comment,
   type Context,
   type FileContent,
 } from "../lib/api";
 import { readoAppearance } from "../lib/codemirror";
 import { commentGutter, type LineComments } from "../lib/commentGutter";
+import { blameGutter } from "../lib/blameGutter";
 import { useComments, commentsForFile, toRelative } from "../lib/comments";
 import {
   useCursor,
@@ -277,6 +279,8 @@ function CodeView({
   const langComp = useMemo(() => new Compartment(), []);
   const focusComp = useMemo(() => new Compartment(), []);
   const gutterComp = useMemo(() => new Compartment(), []);
+  const blameComp = useMemo(() => new Compartment(), []);
+  const blame = useEditorActions((s) => s.blame);
   const setActiveThread = useComments((s) => s.setActive);
   const activeId = useComments((s) => s.activeId);
   const reanchoringId = useComments((s) => s.reanchoringId);
@@ -411,6 +415,7 @@ function CodeView({
         landingField,
         blockField,
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
+        blameComp.of([]),
         // Create-comment gesture (spec: a dedicated key on a selection).
         keymap.of([{ key: "Mod-Shift-m", run: startComposer }]),
         // Save when editing.
@@ -475,6 +480,25 @@ function CodeView({
     // openThreadAtLine is stable enough (only setters); rebuild on data change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineComments, gutterComp]);
+
+  // Fetch and show the blame gutter when blame mode is on; clear it when off.
+  useEffect(() => {
+    if (!blame) {
+      viewRef.current?.dispatch({ effects: blameComp.reconfigure([]) });
+      return;
+    }
+    let cancelled = false;
+    gitBlame(useProject.getState().root, relPath)
+      .then((lines) => {
+        if (!cancelled && lines.length) {
+          viewRef.current?.dispatch({ effects: blameComp.reconfigure(blameGutter(lines)) });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [blame, relPath, blameComp]);
 
   // Highlight the anchored block while its thread is open.
   useEffect(() => {

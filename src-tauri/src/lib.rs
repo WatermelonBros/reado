@@ -39,6 +39,7 @@ pub fn run() {
             git::git_unstage_all,
             git::git_discard,
             git::git_commit,
+            git::git_blame,
             search::search_text,
             annotations::create_comment,
             annotations::list_comments,

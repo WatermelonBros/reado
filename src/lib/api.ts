@@ -91,6 +91,18 @@ export const gitRefs = (root: string) => invoke<GitRefs>("git_refs", { root });
 export const gitShowRef = (root: string, file: string, base: string) =>
   invoke<string | null>("git_show_ref", { root, file, base });
 
+export interface BlameLine {
+  line: number;
+  hash: string;
+  author: string;
+  time: number;
+  summary: string;
+}
+
+/** Per-line blame for a tracked file (empty when untracked / no git). */
+export const gitBlame = (root: string, file: string) =>
+  invoke<BlameLine[]>("git_blame", { root, file });
+
 /** Full-text search across the project via ripgrep. */
 export const searchText = (root: string, query: string) =>
   invoke<SearchMatch[]>("search_text", { root, query });

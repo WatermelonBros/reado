@@ -189,6 +189,27 @@
     transform: scale(1.15);
   }
 
+  /* Per-line git blame gutter (toggled from the breadcrumb). */
+  .reado-blame-gutter {
+    border-right: 1px solid var(--border);
+  }
+  .reado-blame {
+    display: inline-block;
+    max-width: 140px;
+    overflow: hidden;
+    padding: 0 8px;
+    color: var(--text-faint);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    line-height: var(--code-line-height);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .reado-blame-muted {
+    font-style: italic;
+    opacity: 0.7;
+  }
+
   /* The anchored block, highlighted while its comment thread is open. */
   .cm-comment-block {
     background: color-mix(in oklch, var(--marker) 7%, transparent);

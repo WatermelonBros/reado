@@ -190,6 +190,68 @@ pub fn git_commit(root: String, message: String) -> Result<(), String> {
     run_git_checked(&root, &["commit", "-m", &message])
 }
 
+/// Blame attribution for one line of a file.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameLine {
+    /// 1-based final line number.
+    pub line: u32,
+    /// Abbreviated commit hash (8 chars); all-zero for not-yet-committed lines.
+    pub hash: String,
+    pub author: String,
+    /// Author time as a Unix timestamp (seconds).
+    pub time: i64,
+    /// First line of the commit message.
+    pub summary: String,
+}
+
+/// Per-line blame for a tracked file (`git blame --line-porcelain`). Returns an
+/// empty list when git is unavailable or the file is untracked.
+#[tauri::command]
+pub fn git_blame(root: String, file: String) -> Vec<BlameLine> {
+    let Some(out) = run_git_raw(
+        Path::new(&root),
+        &["blame", "--line-porcelain", "--", &file],
+    ) else {
+        return Vec::new();
+    };
+
+    let mut lines = Vec::new();
+    let (mut hash, mut author, mut summary) = (String::new(), String::new(), String::new());
+    let (mut time, mut final_line) = (0i64, 0u32);
+    for l in out.lines() {
+        if let Some(content) = l.strip_prefix('\t') {
+            let _ = content; // the source line itself is not needed
+            lines.push(BlameLine {
+                line: final_line,
+                hash: hash.chars().take(8).collect(),
+                author: author.clone(),
+                time,
+                summary: summary.clone(),
+            });
+        } else if let Some(rest) = l.strip_prefix("author ") {
+            author = rest.to_string();
+        } else if let Some(rest) = l.strip_prefix("author-time ") {
+            time = rest.trim().parse().unwrap_or(0);
+        } else if let Some(rest) = l.strip_prefix("summary ") {
+            summary = rest.to_string();
+        } else {
+            // Commit header: "<40-hex-hash> <orig-line> <final-line> [count]".
+            let mut it = l.split(' ');
+            if let Some(h) = it.next() {
+                if h.len() >= 8 && h.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    hash = h.to_string();
+                    it.next(); // original line
+                    if let Some(fl) = it.next() {
+                        final_line = fl.parse().unwrap_or(final_line);
+                    }
+                }
+            }
+        }
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

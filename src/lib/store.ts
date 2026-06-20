@@ -221,6 +221,9 @@ interface EditorActionsState {
   /** The git ref the diff compares against (HEAD, a branch, or a commit hash). */
   diffBase: string;
   setDiffBase: (base: string) => void;
+  /** Show a per-line git blame gutter in the editor. */
+  blame: boolean;
+  setBlame: (blame: boolean) => void;
 }
 
 /** Bridge for triggering editor actions from outside the editor (e.g. global
@@ -236,6 +239,8 @@ export const useEditorActions = create<EditorActionsState>((set) => ({
   setDiffing: (diffing) => set({ diffing }),
   diffBase: "HEAD",
   setDiffBase: (base) => set({ diffBase: base }),
+  blame: false,
+  setBlame: (blame) => set({ blame }),
 }));
 
 interface CursorState {

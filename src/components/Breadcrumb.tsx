@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { gitRefs, type GitRefs } from "../lib/api";
 import { useProject, useEditorActions } from "../lib/store";
 import { useT } from "../i18n";
-import { ChevronIcon, DiffIcon } from "./icons";
+import { ChevronIcon, DiffIcon, BlameIcon } from "./icons";
 import { Select } from "./ui/Select";
 
 export function Breadcrumb() {
@@ -14,6 +14,8 @@ export function Breadcrumb() {
   const setDiffing = useEditorActions((s) => s.setDiffing);
   const diffBase = useEditorActions((s) => s.diffBase);
   const setDiffBase = useEditorActions((s) => s.setDiffBase);
+  const blame = useEditorActions((s) => s.blame);
+  const setBlame = useEditorActions((s) => s.setBlame);
   const dirty = useEditorActions((s) => s.dirty);
   const t = useT();
   const [refs, setRefs] = useState<GitRefs>({ branches: [], commits: [] });
@@ -67,6 +69,20 @@ export function Breadcrumb() {
             onChange={setDiffBase}
             options={baseOptions}
           />
+        )}
+        {isRepo && !diffing && (
+          <button
+            type="button"
+            onClick={() => setBlame(!blame)}
+            aria-pressed={blame}
+            title={t("blame.toggle")}
+            aria-label={t("blame.toggle")}
+            className={`grid h-6 w-6 place-items-center rounded-md transition-colors hover:bg-surface ${
+              blame ? "text-accent" : "text-faint hover:text-ink"
+            }`}
+          >
+            <BlameIcon className="h-3.5 w-3.5" />
+          </button>
         )}
         {isRepo && (
           <button

@@ -36,6 +36,10 @@ const en = {
   "diff.head": "HEAD (uncommitted)",
   "diff.noBase": "Not present in the selected base.",
   "diff.noChanges": "No changes versus the selected base.",
+  "diff.prevChange": "Previous change (Alt+Up)",
+  "diff.nextChange": "Next change (Alt+Down)",
+  "diff.changes": "{count} changes",
+  "blame.toggle": "Toggle blame",
 
   "status.noFile": "No file open",
   "status.branch": "branch",
@@ -191,6 +195,10 @@ const it: Record<MessageKey, string> = {
   "diff.head": "HEAD (non committato)",
   "diff.noBase": "Non presente nella base selezionata.",
   "diff.noChanges": "Nessuna modifica rispetto alla base selezionata.",
+  "diff.prevChange": "Modifica precedente (Alt+Su)",
+  "diff.nextChange": "Modifica successiva (Alt+Giù)",
+  "diff.changes": "{count} modifiche",
+  "blame.toggle": "Mostra/nascondi blame",
 
   "status.noFile": "Nessun file aperto",
   "status.branch": "ramo",
