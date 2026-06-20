@@ -106,6 +106,8 @@ const en = {
   "review.selectAll": "Select all",
 
   "files.panel": "Files",
+  "git.panel": "Source control",
+  "git.clean": "No changes — the working tree is clean.",
   "comments.panel": "Comments",
   "graph.title": "Knowledge graph",
   "docs.title": "Documentation",
@@ -241,6 +243,8 @@ const it: Record<MessageKey, string> = {
   "review.selectAll": "Seleziona tutti",
 
   "files.panel": "File",
+  "git.panel": "Controllo sorgente",
+  "git.clean": "Nessuna modifica — working tree pulito.",
   "comments.panel": "Commenti",
   "graph.title": "Grafo della conoscenza",
   "docs.title": "Documentazione",

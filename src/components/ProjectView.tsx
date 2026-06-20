@@ -15,6 +15,7 @@ import { ActivityBar } from "./ActivityBar";
 import { FileTree } from "./FileTree";
 import { SearchPanel } from "./SearchPanel";
 import { CommentsPanel } from "./CommentsPanel";
+import { GitPanel } from "./GitPanel";
 import { OrphansPanel } from "./OrphansPanel";
 import { Tabs } from "./Tabs";
 import { Breadcrumb } from "./Breadcrumb";
@@ -33,6 +34,7 @@ const PANEL_TITLE: Record<string, MessageKey> = {
   files: "files.panel",
   search: "search.placeholder",
   comments: "comments.panel",
+  git: "git.panel",
   orphans: "orphans.panel",
 };
 
@@ -147,6 +149,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "files" && <FileTree />}
             {tool === "search" && <SearchPanel />}
             {tool === "comments" && <CommentsPanel />}
+            {tool === "git" && <GitPanel />}
             {tool === "orphans" && <OrphansPanel />}
           </div>
         </aside>

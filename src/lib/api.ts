@@ -48,6 +48,14 @@ export const writeFile = (root: string, path: string, content: string) =>
 /** Git status of the project root (never throws). */
 export const gitInfo = (root: string) => invoke<GitInfo>("git_info", { root });
 
+export interface GitChange {
+  path: string;
+  status: "modified" | "added" | "deleted" | "renamed" | "untracked";
+}
+
+/** Working-tree status (read-only Source Control view). */
+export const gitStatus = (root: string) => invoke<GitChange[]>("git_status", { root });
+
 /** The committed (HEAD) contents of a tracked file, for the diff view. */
 export const gitShowHead = (root: string, file: string) =>
   invoke<string | null>("git_show_head", { root, file });

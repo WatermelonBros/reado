@@ -52,6 +52,51 @@ pub fn git_info(root: String) -> GitInfo {
     GitInfo { is_repo, branch }
 }
 
+/// One changed file in the working tree.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitChange {
+    /// Project-relative path (the new path for renames).
+    pub path: String,
+    /// Category: "modified" | "added" | "deleted" | "renamed" | "untracked".
+    pub status: String,
+}
+
+/// The working-tree status (read-only Source Control view). Reado never stages
+/// or commits — git stays the user's tool; this only surfaces what changed.
+#[tauri::command]
+pub fn git_status(root: String) -> Vec<GitChange> {
+    let Some(out) = run_git(Path::new(&root), &["status", "--porcelain"]) else {
+        return Vec::new();
+    };
+    out.lines()
+        .filter(|l| l.len() > 3)
+        .map(|line| {
+            let code = &line[..2];
+            let mut path = line[3..].to_string();
+            // Renames are "old -> new"; keep the new path.
+            if let Some(idx) = path.find(" -> ") {
+                path = path[idx + 4..].to_string();
+            }
+            let status = if code == "??" {
+                "untracked"
+            } else if code.contains('R') {
+                "renamed"
+            } else if code.contains('D') {
+                "deleted"
+            } else if code.contains('A') {
+                "added"
+            } else {
+                "modified"
+            };
+            GitChange {
+                path: path.trim_matches('"').to_string(),
+                status: status.to_string(),
+            }
+        })
+        .collect()
+}
+
 /// The committed (HEAD) contents of a tracked file, for the on-demand diff view.
 /// Returns `None` when the file is untracked, new, or git is unavailable.
 /// Unlike [`run_git`], the output is returned verbatim (no trimming) so the diff

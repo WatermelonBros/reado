@@ -27,6 +27,7 @@ pub fn run() {
             fs::read_file,
             fs::write_file,
             git::git_info,
+            git::git_status,
             git::git_show_head,
             search::search_text,
             annotations::create_comment,

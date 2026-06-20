@@ -6,12 +6,23 @@
  * sits at the bottom. New tools (Git, Orphans, Graph, History) slot in here as
  * their capabilities land.
  */
-import { useWorkspace, usePalette, type Tool } from "../lib/store";
+import { useWorkspace, usePalette, useProject, type Tool } from "../lib/store";
 import { useComments, openCount } from "../lib/comments";
 import { useT, type MessageKey } from "../i18n";
-import { FilesIcon, SearchIcon, MessageIcon, UnlinkIcon, GraphIcon, DocsIcon, SettingsIcon } from "./icons";
+import {
+  FilesIcon,
+  SearchIcon,
+  MessageIcon,
+  GitBranchIcon,
+  UnlinkIcon,
+  GraphIcon,
+  DocsIcon,
+  SettingsIcon,
+} from "./icons";
 
-const BASE_TOOLS: { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon }[] = [
+type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
+
+const BASE_TOOLS: ToolDef[] = [
   { id: "files", labelKey: "files.panel", Icon: FilesIcon },
   { id: "search", labelKey: "search.placeholder", Icon: SearchIcon },
   { id: "comments", labelKey: "comments.panel", Icon: MessageIcon },
@@ -23,13 +34,17 @@ export function ActivityBar() {
   const toggleGraph = useWorkspace((s) => s.toggleGraph);
   const toggleDocs = useWorkspace((s) => s.toggleDocs);
   const toggleSettings = usePalette((s) => s.toggleSettings);
+  const isRepo = useProject((s) => s.git.isRepo);
   const openComments = useComments((s) => openCount(s.comments));
   const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length);
   const t = useT();
 
-  // The Orphans tool only appears when there is something to resolve.
-  const tools = [
+  // Source Control appears in git repos; Orphans only when there's something to fix.
+  const tools: ToolDef[] = [
     ...BASE_TOOLS,
+    ...(isRepo
+      ? [{ id: "git" as Tool, labelKey: "git.panel" as MessageKey, Icon: GitBranchIcon }]
+      : []),
     ...(orphanCount > 0
       ? [{ id: "orphans" as Tool, labelKey: "orphans.panel" as MessageKey, Icon: UnlinkIcon }]
       : []),
