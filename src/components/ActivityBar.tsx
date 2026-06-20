@@ -9,7 +9,7 @@
 import { useWorkspace, usePalette, type Tool } from "../lib/store";
 import { useComments, openCount } from "../lib/comments";
 import { useT, type MessageKey } from "../i18n";
-import { FilesIcon, SearchIcon, MessageIcon, UnlinkIcon, SettingsIcon } from "./icons";
+import { FilesIcon, SearchIcon, MessageIcon, UnlinkIcon, GraphIcon, SettingsIcon } from "./icons";
 
 const BASE_TOOLS: { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon }[] = [
   { id: "files", labelKey: "files.panel", Icon: FilesIcon },
@@ -20,6 +20,7 @@ const BASE_TOOLS: { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon }[] 
 export function ActivityBar() {
   const tool = useWorkspace((s) => s.tool);
   const selectTool = useWorkspace((s) => s.selectTool);
+  const toggleGraph = useWorkspace((s) => s.toggleGraph);
   const toggleSettings = usePalette((s) => s.toggleSettings);
   const openComments = useComments((s) => openCount(s.comments));
   const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length);
@@ -70,15 +71,26 @@ export function ActivityBar() {
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={() => toggleSettings(true)}
-        title={t("settings.title")}
-        aria-label={t("settings.title")}
-        className="grid h-9 w-9 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
-      >
-        <SettingsIcon className="h-[18px] w-[18px]" />
-      </button>
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={() => toggleGraph(true)}
+          title={t("graph.title")}
+          aria-label={t("graph.title")}
+          className="grid h-9 w-9 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
+        >
+          <GraphIcon className="h-[18px] w-[18px]" />
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleSettings(true)}
+          title={t("settings.title")}
+          aria-label={t("settings.title")}
+          className="grid h-9 w-9 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
+        >
+          <SettingsIcon className="h-[18px] w-[18px]" />
+        </button>
+      </div>
     </nav>
   );
 }
