@@ -97,17 +97,56 @@ pub fn git_status(root: String) -> Vec<GitChange> {
         .collect()
 }
 
-/// The committed (HEAD) contents of a tracked file, for the on-demand diff view.
-/// Returns `None` when the file is untracked, new, or git is unavailable.
-/// Unlike [`run_git`], the output is returned verbatim (no trimming) so the diff
-/// is exact.
+/// The diff bases the user can compare against: local branches and recent commits.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRefs {
+    pub branches: Vec<String>,
+    pub commits: Vec<GitCommit>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommit {
+    pub hash: String,
+    pub subject: String,
+}
+
+/// List local branches and the most recent commits, for the diff base picker.
 #[tauri::command]
-pub fn git_show_head(root: String, file: String) -> Option<String> {
-    // `git show HEAD:<path>` expects forward slashes, which is what we store.
+pub fn git_refs(root: String) -> GitRefs {
+    let root = Path::new(&root);
+    let branches = run_git(
+        root,
+        &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    )
+    .map(|s| s.lines().map(str::to_string).collect())
+    .unwrap_or_default();
+    let commits = run_git(root, &["log", "-25", "--format=%h%x09%s"])
+        .map(|s| {
+            s.lines()
+                .filter_map(|l| l.split_once('\t'))
+                .map(|(h, s)| GitCommit {
+                    hash: h.to_string(),
+                    subject: s.to_string(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    GitRefs { branches, commits }
+}
+
+/// The contents of a tracked file at a given ref (a branch, commit, or `HEAD`),
+/// for the on-demand diff view. Returns `None` when the file is absent there or
+/// git is unavailable. Output is verbatim (no trimming) so the diff is exact.
+#[tauri::command]
+pub fn git_show_ref(root: String, file: String, base: String) -> Option<String> {
+    let reference = if base.is_empty() { "HEAD" } else { &base };
+    // `git show <ref>:<path>` expects forward slashes, which is what we store.
     let output = Command::new("git")
         .arg("-C")
         .arg(&root)
-        .args(["show", &format!("HEAD:{file}")])
+        .args(["show", &format!("{reference}:{file}")])
         .output()
         .ok()?;
     if output.status.success() {

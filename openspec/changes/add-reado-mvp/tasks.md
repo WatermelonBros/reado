@@ -42,7 +42,7 @@
 - [x] 4.3 Plugin packaging (Claude Code + Codex), install/auto-update by Reado, context injection on each agent launch.
 - [x] 4.4 "Send review": batch all open tasks (deselectable) + "send just this now"; choose target agent.
 - [x] 4.5 Agent marks done via CLI; watcher reflects it; error → back to open with note in thread.
-- [ ] 4.6 Diff view on-demand: base picker (working tree / branch / commit), post-hoc snapshot + revert, configurable accept posture.
+- [x] 4.6 Diff view on-demand: base picker (working tree / branch / commit), post-hoc snapshot + revert, configurable accept posture.
 - [x] 4.7 Cross-review: AI can create/reply to comments on another AI's work, with originating-agent identity/logo.
 
 ## 5. Knowledge graph, docs, notifications (`knowledge-graph`, `documentation-views`, `notifications`)

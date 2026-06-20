@@ -198,6 +198,9 @@ interface EditorActionsState {
   /** Show the active file as a diff against its committed version. */
   diffing: boolean;
   setDiffing: (diffing: boolean) => void;
+  /** The git ref the diff compares against (HEAD, a branch, or a commit hash). */
+  diffBase: string;
+  setDiffBase: (base: string) => void;
 }
 
 /** Bridge for triggering editor actions from outside the editor (e.g. global
@@ -211,6 +214,8 @@ export const useEditorActions = create<EditorActionsState>((set) => ({
   setDirty: (dirty) => set({ dirty }),
   diffing: false,
   setDiffing: (diffing) => set({ diffing }),
+  diffBase: "HEAD",
+  setDiffBase: (base) => set({ diffBase: base }),
 }));
 
 interface CursorState {

@@ -12,9 +12,9 @@ import { LanguageDescription } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { unifiedMergeView } from "@codemirror/merge";
 
-import { gitShowHead } from "../lib/api";
+import { gitShowRef } from "../lib/api";
 import { readoAppearance } from "../lib/codemirror";
-import { useProject, useSettings } from "../lib/store";
+import { useProject, useSettings, useEditorActions } from "../lib/store";
 import { useT } from "../i18n";
 
 interface Props {
@@ -24,20 +24,22 @@ interface Props {
 
 export function DiffView({ relPath, text }: Props) {
   const root = useProject((s) => s.root);
+  const base = useEditorActions((s) => s.diffBase);
   const { codeFont, readingWidth } = useSettings();
   const t = useT();
   const [head, setHead] = useState<string | null | undefined>(undefined);
 
-  // Fetch the committed version once per file.
+  // Fetch the base version whenever the file or chosen base changes.
   useEffect(() => {
     let cancelled = false;
-    gitShowHead(root, relPath)
+    setHead(undefined);
+    gitShowRef(root, relPath, base)
       .then((h) => !cancelled && setHead(h))
       .catch(() => !cancelled && setHead(null));
     return () => {
       cancelled = true;
     };
-  }, [root, relPath]);
+  }, [root, relPath, base]);
 
   if (head === undefined) {
     return <div className="grid h-full place-items-center text-muted">{t("common.loading")}</div>;
@@ -58,7 +60,7 @@ export function DiffView({ relPath, text }: Props) {
   }
   return (
     <DiffEditor
-      key={relPath}
+      key={`${relPath}@${base}`}
       path={relPath}
       original={head}
       text={text}

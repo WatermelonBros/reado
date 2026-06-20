@@ -56,9 +56,17 @@ export interface GitChange {
 /** Working-tree status (read-only Source Control view). */
 export const gitStatus = (root: string) => invoke<GitChange[]>("git_status", { root });
 
-/** The committed (HEAD) contents of a tracked file, for the diff view. */
-export const gitShowHead = (root: string, file: string) =>
-  invoke<string | null>("git_show_head", { root, file });
+export interface GitRefs {
+  branches: string[];
+  commits: { hash: string; subject: string }[];
+}
+
+/** Local branches and recent commits, for the diff base picker. */
+export const gitRefs = (root: string) => invoke<GitRefs>("git_refs", { root });
+
+/** A tracked file's contents at a ref (branch/commit/HEAD), for the diff view. */
+export const gitShowRef = (root: string, file: string, base: string) =>
+  invoke<string | null>("git_show_ref", { root, file, base });
 
 /** Full-text search across the project via ripgrep. */
 export const searchText = (root: string, query: string) =>

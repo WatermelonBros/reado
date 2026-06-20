@@ -1,7 +1,10 @@
-/** Path breadcrumb for the active file, with a manual-editing toggle. */
+/** Path breadcrumb for the active file, with the diff toggle and base picker. */
+import { useEffect, useState } from "react";
+import { gitRefs, type GitRefs } from "../lib/api";
 import { useProject, useEditorActions } from "../lib/store";
 import { useT } from "../i18n";
 import { ChevronIcon, DiffIcon } from "./icons";
+import { Select } from "./ui/Select";
 
 export function Breadcrumb() {
   const root = useProject((s) => s.root);
@@ -9,14 +12,32 @@ export function Breadcrumb() {
   const isRepo = useProject((s) => s.git.isRepo);
   const diffing = useEditorActions((s) => s.diffing);
   const setDiffing = useEditorActions((s) => s.setDiffing);
+  const diffBase = useEditorActions((s) => s.diffBase);
+  const setDiffBase = useEditorActions((s) => s.setDiffBase);
   const dirty = useEditorActions((s) => s.dirty);
   const t = useT();
+  const [refs, setRefs] = useState<GitRefs>({ branches: [], commits: [] });
+
+  // Load the diff base options when the diff turns on.
+  useEffect(() => {
+    if (diffing && isRepo) gitRefs(root).then(setRefs).catch(() => {});
+  }, [diffing, isRepo, root]);
+
   if (!active) return null;
 
   const rel = (active.startsWith(root) ? active.slice(root.length) : active)
     .replace(/^[\\/]+/, "")
     .replace(/\\/g, "/");
   const segments = rel.split("/");
+
+  const baseOptions = [
+    { value: "HEAD", label: t("diff.head") },
+    ...refs.branches.map((b) => ({ value: b, label: b })),
+    ...refs.commits.map((c) => ({
+      value: c.hash,
+      label: `${c.hash} · ${c.subject.slice(0, 32)}`,
+    })),
+  ];
 
   return (
     <nav
@@ -37,7 +58,16 @@ export function Breadcrumb() {
         />
       )}
 
-      <div className="ml-auto flex flex-none items-center gap-0.5">
+      <div className="ml-auto flex flex-none items-center gap-1.5">
+        {diffing && isRepo && (
+          <Select
+            ariaLabel={t("diff.base")}
+            variant="ghost"
+            value={diffBase}
+            onChange={setDiffBase}
+            options={baseOptions}
+          />
+        )}
         {isRepo && (
           <button
             type="button"
