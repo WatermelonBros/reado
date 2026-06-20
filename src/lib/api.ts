@@ -55,6 +55,17 @@ export const writeFile = (root: string, path: string, content: string) =>
 /** Git status of the project root (never throws). */
 export const gitInfo = (root: string) => invoke<GitInfo>("git_info", { root });
 
+export interface GitBranches {
+  current: string | null;
+  local: string[];
+  remote: string[];
+}
+/** Local + remote branches for the branch switcher. */
+export const gitBranches = (root: string) => invoke<GitBranches>("git_branches", { root });
+/** Check out a branch (remote branches create a local tracking branch). */
+export const gitCheckout = (root: string, branch: string, remote: boolean) =>
+  invoke<void>("git_checkout", { root, branch, remote });
+
 export interface GitChange {
   path: string;
   status: "modified" | "added" | "deleted" | "renamed" | "untracked";

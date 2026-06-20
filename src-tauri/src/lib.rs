@@ -38,6 +38,8 @@ pub fn run() {
             fs::read_file,
             fs::write_file,
             git::git_info,
+            git::git_branches,
+            git::git_checkout,
             git::git_status,
             git::git_refs,
             git::git_show_ref,

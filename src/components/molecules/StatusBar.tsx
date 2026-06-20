@@ -5,6 +5,7 @@
  * the spirit of VS Code's status bar.
  */
 import { useEffect, useRef, useState } from "react";
+import { gitBranches, gitCheckout, type GitBranches } from "../../lib/api";
 import { useCursor, useProject } from "../../lib/store";
 import { useComments, openCount } from "../../lib/comments";
 import {
@@ -92,8 +93,27 @@ export function StatusBar() {
   const toggleTerminal = useTerminals((s) => s.toggle);
   const t = useT();
 
-  const [menu, setMenu] = useState<"goto" | "eol" | "indent" | "language" | null>(null);
+  const [menu, setMenu] = useState<"goto" | "eol" | "indent" | "language" | "branch" | null>(null);
   const [gotoValue, setGotoValue] = useState("");
+  const [branches, setBranches] = useState<GitBranches | null>(null);
+  const [branchError, setBranchError] = useState<string | null>(null);
+
+  const openBranchMenu = () => {
+    setBranchError(null);
+    setBranches(null);
+    setMenu("branch");
+    gitBranches(root).then(setBranches).catch(() => setBranches(null));
+  };
+
+  const checkout = async (name: string, remote: boolean) => {
+    try {
+      await gitCheckout(root, name, remote);
+      // The working tree now reflects the new branch; reload to re-init cleanly.
+      window.location.reload();
+    } catch (e) {
+      setBranchError(String(e));
+    }
+  };
 
   const rel = relativePath(root, active);
 
@@ -244,13 +264,56 @@ export function StatusBar() {
           </>
         )}
         {git.isRepo ? (
-          <span
-            className="inline-flex items-center gap-[5px] px-1 whitespace-nowrap"
-            title={t("status.branch")}
-          >
-            <GitBranchIcon className="h-[13px] w-[13px]" />
-            {git.branch ?? "—"}
-          </span>
+          <div className="relative">
+            <button
+              type="button"
+              className={ITEM}
+              title={t("status.branch")}
+              onClick={() => (menu === "branch" ? setMenu(null) : openBranchMenu())}
+            >
+              <GitBranchIcon className="h-[13px] w-[13px]" />
+              {git.branch ?? "—"}
+            </button>
+            {menu === "branch" && (
+              <Popover onClose={() => setMenu(null)}>
+                <div className="max-h-72 w-60 overflow-y-auto py-1">
+                  {!branches ? (
+                    <p className="px-3 py-2 text-sm text-faint">{t("common.loading")}</p>
+                  ) : (
+                    <>
+                      {branchError && (
+                        <p className="mx-3 my-1.5 rounded-sm bg-surface px-2 py-1 text-xs whitespace-pre-wrap text-marker">
+                          {branchError}
+                        </p>
+                      )}
+                      <div className="px-3 pt-1 pb-0.5 text-[10px] font-semibold tracking-wide text-faint uppercase">
+                        {t("branch.local")}
+                      </div>
+                      {branches.local.length === 0 && (
+                        <p className="px-3 py-1 text-sm text-faint">—</p>
+                      )}
+                      {branches.local.map((b) => (
+                        <MenuRow
+                          key={`l:${b}`}
+                          label={b}
+                          checked={b === branches.current}
+                          onClick={() => void checkout(b, false)}
+                        />
+                      ))}
+                      {branches.remote.length > 0 && (
+                        <div className="px-3 pt-2 pb-0.5 text-[10px] font-semibold tracking-wide text-faint uppercase">
+                          {t("branch.remote")}
+                        </div>
+                      )}
+                      {branches.remote.map((b) => (
+                        <MenuRow key={`r:${b}`} label={b} onClick={() => void checkout(b, true)} />
+                      ))}
+                    </>
+                  )}
+                </div>
+              </Popover>
+            )}
+          </div>
         ) : (
           <span className="px-1 text-faint">{t("status.notGit")}</span>
         )}

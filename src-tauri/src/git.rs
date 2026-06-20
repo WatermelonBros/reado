@@ -52,6 +52,61 @@ pub fn git_info(root: String) -> GitInfo {
     GitInfo { is_repo, branch }
 }
 
+/// Local and remote branches for the status-bar branch switcher.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranches {
+    pub current: Option<String>,
+    pub local: Vec<String>,
+    pub remote: Vec<String>,
+}
+
+/// List local and remote branches, plus the current one.
+#[tauri::command]
+pub fn git_branches(root: String) -> GitBranches {
+    let root = Path::new(&root);
+    let current = run_git(root, &["rev-parse", "--abbrev-ref", "HEAD"])
+        .filter(|b| !b.is_empty() && b != "HEAD");
+    let parse = |out: Option<String>| -> Vec<String> {
+        out.map(|s| {
+            s.lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+    };
+    let local = parse(run_git(root, &["branch", "--format=%(refname:short)"]));
+    // Drop the "origin/HEAD" symbolic pointer.
+    let remote: Vec<String> = parse(run_git(
+        root,
+        &["branch", "-r", "--format=%(refname:short)"],
+    ))
+    .into_iter()
+    .filter(|b| !b.ends_with("/HEAD"))
+    .collect();
+    GitBranches {
+        current,
+        local,
+        remote,
+    }
+}
+
+/// Check out a branch. For a remote branch ("origin/feat") the remote prefix is
+/// stripped so git's DWIM creates a local tracking branch.
+#[tauri::command]
+pub fn git_checkout(root: String, branch: String, remote: bool) -> Result<(), String> {
+    let target = if remote {
+        branch
+            .split_once('/')
+            .map(|(_, b)| b.to_string())
+            .unwrap_or_else(|| branch.clone())
+    } else {
+        branch.clone()
+    };
+    run_git_checked(&root, &["checkout", &target])
+}
+
 /// One changed file in the working tree, on one side (staged or unstaged). A
 /// file modified both in the index and the working tree produces two entries.
 #[derive(Debug, Serialize)]

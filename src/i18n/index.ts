@@ -190,6 +190,8 @@ const en = {
   "update.installing": "Installing…",
   "update.later": "Later",
   "update.indicator": "Update available",
+  "branch.local": "Local",
+  "branch.remote": "Remote",
   "orphans.lastKnown": "Last known: {loc}",
   "orphans.reanchor": "Re-anchor",
   "orphans.reanchorHint":
@@ -401,6 +403,8 @@ const it: Record<MessageKey, string> = {
   "update.installing": "Installazione…",
   "update.later": "Più tardi",
   "update.indicator": "Aggiornamento disponibile",
+  "branch.local": "Locali",
+  "branch.remote": "Remoti",
   "orphans.lastKnown": "Ultima posizione: {loc}",
   "orphans.reanchor": "Ri-ancora",
   "orphans.reanchorHint":
