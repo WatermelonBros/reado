@@ -147,8 +147,10 @@ export const OutlineIcon = ({ className }: IconProps) => (
 
 export const SpecsIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
-    <path d="M5 4h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
-    <path d="M14 4v5h5M8 13h7M8 17h7" />
+    <rect x="5" y="5" width="14" height="16" rx="2" />
+    <path d="M9 5V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" />
+    <path d="M8.5 12l1.4 1.4 2.6-3" />
+    <path d="M14.5 12.5H16M8.5 17h7" />
   </svg>
 );
 
