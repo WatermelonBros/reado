@@ -78,7 +78,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
   return (
     <div
       className="absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col rounded-lg border border-line-strong bg-overlay shadow-[var(--shadow)]"
-      style={{ top }}
+      style={{ top, borderLeftWidth: 2.5, borderLeftColor: TYPE_COLOR[comment.type] }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Header: type, state, line, close. */}

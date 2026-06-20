@@ -48,6 +48,7 @@ import { useCursor, useEditorActions, useProject, useSettings } from "../lib/sto
 import { useT } from "../i18n";
 import { CommentComposer } from "./CommentComposer";
 import { CommentThread } from "./CommentThread";
+import { TYPE_COLOR } from "./commentMeta";
 import { Welcome } from "./Welcome";
 import { DiffView } from "./DiffView";
 import { PlusIcon } from "./icons";
@@ -601,32 +602,37 @@ function CodeView({
         />
       )}
 
-      {/* Connector from the anchored block to its thread popover. */}
+      {/* A horizontal rule that runs along the top edge of the commented line
+          and flows into the thread popover, in the comment's own colour so the
+          line, its block and the modal read as a single object (GitLab-style). */}
       {openComment &&
         threadTop !== null &&
         (() => {
-          const blockY = topForLine(openComment.anchor.startLine);
-          if (blockY === null) return null;
+          const view = viewRef.current;
+          const wrapBox = wrapRef.current?.getBoundingClientRect();
+          if (!view || !wrapBox) return null;
+          const startLine = Math.min(openComment.anchor.startLine, view.state.doc.lines);
+          const coords = view.coordsAtPos(view.state.doc.line(startLine).from);
+          if (!coords) return null;
+          const lineY = coords.top - wrapBox.top; // top boundary of the line (no glyphs)
           const w = wrapRef.current?.clientWidth ?? 0;
           const popoverWidth = Math.min(460, w - 32);
           const popoverLeft = w - 16 - popoverWidth;
-          const x1 = 6;
-          const y1 = blockY + 10;
-          const x2 = Math.max(x1 + 8, popoverLeft);
-          const y2 = threadTop + 16;
-          const midX = (x1 + x2) / 2;
+          const modalY = threadTop; // meet the modal's top-left corner
+          const color = TYPE_COLOR[openComment.type];
           return (
             <svg
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 z-20 h-full w-full"
             >
               <path
-                d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
+                d={`M 0 ${lineY} H ${popoverLeft} V ${modalY}`}
                 fill="none"
-                stroke="var(--border-strong)"
-                strokeWidth={2}
+                stroke={color}
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-              <circle cx={x1} cy={y1} r={2.5} fill="var(--border-strong)" />
             </svg>
           );
         })()}
