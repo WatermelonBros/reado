@@ -14,6 +14,7 @@ import {
   addReply,
   setCommentState,
   deleteComment,
+  setAnchor,
   type Comment,
   type CommentPatch,
   type CommentState,
@@ -34,6 +35,11 @@ interface CommentsState {
   /** Whether the first-comment gitignore prompt is showing. */
   gitignorePromptOpen: boolean;
   setGitignorePrompt: (open: boolean) => void;
+  /** Id of the comment being manually re-anchored, or null. */
+  reanchoringId: string | null;
+  startReanchor: (id: string) => void;
+  cancelReanchor: () => void;
+  applyReanchor: (file: string, start: number, end: number) => Promise<void>;
   load: (root: string) => Promise<void>;
   create: (input: NewComment) => Promise<{ comment: Comment; firstComment: boolean }>;
   patch: (id: string, patch: CommentPatch) => Promise<void>;
@@ -58,6 +64,16 @@ export const useComments = create<CommentsState>((set, get) => ({
   activeId: null,
   gitignorePromptOpen: false,
   setGitignorePrompt: (open) => set({ gitignorePromptOpen: open }),
+
+  reanchoringId: null,
+  startReanchor: (id) => set({ reanchoringId: id, activeId: null }),
+  cancelReanchor: () => set({ reanchoringId: null }),
+  applyReanchor: async (file, start, end) => {
+    const id = get().reanchoringId;
+    if (!id) return;
+    const next = await setAnchor(get().root, id, file, start, end);
+    set((s) => ({ comments: replace(s.comments, next), reanchoringId: null }));
+  },
 
   load: async (root) => {
     set({ root, comments: [], activeId: null });

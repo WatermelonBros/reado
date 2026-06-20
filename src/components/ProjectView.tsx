@@ -14,6 +14,7 @@ import { ActivityBar } from "./ActivityBar";
 import { FileTree } from "./FileTree";
 import { SearchPanel } from "./SearchPanel";
 import { CommentsPanel } from "./CommentsPanel";
+import { OrphansPanel } from "./OrphansPanel";
 import { Tabs } from "./Tabs";
 import { Breadcrumb } from "./Breadcrumb";
 import { Editor } from "./Editor";
@@ -29,6 +30,7 @@ const PANEL_TITLE: Record<string, MessageKey> = {
   files: "files.panel",
   search: "search.placeholder",
   comments: "comments.panel",
+  orphans: "orphans.panel",
 };
 
 const basename = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? p;
@@ -129,6 +131,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "files" && <FileTree />}
             {tool === "search" && <SearchPanel />}
             {tool === "comments" && <CommentsPanel />}
+            {tool === "orphans" && <OrphansPanel />}
           </div>
         </aside>
       )}

@@ -36,6 +36,7 @@ pub fn run() {
             annotations::delete_comment,
             annotations::add_reado_gitignore,
             annotations::reanchor_file,
+            annotations::set_anchor,
             watcher::start_watching,
             pty::pty_spawn,
             pty::pty_write,

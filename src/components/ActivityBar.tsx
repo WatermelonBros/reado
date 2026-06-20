@@ -9,9 +9,9 @@
 import { useWorkspace, usePalette, type Tool } from "../lib/store";
 import { useComments, openCount } from "../lib/comments";
 import { useT, type MessageKey } from "../i18n";
-import { FilesIcon, SearchIcon, MessageIcon, SettingsIcon } from "./icons";
+import { FilesIcon, SearchIcon, MessageIcon, UnlinkIcon, SettingsIcon } from "./icons";
 
-const TOOLS: { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon }[] = [
+const BASE_TOOLS: { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon }[] = [
   { id: "files", labelKey: "files.panel", Icon: FilesIcon },
   { id: "search", labelKey: "search.placeholder", Icon: SearchIcon },
   { id: "comments", labelKey: "comments.panel", Icon: MessageIcon },
@@ -21,14 +21,26 @@ export function ActivityBar() {
   const tool = useWorkspace((s) => s.tool);
   const selectTool = useWorkspace((s) => s.selectTool);
   const toggleSettings = usePalette((s) => s.toggleSettings);
-  const badge = useComments((s) => openCount(s.comments));
+  const openComments = useComments((s) => openCount(s.comments));
+  const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length);
   const t = useT();
+
+  // The Orphans tool only appears when there is something to resolve.
+  const tools = [
+    ...BASE_TOOLS,
+    ...(orphanCount > 0
+      ? [{ id: "orphans" as Tool, labelKey: "orphans.panel" as MessageKey, Icon: UnlinkIcon }]
+      : []),
+  ];
+  const badgeFor = (id: Tool) =>
+    id === "comments" ? openComments : id === "orphans" ? orphanCount : 0;
 
   return (
     <nav className="flex w-12 flex-none flex-col items-center justify-between border-r border-line bg-surface py-2">
       <div className="flex flex-col items-center gap-1">
-        {TOOLS.map(({ id, labelKey, Icon }) => {
+        {tools.map(({ id, labelKey, Icon }) => {
           const active = tool === id;
+          const badge = badgeFor(id);
           return (
             <button
               key={id}
@@ -37,15 +49,19 @@ export function ActivityBar() {
               title={t(labelKey)}
               aria-label={t(labelKey)}
               aria-pressed={active}
-              className={`relative grid h-9 w-9 place-items-center rounded-md transition-colors ${
-                active
-                  ? "bg-selection text-ink"
-                  : "text-faint hover:bg-overlay hover:text-muted"
+              className={`relative grid h-10 w-10 place-items-center transition-colors ${
+                active ? "text-ink" : "text-faint hover:text-muted"
               }`}
             >
-              <Icon className="h-[18px] w-[18px]" />
-              {id === "comments" && badge > 0 && (
-                <span className="absolute top-1 right-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-marker px-1 text-[9px] font-bold text-on-accent">
+              {/* VS Code-style active indicator: an accent bar on the left edge. */}
+              <span
+                className={`absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-accent transition-opacity ${
+                  active ? "opacity-100" : "opacity-0"
+                }`}
+              />
+              <Icon className="h-[19px] w-[19px]" />
+              {badge > 0 && (
+                <span className="absolute top-1 right-1.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-marker px-1 text-[9px] font-bold text-on-accent">
                   {badge}
                 </span>
               )}

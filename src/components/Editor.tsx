@@ -227,7 +227,14 @@ function CodeView({
   const gutterComp = useMemo(() => new Compartment(), []);
   const setActiveThread = useComments((s) => s.setActive);
   const activeId = useComments((s) => s.activeId);
+  const reanchoringId = useComments((s) => s.reanchoringId);
+  const applyReanchor = useComments((s) => s.applyReanchor);
+  const cancelReanchor = useComments((s) => s.cancelReanchor);
   const composeNonce = useEditorActions((s) => s.composeNonce);
+  const reanchorLabel = useComments((s) => {
+    const c = s.comments.find((x) => x.id === s.reanchoringId);
+    return c?.messages[0]?.body.split("\n")[0] ?? "";
+  });
   const lastComposeNonce = useRef(composeNonce);
   const t = useT();
 
@@ -279,25 +286,32 @@ function CodeView({
     setComposer({ startLine, endLine, context });
   };
 
-  // Start the composer from the current selection (or the cursor's line).
+  // In re-anchor mode the same gesture sets an orphan's new anchor instead of
+  // opening the composer.
+  const anchorOrCompose = (start: number, end: number) => {
+    if (reanchoringId) applyReanchor(relPath, start, end);
+    else openComposerFor(start, end);
+  };
+
+  // Start the gesture from the current selection (or the cursor's line).
   const startComposer = (view: EditorView): boolean => {
     const sel = view.state.selection.main;
     const doc = view.state.doc;
-    openComposerFor(doc.lineAt(sel.from).number, doc.lineAt(sel.to).number);
+    anchorOrCompose(doc.lineAt(sel.from).number, doc.lineAt(sel.to).number);
     return true;
   };
 
-  // Open from the hovered "+" affordance: comment on the whole current
-  // selection when there is one, otherwise on the hovered line alone.
+  // From the hovered "+" affordance: act on the whole current selection when
+  // there is one, otherwise on the hovered line alone.
   const composeFromHover = (line: number) => {
     const view = viewRef.current;
     if (!view) return;
     const sel = view.state.selection.main;
     if (!sel.empty) {
       const doc = view.state.doc;
-      openComposerFor(doc.lineAt(sel.from).number, doc.lineAt(sel.to).number);
+      anchorOrCompose(doc.lineAt(sel.from).number, doc.lineAt(sel.to).number);
     } else {
-      openComposerFor(line, line);
+      anchorOrCompose(line, line);
     }
   };
 
@@ -478,6 +492,21 @@ function CodeView({
       }
     >
       <div ref={hostRef} className="h-full w-full [&_.cm-editor]:h-full" />
+
+      {reanchoringId && (
+        <div className="absolute inset-x-0 top-0 z-40 flex items-center gap-3 border-b border-line bg-[color-mix(in_oklch,var(--marker)_14%,var(--bg-elevated))] px-4 py-2 text-xs text-ink">
+          <span className="min-w-0 flex-1 truncate">
+            {t("orphans.reanchorHint", { label: reanchorLabel })}
+          </span>
+          <button
+            type="button"
+            onClick={cancelReanchor}
+            className="flex-none rounded-md border border-line bg-surface px-2 py-1 text-muted hover:text-ink"
+          >
+            {t("common.cancel")}
+          </button>
+        </div>
+      )}
 
       {showAddButton && (
         <button

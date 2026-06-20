@@ -93,6 +93,13 @@ const en = {
 
   "files.panel": "Files",
   "comments.panel": "Comments",
+  "orphans.panel": "Orphans",
+  "orphans.empty": "No orphaned comments.",
+  "orphans.lastKnown": "Last known: {loc}",
+  "orphans.reanchor": "Re-anchor",
+  "orphans.reanchorHint":
+    "Re-anchoring “{label}” — select a line or range in the editor and confirm.",
+  "orphans.confirm": "Anchor here",
   "comments.empty": "No comments yet. Hover a line and click +, or select code and press the comment shortcut.",
   "comments.filter.all": "All",
   "comments.filter.thisFile": "This file",
@@ -198,6 +205,13 @@ const it: Record<MessageKey, string> = {
 
   "files.panel": "File",
   "comments.panel": "Commenti",
+  "orphans.panel": "Orfani",
+  "orphans.empty": "Nessun commento orfano.",
+  "orphans.lastKnown": "Ultima posizione: {loc}",
+  "orphans.reanchor": "Ri-ancora",
+  "orphans.reanchorHint":
+    "Ri-ancoraggio di “{label}” — seleziona una riga o un intervallo nell'editor e conferma.",
+  "orphans.confirm": "Ancora qui",
   "comments.empty": "Ancora nessun commento. Passa su una riga e clicca +, oppure seleziona del codice e premi la scorciatoia.",
   "comments.filter.all": "Tutti",
   "comments.filter.thisFile": "Questo file",

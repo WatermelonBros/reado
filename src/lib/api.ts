@@ -148,6 +148,15 @@ export const addReadoGitignore = (root: string, versioned: boolean) =>
 export const reanchorFile = (root: string, file: string) =>
   invoke<Comment[]>("reanchor_file", { root, file });
 
+/** Manually re-anchor a comment to a file/range (resolves an orphan). */
+export const setAnchor = (
+  root: string,
+  id: string,
+  file: string,
+  start: number,
+  end: number,
+) => invoke<Comment>("set_anchor", { root, id, file, start, end });
+
 /** Start the filesystem watcher for the project (emits `file-changed`). */
 export const startWatching = (root: string) =>
   invoke<void>("start_watching", { root });

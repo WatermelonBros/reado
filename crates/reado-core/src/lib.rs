@@ -528,6 +528,24 @@ pub fn link_comments(root: &str, id: &str, target: &str) -> Result<Comment> {
     Ok(comment)
 }
 
+/// Manually re-anchor a comment to a new file/range (used to resolve orphans).
+/// Recomputes the context snapshot from the file and clears the orphan flag.
+pub fn set_anchor(root: &str, id: &str, file: &str, start: u32, end: u32) -> Result<Comment> {
+    let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
+    let mut comment = read_comment(&path, archived)?;
+    comment.meta.anchor.file = file.to_string();
+    comment.meta.anchor.scope = Scope::Range;
+    comment.meta.anchor.start_line = start;
+    comment.meta.anchor.end_line = end.max(start);
+    comment.meta.orphan = false;
+    if let Ok(content) = std::fs::read_to_string(Path::new(root).join(file)) {
+        comment.meta.context = extract_context(&content, start, end.max(start));
+    }
+    comment.meta.updated_at = now_millis();
+    write_comment(&dir_for(root, archived), &comment.meta, &comment.messages)?;
+    Ok(comment)
+}
+
 /// Set a comment's state. Transitioning to `done` archives the file
 /// (`comments/` → `archive/`); leaving `done` restores it.
 pub fn set_comment_state(root: &str, id: &str, state: CommentState) -> Result<Comment> {

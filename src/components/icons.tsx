@@ -79,6 +79,12 @@ export const EyeOffIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const UnlinkIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 3.5 8.54M8 12h3M2 2l20 20" />
+  </svg>
+);
+
 export const SendIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" />

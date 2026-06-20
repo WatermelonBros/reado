@@ -15,7 +15,7 @@ export function Tabs() {
   return (
     <div
       role="tablist"
-      className="flex h-[38px] flex-none items-stretch overflow-x-auto border-b border-line [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex h-[38px] flex-none items-stretch overflow-x-auto border-b border-line bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {tabs.map((path) => {
         const isActive = active === path;
@@ -35,8 +35,8 @@ export function Tabs() {
             title={path}
             className={`group flex max-w-[220px] cursor-pointer items-center gap-2 whitespace-nowrap border-r border-line pl-4 pr-2 text-sm transition-colors ${
               isActive
-                ? "bg-canvas text-ink shadow-[inset_0_-2px_0_var(--accent)]"
-                : "text-muted hover:bg-surface hover:text-ink"
+                ? "bg-canvas text-ink shadow-[inset_0_2px_0_var(--accent)]"
+                : "text-muted hover:bg-canvas/50 hover:text-ink"
             }`}
           >
             <span className="overflow-hidden text-ellipsis">{basename(path)}</span>

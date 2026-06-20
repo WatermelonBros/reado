@@ -59,3 +59,8 @@ pub fn add_reado_gitignore(root: String, versioned: bool) -> Result<()> {
 pub fn reanchor_file(root: String, file: String) -> Result<Vec<Comment>> {
     Ok(core::reanchor_file(&root, &file)?)
 }
+
+#[tauri::command]
+pub fn set_anchor(root: String, id: String, file: String, start: u32, end: u32) -> Result<Comment> {
+    Ok(core::set_anchor(&root, &id, &file, start, end)?)
+}
