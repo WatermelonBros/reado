@@ -1,5 +1,6 @@
 /** Cross-cutting React hooks: theme application and global keyboard shortcuts. */
 import { useEffect } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useSettings, usePalette, useEditorActions, type ThemeName } from "./store";
 import { useTerminals } from "./terminals";
 import { formatDocument } from "./docInfo";
@@ -52,8 +53,16 @@ export function useApplyTheme(): void {
 export function useApplyZoom(): void {
   const zoom = useSettings((s) => s.zoom);
   useEffect(() => {
-    // `zoom` scales the whole UI including our px-based sizing.
-    document.documentElement.style.zoom = String(zoom);
+    // Use the webview's native zoom (like a browser's Cmd+/-): it scales the
+    // whole UI *and* keeps pointer hit-testing correct. CSS `zoom` does not —
+    // it desyncs CodeMirror's coordinate mapping so clicks land on the wrong
+    // line and Cmd+click resolves the wrong token. Fall back to CSS `zoom`
+    // only outside Tauri (e.g. the browser dev/test context).
+    getCurrentWebview()
+      .setZoom(zoom)
+      .catch(() => {
+        document.documentElement.style.zoom = String(zoom);
+      });
   }, [zoom]);
 }
 
