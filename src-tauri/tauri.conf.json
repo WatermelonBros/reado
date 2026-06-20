@@ -26,6 +26,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "shortDescription": "A calm, read-first code IDE.",
     "longDescription": "Reado inverts the IDE: the primary experience is reading code, and the primary action is leaving durable comments that an AI agent resolves.",
@@ -36,5 +37,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/WatermelonBros/reado/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDEwMDFGOTQ0MDFFQTQwOApSV1FJcEI1QWxCOEFBVzFKMnViVnNyWENBQzZEVTFUUjFjeHJYMUNpZ0psVTM3ampVcWZjb3BjMQo="
+    }
   }
 }

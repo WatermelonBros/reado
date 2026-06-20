@@ -11,6 +11,8 @@
     "core:window:allow-set-title",
     "opener:default",
     "dialog:default",
-    "store:default"
+    "store:default",
+    "updater:default",
+    "process:default"
   ]
 }

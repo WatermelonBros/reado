@@ -61,10 +61,16 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the updater artifacts so clients can verify them against the
+          # public key in tauri.conf.json. Set these as repository secrets.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Reado ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download and install Reado for your platform."
+          releaseBody: "See the assets below to download and install Reado for your platform. Reado updates itself automatically from signed releases."
           releaseDraft: true
           prerelease: false
+          # Emit latest.json (the updater manifest) alongside the installers.
+          includeUpdaterJson: true
           args: ${{ matrix.args }}

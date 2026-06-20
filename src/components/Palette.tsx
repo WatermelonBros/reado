@@ -13,6 +13,7 @@ import fuzzysort from "fuzzysort";
 import { listFiles, searchText, type SearchMatch } from "../lib/api";
 import { usePalette, useProject, useSettings, useEditorActions, useWorkspace, THEMES } from "../lib/store";
 import { mod } from "../lib/shortcuts";
+import { checkForUpdates } from "../lib/updater";
 import { useT, type MessageKey } from "../i18n";
 
 interface Row {
@@ -271,6 +272,7 @@ function commandRows(
       run: () => project.setShowHidden(!project.showHidden),
     },
     { label: t("settings.title"), hint: `${mod},`, run: () => toggleSettings(true) },
+    { label: t("settings.checkUpdates"), run: () => checkForUpdates(true) },
   ];
   // Quick theme switches.
   for (const theme of THEMES) {

@@ -63,4 +63,4 @@
 - [x] 7.1 i18n (IT + EN) wiring across the UI.
 - [ ] 7.2 Linux validation (PTY/notifications/paths).
 - [ ] 7.3 Windows validation (PTY/shell/path) — last, highest cost.
-- [ ] 7.4 Tauri auto-update.
+- [x] 7.4 Tauri auto-update.

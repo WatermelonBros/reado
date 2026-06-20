@@ -7,6 +7,7 @@ import { RecentProjects } from "./components/RecentProjects";
 import { ProjectView } from "./components/ProjectView";
 import { currentProjectPath } from "./lib/window";
 import { useApplyTheme, useApplyZoom, useGlobalShortcuts } from "./lib/hooks";
+import { checkForUpdates } from "./lib/updater";
 
 export default function App() {
   useApplyTheme();
@@ -21,6 +22,11 @@ export default function App() {
     const onHashChange = () => setProjectPath(currentProjectPath());
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // Silent update check on the launcher window only.
+  useEffect(() => {
+    if (currentProjectPath() === null) void checkForUpdates(false);
   }, []);
 
   return projectPath ? (

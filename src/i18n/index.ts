@@ -60,6 +60,7 @@ const en = {
   "settings.codeFont": "Code font",
   "settings.completionSound": "Play a sound when the agent finishes",
   "settings.notifications": "Notifications",
+  "settings.checkUpdates": "Check for updates…",
   "settings.close": "Close",
 
   "empty.firstComment":
@@ -199,6 +200,7 @@ const it: Record<MessageKey, string> = {
   "settings.codeFont": "Font del codice",
   "settings.completionSound": "Riproduci un suono quando l'agente finisce",
   "settings.notifications": "Notifiche",
+  "settings.checkUpdates": "Controlla aggiornamenti…",
   "settings.close": "Chiudi",
 
   "empty.firstComment":
