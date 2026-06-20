@@ -93,6 +93,55 @@ const editorTheme = EditorView.theme({
     backgroundColor: "var(--landing)",
     transition: "background-color 1.2s var(--ease)",
   },
+
+  // Find & replace panel — themed to sit quietly inside Reado's surfaces.
+  ".cm-panels": {
+    backgroundColor: "var(--bg-elevated)",
+    color: "var(--text)",
+  },
+  ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--border)" },
+  ".cm-panels.cm-panels-bottom": { borderTop: "1px solid var(--border)" },
+  ".cm-search": {
+    padding: "var(--space-2) var(--space-3)",
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    fontFamily: "var(--font-ui)",
+    fontSize: "var(--text-sm)",
+  },
+  ".cm-search label": {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+    color: "var(--text-muted)",
+    fontSize: "var(--text-xs)",
+  },
+  ".cm-textfield": {
+    backgroundColor: "var(--bg-surface)",
+    color: "var(--text)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+    padding: "3px 8px",
+    outline: "none",
+  },
+  ".cm-textfield:focus": { borderColor: "var(--border-strong)" },
+  ".cm-button": {
+    backgroundColor: "var(--bg-surface)",
+    backgroundImage: "none",
+    color: "var(--text)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+    padding: "3px 9px",
+    cursor: "pointer",
+  },
+  ".cm-button:hover": { backgroundColor: "var(--bg-overlay)" },
+  ".cm-panel.cm-search [name=close]": {
+    color: "var(--text-muted)",
+    fontSize: "var(--text-md)",
+    cursor: "pointer",
+  },
+  ".cm-panel.cm-search [name=close]:hover": { color: "var(--text)" },
 });
 
 /** All extensions implementing Reado's reading-focused appearance. */

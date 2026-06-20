@@ -29,7 +29,7 @@ import {
 import { languages } from "@codemirror/language-data";
 import { keymap } from "@codemirror/view";
 import { defaultKeymap } from "@codemirror/commands";
-import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -391,6 +391,8 @@ function CodeView({
         drawSelection(),
         bracketMatching(),
         highlightSelectionMatches(),
+        // Find & replace panel (Mod-F to find, Mod-Alt-F to replace).
+        search({ top: true }),
         // Mirror the cursor position into the status bar; track unsaved edits.
         EditorView.updateListener.of((u) => {
           if (u.selectionSet || u.docChanged) {
