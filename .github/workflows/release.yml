@@ -23,12 +23,16 @@ jobs:
         include:
           - platform: macos-latest # Apple Silicon
             args: --target aarch64-apple-darwin
+            rust_target: aarch64-apple-darwin
           - platform: macos-latest # Intel
             args: --target x86_64-apple-darwin
+            rust_target: x86_64-apple-darwin
           - platform: ubuntu-22.04
             args: ""
+            rust_target: ""
           - platform: windows-latest
             args: ""
+            rust_target: ""
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +60,12 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      # Build the CLI sidecar for this matrix target (externalBin requires the
+      # binary named for the exact target triple being built).
+      - name: Build the CLI sidecar
+        shell: bash
+        run: bash scripts/bundle-cli.sh ${{ matrix.rust_target }}
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0

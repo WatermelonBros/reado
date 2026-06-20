@@ -44,6 +44,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      # tauri.conf.json declares the CLI as an externalBin sidecar, so Tauri's
+      # build script requires the binary to exist even for clippy/test.
+      - name: Build the CLI sidecar
+        run: bash scripts/bundle-cli.sh
       - name: Check formatting
         run: |
           for crate in crates/reado-core crates/reado-cli src-tauri; do
