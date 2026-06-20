@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
-# Rasterize branding/icon.svg → branding/icon.png and regenerate all app icons.
+# Regenerate all app icons from the source artwork.
 #
-# IMPORTANT: render with a real browser. ImageMagick/librsvg drop SVG filters
-# (the book's drop shadow) and flatten the radial glow, so do NOT use `magick`
-# to rasterize this icon.
+# Pipeline: branding/icon-source.png (a full-bleed 1024 raster — the open-book
+# mark on the dark glow background) → apply the macOS-style squircle mask
+# (rounded corners, transparent outside) → branding/icon.png → tauri icon.
+#
+# The source is a raster on purpose: tracing the book to SVG merged the two
+# right-hand sheets into one shape, so we keep the raster and mask it here.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
-HTML="$(mktemp -t reado-icon).html"
-{
-  echo '<!doctype html><html><head><meta charset="utf-8">'
-  echo '<style>html,body{margin:0;padding:0;background:transparent}svg{display:block}</style>'
-  echo '</head><body>'
-  cat branding/icon.svg
-  echo '</body></html>'
-} > "$HTML"
+SRC="branding/icon-source.png"
+OUT="branding/icon.png"
 
-"$CHROME" --headless=new --disable-gpu --hide-scrollbars \
-  --default-background-color=00000000 --force-device-scale-factor=1 \
-  --window-size=1024,1024 --screenshot=branding/icon.png "$HTML"
+# Rounded-square (squircle) mask: 824x824 inset, ~22% corner radius.
+magick -size 1024x1024 xc:black -fill white \
+  -draw "roundrectangle 100,100,924,924,184,184" /tmp/reado-squircle-mask.png
+magick "$SRC" /tmp/reado-squircle-mask.png -alpha off \
+  -compose CopyOpacity -composite "$OUT"
 
-npx tauri icon branding/icon.png
-echo "icons regenerated from branding/icon.svg"
+npx tauri icon "$OUT"
+echo "icons regenerated from $SRC"

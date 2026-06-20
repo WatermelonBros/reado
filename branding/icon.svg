@@ -1,23 +1,18 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <!-- Soft light: a gentle radial glow from the upper-centre, fading to near-black. -->
-    <radialGradient id="glow" cx="50%" cy="36%" r="78%">
-      <stop offset="0%" stop-color="#3C3C46"/>
-      <stop offset="50%" stop-color="#1B1B1F"/>
-      <stop offset="100%" stop-color="#0A0A0C"/>
+    <radialGradient id="glow" cx="50%" cy="33%" r="82%">
+      <stop offset="0%" stop-color="#52525E"/>
+      <stop offset="45%" stop-color="#202024"/>
+      <stop offset="100%" stop-color="#08080A"/>
     </radialGradient>
+    <!-- Ground shadow under the whole book, on the tile. -->
     <filter id="bookShadow" x="-40%" y="-40%" width="180%" height="180%">
-      <feDropShadow dx="0" dy="11" stdDeviation="15" flood-color="#000" flood-opacity="0.55"/>
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity="0.5"/>
     </filter>
-    <!-- Inner shadow along the top edge: the front page recesses the sheet
-         behind it, so the pages read as stacked rather than one flat shape. -->
-    <filter id="innerShade" x="-20%" y="-20%" width="140%" height="140%">
-      <feOffset in="SourceAlpha" dx="0" dy="9" result="o"/>
-      <feGaussianBlur in="o" stdDeviation="9" result="b"/>
-      <feComposite in="SourceAlpha" in2="b" operator="out" result="inv"/>
-      <feFlood flood-color="#000" flood-opacity="0.42"/>
-      <feComposite in2="inv" operator="in" result="shade"/>
-      <feComposite in="shade" in2="SourceGraphic" operator="over"/>
+    <!-- The top page casts a soft shadow onto the sheet behind it. -->
+    <filter id="pageShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="7" dy="9" stdDeviation="9" flood-color="#000" flood-opacity="0.4"/>
     </filter>
   </defs>
 
@@ -25,14 +20,21 @@
        transparent corners so it sits beside other dock icons. -->
   <rect x="100" y="100" width="824" height="824" rx="184" ry="184" fill="url(#glow)"/>
 
-  <!-- The open-book mark, enlarged about its centre. The shadow lives on the
-       outer group (1024 space, no axis flip) so it stays visible. -->
-  <g filter="url(#bookShadow)" transform="translate(514,464) scale(1.5) translate(-514,-464)">
-    <g filter="url(#innerShade)">
-      <g transform="translate(0,1024) scale(0.1,-0.1)" fill="#F3EFE6">
-        <path d="M6215 6994 c-110 -30 -339 -93 -508 -139 -380 -104 -419 -124 -462 -244 -23 -66 -23 -2366 0 -2432 23 -63 58 -104 117 -133 l52 -26 659 0 c477 0 671 3 699 12 53 16 121 78 150 136 l23 47 3 1130 c2 622 0 1158 -3 1192 -13 129 -103 220 -228 232 l-62 6 -6 65 c-8 98 -38 148 -108 185 -65 33 -112 29 -326 -31z"/>
-        <path d="M3505 6751 c-51 -23 -102 -74 -126 -126 -18 -38 -19 -92 -19 -1220 0 -818 3 -1192 11 -1219 15 -56 101 -138 159 -154 34 -10 204 -12 705 -10 732 3 684 -1 756 70 75 76 70 -16 76 1266 4 877 3 1160 -6 1204 -17 82 -64 146 -130 180 l-53 28 -667 0 c-623 0 -669 -2 -706 -19z"/>
-      </g>
+  <!-- Open book: a left page, and on the right a front (turning) page over a
+       back sheet. Three explicit shapes so the front page's edge reads against
+       the sheet behind it (the traced source had merged them into one). -->
+  <g filter="url(#bookShadow)">
+    <!-- Left page (gentle outward tilt). -->
+    <rect x="320" y="356" width="170" height="300" rx="26" ry="26" fill="#F3EFE6"
+          transform="rotate(-5 405 506)"/>
+    <!-- Back sheet: same tilt as the front page, nudged up-right so a clean
+         second sheet peeks out behind it. -->
+    <rect x="552" y="346" width="170" height="300" rx="26" ry="26" fill="#F3EFE6"
+          transform="rotate(5 637 496)"/>
+    <!-- Front (turning) page on top, casting a soft shadow onto the back sheet. -->
+    <g filter="url(#pageShadow)">
+      <rect x="534" y="356" width="170" height="300" rx="26" ry="26" fill="#F3EFE6"
+            transform="rotate(5 619 506)"/>
     </g>
   </g>
 </svg>
