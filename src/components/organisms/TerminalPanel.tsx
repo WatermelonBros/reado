@@ -9,11 +9,15 @@ import { ptyWrite } from "../../lib/api";
 import { useTerminals } from "../../lib/terminals";
 import { useProject } from "../../lib/store";
 import { useComments } from "../../lib/comments";
-import { useState } from "react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useT } from "../../i18n";
 import { Terminal } from "../organisms/Terminal";
 import { SendReviewDialog } from "../organisms/SendReviewDialog";
-import { PlusIcon, CloseIcon, SendIcon } from "../atoms/icons";
+import { PlusIcon, CloseIcon, SendIcon, ClaudeIcon, CodexIcon } from "../atoms/icons";
+
+// Brand colours for the agent launchers.
+const CLAUDE_ORANGE = "#D97757";
+const CODEX_TEAL = "#10A37F";
 
 export function TerminalPanel() {
   const sessions = useTerminals((s) => s.sessions);
@@ -23,6 +27,8 @@ export function TerminalPanel() {
   const setActive = useTerminals((s) => s.setActive);
   const toggle = useTerminals((s) => s.toggle);
   const root = useProject((s) => s.root);
+  const height = useTerminals((s) => s.height);
+  const setHeight = useTerminals((s) => s.setHeight);
   // Select the stable array and derive the count in render (returning a new
   // array from the selector would loop).
   const openTaskCount = useComments(
@@ -39,8 +45,30 @@ export function TerminalPanel() {
 
   const [reviewOpen, setReviewOpen] = useState(false);
 
+  // Drag the top edge to resize. Track from the pointer so it follows the
+  // cursor regardless of where on the handle the drag began.
+  const startResize = (e: ReactPointerEvent) => {
+    e.preventDefault();
+    const onMove = (ev: PointerEvent) => setHeight(window.innerHeight - ev.clientY);
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   return (
-    <div className="flex h-[280px] flex-none flex-col border-t border-line bg-canvas">
+    <div
+      className="relative flex flex-none flex-col border-t border-line bg-canvas"
+      style={{ height }}
+    >
+      {/* Resize handle straddling the top border. */}
+      <div
+        onPointerDown={startResize}
+        className="absolute -top-1 right-0 left-0 z-10 h-2 cursor-row-resize"
+      />
+
       {/* Tab bar. */}
       <div className="flex h-9 flex-none items-center gap-1 border-b border-line pr-2 pl-1">
         <div className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -102,17 +130,19 @@ export function TerminalPanel() {
         <button
           type="button"
           onClick={() => launch("READO_AGENT=claude-code claude")}
-          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong"
+          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium transition-colors hover:border-line-strong"
+          style={{ color: CLAUDE_ORANGE }}
         >
-          <span className="h-2 w-2 rounded-full" style={{ background: "var(--syn-control)" }} />
+          <ClaudeIcon className="h-3.5 w-3.5" />
           {t("terminal.launchClaude")}
         </button>
         <button
           type="button"
           onClick={() => launch("READO_AGENT=codex codex")}
-          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong"
+          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium transition-colors hover:border-line-strong"
+          style={{ color: CODEX_TEAL }}
         >
-          <span className="h-2 w-2 rounded-full" style={{ background: "var(--syn-string)" }} />
+          <CodexIcon className="h-3.5 w-3.5" />
           {t("terminal.launchCodex")}
         </button>
         <button

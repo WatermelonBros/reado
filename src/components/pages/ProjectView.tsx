@@ -5,9 +5,9 @@
  */
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { gitInfo, startWatching, reanchorFile, rebuildIndex } from "../../lib/api";
+import { gitInfo, startWatching, reanchorFile, rebuildIndex, readFile } from "../../lib/api";
 import { useProject, useSessions, useWorkspace } from "../../lib/store";
-import { useComments } from "../../lib/comments";
+import { useComments, toRelative } from "../../lib/comments";
 import { notifyResolved } from "../../lib/notify";
 import { loadProjectConfig, watchProjectConfig } from "../../lib/projectConfig";
 import { setWindowTitle } from "../../lib/window";
@@ -97,6 +97,17 @@ export function ProjectView({ root }: { root: string }) {
         reanchorFile(root, file)
           .then((list) => useComments.getState().replaceForFile(file, list))
           .catch(() => {});
+        // Re-list the tree so files created/moved/deleted on disk (or dragged in
+        // from outside) show up without a manual refresh.
+        useProject.getState().bumpTree();
+        // If a file open in a tab was deleted on disk, close the tab instead of
+        // leaving a broken editor (VS Code behaviour).
+        const { tabs, close } = useProject.getState();
+        // Tabs hold absolute paths; pass the absolute path so read_file resolves
+        // it against the project root (a relative path would fail to canonicalize
+        // and wrongly close the tab on every edit).
+        const tab = tabs.find((p) => toRelative(root, p) === file);
+        if (tab) readFile(root, tab).catch(() => close(tab));
       }),
       // An agent mutated comments via the `reado` CLI — reload the list so the
       // UI reflects done/reply/add without a manual refresh.
@@ -113,6 +124,8 @@ export function ProjectView({ root }: { root: string }) {
   const tool = useWorkspace((s) => s.tool);
   const graphOpen = useWorkspace((s) => s.graphOpen);
   const docsOpen = useWorkspace((s) => s.docsOpen);
+  const sidebarWidth = useWorkspace((s) => s.sidebarWidth);
+  const setSidebarWidth = useWorkspace((s) => s.setSidebarWidth);
   const showHidden = useProject((s) => s.showHidden);
   const setShowHidden = useProject((s) => s.setShowHidden);
   const terminalOpen = useTerminals((s) => s.open);
@@ -127,14 +140,34 @@ export function ProjectView({ root }: { root: string }) {
     prevOpenTasks.current = openTaskCount;
   }, [openTaskCount]);
 
+  // Drag the sidebar's right edge to resize. The panel starts after the 48px
+  // activity bar, so its width tracks the cursor's x minus that offset.
+  const startSidebarResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const onMove = (ev: PointerEvent) => setSidebarWidth(ev.clientX - 48);
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   return (
     <div
       className="grid h-full overflow-hidden"
-      style={{ gridTemplateColumns: tool ? "48px 264px 1fr" : "48px 1fr" }}
+      style={{
+        gridTemplateColumns: tool ? `48px ${sidebarWidth}px 1fr` : "48px 1fr",
+      }}
     >
       <ActivityBar />
       {tool && (
-        <aside className="flex min-w-0 flex-col overflow-hidden border-r border-line bg-surface">
+        <aside className="relative flex min-w-0 flex-col overflow-hidden border-r border-line bg-surface">
+          {/* Resize handle straddling the right border. */}
+          <div
+            onPointerDown={startSidebarResize}
+            className="absolute top-0 -right-1 bottom-0 z-10 w-2 cursor-col-resize"
+          />
           <header className="flex h-9 flex-none items-center justify-between border-b border-line pr-2 pl-3 text-xs font-medium tracking-wide text-muted uppercase">
             <span>{t(PANEL_TITLE[tool])}</span>
             {tool === "files" && (

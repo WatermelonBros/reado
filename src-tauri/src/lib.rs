@@ -37,6 +37,8 @@ pub fn run() {
             fs::list_files,
             fs::read_file,
             fs::write_file,
+            fs::move_path,
+            fs::import_paths,
             git::git_info,
             git::git_branches,
             git::git_checkout,
@@ -74,6 +76,14 @@ pub fn run() {
             pty::pty_resize,
             pty::pty_kill,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Reado");
+        .build(tauri::generate_context!())
+        .expect("error while building Reado")
+        .run(|app, event| {
+            // On exit, terminate every PTY (and its dev servers) so nothing
+            // outlives the app.
+            if let tauri::RunEvent::Exit = event {
+                use tauri::Manager;
+                pty::kill_all(&app.state::<pty::PtyState>());
+            }
+        });
 }

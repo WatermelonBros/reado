@@ -5,7 +5,7 @@
  * survive tab switches. Streams output from `pty-output-{id}` and forwards
  * keystrokes and resizes back to the PTY.
  */
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -24,6 +24,29 @@ export function Terminal({ id, cwd, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  // Last size pushed to the PTY. Resending an unchanged size still raises
+  // SIGWINCH, which makes a TUI (Claude/Codex use Ink) repaint its whole frame —
+  // and xterm's reflow turns repeated repaints into duplicated lines. So we only
+  // forward a resize when the dimensions actually change.
+  const lastSize = useRef({ rows: 0, cols: 0 });
+
+  // Fit to the container and forward the size to the PTY, but only when it
+  // changed. Safe to call as often as we like.
+  const syncSize = useCallback(() => {
+    const fit = fitRef.current;
+    const term = termRef.current;
+    const host = hostRef.current;
+    if (!fit || !term || !host || host.clientWidth === 0) return;
+    try {
+      fit.fit();
+    } catch {
+      return; // not measurable right now
+    }
+    const { rows, cols } = term;
+    if (rows === lastSize.current.rows && cols === lastSize.current.cols) return;
+    lastSize.current = { rows, cols };
+    ptyResize(id, rows, cols).catch(() => {});
+  }, [id]);
 
   // Create the terminal and PTY once.
   useEffect(() => {
@@ -53,6 +76,7 @@ export function Terminal({ id, cwd, active }: Props) {
       } catch {
         /* container not measured yet */
       }
+      lastSize.current = { rows: term.rows, cols: term.cols };
       await ptySpawn(id, cwd, term.rows, term.cols).catch(() => {});
 
       unlisten.push(
@@ -64,6 +88,10 @@ export function Terminal({ id, cwd, active }: Props) {
         ),
       );
       term.onData((data) => ptyWrite(id, data));
+
+      // Once the web font is ready the cell metrics change; refit so the PTY's
+      // column count matches what's actually rendered before an agent reads it.
+      document.fonts?.ready.then(() => !disposed && syncSize());
     });
 
     return () => {
@@ -76,41 +104,33 @@ export function Terminal({ id, cwd, active }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep the PTY size in sync with the rendered terminal.
+  // Keep the PTY size in sync with the rendered terminal. Coalesce bursts of
+  // resize events (e.g. dragging the panel edge) into one sync per frame.
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    let raf = 0;
     const observer = new ResizeObserver(() => {
-      const fit = fitRef.current;
-      const term = termRef.current;
-      if (!fit || !term || host.clientWidth === 0) return;
-      try {
-        fit.fit();
-        ptyResize(id, term.rows, term.cols).catch(() => {});
-      } catch {
-        /* not measurable right now */
-      }
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(syncSize);
     });
     observer.observe(host);
-    return () => observer.disconnect();
-  }, [id]);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [syncSize]);
 
   // Refit and focus when this tab becomes active (it may have been hidden).
   useEffect(() => {
     if (!active) return;
     const term = termRef.current;
-    const fit = fitRef.current;
-    if (!term || !fit) return;
+    if (!term) return;
     requestAnimationFrame(() => {
-      try {
-        fit.fit();
-        ptyResize(id, term.rows, term.cols).catch(() => {});
-        term.focus();
-      } catch {
-        /* ignore */
-      }
+      syncSize();
+      term.focus();
     });
-  }, [active, id]);
+  }, [active, syncSize]);
 
   return <div ref={hostRef} className="h-full w-full" />;
 }

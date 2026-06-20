@@ -48,3 +48,7 @@ portable-pty = "0.8"
 thiserror = "2"
 # Rebuildable SQLite index of comments (a cache; the `.md` files stay the truth).
 rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Signal the PTY's process group on close so dev servers don't orphan (Unix only).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

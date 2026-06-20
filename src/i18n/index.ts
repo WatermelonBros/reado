@@ -146,6 +146,15 @@ const en = {
   "review.send": "Send {count}",
   "review.selectAll": "Select all",
 
+  "audit.title": "Ask AI for an audit",
+  "audit.target": "Auditing",
+  "audit.instructions": "What should the AI look for?",
+  "audit.placeholder":
+    "e.g. correctness bugs, security issues, dead code… (leave empty for a general audit)",
+  "audit.hint": "The AI writes its findings as comments anchored to the code, so you can read them inline.",
+  "audit.send": "Send to AI",
+  "tree.audit": "Ask AI for an audit",
+
   "files.panel": "Files",
   "git.panel": "Source control",
   "git.clean": "No changes — the working tree is clean.",
@@ -362,6 +371,15 @@ const it: Record<MessageKey, string> = {
   "review.target": "Invia a",
   "review.send": "Invia {count}",
   "review.selectAll": "Seleziona tutti",
+
+  "audit.title": "Chiedi un audit all'AI",
+  "audit.target": "Audit di",
+  "audit.instructions": "Cosa deve cercare l'AI?",
+  "audit.placeholder":
+    "es. bug di correttezza, problemi di sicurezza, codice morto… (lascia vuoto per un audit generale)",
+  "audit.hint": "L'AI scrive i risultati come commenti ancorati al codice, così li leggi direttamente inline.",
+  "audit.send": "Invia all'AI",
+  "tree.audit": "Chiedi un audit all'AI",
 
   "files.panel": "File",
   "git.panel": "Controllo sorgente",

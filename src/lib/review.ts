@@ -28,6 +28,22 @@ export function composeReviewPromptForIds(ids: string[]): string {
   );
 }
 
+/**
+ * Compose the prompt that asks the agent to audit a file or folder and record
+ * its findings as Reado comments (so they show up inline in the code). Single
+ * line, like the review prompts, so it submits as one message in the agent TUI.
+ */
+export function composeAuditPrompt(target: string, instructions: string): string {
+  const focus = instructions.trim() || "a general code-quality, correctness, and security audit";
+  return (
+    `READO AUDIT — please audit \`${target}\` (focus: ${focus}). ` +
+    "Do NOT change any code. Instead, for each finding anchor a comment to the exact line(s) with " +
+    '`reado comment add --file <path> --line <n> [--end <m>] --type <bug|refactor|performance|question|note> "<body>"` ' +
+    "— use a task comment for actionable issues and add `--note` for observations. " +
+    "Keep each comment concise and specific to its location. Start now."
+  );
+}
+
 /** Prompt for resolving a single specific task ("send just this now"). */
 export function composeSingleTaskPrompt(id: string): string {
   return (

@@ -177,6 +177,9 @@ interface WorkspaceState {
   /** Whether the documentation overlay is open. */
   docsOpen: boolean;
   toggleDocs: (open?: boolean) => void;
+  /** Side-panel width in px (drag-resizable), persisted. */
+  sidebarWidth: number;
+  setSidebarWidth: (px: number) => void;
 }
 
 /** Tool sidebar state (which side panel is shown), persisted per user. */
@@ -189,8 +192,15 @@ export const useWorkspace = create<WorkspaceState>()(
       toggleGraph: (open) => set((s) => ({ graphOpen: open ?? !s.graphOpen })),
       docsOpen: false,
       toggleDocs: (open) => set((s) => ({ docsOpen: open ?? !s.docsOpen })),
+      sidebarWidth: 264,
+      // Clamp so the panel stays usable and never crowds out the editor.
+      setSidebarWidth: (px) =>
+        set({ sidebarWidth: Math.max(180, Math.min(px, window.innerWidth - 360)) }),
     }),
-    { name: "reado.workspace", partialize: (s) => ({ tool: s.tool }) },
+    {
+      name: "reado.workspace",
+      partialize: (s) => ({ tool: s.tool, sidebarWidth: s.sidebarWidth }),
+    },
   ),
 );
 
@@ -282,10 +292,15 @@ interface ProjectState {
   active: string | null;
   showHidden: boolean;
   landing: Landing | null;
+  /** Bumped to make the file tree re-list directories (external/internal changes). */
+  treeNonce: number;
+  bumpTree: () => void;
   init: (root: string, git: GitInfo, session?: Session) => void;
   setGit: (git: GitInfo) => void;
   open: (path: string, line?: number) => void;
   close: (path: string) => void;
+  /** Repoint an open tab after its file moved on disk. */
+  renamePath: (from: string, to: string) => void;
   /** Close every tab except `path` (becomes active). */
   closeOthers: (path: string) => void;
   /** Close the tabs to the right of `path`. */
@@ -303,6 +318,8 @@ export const useProject = create<ProjectState>((set) => ({
   active: null,
   showHidden: false,
   landing: null,
+  treeNonce: 0,
+  bumpTree: () => set((s) => ({ treeNonce: s.treeNonce + 1 })),
   init: (root, git, session) =>
     set({
       root,
@@ -338,6 +355,11 @@ export const useProject = create<ProjectState>((set) => ({
       return { tabs, active };
     }),
   closeAll: () => set({ tabs: [], active: null }),
+  renamePath: (from, to) =>
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t === from ? to : t)),
+      active: s.active === from ? to : s.active,
+    })),
   setActive: (path) => set({ active: path }),
   setShowHidden: (show) => set({ showHidden: show }),
 }));

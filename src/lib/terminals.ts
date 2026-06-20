@@ -21,6 +21,9 @@ interface TerminalsState {
   activeId: string | null;
   /** Whether the bottom terminal panel is visible. */
   open: boolean;
+  /** Panel height in px (drag-resizable). */
+  height: number;
+  setHeight: (px: number) => void;
   /** Create a terminal tab and focus it; opens the panel. Returns its id. */
   add: () => string;
   remove: (id: string) => void;
@@ -34,6 +37,9 @@ export const useTerminals = create<TerminalsState>((set, get) => ({
   sessions: [],
   activeId: null,
   open: false,
+  height: 280,
+  // Clamp so the panel can't swallow the whole window or vanish.
+  setHeight: (px) => set({ height: Math.max(120, Math.min(px, window.innerHeight - 160)) }),
 
   add: () => {
     const id = newId();

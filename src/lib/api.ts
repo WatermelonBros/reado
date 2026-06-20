@@ -52,6 +52,14 @@ export const readFile = (root: string, path: string, asText?: boolean) =>
 export const writeFile = (root: string, path: string, content: string) =>
   invoke<void>("write_file", { root, path, content });
 
+/** Move/rename a file or folder within the project (internal drag-and-drop). */
+export const movePath = (root: string, from: string, to: string) =>
+  invoke<void>("move_path", { root, from, to });
+
+/** Copy external files/folders into a project folder (drag-and-drop from outside). */
+export const importPaths = (root: string, sources: string[], destDir: string) =>
+  invoke<void>("import_paths", { root, sources, destDir });
+
 /** Git status of the project root (never throws). */
 export const gitInfo = (root: string) => invoke<GitInfo>("git_info", { root });
 

@@ -39,10 +39,14 @@ fn default_shell() -> (String, Vec<&'static str>) {
     }
     #[cfg(not(windows))]
     {
-        // A login shell loads the user's profile so PATH/aliases match a terminal.
+        // A login *and interactive* shell: `-l` sources the profile, `-i` sources
+        // the rc file (~/.zshrc, ~/.bashrc) where version managers (nvm/fnm/asdf)
+        // put the right node/pnpm on PATH. Without `-i` the terminal can run a
+        // different node than the user's real terminal — enough to send dev-server
+        // watchers (e.g. Next.js) into an infinite recompile loop.
         (
             std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
-            vec!["-l"],
+            vec!["-il"],
         )
     }
 }
@@ -143,11 +147,38 @@ pub fn pty_resize(state: State<PtyState>, id: String, rows: u16, cols: u16) -> R
     Ok(())
 }
 
+/// Best-effort terminate of a session's whole process tree.
+///
+/// The shell is the PTY's session leader; a foreground job (e.g. `pnpm dev`)
+/// runs in its own process group. Killing only the shell would orphan that job,
+/// so we signal the tty's foreground process group too — SIGHUP to let it clean
+/// up, then SIGKILL — before killing the shell itself.
+fn terminate(session: &mut Session) {
+    #[cfg(unix)]
+    if let Some(pgrp) = session.master.process_group_leader() {
+        unsafe {
+            libc::killpg(pgrp, libc::SIGHUP);
+            libc::killpg(pgrp, libc::SIGKILL);
+        }
+    }
+    let _ = session.child.kill();
+}
+
 /// Kill a session and drop it from the registry.
 #[tauri::command]
 pub fn pty_kill(state: State<PtyState>, id: String) -> Result<(), String> {
     if let Some(mut session) = state.0.lock().unwrap().remove(&id) {
-        let _ = session.child.kill();
+        terminate(&mut session);
     }
     Ok(())
+}
+
+/// Terminate every live session — called when the app is exiting so no shell or
+/// dev server outlives Reado.
+pub fn kill_all(state: &PtyState) {
+    if let Ok(mut map) = state.0.lock() {
+        for (_, mut session) in map.drain() {
+            terminate(&mut session);
+        }
+    }
 }
