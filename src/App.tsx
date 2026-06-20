@@ -6,10 +6,11 @@ import { useEffect, useState } from "react";
 import { RecentProjects } from "./components/RecentProjects";
 import { ProjectView } from "./components/ProjectView";
 import { currentProjectPath } from "./lib/window";
-import { useApplyTheme, useGlobalShortcuts } from "./lib/hooks";
+import { useApplyTheme, useApplyZoom, useGlobalShortcuts } from "./lib/hooks";
 
 export default function App() {
   useApplyTheme();
+  useApplyZoom();
   useGlobalShortcuts();
 
   const [projectPath, setProjectPath] = useState<string | null>(currentProjectPath);

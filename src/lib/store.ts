@@ -43,6 +43,8 @@ export interface SettingsState {
   focusMode: boolean;
   /** Wrap long lines instead of scrolling horizontally. */
   wrap: boolean;
+  /** Interface zoom factor (1 = 100%). */
+  zoom: number;
   /** Version `.reado/` (except the rebuildable index) instead of gitignoring it. */
   versionReado: boolean;
   /** Suppress the first-comment gitignore prompt once the user opts out. */
@@ -63,6 +65,7 @@ export const useSettings = create<SettingsState>()(
       readingWidth: false,
       focusMode: false,
       wrap: false,
+      zoom: 1,
       versionReado: false,
       gitignoreDontAsk: false,
       completionSound: false,

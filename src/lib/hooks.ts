@@ -47,6 +47,20 @@ export function useApplyTheme(): void {
   }, [mode, theme, lightTheme, darkTheme]);
 }
 
+/** Apply the interface zoom factor to the document. */
+export function useApplyZoom(): void {
+  const zoom = useSettings((s) => s.zoom);
+  useEffect(() => {
+    // `zoom` scales the whole UI including our px-based sizing.
+    document.documentElement.style.zoom = String(zoom);
+  }, [zoom]);
+}
+
+/** Interface zoom bounds. */
+const ZOOM_MIN = 0.6;
+const ZOOM_MAX = 2;
+const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
+
 /** Bind Reado's global keyboard shortcuts. */
 export function useGlobalShortcuts(): void {
   const open = usePalette((s) => s.open);
@@ -57,6 +71,22 @@ export function useGlobalShortcuts(): void {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const key = e.key.toLowerCase();
+      // Interface zoom: Cmd/Ctrl with +/=, -, or 0 to reset.
+      if (key === "=" || key === "+") {
+        e.preventDefault();
+        const z = useSettings.getState().zoom;
+        useSettings.getState().set({ zoom: clampZoom(z + 0.1) });
+        return;
+      } else if (key === "-") {
+        e.preventDefault();
+        const z = useSettings.getState().zoom;
+        useSettings.getState().set({ zoom: clampZoom(z - 0.1) });
+        return;
+      } else if (key === "0") {
+        e.preventDefault();
+        useSettings.getState().set({ zoom: 1 });
+        return;
+      }
       if (key === "p") {
         e.preventDefault();
         open("files");

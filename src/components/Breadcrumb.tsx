@@ -1,15 +1,12 @@
 /** Path breadcrumb for the active file, with a manual-editing toggle. */
 import { useProject, useEditorActions } from "../lib/store";
 import { useT } from "../i18n";
-import { mod } from "../lib/shortcuts";
-import { ChevronIcon, EditIcon, DiffIcon } from "./icons";
+import { ChevronIcon, DiffIcon } from "./icons";
 
 export function Breadcrumb() {
   const root = useProject((s) => s.root);
   const active = useProject((s) => s.active);
   const isRepo = useProject((s) => s.git.isRepo);
-  const editing = useEditorActions((s) => s.editing);
-  const setEditing = useEditorActions((s) => s.setEditing);
   const diffing = useEditorActions((s) => s.diffing);
   const setDiffing = useEditorActions((s) => s.setDiffing);
   const dirty = useEditorActions((s) => s.dirty);
@@ -55,18 +52,6 @@ export function Breadcrumb() {
             <DiffIcon className="h-3.5 w-3.5" />
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setEditing(!editing)}
-          aria-pressed={editing}
-          title={`${t("editor.edit")} (${mod}S ${t("editor.save")})`}
-          aria-label={t("editor.edit")}
-          className={`grid h-6 w-6 place-items-center rounded-md transition-colors hover:bg-surface ${
-            editing ? "text-accent" : "text-faint hover:text-ink"
-          }`}
-        >
-          <EditIcon className="h-3.5 w-3.5" />
-        </button>
       </div>
     </nav>
   );

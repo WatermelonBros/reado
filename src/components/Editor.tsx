@@ -139,9 +139,8 @@ export function Editor() {
       .catch(() => {});
   }, [root, active]);
 
-  // Each file opens read-first: reset manual editing, dirty and diff state.
+  // Each file opens with a clean default view: reset the dirty and diff state.
   useEffect(() => {
-    useEditorActions.getState().setEditing(false);
     useEditorActions.getState().setDirty(false);
     useEditorActions.getState().setDiffing(false);
   }, [active]);
@@ -253,8 +252,6 @@ function CodeView({
   const applyReanchor = useComments((s) => s.applyReanchor);
   const cancelReanchor = useComments((s) => s.cancelReanchor);
   const composeNonce = useEditorActions((s) => s.composeNonce);
-  const editing = useEditorActions((s) => s.editing);
-  const editComp = useMemo(() => new Compartment(), []);
   const reanchorLabel = useComments((s) => {
     const c = s.comments.find((x) => x.id === s.reanchoringId);
     return c?.messages[0]?.body.split("\n")[0] ?? "";
@@ -310,10 +307,10 @@ function CodeView({
     setComposer({ startLine, endLine, context });
   };
 
-  // Save the editable buffer to disk (manual editing). No-op when read-only.
+  // Save the buffer to disk (Cmd/Ctrl+S).
   const saveFile = () => {
     const view = viewRef.current;
-    if (!view || !useEditorActions.getState().editing) return;
+    if (!view) return;
     writeFile(useProject.getState().root, relPath, view.state.doc.toString())
       .then(() => useEditorActions.getState().setDirty(false))
       .catch(() => {});
@@ -385,9 +382,9 @@ function CodeView({
         // Save when editing.
         keymap.of([{ key: "Mod-s", run: () => (saveFile(), true) }]),
         keymap.of([...defaultKeymap, ...searchKeymap, ...foldKeymap]),
-        // Read-first: the viewer is non-editable by default; manual editing
-        // (task 1.8) toggles this compartment.
-        editComp.of(editableExtension(editing)),
+        // Editing is always available; read-first is about the clean default
+        // view (no diff/AI overlay), not about being read-only.
+        editableExtension(true),
         readoAppearance,
         wrapComp.of(wrap ? EditorView.lineWrapping : []),
         focusComp.of(focusExtension(focusMode)),
@@ -426,13 +423,6 @@ function CodeView({
       effects: focusComp.reconfigure(focusExtension(focusMode)),
     });
   }, [focusMode, focusComp]);
-
-  // Toggle manual editing live.
-  useEffect(() => {
-    viewRef.current?.dispatch({
-      effects: editComp.reconfigure(editableExtension(editing)),
-    });
-  }, [editing, editComp]);
 
   // Rebuild the comment gutter when this file's comments change.
   useEffect(() => {

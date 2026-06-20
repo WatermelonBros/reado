@@ -52,9 +52,21 @@ export function ActivityBar() {
   const badgeFor = (id: Tool) =>
     id === "comments" ? openComments : id === "orphans" ? orphanCount : 0;
 
+  // One shared accent bar that slides to the active tool (button pitch = 44px:
+  // h-10 (40px) + gap-1 (4px)).
+  const activeIndex = tools.findIndex((x) => x.id === tool);
+
   return (
     <nav className="flex w-12 flex-none flex-col items-center justify-between border-r border-line bg-surface py-2">
-      <div className="flex flex-col items-center gap-1">
+      <div className="relative flex flex-col items-center gap-1">
+        <span
+          aria-hidden="true"
+          className="absolute left-0 h-7 w-0.5 rounded-full bg-accent transition-[top,opacity] duration-200 ease-out"
+          style={{
+            top: activeIndex * 44 + 6,
+            opacity: activeIndex >= 0 ? 1 : 0,
+          }}
+        />
         {tools.map(({ id, labelKey, Icon }) => {
           const active = tool === id;
           const badge = badgeFor(id);
@@ -70,12 +82,6 @@ export function ActivityBar() {
                 active ? "text-ink" : "text-faint hover:text-muted"
               }`}
             >
-              {/* VS Code-style active indicator: an accent bar on the left edge. */}
-              <span
-                className={`absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-accent transition-opacity ${
-                  active ? "opacity-100" : "opacity-0"
-                }`}
-              />
               <Icon className="h-[18px] w-[18px]" />
               {badge > 0 && (
                 <span className="absolute top-1 right-1.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-marker px-1 text-[9px] font-bold text-on-accent">
