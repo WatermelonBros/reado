@@ -14,6 +14,11 @@ export type Locale = "en" | "it";
 /** English is the source of truth; every other locale mirrors these keys. */
 const en = {
   "app.tagline": "A calm place to read code.",
+  "welcome.how": "How it works",
+  "welcome.step1": "Read — open files and move through the code.",
+  "welcome.step2": "Comment — select lines and leave a note or task.",
+  "welcome.step3": "Resolve — run an agent; it answers your tasks via the reado CLI.",
+  "welcome.shortcuts": "Shortcuts",
   "recents.title": "Recent projects",
   "recents.empty": "No projects yet. Open a folder to start reading.",
   "recents.open": "Open folder…",
@@ -173,6 +178,11 @@ export type MessageKey = keyof typeof en;
 
 const it: Record<MessageKey, string> = {
   "app.tagline": "Un posto tranquillo per leggere il codice.",
+  "welcome.how": "Come funziona",
+  "welcome.step1": "Leggi — apri i file e muoviti nel codice.",
+  "welcome.step2": "Commenta — seleziona righe e lascia una nota o un task.",
+  "welcome.step3": "Risolvi — lancia un agente; risponde ai tuoi task via CLI reado.",
+  "welcome.shortcuts": "Scorciatoie",
   "recents.title": "Progetti recenti",
   "recents.empty": "Ancora nessun progetto. Apri una cartella per iniziare a leggere.",
   "recents.open": "Apri cartella…",
