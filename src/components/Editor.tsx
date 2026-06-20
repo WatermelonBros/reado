@@ -75,6 +75,30 @@ const landingField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+/** StateEffect/Field highlighting the anchored block while its thread is open. */
+const setBlock = StateEffect.define<{ from: number; to: number } | null>();
+const blockField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    value = value.map(tr.changes);
+    for (const e of tr.effects) {
+      if (e.is(setBlock)) {
+        if (!e.value) return Decoration.none;
+        const ranges = [];
+        const max = tr.state.doc.lines;
+        for (let l = Math.max(1, e.value.from); l <= Math.min(e.value.to, max); l++) {
+          ranges.push(
+            Decoration.line({ class: "cm-comment-block" }).range(tr.state.doc.line(l).from),
+          );
+        }
+        return Decoration.set(ranges);
+      }
+    }
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 const human = (bytes: number) => {
   const units = ["B", "KB", "MB", "GB"];
   let n = bytes;
@@ -376,6 +400,7 @@ function CodeView({
           if (u.docChanged) useEditorActions.getState().setDirty(true);
         }),
         landingField,
+        blockField,
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
         // Create-comment gesture (spec: a dedicated key on a selection).
         keymap.of([{ key: "Mod-Shift-m", run: startComposer }]),
@@ -432,6 +457,18 @@ function CodeView({
     // openThreadAtLine is stable enough (only setters); rebuild on data change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineComments, gutterComp]);
+
+  // Highlight the anchored block while its thread is open.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const c = activeId ? comments.find((x) => x.id === activeId) : null;
+    const block =
+      c && c.anchor.scope === "range"
+        ? { from: c.anchor.startLine, to: c.anchor.endLine }
+        : null;
+    view.dispatch({ effects: setBlock.of(block) });
+  }, [activeId, comments]);
 
   // Re-position overlays as the editor scrolls or the window resizes.
   useEffect(() => {
@@ -563,6 +600,36 @@ function CodeView({
           onClose={closeOverlays}
         />
       )}
+
+      {/* Connector from the anchored block to its thread popover. */}
+      {openComment &&
+        threadTop !== null &&
+        (() => {
+          const blockY = topForLine(openComment.anchor.startLine);
+          if (blockY === null) return null;
+          const w = wrapRef.current?.clientWidth ?? 0;
+          const popoverWidth = Math.min(460, w - 32);
+          const popoverLeft = w - 16 - popoverWidth;
+          const x1 = 6;
+          const y1 = blockY + 10;
+          const x2 = Math.max(x1 + 8, popoverLeft);
+          const y2 = threadTop + 16;
+          const midX = (x1 + x2) / 2;
+          return (
+            <svg
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+            >
+              <path
+                d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
+                fill="none"
+                stroke="var(--border-strong)"
+                strokeWidth={2}
+              />
+              <circle cx={x1} cy={y1} r={2.5} fill="var(--border-strong)" />
+            </svg>
+          );
+        })()}
 
       {openComment && threadTop !== null && (
         <CommentThread

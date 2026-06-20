@@ -189,6 +189,12 @@
     transform: scale(1.15);
   }
 
+  /* The anchored block, highlighted while its comment thread is open. */
+  .cm-comment-block {
+    background: color-mix(in oklch, var(--marker) 8%, transparent);
+    box-shadow: inset 2px 0 0 var(--border-strong);
+  }
+
   /* CodeMirror-injected DOM (cannot be utility classes). */
   .cm-focus-mode .cm-line {
     opacity: 0.38;
