@@ -110,7 +110,12 @@ pub enum FileContent {
     /// UTF-8 text (code, markdown, JSON, …).
     Text { text: String },
     /// An image, returned as a `data:` URL ready to drop into `<img src>`.
-    Image { data_url: String },
+    /// (`rename_all` on an enum only renames variants, not their fields, so the
+    /// camelCase frontend name must be set explicitly.)
+    Image {
+        #[serde(rename = "dataUrl")]
+        data_url: String,
+    },
     /// Binary, non-image file — rendered as an unsupported-preview placeholder.
     Binary { size: u64 },
 }

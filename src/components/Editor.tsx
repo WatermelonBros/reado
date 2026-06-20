@@ -61,6 +61,7 @@ import { CommentThread } from "./CommentThread";
 import { ACCENT } from "./commentMeta";
 import { Welcome } from "./Welcome";
 import { DiffView } from "./DiffView";
+import { ImageView } from "./ImageView";
 import { PlusIcon } from "./icons";
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
@@ -259,15 +260,7 @@ export function Editor() {
   const content = loaded.content;
 
   if (content.kind === "image") {
-    return (
-      <div className="flex h-full items-center justify-center overflow-auto p-8">
-        <img
-          src={content.dataUrl}
-          alt={active}
-          className="max-h-full max-w-full rounded-md shadow-[var(--shadow)]"
-        />
-      </div>
-    );
+    return <ImageView dataUrl={content.dataUrl} name={active} />;
   }
   if (content.kind === "binary") {
     return (

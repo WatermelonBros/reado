@@ -189,6 +189,23 @@
     transform: scale(1.15);
   }
 
+  /* Transparency checkerboard behind images in the image viewer. */
+  .reado-checkerboard {
+    --sq: 16px;
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(45deg, var(--bg-elevated) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--bg-elevated) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--bg-elevated) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--bg-elevated) 75%);
+    background-size: var(--sq) var(--sq);
+    background-position:
+      0 0,
+      0 calc(var(--sq) / 2),
+      calc(var(--sq) / 2) calc(var(--sq) / -2),
+      calc(var(--sq) / -2) 0;
+  }
+
   /* Per-line git blame gutter (toggled from the breadcrumb). */
   .reado-blame-gutter {
     border-right: 1px solid var(--border);

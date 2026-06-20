@@ -110,7 +110,6 @@ export function ProjectView({ root }: { root: string }) {
   const showHidden = useProject((s) => s.showHidden);
   const setShowHidden = useProject((s) => s.setShowHidden);
   const terminalOpen = useTerminals((s) => s.open);
-  const noComments = useComments((s) => s.comments.length === 0);
   const openTaskCount = useComments(
     (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
   );
@@ -121,10 +120,6 @@ export function ProjectView({ root }: { root: string }) {
     if (openTaskCount < prevOpenTasks.current) notifyResolved(openTaskCount);
     prevOpenTasks.current = openTaskCount;
   }, [openTaskCount]);
-
-  // First-comment hint: shown while a file is open and the project has no
-  // comments yet; it disappears once the first comment exists (spec).
-  const showEmptyHint = active != null && noComments;
 
   return (
     <div
@@ -169,16 +164,6 @@ export function ProjectView({ root }: { root: string }) {
         <Breadcrumb />
         <div className="relative flex-1 overflow-hidden">
           <Editor />
-          {/* Discreet first-comment hint — replaced by the annotation flow in
-              phase 3, hidden once any file is open. */}
-          {showEmptyHint && (
-            <p
-              role="note"
-              className="pointer-events-none absolute bottom-8 left-1/2 m-0 max-w-[420px] -translate-x-1/2 rounded-lg border border-line bg-overlay px-4 py-3 text-center text-sm text-muted shadow-[var(--shadow)]"
-            >
-              {t("empty.firstComment")}
-            </p>
-          )}
         </div>
         {terminalOpen && <TerminalPanel />}
         <StatusBar />
