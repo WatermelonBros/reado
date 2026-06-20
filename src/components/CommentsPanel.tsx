@@ -63,7 +63,9 @@ export function CommentsPanel() {
       onClick={() => setView(id)}
       aria-pressed={view === id}
       className={`flex-1 rounded-sm px-2 py-1 text-xs transition-colors ${
-        view === id ? "bg-canvas text-ink shadow-[var(--shadow)]" : "text-muted hover:text-ink"
+        view === id
+          ? "bg-canvas font-medium text-ink"
+          : "text-muted hover:text-ink"
       }`}
     >
       {label}

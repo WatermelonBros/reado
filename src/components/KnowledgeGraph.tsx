@@ -31,6 +31,8 @@ interface Node {
 interface Edge {
   a: string;
   b: string;
+  /** "colocation" (comment→file) reads quiet; "link" (manual) reads accented. */
+  kind: "colocation" | "link";
 }
 
 const basename = (p: string) => p.split("/").pop() ?? p;
@@ -95,11 +97,12 @@ export function KnowledgeGraph() {
             line: 1,
           });
         }
-        edges.push({ a: `c:${c.id}`, b: fid }); // co-location
+        edges.push({ a: `c:${c.id}`, b: fid, kind: "colocation" });
       }
       // Manual links between comments.
       for (const target of c.links) {
-        if (comments.some((x) => x.id === target)) edges.push({ a: `c:${c.id}`, b: `c:${target}` });
+        if (comments.some((x) => x.id === target))
+          edges.push({ a: `c:${c.id}`, b: `c:${target}`, kind: "link" });
       }
     });
     return { nodes, edges };
@@ -109,6 +112,8 @@ export function KnowledgeGraph() {
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
   const dragId = useRef<string | null>(null);
+  const dragMoved = useRef(false);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
   // Force simulation.
@@ -216,6 +221,7 @@ export function KnowledgeGraph() {
             className="min-h-0 flex-1"
             onPointerMove={(e) => {
               if (!dragId.current) return;
+              dragMoved.current = true;
               const p = toSvg(e);
               const n = byId(dragId.current);
               if (n) {
@@ -237,40 +243,65 @@ export function KnowledgeGraph() {
                   y1={a.y}
                   x2={b.x}
                   y2={b.y}
-                  stroke="var(--border-strong)"
-                  strokeWidth={1}
+                  stroke={e.kind === "link" ? "var(--accent)" : "var(--border)"}
+                  strokeWidth={e.kind === "link" ? 1.5 : 1}
                 />
               );
             })}
-            {nodes.map((n) => (
-              <g
-                key={n.id}
-                transform={`translate(${n.x},${n.y})`}
-                className="cursor-pointer"
-                onPointerDown={(e) => {
-                  (e.target as Element).setPointerCapture?.(e.pointerId);
-                  dragId.current = n.id;
-                }}
-                onClick={() => navigate(n)}
-              >
-                <circle
-                  r={n.kind === "file" ? 9 : 6}
-                  fill={n.kind === "file" ? "var(--bg-elevated)" : n.color}
-                  stroke={n.color}
-                  strokeWidth={n.kind === "file" ? 2 : 1}
-                />
-                <text
-                  x={n.kind === "file" ? 13 : 10}
-                  y={4}
-                  fontSize={n.kind === "file" ? 12 : 11}
-                  fill={n.kind === "file" ? "var(--text)" : "var(--text-muted)"}
-                  style={{ fontFamily: "var(--font-ui)", pointerEvents: "none" }}
+            {nodes.map((n) => {
+              const showLabel = n.kind === "file" || hoverId === n.id;
+              return (
+                <g
+                  key={n.id}
+                  transform={`translate(${n.x},${n.y})`}
+                  className="cursor-pointer"
+                  onPointerDown={(e) => {
+                    (e.target as Element).setPointerCapture?.(e.pointerId);
+                    dragId.current = n.id;
+                    dragMoved.current = false;
+                  }}
+                  onPointerEnter={() => setHoverId(n.id)}
+                  onPointerLeave={() => setHoverId((h) => (h === n.id ? null : h))}
+                  // A drag must not also navigate.
+                  onClick={() => !dragMoved.current && navigate(n)}
                 >
-                  {n.label}
-                </text>
-              </g>
-            ))}
+                  <circle
+                    r={n.kind === "file" ? 9 : 6}
+                    fill={n.kind === "file" ? "var(--bg-elevated)" : n.color}
+                    stroke={n.color}
+                    strokeWidth={n.kind === "file" ? 2 : 1}
+                  />
+                  {showLabel && (
+                    <text
+                      x={n.kind === "file" ? 13 : 10}
+                      y={4}
+                      fontSize={n.kind === "file" ? 12 : 11}
+                      fill={n.kind === "file" ? "var(--text)" : "var(--text)"}
+                      style={{ fontFamily: "var(--font-ui)", pointerEvents: "none" }}
+                    >
+                      {n.label}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
           </svg>
+        )}
+        {nodes.length > 0 && (
+          <footer className="flex flex-none items-center gap-4 border-t border-line px-4 py-2 text-[11px] text-faint">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full border-2 border-accent bg-surface" />
+              {t("graph.legend.file")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ background: "var(--syn-keyword)" }} />
+              {t("graph.legend.comment")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-px w-4" style={{ background: "var(--accent)" }} />
+              {t("graph.legend.link")}
+            </span>
+          </footer>
         )}
       </div>
     </div>
