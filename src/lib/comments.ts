@@ -99,7 +99,12 @@ export const useComments = create<CommentsState>((set, get) => ({
   },
 
   load: async (root) => {
-    set({ root, comments: [], activeId: null });
+    // A reload of the *same* project (e.g. the watcher saw a comment change)
+    // must not clear the list or drop the open thread — only a genuine project
+    // switch resets activeId. Clearing/resetting here would close the thread the
+    // user just acted on (our own write trips the watcher too).
+    const sameRoot = get().root === root;
+    if (!sameRoot) set({ root, comments: [], archived: [], activeId: null });
     // Load active and resolved (archived) together: done comments are shown
     // inline in the editor too, so the gutter needs them up front.
     const [comments, archived] = await Promise.all([

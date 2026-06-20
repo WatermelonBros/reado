@@ -5,14 +5,15 @@
  * `claude`/`codex` in the active terminal — the entry point to the AI loop.
  * Inactive terminals stay mounted but hidden so their sessions persist.
  */
-import { ptyWrite } from "../../lib/api";
+import { submitToTerminal } from "../../lib/api";
 import { useTerminals } from "../../lib/terminals";
 import { useProject } from "../../lib/store";
-import { useComments } from "../../lib/comments";
+import { useComments, toRelative } from "../../lib/comments";
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useT } from "../../i18n";
 import { Terminal } from "../organisms/Terminal";
 import { SendReviewDialog } from "../organisms/SendReviewDialog";
+import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
 import { PlusIcon, CloseIcon, SendIcon, ClaudeIcon, CodexIcon } from "../atoms/icons";
 
 // Brand colours for the agent launchers.
@@ -27,6 +28,7 @@ export function TerminalPanel() {
   const setActive = useTerminals((s) => s.setActive);
   const toggle = useTerminals((s) => s.toggle);
   const root = useProject((s) => s.root);
+  const active = useProject((s) => s.active);
   const height = useTerminals((s) => s.height);
   const setHeight = useTerminals((s) => s.setHeight);
   // Select the stable array and derive the count in render (returning a new
@@ -40,10 +42,16 @@ export function TerminalPanel() {
   const launch = (command: string) => {
     const id = activeId ?? add();
     // Defer so a freshly spawned PTY is ready before we write to it.
-    setTimeout(() => ptyWrite(id, `${command}\r`), id === activeId ? 0 : 400);
+    submitToTerminal(id, command, id === activeId ? 0 : 400);
   };
 
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null);
+  // Audit the open file when there is one, otherwise the whole project.
+  const openAudit = () =>
+    setAuditTarget(
+      active ? { path: toRelative(root, active), isDir: false } : { path: ".", isDir: true },
+    );
 
   // Drag the top edge to resize. Track from the pointer so it follows the
   // cursor regardless of where on the handle the drag began.
@@ -129,6 +137,15 @@ export function TerminalPanel() {
         </button>
         <button
           type="button"
+          onClick={openAudit}
+          title={active ? t("tree.audit") : t("comments.auditProject")}
+          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong"
+        >
+          <ClaudeIcon className="h-3.5 w-3.5" />
+          {t("comments.audit")}
+        </button>
+        <button
+          type="button"
           onClick={() => launch("READO_AGENT=claude-code claude")}
           className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium transition-colors hover:border-line-strong"
           style={{ color: CLAUDE_ORANGE }}
@@ -169,6 +186,7 @@ export function TerminalPanel() {
       </div>
 
       <SendReviewDialog open={reviewOpen} onClose={() => setReviewOpen(false)} />
+      <AuditDialog target={auditTarget} onClose={() => setAuditTarget(null)} />
     </div>
   );
 }

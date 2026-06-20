@@ -11,9 +11,18 @@ interface TextViewState {
   /** Absolute paths to force-open as text. */
   force: Set<string>;
   openAsText: (path: string) => void;
+  /** Flip a path between its rich rendering and source (e.g. markdown). */
+  toggleText: (path: string) => void;
 }
 
 export const useTextView = create<TextViewState>((set) => ({
   force: new Set(),
   openAsText: (path) => set((s) => ({ force: new Set(s.force).add(path) })),
+  toggleText: (path) =>
+    set((s) => {
+      const force = new Set(s.force);
+      if (force.has(path)) force.delete(path);
+      else force.add(path);
+      return { force };
+    }),
 }));

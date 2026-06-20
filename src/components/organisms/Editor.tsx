@@ -65,7 +65,7 @@ import { Welcome } from "../molecules/Welcome";
 import { DiffView } from "../organisms/DiffView";
 import { ImageView } from "../organisms/ImageView";
 import { ContextMenu } from "../atoms/ContextMenu";
-import { PlusIcon } from "../atoms/icons";
+import { PlusIcon, DocsIcon, EditIcon } from "../atoms/icons";
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
 const PLACEHOLDER = "grid h-full place-items-center p-8 text-center text-muted";
@@ -208,6 +208,7 @@ export function Editor() {
   const landing = useProject((s) => s.landing);
   const allComments = useComments((s) => s.comments);
   const archived = useComments((s) => s.archived);
+  const reanchoringId = useComments((s) => s.reanchoringId);
   const diffing = useEditorActions((s) => s.diffing);
   const { wrap, readingWidth, codeFont, focusMode } = useSettings();
   const t = useT();
@@ -295,18 +296,58 @@ export function Editor() {
     );
   }
 
-  if (isMarkdown(active)) {
+  const relPath = toRelative(root, active);
+
+  // Markdown renders as prose by default; comments anchor to source lines, so a
+  // toggle drops to the source view (CodeView) where the gutter/threads live.
+  if (isMarkdown(active) && !diffing) {
+    // While re-anchoring, force source: the prose view has no lines to select.
+    const asSource = forceText.has(active) || reanchoringId !== null;
+    const mdComments = commentsForFile(
+      [...allComments, ...archived.filter((c) => c.state === "done")],
+      relPath,
+    );
     return (
-      <div
-        className="prose-reado mx-auto h-full w-full overflow-y-auto p-8"
-        style={{ maxWidth: readingWidth ? "var(--reading-measure)" : undefined }}
-      >
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content.text}</ReactMarkdown>
+      <div className="relative h-full w-full">
+        <button
+          type="button"
+          onClick={() => useTextView.getState().toggleText(active)}
+          title={asSource ? t("editor.viewRendered") : t("editor.viewSource")}
+          className="absolute top-3 right-4 z-30 flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-xs text-muted shadow-[var(--shadow)] hover:text-ink"
+        >
+          {asSource ? <DocsIcon className="h-3.5 w-3.5" /> : <EditIcon className="h-3.5 w-3.5" />}
+          {asSource ? t("editor.viewRendered") : t("editor.viewSource")}
+          {!asSource && mdComments.length > 0 && (
+            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-[10px] font-semibold text-on-accent">
+              {mdComments.length}
+            </span>
+          )}
+        </button>
+        {asSource ? (
+          <CodeView
+            key={active}
+            path={active}
+            relPath={relPath}
+            text={content.text}
+            comments={mdComments}
+            wrap={wrap}
+            readingWidth={readingWidth}
+            codeFont={codeFont}
+            focusMode={focusMode}
+            landingLine={landing?.path === active ? landing : null}
+          />
+        ) : (
+          <div
+            className="prose-reado mx-auto h-full w-full overflow-y-auto p-8"
+            style={{ maxWidth: readingWidth ? "var(--reading-measure)" : undefined }}
+          >
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content.text}</ReactMarkdown>
+          </div>
+        )}
       </div>
     );
   }
 
-  const relPath = toRelative(root, active);
   if (diffing) {
     return <DiffView key={relPath} relPath={relPath} text={content.text} />;
   }
@@ -452,6 +493,16 @@ function CodeView({
   const anchorOrCompose = (start: number, end: number) => {
     if (reanchoringId) applyReanchor(relPath, start, end);
     else openComposerFor(start, end);
+  };
+
+  // Confirm re-anchoring to the current selection (or the cursor's line) — the
+  // explicit button so it doesn't depend on knowing the keyboard gesture.
+  const confirmReanchor = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const doc = view.state.doc;
+    applyReanchor(relPath, doc.lineAt(sel.from).number, doc.lineAt(sel.to).number);
   };
 
   // Start the gesture from the current selection (or the cursor's line).
@@ -767,12 +818,15 @@ function CodeView({
   const openComment = activeId ? comments.find((c) => c.id === activeId) ?? null : null;
   const wrapH = wrapRef.current?.clientHeight ?? 0;
   const composerTop = clampTop(composer ? topForLine(composer.endLine) : null, 260);
-  // The thread box hangs from the *bottom* of the last commented line, so the
-  // connector's horizontal run sits below the code (never crossing it).
-  const threadTop = clampTop(
-    openComment ? bottomForLine(openComment.anchor.endLine) : null,
-    Math.min(wrapH * 0.7, 420),
-  );
+  // The thread box hangs from the *bottom* of the last commented line and scrolls
+  // with the code. It is shown only while that line is within the viewport, so
+  // the connector always points at its anchor and never runs across unrelated
+  // lines — when the anchor scrolls off-screen, the panel scrolls off with it.
+  const rawThreadTop = openComment ? bottomForLine(openComment.anchor.endLine) : null;
+  const threadTop =
+    rawThreadTop !== null && rawThreadTop >= 0 && rawThreadTop <= wrapH
+      ? rawThreadTop
+      : null;
 
   const closeOverlays = () => {
     setComposer(null);
@@ -921,6 +975,13 @@ function CodeView({
           </span>
           <button
             type="button"
+            onClick={confirmReanchor}
+            className="flex-none rounded-md bg-accent px-2 py-1 font-semibold text-on-accent hover:brightness-110"
+          >
+            {t("orphans.confirm")}
+          </button>
+          <button
+            type="button"
             onClick={cancelReanchor}
             className="flex-none rounded-md border border-line bg-surface px-2 py-1 text-muted hover:text-ink"
           >
@@ -961,8 +1022,9 @@ function CodeView({
       {openComment &&
         threadTop !== null &&
         (() => {
-          const startTop = topForLine(openComment.anchor.startLine);
-          if (startTop === null) return null;
+          // Start may sit above the viewport on a multi-line anchor; clamp the
+          // rail to the top edge so the connector still draws.
+          const startTop = topForLine(openComment.anchor.startLine) ?? 0;
           const w = wrapRef.current?.clientWidth ?? 0;
           const xBoxRight = w - 16; // the box's right edge (it sits at right-4)
           const xRail = 6; // in the line-number gutter, far left

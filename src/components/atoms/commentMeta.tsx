@@ -3,8 +3,10 @@
  * type option lists, and author/agent identity. Kept separate so badges stay
  * consistent across the composer, thread popover and comment list.
  */
+import type { ReactElement } from "react";
 import type { CommentType, CommentState, Message } from "../../lib/api";
 import type { MessageKey } from "../../i18n";
+import { ClaudeIcon, CodexIcon } from "./icons";
 
 export const COMMENT_TYPES: CommentType[] = [
   "bug",
@@ -50,6 +52,21 @@ const AGENT_NAMES: Record<string, string> = {
   codex: "Codex",
   copilot: "Copilot",
 };
+
+/** Brand colour + glyph per agent, for attributing thread messages. */
+export const AGENT_BRAND: Record<
+  string,
+  { color: string; Icon: (p: { className?: string }) => ReactElement }
+> = {
+  "claude-code": { color: "#D97757", Icon: ClaudeIcon },
+  codex: { color: "#10A37F", Icon: CodexIcon },
+};
+
+/** The brand for a message's agent author, or null (user / unknown agent). */
+export function agentBrand(message: Message) {
+  if (message.author !== "agent" || !message.agent) return null;
+  return AGENT_BRAND[message.agent] ?? null;
+}
 
 /** Display name for a thread message's author. */
 export function authorLabel(message: Message, you: string): string {

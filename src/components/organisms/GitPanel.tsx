@@ -15,11 +15,14 @@ import {
   gitUnstageAll,
   gitDiscard,
   gitCommit,
+  submitToTerminal,
   type GitChange,
 } from "../../lib/api";
 import { useProject, useEditorActions } from "../../lib/store";
+import { useTerminals } from "../../lib/terminals";
+import { composeCommitPrompt } from "../../lib/review";
 import { useT } from "../../i18n";
-import { PlusIcon, MinusIcon, DiscardIcon } from "../atoms/icons";
+import { PlusIcon, MinusIcon, DiscardIcon, ClaudeIcon } from "../atoms/icons";
 
 /** Single-letter badge + colour per change category. */
 const STATUS: Record<GitChange["status"], { letter: string; color: string }> = {
@@ -40,6 +43,8 @@ export function GitPanel() {
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);
   const setDiffing = useEditorActions((s) => s.setDiffing);
+  const activeTerminal = useTerminals((s) => s.activeId);
+  const addTerminal = useTerminals((s) => s.add);
   const t = useT();
   const [changes, setChanges] = useState<GitChange[]>([]);
   const [message, setMessage] = useState("");
@@ -92,6 +97,13 @@ export function GitPanel() {
       })
       .catch(() => {})
       .finally(() => setBusy(false));
+  };
+
+  // Hand the commit+push off to the agent in the terminal: it reviews the diff,
+  // writes the message, commits and pushes.
+  const aiCommit = () => {
+    const id = activeTerminal ?? addTerminal();
+    submitToTerminal(id, composeCommitPrompt(), id === activeTerminal ? 0 : 400);
   };
 
   const Row = ({ c }: { c: GitChange }) => {
@@ -217,6 +229,16 @@ export function GitPanel() {
           className="mt-1.5 w-full rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-50"
         >
           {busy ? t("git.committing") : t("git.commit")}
+        </button>
+        <button
+          type="button"
+          onClick={aiCommit}
+          disabled={changes.length === 0}
+          title={changes.length === 0 ? t("git.clean") : t("git.aiCommit")}
+          className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:border-line-strong disabled:opacity-50"
+        >
+          <ClaudeIcon className="h-3.5 w-3.5" />
+          {t("git.aiCommit")}
         </button>
       </div>
 

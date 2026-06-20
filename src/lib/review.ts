@@ -44,6 +44,18 @@ export function composeAuditPrompt(target: string, instructions: string): string
   );
 }
 
+/**
+ * Prompt asking the agent to commit and push the working tree. Single line so it
+ * submits as one message in the agent TUI.
+ */
+export function composeCommitPrompt(): string {
+  return (
+    "Commit and push the current changes. Run `git status` and `git diff` to review them, " +
+    "stage everything, write a concise Conventional Commit message summarising the change, " +
+    "commit, then `git push`. Don't ask for confirmation — just do it."
+  );
+}
+
 /** Prompt for resolving a single specific task ("send just this now"). */
 export function composeSingleTaskPrompt(id: string): string {
   return (

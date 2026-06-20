@@ -282,6 +282,19 @@ export const ptySpawn = (id: string, cwd: string, rows: number, cols: number) =>
 export const ptyWrite = (id: string, data: string) =>
   invoke<void>("pty_write", { id, data });
 
+/**
+ * Send a command to a terminal and submit it. The text and the Enter key are
+ * sent as two separate writes: a TUI agent (Claude/Codex use Ink) otherwise
+ * treats a trailing newline in the same chunk as a literal newline instead of
+ * submitting. `delay` lets a freshly spawned PTY become ready first.
+ */
+export function submitToTerminal(id: string, command: string, delay = 0): void {
+  setTimeout(() => {
+    void ptyWrite(id, command);
+    setTimeout(() => void ptyWrite(id, "\r"), 120);
+  }, delay);
+}
+
 /** Resize a terminal's PTY. */
 export const ptyResize = (id: string, rows: number, cols: number) =>
   invoke<void>("pty_resize", { id, rows, cols });

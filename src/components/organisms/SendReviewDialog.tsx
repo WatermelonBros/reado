@@ -4,7 +4,7 @@
  * task 4.4 (deselectable batch + target agent).
  */
 import { useMemo, useState } from "react";
-import { ptyWrite } from "../../lib/api";
+import { submitToTerminal } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useTerminals } from "../../lib/terminals";
 import { composeReviewPrompt, composeReviewPromptForIds } from "../../lib/review";
@@ -44,7 +44,7 @@ export function SendReviewDialog({ open, onClose }: { open: boolean; onClose: ()
       selected.length === tasks.length
         ? composeReviewPrompt(tasks.length)
         : composeReviewPromptForIds(selected);
-    setTimeout(() => ptyWrite(id, `${prompt}\r`), id === (target || activeId) ? 0 : 400);
+    submitToTerminal(id, prompt, id === (target || activeId) ? 0 : 400);
     onClose();
   };
 

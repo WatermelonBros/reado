@@ -7,7 +7,7 @@
  * SendReviewDialog: pick the target terminal, then inject a one-line prompt.
  */
 import { useState } from "react";
-import { ptyWrite } from "../../lib/api";
+import { submitToTerminal } from "../../lib/api";
 import { useTerminals } from "../../lib/terminals";
 import { composeAuditPrompt } from "../../lib/review";
 import { useT } from "../../i18n";
@@ -40,7 +40,7 @@ export function AuditDialog({
     const id = agent || activeId || add();
     const prompt = composeAuditPrompt(target.path, instructions);
     // Defer when we just spawned a terminal so the PTY is ready to receive.
-    setTimeout(() => ptyWrite(id, `${prompt}\r`), id === (agent || activeId) ? 0 : 400);
+    submitToTerminal(id, prompt, id === (agent || activeId) ? 0 : 400);
     setInstructions("");
     onClose();
   };

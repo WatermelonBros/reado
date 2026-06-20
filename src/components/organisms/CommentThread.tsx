@@ -19,6 +19,7 @@ import {
   typeKey,
   stateKey,
   authorLabel,
+  agentBrand,
 } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
 import { Checkbox } from "../atoms/Checkbox";
@@ -149,13 +150,20 @@ export function CommentThread({ comment, top, onClose }: Props) {
         {comment.messages.map((m, i) => (
           <div key={i} className={`group/msg ${i > 0 ? "border-t border-line pt-3" : ""}`}>
             <div className="mb-1 flex items-baseline gap-2">
-              <span
-                className={`text-xs font-semibold ${
-                  m.author === "agent" ? "text-accent" : "text-ink"
-                }`}
-              >
-                {authorLabel(m, t("comment.you"))}
-              </span>
+              {(() => {
+                const brand = agentBrand(m);
+                return (
+                  <span
+                    className={`flex items-center gap-1 text-xs font-semibold ${
+                      brand ? "" : m.author === "agent" ? "text-accent" : "text-ink"
+                    }`}
+                    style={brand ? { color: brand.color } : undefined}
+                  >
+                    {brand && <brand.Icon className="h-3 w-3 translate-y-px" />}
+                    {authorLabel(m, t("comment.you"))}
+                  </span>
+                );
+              })()}
               <span className="text-[11px] text-faint">{fmtTime(m.createdAt)}</span>
               {i === 0 && editDraft === null && (
                 <button
