@@ -8,6 +8,7 @@
  */
 import { useWorkspace, usePalette, useProject, type Tool } from "../lib/store";
 import { useComments, openCount } from "../lib/comments";
+import { useSpecs } from "../lib/specs";
 import { useT, type MessageKey } from "../i18n";
 import {
   FilesIcon,
@@ -18,6 +19,7 @@ import {
   GraphIcon,
   DocsIcon,
   SettingsIcon,
+  SpecsIcon,
 } from "./icons";
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
@@ -37,13 +39,18 @@ export function ActivityBar() {
   const isRepo = useProject((s) => s.git.isRepo);
   const openComments = useComments((s) => openCount(s.comments));
   const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length);
+  const hasSpecs = useSpecs((s) => s.groups.length > 0);
   const t = useT();
 
-  // Source Control appears in git repos; Orphans only when there's something to fix.
+  // Source Control appears in git repos; Orphans only when there's something to
+  // fix; Specs only when the project has an OpenSpec/speckit plan.
   const tools: ToolDef[] = [
     ...BASE_TOOLS,
     ...(isRepo
       ? [{ id: "git" as Tool, labelKey: "git.panel" as MessageKey, Icon: GitBranchIcon }]
+      : []),
+    ...(hasSpecs
+      ? [{ id: "specs" as Tool, labelKey: "specs.panel" as MessageKey, Icon: SpecsIcon }]
       : []),
     ...(orphanCount > 0
       ? [{ id: "orphans" as Tool, labelKey: "orphans.panel" as MessageKey, Icon: UnlinkIcon }]

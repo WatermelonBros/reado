@@ -18,6 +18,8 @@ import { SearchPanel } from "./SearchPanel";
 import { CommentsPanel } from "./CommentsPanel";
 import { GitPanel } from "./GitPanel";
 import { OrphansPanel } from "./OrphansPanel";
+import { SpecsPanel } from "./SpecsPanel";
+import { useSpecs } from "../lib/specs";
 import { Tabs } from "./Tabs";
 import { Breadcrumb } from "./Breadcrumb";
 import { Editor } from "./Editor";
@@ -37,6 +39,7 @@ const PANEL_TITLE: Record<string, MessageKey> = {
   comments: "comments.panel",
   git: "git.panel",
   orphans: "orphans.panel",
+  specs: "specs.panel",
 };
 
 const basename = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? p;
@@ -62,6 +65,7 @@ export function ProjectView({ root }: { root: string }) {
     restored.current = true;
     setWindowTitle(basename(root));
     useComments.getState().load(root);
+    useSpecs.getState().load(root);
     // Build the SQLite index on open if missing/stale (rebuildable cache).
     rebuildIndex(root).catch(() => {});
     gitInfo(root)
@@ -155,6 +159,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "search" && <SearchPanel />}
             {tool === "comments" && <CommentsPanel />}
             {tool === "git" && <GitPanel />}
+            {tool === "specs" && <SpecsPanel />}
             {tool === "orphans" && <OrphansPanel />}
           </div>
         </aside>

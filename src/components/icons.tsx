@@ -138,6 +138,13 @@ export const BlameIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const SpecsIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M5 4h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
+    <path d="M14 4v5h5M8 13h7M8 17h7" />
+  </svg>
+);
+
 export const MinusIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M5 12h14" />

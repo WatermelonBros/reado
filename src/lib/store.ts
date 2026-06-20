@@ -154,7 +154,7 @@ export const useSessions = create<SessionsState>()(
   ),
 );
 
-export type Tool = "files" | "search" | "comments" | "git" | "orphans";
+export type Tool = "files" | "search" | "comments" | "git" | "orphans" | "specs";
 
 interface WorkspaceState {
   /** Active side-panel tool, or null when the panel is collapsed. */

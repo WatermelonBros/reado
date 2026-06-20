@@ -1,0 +1,79 @@
+/**
+ * Specs browser model. Reado is AI-first, so the plan lives next to the code:
+ * this surfaces an OpenSpec project's change proposals and capability specs (and
+ * a speckit `.specify/` tree) as a tidy, ordered list you can read alongside the
+ * source. Read-only — it just points the editor at the right markdown.
+ */
+import { create } from "zustand";
+import { listFiles } from "./api";
+
+export interface SpecItem {
+  /** File label relative to its group folder (e.g. "proposal.md"). */
+  label: string;
+  /** Project-relative path, for opening in the editor. */
+  path: string;
+}
+
+export interface SpecGroup {
+  title: string;
+  kind: "change" | "spec";
+  items: SpecItem[];
+}
+
+/** Order the well-known OpenSpec documents first, then anything else. */
+const FILE_ORDER = ["proposal.md", "design.md", "tasks.md", "spec.md"];
+const fileRank = (label: string) => {
+  const base = label.split("/").pop() ?? label;
+  const i = FILE_ORDER.indexOf(base);
+  return i < 0 ? FILE_ORDER.length : i;
+};
+
+/** Group the project's spec markdown into changes and capability specs. */
+export function groupSpecs(files: string[]): SpecGroup[] {
+  const md = files
+    .map((f) => f.replace(/\\/g, "/"))
+    .filter((f) => /\.(md|markdown)$/i.test(f));
+
+  const groups = new Map<string, SpecGroup>();
+  const add = (key: string, group: Omit<SpecGroup, "items">, item: SpecItem) => {
+    const g = groups.get(key) ?? { ...group, items: [] };
+    g.items.push(item);
+    groups.set(key, g);
+  };
+
+  for (const path of md) {
+    let m: RegExpMatchArray | null;
+    if ((m = path.match(/(?:^|\/)\.?openspec\/changes\/([^/]+)\/(.+)$/))) {
+      add(`change:${m[1]}`, { title: m[1], kind: "change" }, { label: m[2], path });
+    } else if ((m = path.match(/(?:^|\/)\.?openspec\/specs\/([^/]+)\/(.+)$/))) {
+      add(`spec:${m[1]}`, { title: m[1], kind: "spec" }, { label: m[2], path });
+    } else if ((m = path.match(/(?:^|\/)\.specify\/(?:specs\/)?([^/]+)\/(.+)$/))) {
+      add(`spec:${m[1]}`, { title: m[1], kind: "spec" }, { label: m[2], path });
+    }
+  }
+
+  for (const g of groups.values()) {
+    g.items.sort((a, b) => fileRank(a.label) - fileRank(b.label) || a.label.localeCompare(b.label));
+  }
+  // Changes first, then specs; each alphabetical.
+  return [...groups.values()].sort(
+    (a, b) =>
+      (a.kind === b.kind ? 0 : a.kind === "change" ? -1 : 1) || a.title.localeCompare(b.title),
+  );
+}
+
+interface SpecsState {
+  groups: SpecGroup[];
+  load: (root: string) => Promise<void>;
+}
+
+export const useSpecs = create<SpecsState>((set) => ({
+  groups: [],
+  load: async (root) => {
+    try {
+      set({ groups: groupSpecs(await listFiles(root)) });
+    } catch {
+      set({ groups: [] });
+    }
+  },
+}));
