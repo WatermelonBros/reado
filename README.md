@@ -14,6 +14,13 @@ Codex) resolves, and that accumulate into a consultable knowledge base.
 Reado is built with [Tauri 2](https://tauri.app), React 19 and a Rust backend.
 It runs on macOS, Linux and Windows.
 
+## Download
+
+Grab the latest signed build for your platform from the
+[**Releases**](https://github.com/WatermelonBros/reado/releases/latest) page —
+macOS (`.dmg`, signed & notarized), Linux (`.AppImage` / `.deb` / `.rpm`) and
+Windows (`.exe` / `.msi`). Reado updates itself from signed releases after that.
+
 ## Status
 
 Reado is in active development. The current focus is the **read → annotate →
