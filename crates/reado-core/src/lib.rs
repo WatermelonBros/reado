@@ -569,10 +569,40 @@ pub fn set_comment_state(root: &str, id: &str, state: CommentState) -> Result<Co
     Ok(comment)
 }
 
+/// Update the stored path of every active comment anchored to `from` so it
+/// points at `to` (used when the watcher reports a file rename/move).
+pub fn rename_comments(root: &str, from: &str, to: &str) -> Result<usize> {
+    let dir = comments_dir(root);
+    let mut moved = 0;
+    for mut comment in list_dir(&dir, false) {
+        if comment.meta.anchor.file == from {
+            comment.meta.anchor.file = to.to_string();
+            comment.meta.updated_at = now_millis();
+            write_comment(&dir, &comment.meta, &comment.messages)?;
+            moved += 1;
+        }
+    }
+    Ok(moved)
+}
+
 /// Delete a comment entirely (never archived — deletion is permanent).
 pub fn delete_comment(root: &str, id: &str) -> Result<()> {
     let (path, _) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
     std::fs::remove_file(path)?;
+    Ok(())
+}
+
+/// Read the per-project config (`.reado/config.json`) as raw JSON, or `None`
+/// when absent. Per-project settings override the user's global settings.
+pub fn read_config(root: &str) -> Option<String> {
+    std::fs::read_to_string(reado_dir(root).join("config.json")).ok()
+}
+
+/// Write the per-project config (`.reado/config.json`). `json` is stored verbatim.
+pub fn write_config(root: &str, json: &str) -> Result<()> {
+    let dir = reado_dir(root);
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join("config.json"), json)?;
     Ok(())
 }
 

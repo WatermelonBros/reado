@@ -23,8 +23,10 @@ export function TerminalPanel() {
   const setActive = useTerminals((s) => s.setActive);
   const toggle = useTerminals((s) => s.toggle);
   const root = useProject((s) => s.root);
-  const openTasks = useComments((s) =>
-    s.comments.filter((c) => c.kind === "task" && c.state === "open"),
+  // Select the stable array and derive the count in render (returning a new
+  // array from the selector would loop).
+  const openTaskCount = useComments(
+    (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
   );
   const t = useT();
 
@@ -83,17 +85,17 @@ export function TerminalPanel() {
         <button
           type="button"
           onClick={() => setReviewOpen(true)}
-          disabled={openTasks.length === 0}
+          disabled={openTaskCount === 0}
           title={
-            openTasks.length === 0 ? t("terminal.noTasks") : t("terminal.sendReview")
+            openTaskCount === 0 ? t("terminal.noTasks") : t("terminal.sendReview")
           }
           className="flex items-center gap-1.5 rounded-md bg-accent px-2 py-1 text-xs font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-40"
         >
           <SendIcon className="h-3.5 w-3.5" />
           {t("terminal.sendReview")}
-          {openTasks.length > 0 && (
+          {openTaskCount > 0 && (
             <span className="grid h-4 min-w-4 place-items-center rounded-full bg-[color-mix(in_oklch,var(--accent-contrast)_25%,transparent)] px-1 text-[10px]">
-              {openTasks.length}
+              {openTaskCount}
             </span>
           )}
         </button>

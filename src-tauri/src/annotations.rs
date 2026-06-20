@@ -56,6 +56,16 @@ pub fn add_reado_gitignore(root: String, versioned: bool) -> Result<()> {
 }
 
 #[tauri::command]
+pub fn read_project_config(root: String) -> Option<String> {
+    core::read_config(&root)
+}
+
+#[tauri::command]
+pub fn write_project_config(root: String, json: String) -> Result<()> {
+    Ok(core::write_config(&root, &json)?)
+}
+
+#[tauri::command]
 pub fn reanchor_file(root: String, file: String) -> Result<Vec<Comment>> {
     Ok(core::reanchor_file(&root, &file)?)
 }

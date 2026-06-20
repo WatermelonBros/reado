@@ -28,7 +28,7 @@ export const THEMES: ThemeName[] = [
   "reado-sepia",
 ];
 
-interface SettingsState {
+export interface SettingsState {
   /** Theme used when mode is "manual". */
   theme: ThemeName;
   /** Light theme used by "system"/"auto" modes. */

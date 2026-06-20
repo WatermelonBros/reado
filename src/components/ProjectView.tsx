@@ -9,6 +9,7 @@ import { gitInfo, startWatching, reanchorFile } from "../lib/api";
 import { useProject, useSessions, useWorkspace } from "../lib/store";
 import { useComments } from "../lib/comments";
 import { notifyResolved } from "../lib/notify";
+import { loadProjectConfig, watchProjectConfig } from "../lib/projectConfig";
 import { setWindowTitle } from "../lib/window";
 import { useT, type MessageKey } from "../i18n";
 import { ActivityBar } from "./ActivityBar";
@@ -71,6 +72,12 @@ export function ProjectView({ root }: { root: string }) {
     if (!restored.current) return;
     saveSession(root, { tabs, active });
   }, [root, tabs, active, saveSession]);
+
+  // Apply per-project settings overrides, then persist changes back to them.
+  useEffect(() => {
+    loadProjectConfig(root);
+    return watchProjectConfig(root);
+  }, [root]);
 
   // Watch the project and re-anchor a file's comments when it changes on disk
   // (external edits, or the agent's own writes).

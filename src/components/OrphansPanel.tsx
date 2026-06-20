@@ -10,7 +10,8 @@ import { useT } from "../i18n";
 import { TYPE_COLOR, typeKey, Dot } from "./commentMeta";
 
 export function OrphansPanel() {
-  const orphans = useComments((s) => s.comments.filter((c) => c.orphan));
+  const comments = useComments((s) => s.comments);
+  const orphans = comments.filter((c) => c.orphan);
   const startReanchor = useComments((s) => s.startReanchor);
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);

@@ -160,6 +160,13 @@ export const deleteComment = (root: string, id: string) =>
 export const addReadoGitignore = (root: string, versioned: boolean) =>
   invoke<void>("add_reado_gitignore", { root, versioned });
 
+/** Per-project config (`.reado/config.json`) as raw JSON, or null when absent. */
+export const readProjectConfig = (root: string) =>
+  invoke<string | null>("read_project_config", { root });
+
+export const writeProjectConfig = (root: string, json: string) =>
+  invoke<void>("write_project_config", { root, json });
+
 /** Recompute the anchors of `file`'s comments against its current content. */
 export const reanchorFile = (root: string, file: string) =>
   invoke<Comment[]>("reanchor_file", { root, file });

@@ -38,6 +38,8 @@ pub fn run() {
             annotations::set_comment_state,
             annotations::delete_comment,
             annotations::add_reado_gitignore,
+            annotations::read_project_config,
+            annotations::write_project_config,
             annotations::reanchor_file,
             annotations::set_anchor,
             watcher::start_watching,

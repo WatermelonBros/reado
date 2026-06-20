@@ -15,9 +15,8 @@ import { Checkbox } from "./ui/Checkbox";
 import { Select } from "./ui/Select";
 
 export function SendReviewDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const tasks = useComments((s) =>
-    s.comments.filter((c) => c.kind === "task" && c.state === "open"),
-  );
+  const comments = useComments((s) => s.comments);
+  const tasks = comments.filter((c) => c.kind === "task" && c.state === "open");
   const sessions = useTerminals((s) => s.sessions);
   const activeId = useTerminals((s) => s.activeId);
   const add = useTerminals((s) => s.add);

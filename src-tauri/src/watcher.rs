@@ -14,7 +14,8 @@ use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::time::Duration;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use notify::{RecursiveMode, Watcher};
+use notify::event::{ModifyKind, RenameMode};
+use notify::{EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -84,6 +85,26 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
         loop {
             match rx.recv_timeout(DEBOUNCE) {
                 Ok(Ok(event)) => {
+                    // A rename that reports both endpoints (Linux/inotify) lets us
+                    // move a file's comments instead of orphaning them.
+                    if matches!(
+                        event.kind,
+                        EventKind::Modify(ModifyKind::Name(RenameMode::Both))
+                    ) && event.paths.len() == 2
+                    {
+                        if let (Some(from), Some(to)) = (
+                            relative(&root, &event.paths[0]),
+                            relative(&root, &event.paths[1]),
+                        ) {
+                            if reado_core::rename_comments(&root.to_string_lossy(), &from, &to)
+                                .unwrap_or(0)
+                                > 0
+                            {
+                                let _ = app.emit("comments-changed", ());
+                            }
+                        }
+                        continue;
+                    }
                     for path in event.paths {
                         pending.insert(path);
                     }
