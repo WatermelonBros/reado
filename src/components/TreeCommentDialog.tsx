@@ -37,14 +37,19 @@ export function TreeCommentDialog({
   const t = useT();
 
   const [type, setType] = useState<CommentType>("note");
-  const [isTask, setIsTask] = useState(true);
+  // type=note → a note; actionable types default to a task (toggleable).
+  const [isTask, setIsTask] = useState(false);
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
+  const pickType = (tp: CommentType) => {
+    setType(tp);
+    setIsTask(tp !== "note");
+  };
 
   const reset = () => {
     setBody("");
     setType("note");
-    setIsTask(true);
+    setIsTask(false);
   };
   const close = () => {
     reset();
@@ -94,7 +99,7 @@ export function TreeCommentDialog({
           <button
             key={tp}
             type="button"
-            onClick={() => setType(tp)}
+            onClick={() => pickType(tp)}
             className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs ${
               type === tp ? "bg-selection text-ink" : "text-muted hover:text-ink"
             }`}

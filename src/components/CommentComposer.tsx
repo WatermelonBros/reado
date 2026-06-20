@@ -31,7 +31,13 @@ export function CommentComposer({ relPath, startLine, endLine, context, top, onC
 
   const [type, setType] = useState<CommentType>("note");
   const [scope, setScope] = useState<Scope>("range");
-  const [isTask, setIsTask] = useState(true);
+  // A "note" type defaults to a note (not sent to the AI); actionable types
+  // (bug/refactor/…) default to a task. The user can still toggle it.
+  const [isTask, setIsTask] = useState(false);
+  const pickType = (tp: CommentType) => {
+    setType(tp);
+    setIsTask(tp !== "note");
+  };
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -90,7 +96,7 @@ export function CommentComposer({ relPath, startLine, endLine, context, top, onC
             <button
               key={tp}
               type="button"
-              onClick={() => setType(tp)}
+              onClick={() => pickType(tp)}
               className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs ${
                 type === tp ? "bg-selection text-ink" : "text-muted hover:text-ink"
               }`}
