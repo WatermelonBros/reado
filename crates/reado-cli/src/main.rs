@@ -63,6 +63,8 @@ enum KbCmd {
     List,
     /// Print a knowledge document (a doc or spec markdown file) by path.
     Show { path: String },
+    /// Full-text search the docs and specs by content.
+    Search { query: String },
 }
 
 #[derive(Subcommand)]
@@ -195,6 +197,42 @@ fn kb(cli: &Cli, root: &str, action: &KbCmd) -> Result<(), Box<dyn std::error::E
             }
             let text = std::fs::read_to_string(root_path.join(path))?;
             print!("{text}");
+        }
+        KbCmd::Search { query } => {
+            let needle = query.to_lowercase();
+            let mut md = Vec::new();
+            collect_markdown(root_path, root_path, &mut md);
+            md.sort();
+            let mut hits: Vec<(String, usize, String)> = Vec::new();
+            for rel in &md {
+                if hits.len() >= 200 {
+                    break;
+                }
+                let Ok(content) = std::fs::read_to_string(root_path.join(rel)) else {
+                    continue;
+                };
+                for (i, line) in content.lines().enumerate() {
+                    if line.to_lowercase().contains(&needle) {
+                        hits.push((rel.clone(), i + 1, line.trim().to_string()));
+                        if hits.len() >= 200 {
+                            break;
+                        }
+                    }
+                }
+            }
+            if cli.json {
+                let rows: Vec<_> = hits
+                    .iter()
+                    .map(|(p, l, t)| serde_json::json!({ "path": p, "line": l, "text": t }))
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&rows)?);
+            } else if hits.is_empty() {
+                println!("No matches.");
+            } else {
+                for (p, l, t) in &hits {
+                    println!("{p}:{l}: {t}");
+                }
+            }
         }
     }
     Ok(())

@@ -10,12 +10,11 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { readFile, type Comment, type CommentType } from "../lib/api";
+import { readFile, searchText, listFiles, type Comment, type CommentType } from "../lib/api";
 import { useComments } from "../lib/comments";
 import { useProject, useWorkspace } from "../lib/store";
 import { useSpecs } from "../lib/specs";
 import { listDocs, type DocItem } from "../lib/knowledge";
-import { listFiles } from "../lib/api";
 import { useT } from "../i18n";
 import { COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "./commentMeta";
 import { Select } from "./ui/Select";
@@ -44,6 +43,8 @@ export function DocsView() {
   const [typeFilter, setTypeFilter] = useState<CommentType | "all">("all");
   const [selection, setSelection] = useState<Selection>({ kind: "notes" });
   const [content, setContent] = useState<string | null>(null);
+  // KB paths whose *content* matches the query (full-text, not just the name).
+  const [contentMatches, setContentMatches] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadArchived();
@@ -100,11 +101,49 @@ export function DocsView() {
     close(false);
   };
 
+  // Full-text search across the KB: ripgrep the project, keep hits that are KB
+  // docs/specs. Combined with the name filter below for a real KB search.
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setContentMatches(new Set());
+      return;
+    }
+    const kbPaths = new Set([
+      ...docs.map((d) => d.path),
+      ...specGroups.flatMap((g) => g.items.map((i) => i.path)),
+    ]);
+    let cancelled = false;
+    const id = setTimeout(() => {
+      searchText(root, query.trim())
+        .then((matches) => {
+          if (cancelled) return;
+          const hit = new Set<string>();
+          for (const m of matches) {
+            const rel = (m.path.startsWith(root) ? m.path.slice(root.length) : m.path)
+              .replace(/^[\\/]+/, "")
+              .replace(/\\/g, "/");
+            if (kbPaths.has(rel)) hit.add(rel);
+          }
+          setContentMatches(hit);
+        })
+        .catch(() => {});
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, [query, root, docs, specGroups]);
+
   const q = query.trim().toLowerCase();
   const match = (s: string) => !q || s.toLowerCase().includes(q);
-  const filteredDocs = docs.filter((d) => match(d.label));
+  const filteredDocs = docs.filter((d) => match(d.label) || contentMatches.has(d.path));
   const filteredSpecs = specGroups
-    .map((g) => ({ ...g, items: g.items.filter((i) => match(i.label) || match(g.title)) }))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter(
+        (i) => match(i.label) || match(g.title) || contentMatches.has(i.path),
+      ),
+    }))
     .filter((g) => g.items.length > 0);
 
   const isSel = (kind: string, path?: string) =>
