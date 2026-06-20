@@ -35,13 +35,31 @@ fn candidates_for(root: &str, path: &str) -> Vec<Candidate> {
     // Web languages → Biome, then Prettier (project-local binary preferred).
     let web = matches!(
         ext.as_str(),
-        "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "json" | "jsonc"
-            | "css" | "scss" | "less" | "html" | "vue" | "svelte" | "md" | "mdx"
-            | "yaml" | "yml" | "graphql"
+        "js" | "jsx"
+            | "ts"
+            | "tsx"
+            | "mjs"
+            | "cjs"
+            | "json"
+            | "jsonc"
+            | "css"
+            | "scss"
+            | "less"
+            | "html"
+            | "vue"
+            | "svelte"
+            | "md"
+            | "mdx"
+            | "yaml"
+            | "yml"
+            | "graphql"
     );
     if web {
         let biome = local_bin(root, "biome").unwrap_or_else(|| "biome".into());
-        push(biome, vec!["format".into(), format!("--stdin-file-path={path}")]);
+        push(
+            biome,
+            vec!["format".into(), format!("--stdin-file-path={path}")],
+        );
         let prettier = local_bin(root, "prettier").unwrap_or_else(|| "prettier".into());
         push(prettier, vec!["--stdin-filepath".into(), path.to_string()]);
     }
@@ -53,7 +71,10 @@ fn candidates_for(root: &str, path: &str) -> Vec<Candidate> {
             push("ruff".into(), vec!["format".into(), "-".into()]);
             push("black".into(), vec!["-q".into(), "-".into()]);
         }
-        "rb" => push("rubocop".into(), vec!["-a".into(), "-s".into(), path.to_string()]),
+        "rb" => push(
+            "rubocop".into(),
+            vec!["-a".into(), "-s".into(), path.to_string()],
+        ),
         "sh" | "bash" => push("shfmt".into(), vec![]),
         _ => {}
     }
@@ -98,14 +119,12 @@ pub fn format_file(root: String, path: String, content: String) -> Result<String
     if candidates.is_empty() {
         return Err("No formatter configured for this file type.".into());
     }
-    let mut last_missing = true;
     for c in &candidates {
-        match run(&root, c, &content)? {
-            Some(formatted) => return Ok(formatted),
-            None => last_missing = last_missing && true, // not installed; try next
+        // `None` means that formatter isn't installed — try the next candidate.
+        if let Some(formatted) = run(&root, c, &content)? {
+            return Ok(formatted);
         }
     }
-    let _ = last_missing;
     Err("No formatter installed for this file type.".into())
 }
 

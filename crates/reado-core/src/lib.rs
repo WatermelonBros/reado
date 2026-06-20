@@ -724,12 +724,7 @@ pub fn relocate(old_start: u32, context: &Context, new_content: &str) -> Option<
     let after = trim(&context.after);
     if !before.is_empty() || !after.is_empty() {
         let blen = before.len();
-        let window: Vec<String> = before
-            .iter()
-            .chain(&snip)
-            .chain(&after)
-            .cloned()
-            .collect();
+        let window: Vec<String> = before.iter().chain(&snip).chain(&after).cloned().collect();
         if let Some((i, score)) = best_fuzzy(&lines, &window) {
             // Weight context fully but require the surrounding lines to be a
             // strong match, so we don't drag an anchor onto unrelated code.

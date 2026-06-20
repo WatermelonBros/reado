@@ -12,7 +12,11 @@ use crate::error::{Error, Result};
 /// The installed CLI's file name (what ends up on the user's PATH).
 const CLI_NAME: &str = if cfg!(windows) { "reado.exe" } else { "reado" };
 /// The bundled sidecar's file name (can't match the Tauri package name).
-const SIDECAR_NAME: &str = if cfg!(windows) { "reado-cli.exe" } else { "reado-cli" };
+const SIDECAR_NAME: &str = if cfg!(windows) {
+    "reado-cli.exe"
+} else {
+    "reado-cli"
+};
 
 /// Locate the bundled CLI shipped beside the app executable.
 fn bundled_cli() -> Result<PathBuf> {
@@ -63,5 +67,7 @@ pub fn install_cli() -> Result<String> {
 /// Whether the CLI is already installed on the user's `~/.local/bin`.
 #[tauri::command]
 pub fn cli_installed() -> bool {
-    local_bin().map(|b| b.join(CLI_NAME).exists()).unwrap_or(false)
+    local_bin()
+        .map(|b| b.join(CLI_NAME).exists())
+        .unwrap_or(false)
 }

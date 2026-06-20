@@ -102,7 +102,10 @@ pub fn list_files(root: String) -> Result<Vec<String>> {
         // read_file) works in terms of the root, and consumers prepend it.
         .map(|entry| {
             let p = entry.path();
-            p.strip_prefix(&root).unwrap_or(p).to_string_lossy().into_owned()
+            p.strip_prefix(&root)
+                .unwrap_or(p)
+                .to_string_lossy()
+                .into_owned()
         })
         .collect();
     Ok(files)

@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Reado — a calm, read-first code IDE where comments are durable, AI-resolvable artifacts.",
   "license": "MIT",
+  "packageManager": "pnpm@10.26.2",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

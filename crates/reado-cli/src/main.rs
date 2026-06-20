@@ -250,8 +250,18 @@ fn collect_markdown(root: &Path, dir: &Path, out: &mut Vec<String>) {
         if path.is_dir() {
             if matches!(
                 name.as_str(),
-                ".git" | "node_modules" | "target" | "dist" | "build" | ".next" | "vendor"
-                    | ".reado" | ".claude" | ".codex" | ".github" | ".vscode"
+                ".git"
+                    | "node_modules"
+                    | "target"
+                    | "dist"
+                    | "build"
+                    | ".next"
+                    | "vendor"
+                    | ".reado"
+                    | ".claude"
+                    | ".codex"
+                    | ".github"
+                    | ".vscode"
             ) {
                 continue;
             }

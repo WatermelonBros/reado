@@ -35,7 +35,9 @@ pub fn find_definition(root: String, name: String) -> Vec<Definition> {
     // Only resolve plausible identifiers.
     if name.is_empty()
         || name.len() > 100
-        || !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+        || !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
     {
         return Vec::new();
     }

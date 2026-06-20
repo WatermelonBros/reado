@@ -93,14 +93,26 @@ fn expand_status_line(line: &str) -> Vec<GitChange> {
     let path = path.trim_matches('"').to_string();
 
     if x == '?' {
-        return vec![GitChange { path, status: "untracked".into(), staged: false }];
+        return vec![GitChange {
+            path,
+            status: "untracked".into(),
+            staged: false,
+        }];
     }
     let mut out = Vec::new();
     if x != ' ' {
-        out.push(GitChange { path: path.clone(), status: categorize_char(x).into(), staged: true });
+        out.push(GitChange {
+            path: path.clone(),
+            status: categorize_char(x).into(),
+            staged: true,
+        });
     }
     if y != ' ' {
-        out.push(GitChange { path, status: categorize_char(y).into(), staged: false });
+        out.push(GitChange {
+            path,
+            status: categorize_char(y).into(),
+            staged: false,
+        });
     }
     out
 }
@@ -118,7 +130,12 @@ pub fn git_status(root: String) -> Vec<GitChange> {
 
 /// Run git and return raw stdout (no trimming), or `None` on failure.
 fn run_git_raw(root: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git").arg("-C").arg(root).args(args).output().ok()?;
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .ok()?;
     output
         .status
         .success()
