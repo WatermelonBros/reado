@@ -76,7 +76,7 @@ export function ActivityBar() {
                   active ? "opacity-100" : "opacity-0"
                 }`}
               />
-              <Icon className="h-[19px] w-[19px]" />
+              <Icon className="h-[18px] w-[18px]" />
               {badge > 0 && (
                 <span className="absolute top-1 right-1.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-marker px-1 text-[9px] font-bold text-on-accent">
                   {badge}
@@ -93,7 +93,7 @@ export function ActivityBar() {
           onClick={() => toggleDocs(true)}
           title={t("docs.title")}
           aria-label={t("docs.title")}
-          className="grid h-9 w-9 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
+          className="grid h-10 w-10 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
         >
           <DocsIcon className="h-[18px] w-[18px]" />
         </button>
@@ -102,7 +102,7 @@ export function ActivityBar() {
           onClick={() => toggleGraph(true)}
           title={t("graph.title")}
           aria-label={t("graph.title")}
-          className="grid h-9 w-9 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
+          className="grid h-10 w-10 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
         >
           <GraphIcon className="h-[18px] w-[18px]" />
         </button>
@@ -111,7 +111,7 @@ export function ActivityBar() {
           onClick={() => toggleSettings(true)}
           title={t("settings.title")}
           aria-label={t("settings.title")}
-          className="grid h-9 w-9 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
+          className="grid h-10 w-10 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
         >
           <SettingsIcon className="h-[18px] w-[18px]" />
         </button>

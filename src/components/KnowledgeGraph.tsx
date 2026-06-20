@@ -193,7 +193,7 @@ export function KnowledgeGraph() {
   return (
     <div
       onClick={() => close(false)}
-      className="animate-fade fixed inset-0 z-[115] grid place-items-center bg-[color-mix(in_oklch,var(--bg)_70%,transparent)] backdrop-blur-[2px]"
+      className="animate-fade fixed inset-0 z-[115] grid place-items-center reado-scrim"
     >
       <div
         onClick={(e) => e.stopPropagation()}

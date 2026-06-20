@@ -159,7 +159,7 @@ export function Palette() {
   return (
     <div
       onMouseDown={close}
-      className="animate-fade fixed inset-0 z-[100] flex items-start justify-center bg-[color-mix(in_oklch,var(--bg)_55%,transparent)] pt-[14vh] backdrop-blur-[2px]"
+      className="animate-fade reado-scrim fixed inset-0 z-[100] flex items-start justify-center pt-[14vh]"
     >
       <div
         role="dialog"

@@ -116,6 +116,12 @@
       opacity: 0;
     }
   }
+  /* Shared overlay scrim — one consistent dim+blur for every centred overlay. */
+  .reado-scrim {
+    background: color-mix(in oklch, var(--bg) 60%, transparent);
+    backdrop-filter: blur(2px);
+  }
+
   .animate-fade {
     animation: reado-fade var(--motion-fast, 120ms) var(--ease, ease);
   }

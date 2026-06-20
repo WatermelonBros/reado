@@ -26,7 +26,7 @@ export function Modal({ open, onOpenChange, ariaLabel, className = "", children 
       unmountOnExit
     >
       <Portal>
-        <Dialog.Backdrop className="animate-fade fixed inset-0 z-[110] bg-[color-mix(in_oklch,var(--bg)_55%,transparent)] backdrop-blur-[2px]" />
+        <Dialog.Backdrop className="animate-fade fixed inset-0 z-[110] reado-scrim" />
         <Dialog.Positioner className="fixed inset-0 z-[110] grid place-items-center p-4">
           <Dialog.Content
             aria-label={ariaLabel}

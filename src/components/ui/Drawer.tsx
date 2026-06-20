@@ -21,7 +21,7 @@ export function Drawer({ open, onOpenChange, ariaLabel, className = "", children
   return (
     <Dialog.Root open={open} onOpenChange={(d) => onOpenChange(d.open)} unmountOnExit lazyMount>
       <Portal>
-        <Dialog.Backdrop className="drawer-backdrop fixed inset-0 z-[110] bg-[color-mix(in_oklch,var(--bg)_45%,transparent)]" />
+        <Dialog.Backdrop className="drawer-backdrop reado-scrim fixed inset-0 z-[110]" />
         <Dialog.Positioner className="fixed inset-y-0 right-0 z-[110] flex">
           <Dialog.Content
             aria-label={ariaLabel}

@@ -48,11 +48,11 @@ export function SearchPanel() {
       </div>
       <div className="flex-1 overflow-y-auto">
         {error ? (
-          <p className="px-3 py-3 text-xs text-marker">
+          <p className="px-4 py-4 text-xs text-marker">
             {error.includes("ripgrep") ? t("search.ripgrepMissing") : error}
           </p>
         ) : matches.length === 0 ? (
-          <p className="px-3 py-3 text-xs text-faint">
+          <p className="px-4 py-6 text-xs leading-relaxed text-faint">
             {query.trim().length >= 2 ? t("search.noResults") : ""}
           </p>
         ) : (
