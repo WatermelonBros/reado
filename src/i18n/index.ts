@@ -154,6 +154,9 @@ const en = {
   "audit.hint": "The AI writes its findings as comments anchored to the code, so you can read them inline.",
   "audit.send": "Send to AI",
   "tree.audit": "Ask AI for an audit",
+  "comments.review": "Review",
+  "comments.audit": "Audit",
+  "comments.auditProject": "Audit the project",
 
   "files.panel": "Files",
   "git.panel": "Source control",
@@ -380,6 +383,9 @@ const it: Record<MessageKey, string> = {
   "audit.hint": "L'AI scrive i risultati come commenti ancorati al codice, così li leggi direttamente inline.",
   "audit.send": "Invia all'AI",
   "tree.audit": "Chiedi un audit all'AI",
+  "comments.review": "Review",
+  "comments.audit": "Audit",
+  "comments.auditProject": "Audit del progetto",
 
   "files.panel": "File",
   "git.panel": "Controllo sorgente",

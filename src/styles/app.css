@@ -188,6 +188,13 @@
   .reado-comment-gutter:hover .reado-gutter-marker:empty::before {
     transform: scale(1.15);
   }
+  /* Resolved (done) comments: a green dot/badge so they read as finished. */
+  .reado-gutter-marker--done:empty::before {
+    background: var(--syn-string);
+  }
+  .reado-gutter-marker--done:not(:empty) {
+    background: var(--syn-string);
+  }
 
   /* Transparency checkerboard behind images in the image viewer. */
   .reado-checkerboard {

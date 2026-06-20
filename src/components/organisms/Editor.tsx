@@ -11,7 +11,8 @@
  * Syntax highlighting and the editor theme come from `lib/codemirror.ts`.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EditorState, Compartment, StateEffect, StateField } from "@codemirror/state";
+import { EditorState, Compartment, StateEffect, StateField, Annotation } from "@codemirror/state";
+import { listen } from "@tauri-apps/api/event";
 import {
   EditorView,
   lineNumbers,
@@ -68,6 +69,10 @@ import { PlusIcon } from "../atoms/icons";
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
 const PLACEHOLDER = "grid h-full place-items-center p-8 text-center text-muted";
+
+/** Marks a doc change as a reload from disk (an external edit), not a user edit,
+ * so it doesn't flip the dirty flag. */
+const ExternalReload = Annotation.define<boolean>();
 
 /** StateEffect/Field driving the transient landing-line highlight. */
 const setLanding = StateEffect.define<number | null>();
@@ -202,6 +207,7 @@ export function Editor() {
   const active = useProject((s) => s.active);
   const landing = useProject((s) => s.landing);
   const allComments = useComments((s) => s.comments);
+  const archived = useComments((s) => s.archived);
   const diffing = useEditorActions((s) => s.diffing);
   const { wrap, readingWidth, codeFont, focusMode } = useSettings();
   const t = useT();
@@ -235,6 +241,22 @@ export function Editor() {
       .then((list) => useComments.getState().replaceForFile(rel, list))
       .catch(() => {});
   }, [root, active]);
+
+  // Reload the open file when it changes on disk (e.g. an agent edited it),
+  // unless the user has unsaved manual edits in progress.
+  useEffect(() => {
+    if (!active) return;
+    const rel = toRelative(root, active);
+    const un = listen<{ file: string }>("file-changed", (e) => {
+      if (e.payload.file !== rel || useEditorActions.getState().dirty) return;
+      readFile(root, active, forceText.has(active))
+        .then((c) => setLoaded({ path: active, content: c }))
+        .catch(() => {});
+    });
+    return () => {
+      un.then((off) => off());
+    };
+  }, [root, active, forceText]);
 
   // Each file opens with a clean default view: reset the dirty and diff state.
   useEffect(() => {
@@ -288,13 +310,19 @@ export function Editor() {
   if (diffing) {
     return <DiffView key={relPath} relPath={relPath} text={content.text} />;
   }
+  // Show active comments plus resolved (done) ones, so a finished task stays
+  // readable inline (marked done) instead of vanishing from the code.
+  const fileComments = commentsForFile(
+    [...allComments, ...archived.filter((c) => c.state === "done")],
+    relPath,
+  );
   return (
     <CodeView
       key={active}
       path={active}
       relPath={relPath}
       text={content.text}
-      comments={commentsForFile(allComments, relPath)}
+      comments={fileComments}
       wrap={wrap}
       readingWidth={readingWidth}
       codeFont={codeFont}
@@ -371,15 +399,17 @@ function CodeView({
   // Bumped on scroll/resize so the overlays re-read their anchor coordinates.
   const [, setTick] = useState(0);
 
-  // Group comments by their anchored start line for the gutter.
+  // Group comments by their anchored start line for the gutter. A line is shown
+  // "done" (green) only when every comment on it is resolved.
   const lineComments = useMemo<LineComments>(() => {
     const map: LineComments = new Map();
     for (const c of comments) {
       if (c.anchor.scope !== "range") continue;
       const line = c.anchor.startLine;
-      const ids = map.get(line) ?? [];
-      ids.push(c.id);
-      map.set(line, ids);
+      const entry = map.get(line) ?? { ids: [], done: true };
+      entry.ids.push(c.id);
+      entry.done = entry.done && (c.state === "done" || c.state === "discarded");
+      map.set(line, entry);
     }
     return map;
   }, [comments]);
@@ -476,7 +506,9 @@ function CodeView({
             const line = u.state.doc.lineAt(head);
             useCursor.getState().set(line.number, head - line.from + 1);
           }
-          if (u.docChanged) useEditorActions.getState().setDirty(true);
+          if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ExternalReload))) {
+            useEditorActions.getState().setDirty(true);
+          }
         }),
         landingField,
         blockField,
@@ -532,6 +564,22 @@ function CodeView({
     // `text`/`path` identity drives recreation via the `key` prop in Editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Replace the document when the file changed on disk (e.g. an agent edited
+  // it). Skipped while the user has unsaved manual edits so we never clobber
+  // them; tagged as an external reload so it doesn't mark the doc dirty.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || view.state.doc.toString() === text) return;
+    if (useEditorActions.getState().dirty) return;
+    const sel = view.state.selection.main;
+    const len = text.length;
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: text },
+      selection: { anchor: Math.min(sel.anchor, len), head: Math.min(sel.head, len) },
+      annotations: ExternalReload.of(true),
+    });
+  }, [text]);
 
   // Reconfigure line wrapping live.
   useEffect(() => {
@@ -673,25 +721,39 @@ function CodeView({
     return () => clearTimeout(timer);
   }, [landingLine]);
 
+  // Convert a viewport y (from coordsAtPos / pointer events) into a top offset
+  // within the overlay container, expressed in the container's LAYOUT pixels.
+  //
+  // getBoundingClientRect() reports *visual* pixels (scaled by the page zoom and
+  // device-pixel ratio), but a CSS `top` is applied in *layout* pixels. Under
+  // zoom the two differ, so the raw difference drifts further the lower the line
+  // is. Dividing by the effective scale (visual height / layout height) makes the
+  // overlay track its anchor at any zoom and window size.
+  const toLocalTop = (viewportY: number): number | null => {
+    const wrap = wrapRef.current;
+    if (!wrap) return null;
+    const rect = wrap.getBoundingClientRect();
+    const scale = wrap.offsetHeight ? rect.height / wrap.offsetHeight : 1;
+    return (viewportY - rect.top) / scale;
+  };
+
   // Pixel offset of a line's top, relative to the overlay container. Returns
   // null when the line is scrolled out of view (overlay is then hidden).
   const topForLine = (line: number): number | null => {
     const view = viewRef.current;
-    if (!view || !wrapRef.current) return null;
+    if (!view) return null;
     const clamped = Math.min(Math.max(line, 1), view.state.doc.lines);
     const coords = view.coordsAtPos(view.state.doc.line(clamped).from);
-    if (!coords) return null;
-    return coords.top - wrapRef.current.getBoundingClientRect().top;
+    return coords ? toLocalTop(coords.top) : null;
   };
 
   // Pixel offset of a line's *bottom* edge, relative to the overlay container.
   const bottomForLine = (line: number): number | null => {
     const view = viewRef.current;
-    if (!view || !wrapRef.current) return null;
+    if (!view) return null;
     const clamped = Math.min(Math.max(line, 1), view.state.doc.lines);
     const coords = view.coordsAtPos(view.state.doc.line(clamped).from);
-    if (!coords) return null;
-    return coords.bottom - wrapRef.current.getBoundingClientRect().top;
+    return coords ? toLocalTop(coords.bottom) : null;
   };
 
   // Keep an overlay of the given height fully within the editor viewport, so a
@@ -796,7 +858,8 @@ function CodeView({
     const line = view.state.doc.lineAt(pos).number;
     const coords = view.coordsAtPos(view.state.doc.line(line).from);
     if (!coords) return;
-    const top = coords.top - wrapRef.current.getBoundingClientRect().top;
+    const top = toLocalTop(coords.top);
+    if (top === null) return;
     setHover((prev) => (prev?.line === line ? prev : { line, top }));
   };
 

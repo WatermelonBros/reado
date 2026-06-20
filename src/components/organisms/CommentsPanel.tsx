@@ -13,6 +13,9 @@ import { useT } from "../../i18n";
 import { COMMENT_STATES, COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
 import { Checkbox } from "../atoms/Checkbox";
+import { SendIcon, ClaudeIcon } from "../atoms/icons";
+import { SendReviewDialog } from "./SendReviewDialog";
+import { AuditDialog, type AuditTarget } from "./AuditDialog";
 
 const fmtDate = (ms: number) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(ms));
@@ -32,6 +35,13 @@ export function CommentsPanel() {
   const [typeFilter, setTypeFilter] = useState<CommentType | "all">("all");
   const [stateFilter, setStateFilter] = useState<CommentState | "all">("all");
   const [thisFileOnly, setThisFileOnly] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null);
+
+  const openTasks = comments.filter((c) => c.kind === "task" && c.state === "open").length;
+  // Audit the open file when there is one, otherwise the whole project.
+  const auditScope = (): AuditTarget =>
+    active ? { path: toRelative(root, active), isDir: false } : { path: ".", isDir: true };
 
   // Load the history lazily when first switching to it.
   useEffect(() => {
@@ -148,6 +158,37 @@ export function CommentsPanel() {
           </ul>
         )}
       </div>
+
+      {/* Ask an agent to review the open tasks or audit the code into comments. */}
+      <div className="flex flex-none gap-2 border-t border-line p-2">
+        <button
+          type="button"
+          onClick={() => setReviewOpen(true)}
+          disabled={openTasks === 0}
+          title={openTasks === 0 ? t("terminal.noTasks") : t("terminal.sendReview")}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-accent px-2 py-1.5 text-xs font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-40"
+        >
+          <SendIcon className="h-3.5 w-3.5" />
+          {t("comments.review")}
+          {openTasks > 0 && (
+            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-[color-mix(in_oklch,var(--accent-contrast)_25%,transparent)] px-1 text-[10px]">
+              {openTasks}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setAuditTarget(auditScope())}
+          title={active ? t("tree.audit") : t("comments.auditProject")}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs text-ink transition-colors hover:border-line-strong"
+        >
+          <ClaudeIcon className="h-3.5 w-3.5" />
+          {t("comments.audit")}
+        </button>
+      </div>
+
+      <SendReviewDialog open={reviewOpen} onClose={() => setReviewOpen(false)} />
+      <AuditDialog target={auditTarget} onClose={() => setAuditTarget(null)} />
     </div>
   );
 }

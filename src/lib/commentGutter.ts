@@ -11,18 +11,24 @@
 import { gutter, GutterMarker, EditorView } from "@codemirror/view";
 import { RangeSet } from "@codemirror/state";
 
-/** Comment ids grouped by their (1-based) anchored line. */
-export type LineComments = Map<number, string[]>;
+/** Comment ids grouped by their (1-based) anchored line, with whether every
+ * comment on that line is resolved (so the marker can show a "done" dot). */
+export type LineComments = Map<number, { ids: string[]; done: boolean }>;
 
 class CommentGutterMarker extends GutterMarker {
-  constructor(private readonly count: number) {
+  constructor(
+    private readonly count: number,
+    private readonly done: boolean,
+  ) {
     super();
   }
   override toDOM() {
     const el = document.createElement("span");
-    el.className = "reado-gutter-marker";
+    el.className = `reado-gutter-marker${this.done ? " reado-gutter-marker--done" : ""}`;
     el.textContent = this.count > 1 ? String(this.count) : "";
-    el.title = `${this.count} comment${this.count > 1 ? "s" : ""}`;
+    el.title = `${this.count} comment${this.count > 1 ? "s" : ""}${
+      this.done ? " (resolved)" : ""
+    }`;
     return el;
   }
 }
@@ -40,17 +46,17 @@ export function commentGutter(
       const ranges = [...lines.entries()]
         .filter(([line]) => line >= 1 && line <= doc.lines)
         .sort((a, b) => a[0] - b[0])
-        .map(([line, ids]) =>
-          new CommentGutterMarker(ids.length).range(doc.line(line).from),
+        .map(([line, { ids, done }]) =>
+          new CommentGutterMarker(ids.length, done).range(doc.line(line).from),
         );
       return RangeSet.of(ranges);
     },
     domEventHandlers: {
       mousedown(view, block) {
         const line = view.state.doc.lineAt(block.from).number;
-        const ids = lines.get(line);
-        if (ids && ids.length) {
-          onClick(line, ids);
+        const entry = lines.get(line);
+        if (entry && entry.ids.length) {
+          onClick(line, entry.ids);
           return true;
         }
         return false;

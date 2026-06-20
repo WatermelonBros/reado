@@ -96,7 +96,13 @@ export function CommentThread({ comment, top, onClose }: Props) {
           ariaLabel="type"
           variant="ghost"
           value={comment.type}
-          onChange={(v) => patch(comment.id, { type: v as CommentType })}
+          // Mirror the composer: changing the type re-derives the kind (a "note"
+          // type is a note; any actionable type becomes a task) so it's sent to
+          // the AI. The task/note checkbox below can still override it.
+          onChange={(v) => {
+            const type = v as CommentType;
+            patch(comment.id, { type, kind: type === "note" ? "note" : "task" });
+          }}
           options={COMMENT_TYPES.map((tp) => ({
             value: tp,
             label: t(typeKey(tp)),

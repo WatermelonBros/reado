@@ -62,6 +62,19 @@ function replace(list: Comment[], next: Comment): Comment[] {
   return next.archived ? without : [...without, next];
 }
 
+/** Route an updated comment to the right list: archived ones move to `archived`
+ * (still shown inline as resolved), active ones stay in `comments`. */
+function distribute(
+  s: { comments: Comment[]; archived: Comment[] },
+  next: Comment,
+): { comments: Comment[]; archived: Comment[] } {
+  const comments = s.comments.filter((c) => c.id !== next.id);
+  const archived = s.archived.filter((c) => c.id !== next.id);
+  if (next.archived) archived.push(next);
+  else comments.push(next);
+  return { comments, archived };
+}
+
 export const useComments = create<CommentsState>((set, get) => ({
   root: "",
   comments: [],
@@ -87,9 +100,14 @@ export const useComments = create<CommentsState>((set, get) => ({
 
   load: async (root) => {
     set({ root, comments: [], activeId: null });
-    const comments = await listComments(root);
+    // Load active and resolved (archived) together: done comments are shown
+    // inline in the editor too, so the gutter needs them up front.
+    const [comments, archived] = await Promise.all([
+      listComments(root),
+      listArchived(root),
+    ]);
     // Guard against a stale load if the project changed meanwhile.
-    if (get().root === root) set({ comments });
+    if (get().root === root) set({ comments, archived });
   },
 
   create: async (input) => {
@@ -100,23 +118,24 @@ export const useComments = create<CommentsState>((set, get) => ({
 
   patch: async (id, patch) => {
     const next = await updateComment(get().root, id, patch);
-    set((s) => ({ comments: replace(s.comments, next) }));
+    set((s) => distribute(s, next));
   },
 
   reply: async (id, body) => {
     const next = await addReply(get().root, id, "user", body);
-    set((s) => ({ comments: replace(s.comments, next) }));
+    set((s) => distribute(s, next));
   },
 
   setState: async (id, state) => {
     const next = await setCommentState(get().root, id, state);
-    set((s) => ({ comments: replace(s.comments, next) }));
+    set((s) => distribute(s, next));
   },
 
   remove: async (id) => {
     await deleteComment(get().root, id);
     set((s) => ({
       comments: s.comments.filter((c) => c.id !== id),
+      archived: s.archived.filter((c) => c.id !== id),
       activeId: s.activeId === id ? null : s.activeId,
     }));
   },
