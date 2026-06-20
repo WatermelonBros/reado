@@ -35,20 +35,30 @@ export function SpecsPanel() {
             <span className="truncate text-sm font-medium text-ink">{g.title}</span>
           </div>
           <ul className="m-0 list-none p-0">
-            {g.items.map((item) => {
+            {g.items.map((item, i) => {
               const full = `${root}/${item.path}`;
               const isActive = active === full;
+              // A small "Specs" heading before the first capability delta.
+              const firstSpec = item.isSpec && (i === 0 || !g.items[i - 1].isSpec);
               return (
                 <li key={item.path}>
+                  {firstSpec && (
+                    <div className="px-5 pt-2 pb-0.5 text-[10px] font-semibold tracking-wide text-faint uppercase">
+                      {t("specs.spec")}
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => open(full)}
                     title={item.path}
-                    className={`block w-full truncate py-1 pr-3 pl-5 text-left text-sm transition-colors ${
-                      isActive ? "bg-selection text-ink" : "text-muted hover:bg-surface hover:text-ink"
-                    }`}
+                    className={`flex w-full items-center gap-2 truncate py-1 pr-3 text-left text-sm transition-colors ${
+                      item.isSpec ? "pl-7" : "pl-5"
+                    } ${isActive ? "bg-selection text-ink" : "text-muted hover:bg-surface hover:text-ink"}`}
                   >
-                    {item.label}
+                    {item.isSpec && (
+                      <span className="h-1 w-1 flex-none rounded-full bg-[var(--syn-control)]" />
+                    )}
+                    <span className="truncate">{item.label}</span>
                   </button>
                 </li>
               );

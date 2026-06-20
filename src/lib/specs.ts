@@ -8,10 +8,12 @@ import { create } from "zustand";
 import { listFiles } from "./api";
 
 export interface SpecItem {
-  /** File label relative to its group folder (e.g. "proposal.md"). */
+  /** Display label: a document name ("proposal.md") or a capability ("auth"). */
   label: string;
   /** Project-relative path, for opening in the editor. */
   path: string;
+  /** True for a capability spec delta, false for a change document. */
+  isSpec: boolean;
 }
 
 export interface SpecGroup {
@@ -20,8 +22,17 @@ export interface SpecGroup {
   items: SpecItem[];
 }
 
-/** Order the well-known OpenSpec documents first, then anything else. */
-const FILE_ORDER = ["proposal.md", "design.md", "tasks.md", "spec.md"];
+/** Order the well-known OpenSpec + speckit documents first, then anything else. */
+const FILE_ORDER = [
+  "spec.md",
+  "proposal.md",
+  "plan.md",
+  "design.md",
+  "research.md",
+  "data-model.md",
+  "tasks.md",
+  "quickstart.md",
+];
 const fileRank = (label: string) => {
   const base = label.split("/").pop() ?? label;
   const i = FILE_ORDER.indexOf(base);
@@ -41,19 +52,48 @@ export function groupSpecs(files: string[]): SpecGroup[] {
     groups.set(key, g);
   };
 
+  // speckit keeps features under a top-level `specs/` and config under
+  // `.specify/`; only treat a bare `specs/` as speckit when one of those signals
+  // is present, so a random `specs/` folder isn't mistaken for a plan.
+  const speckit =
+    md.some((f) => /(?:^|\/)\.specify\//.test(f)) ||
+    md.some((f) => /(?:^|\/)specs\/[^/]+\/plan\.md$/.test(f));
+
   for (const path of md) {
     let m: RegExpMatchArray | null;
-    if ((m = path.match(/(?:^|\/)\.?openspec\/changes\/([^/]+)\/(.+)$/))) {
-      add(`change:${m[1]}`, { title: m[1], kind: "change" }, { label: m[2], path });
-    } else if ((m = path.match(/(?:^|\/)\.?openspec\/specs\/([^/]+)\/(.+)$/))) {
-      add(`spec:${m[1]}`, { title: m[1], kind: "spec" }, { label: m[2], path });
-    } else if ((m = path.match(/(?:^|\/)\.specify\/(?:specs\/)?([^/]+)\/(.+)$/))) {
-      add(`spec:${m[1]}`, { title: m[1], kind: "spec" }, { label: m[2], path });
+    // --- OpenSpec ---
+    // A capability spec delta nested under a change → label by capability.
+    if ((m = path.match(/(?:^|\/)\.?openspec\/changes\/([^/]+)\/specs\/([^/]+)\/(.+)$/))) {
+      const label = m[3] === "spec.md" ? m[2] : `${m[2]}/${m[3]}`;
+      add(`change:${m[1]}`, { title: m[1], kind: "change" }, { label, path, isSpec: true });
+    }
+    // A change document (proposal/design/tasks) directly under the change.
+    else if ((m = path.match(/(?:^|\/)\.?openspec\/changes\/([^/]+)\/([^/]+)$/))) {
+      add(`change:${m[1]}`, { title: m[1], kind: "change" }, { label: m[2], path, isSpec: false });
+    }
+    // A standalone OpenSpec capability spec.
+    else if ((m = path.match(/(?:^|\/)\.?openspec\/specs\/([^/]+)\/(.+)$/))) {
+      add(`spec:${m[1]}`, { title: m[1], kind: "spec" }, { label: m[2], path, isSpec: true });
+    }
+    // --- speckit ---
+    // A feature's documents (spec/plan/tasks/research/…) under top-level specs/.
+    else if (speckit && (m = path.match(/(?:^|\/)specs\/([^/]+)\/(.+)$/))) {
+      add(`change:${m[1]}`, { title: m[1], kind: "change" }, { label: m[2], path, isSpec: false });
+    }
+    // speckit project memory (constitution, …).
+    else if ((m = path.match(/(?:^|\/)\.specify\/([^/]+)\/(.+)$/))) {
+      add(`spec:${m[1]}`, { title: m[1], kind: "spec" }, { label: m[2], path, isSpec: true });
     }
   }
 
   for (const g of groups.values()) {
-    g.items.sort((a, b) => fileRank(a.label) - fileRank(b.label) || a.label.localeCompare(b.label));
+    // Documents first (proposal → design → tasks), then capability specs A→Z.
+    g.items.sort(
+      (a, b) =>
+        Number(a.isSpec) - Number(b.isSpec) ||
+        fileRank(a.label) - fileRank(b.label) ||
+        a.label.localeCompare(b.label),
+    );
   }
   // Changes first, then specs; each alphabetical.
   return [...groups.values()].sort(
