@@ -46,7 +46,7 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
 
       {/* Bottom overlay: dimensions + zoom controls. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-        <div className="pointer-events-auto flex items-center gap-1 rounded-lg border border-line bg-overlay/90 px-2 py-1 text-xs text-muted shadow-[var(--shadow)] backdrop-blur">
+        <div className="pointer-events-auto flex items-center gap-1 rounded-lg border border-line bg-overlay px-2 py-1 text-xs text-muted shadow-[var(--shadow)]">
           {size && (
             <span className="px-1.5 font-mono text-faint tabular-nums">
               {size.w} × {size.h}

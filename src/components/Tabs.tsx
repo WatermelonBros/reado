@@ -1,9 +1,10 @@
 /** Open-file tab strip, with a right-click context menu per tab. */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useProject } from "../lib/store";
 import { formatDocument } from "../lib/docInfo";
-import { useT, type MessageKey } from "../i18n";
+import { useT } from "../i18n";
 import { CloseIcon } from "./icons";
+import { ContextMenu, type ContextMenuItem } from "./ui/ContextMenu";
 
 const basename = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
@@ -19,35 +20,19 @@ export function Tabs() {
 
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null);
 
-  // Dismiss the context menu on any outside interaction.
-  useEffect(() => {
-    if (!menu) return;
-    const off = () => setMenu(null);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenu(null);
-    window.addEventListener("click", off);
-    window.addEventListener("resize", off);
-    window.addEventListener("blur", off);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("click", off);
-      window.removeEventListener("resize", off);
-      window.removeEventListener("blur", off);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [menu]);
-
   if (tabs.length === 0) return null;
 
   const path = menu?.path ?? "";
   const isLast = menu ? tabs.indexOf(menu.path) === tabs.length - 1 : true;
-  const items: { label: MessageKey; run: () => void; disabled?: boolean }[] = [
-    { label: "tabs.close", run: () => close(path) },
-    { label: "tabs.closeOthers", run: () => closeOthers(path), disabled: tabs.length < 2 },
-    { label: "tabs.closeRight", run: () => closeToRight(path), disabled: isLast },
-    { label: "tabs.closeAll", run: closeAll },
+  const items: ContextMenuItem[] = [
+    { label: t("tabs.close"), onSelect: () => close(path) },
+    { label: t("tabs.closeOthers"), onSelect: () => closeOthers(path), disabled: tabs.length < 2 },
+    { label: t("tabs.closeRight"), onSelect: () => closeToRight(path), disabled: isLast },
+    { label: t("tabs.closeAll"), onSelect: closeAll },
     {
-      label: "editor.format",
-      run: () => {
+      label: t("editor.format"),
+      separatorBefore: true,
+      onSelect: () => {
         setActive(path);
         setTimeout(() => void formatDocument(), 80);
       },
@@ -104,28 +89,7 @@ export function Tabs() {
       })}
 
       {menu && (
-        <ul
-          className="fixed z-[120] min-w-[190px] overflow-hidden rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]"
-          style={{ left: menu.x, top: menu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {items.map((item, i) => (
-            <li key={item.label}>
-              {i === items.length - 1 && <div className="my-1 border-t border-line" />}
-              <button
-                type="button"
-                disabled={item.disabled}
-                onClick={() => {
-                  setMenu(null);
-                  item.run();
-                }}
-                className="flex w-full items-center px-3 py-1.5 text-left text-ink transition-colors hover:bg-surface disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                {t(item.label)}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />
       )}
     </div>
   );

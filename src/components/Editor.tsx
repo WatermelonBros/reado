@@ -62,6 +62,7 @@ import { ACCENT } from "./commentMeta";
 import { Welcome } from "./Welcome";
 import { DiffView } from "./DiffView";
 import { ImageView } from "./ImageView";
+import { ContextMenu } from "./ui/ContextMenu";
 import { PlusIcon } from "./icons";
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
@@ -652,23 +653,6 @@ function CodeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stickyScroll]);
 
-  // Dismiss the editor context menu on any outside interaction.
-  useEffect(() => {
-    if (!ctxMenu) return;
-    const off = () => setCtxMenu(null);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCtxMenu(null);
-    window.addEventListener("click", off);
-    window.addEventListener("resize", off);
-    document.addEventListener("scroll", off, true);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("click", off);
-      window.removeEventListener("resize", off);
-      document.removeEventListener("scroll", off, true);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [ctxMenu]);
-
   // Scroll to and softly highlight the landing line after a jump.
   useEffect(() => {
     const view = viewRef.current;
@@ -966,26 +950,12 @@ function CodeView({
       )}
 
       {ctxMenu && (
-        <ul
-          className="fixed z-[120] min-w-[200px] overflow-hidden rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]"
-          style={{ left: ctxMenu.x, top: ctxMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {ctxActions().map((item) => (
-            <li key={item.label}>
-              <button
-                type="button"
-                onClick={() => {
-                  setCtxMenu(null);
-                  item.run();
-                }}
-                className="flex w-full items-center px-3 py-1.5 text-left text-ink transition-colors hover:bg-surface"
-              >
-                {item.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          items={ctxActions().map((a) => ({ label: a.label, onSelect: a.run }))}
+          onClose={() => setCtxMenu(null)}
+        />
       )}
     </div>
   );

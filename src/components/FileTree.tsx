@@ -13,6 +13,7 @@ import { toRelative } from "../lib/comments";
 import { useT } from "../i18n";
 import { FileIcon, ChevronIcon, MessageIcon } from "./icons";
 import { TreeCommentDialog, type CommentTarget } from "./TreeCommentDialog";
+import { ContextMenu, type ContextMenuItem } from "./ui/ContextMenu";
 
 type Ctx = (entry: DirEntry | null, e: React.MouseEvent) => void;
 
@@ -32,29 +33,33 @@ export function FileTree() {
     setMenu({ x: e.clientX, y: e.clientY, entry });
   };
 
-  // Dismiss the context menu on any outside interaction.
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenu(null);
-    window.addEventListener("click", close);
-    window.addEventListener("resize", close);
-    window.addEventListener("blur", close);
-    document.addEventListener("scroll", close, true);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("blur", close);
-      document.removeEventListener("scroll", close, true);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [menu]);
-
   const openComment = (kind: CommentTarget["kind"], path = "") => {
     setMenu(null);
     setTarget({ kind, path });
   };
+
+  const menuItems: ContextMenuItem[] = menu
+    ? [
+        ...(menu.entry
+          ? [
+              {
+                label: t(menu.entry.isDir ? "tree.commentFolder" : "tree.commentFile"),
+                icon: <MessageIcon className="h-3.5 w-3.5" />,
+                onSelect: () =>
+                  openComment(
+                    menu.entry!.isDir ? "folder" : "file",
+                    toRelative(root, menu.entry!.path),
+                  ),
+              },
+            ]
+          : []),
+        {
+          label: t("tree.commentProject"),
+          icon: <MessageIcon className="h-3.5 w-3.5" />,
+          onSelect: () => openComment("project"),
+        },
+      ]
+    : [];
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -75,43 +80,11 @@ export function FileTree() {
       </div>
 
       {menu && (
-        <ul
-          className="fixed z-[120] min-w-[200px] overflow-hidden rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]"
-          style={{ left: menu.x, top: menu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {menu.entry && (
-            <MenuItem
-              label={t(menu.entry.isDir ? "tree.commentFolder" : "tree.commentFile")}
-              onClick={() =>
-                openComment(
-                  menu.entry!.isDir ? "folder" : "file",
-                  toRelative(root, menu.entry!.path),
-                )
-              }
-            />
-          )}
-          <MenuItem label={t("tree.commentProject")} onClick={() => openComment("project")} />
-        </ul>
+        <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
       )}
 
       <TreeCommentDialog target={target} onClose={() => setTarget(null)} />
     </div>
-  );
-}
-
-function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink transition-colors hover:bg-surface"
-      >
-        <MessageIcon className="h-3.5 w-3.5 flex-none text-muted" />
-        {label}
-      </button>
-    </li>
   );
 }
 
