@@ -8,6 +8,7 @@ import { ProjectView } from "./components/ProjectView";
 import { currentProjectPath } from "./lib/window";
 import { useApplyTheme, useApplyZoom, useGlobalShortcuts } from "./lib/hooks";
 import { checkForUpdates } from "./lib/updater";
+import { listenForMenu } from "./lib/menu";
 
 export default function App() {
   useApplyTheme();
@@ -27,6 +28,12 @@ export default function App() {
   // Silent update check on the launcher window only.
   useEffect(() => {
     if (currentProjectPath() === null) void checkForUpdates(false);
+  }, []);
+
+  // Route native-menu clicks to in-app commands.
+  useEffect(() => {
+    const off = listenForMenu();
+    return () => void off.then((fn) => fn());
   }, []);
 
   return projectPath ? (

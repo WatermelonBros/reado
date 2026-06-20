@@ -9,6 +9,7 @@ mod annotations;
 mod error;
 mod format;
 mod fs;
+mod menu;
 mod git;
 mod index;
 mod pty;
@@ -25,6 +26,10 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            menu::init(app)?;
+            Ok(())
+        })
         .manage(pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
             fs::list_dir,

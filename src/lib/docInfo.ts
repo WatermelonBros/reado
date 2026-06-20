@@ -8,7 +8,8 @@
  */
 import { create } from "zustand";
 import { EditorView } from "@codemirror/view";
-import { writeFile, formatFile } from "./api";
+import { openSearchPanel } from "@codemirror/search";
+import { writeFile, formatFile, findDefinition } from "./api";
 import { useProject, useEditorActions } from "./store";
 import { toRelative } from "./comments";
 
@@ -111,6 +112,39 @@ export async function formatDocument(): Promise<string | null> {
   } catch (e) {
     return String(e);
   }
+}
+
+/** Save the active document to disk (used by the native menu's File ▸ Save). */
+export function saveDocument(): void {
+  const { view } = useDocInfo.getState();
+  const { root, active } = useProject.getState();
+  if (!view || !active) return;
+  writeFile(root, toRelative(root, active), view.state.doc.toString())
+    .then(() => useEditorActions.getState().setDirty(false))
+    .catch(() => {});
+}
+
+/** Open the editor's find panel (native menu Edit ▸ Find). */
+export function openFind(): void {
+  const { view } = useDocInfo.getState();
+  if (view) {
+    openSearchPanel(view);
+    view.focus();
+  }
+}
+
+/** Jump to the definition of the symbol at the cursor (native menu Go ▸ …). */
+export function goToDefinitionAtCursor(): void {
+  const { view } = useDocInfo.getState();
+  if (!view) return;
+  const word = view.state.wordAt(view.state.selection.main.head);
+  if (!word) return;
+  const name = view.state.doc.sliceString(word.from, word.to);
+  findDefinition(useProject.getState().root, name)
+    .then((defs) => {
+      if (defs.length) useProject.getState().open(defs[0].path, defs[0].line);
+    })
+    .catch(() => {});
 }
 
 /** Rewrite the active file with the chosen line endings (applies + saves). */
