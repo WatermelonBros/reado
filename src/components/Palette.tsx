@@ -14,6 +14,7 @@ import { listFiles, searchText, type SearchMatch } from "../lib/api";
 import { usePalette, useProject, useSettings, useEditorActions, useWorkspace, THEMES } from "../lib/store";
 import { mod } from "../lib/shortcuts";
 import { checkForUpdates } from "../lib/updater";
+import { formatDocument } from "../lib/docInfo";
 import { useT, type MessageKey } from "../i18n";
 
 interface Row {
@@ -251,6 +252,7 @@ function commandRows(
 ): Row[] {
   const rows: Row[] = [
     { label: t("comment.new"), hint: `${mod}⇧M`, run: requestCompose },
+    { label: t("editor.format"), hint: "⇧⌥F", run: () => void formatDocument() },
     { label: t("graph.title"), run: openGraph },
     { label: t("docs.title"), run: openDocs },
     { label: t("finder.placeholder"), hint: `${mod}P`, run: () => open("files") },

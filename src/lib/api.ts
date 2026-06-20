@@ -118,6 +118,10 @@ export interface Definition {
 export const findDefinition = (root: string, name: string) =>
   invoke<Definition[]>("find_definition", { root, name });
 
+/** Format text with the project's formatter for this file type. Throws on failure. */
+export const formatFile = (root: string, path: string, content: string) =>
+  invoke<string>("format_file", { root, path, content });
+
 // ---- Annotations ---------------------------------------------------------
 
 export type CommentType = "bug" | "refactor" | "performance" | "question" | "note";

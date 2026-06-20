@@ -8,7 +8,7 @@
  */
 import { create } from "zustand";
 import { EditorView } from "@codemirror/view";
-import { writeFile } from "./api";
+import { writeFile, formatFile } from "./api";
 import { useProject, useEditorActions } from "./store";
 import { toRelative } from "./comments";
 
@@ -70,6 +70,26 @@ export function goToLine(n: number): void {
     effects: EditorView.scrollIntoView(line.from, { y: "center" }),
   });
   view.focus();
+}
+
+/** Format the active document with the project's formatter, applying the result
+ *  to the buffer (the user still saves). Returns an error message on failure. */
+export async function formatDocument(): Promise<string | null> {
+  const { view } = useDocInfo.getState();
+  const { root, active } = useProject.getState();
+  if (!view || !active) return null;
+  const content = view.state.doc.toString();
+  try {
+    const formatted = await formatFile(root, toRelative(root, active), content);
+    if (formatted && formatted !== content) {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: formatted },
+      });
+    }
+    return null;
+  } catch (e) {
+    return String(e);
+  }
 }
 
 /** Rewrite the active file with the chosen line endings (applies + saves). */

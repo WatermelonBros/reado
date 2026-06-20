@@ -7,6 +7,7 @@
 
 mod annotations;
 mod error;
+mod format;
 mod fs;
 mod git;
 mod index;
@@ -43,6 +44,7 @@ pub fn run() {
             git::git_blame,
             search::search_text,
             symbols::find_definition,
+            format::format_file,
             annotations::create_comment,
             annotations::list_comments,
             annotations::list_archived,

@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { useSettings, usePalette, useEditorActions, type ThemeName } from "./store";
 import { useTerminals } from "./terminals";
+import { formatDocument } from "./docInfo";
 
 /** Resolve the active theme from settings, OS preference and time of day. */
 function resolveTheme(
@@ -68,6 +69,12 @@ export function useGlobalShortcuts(): void {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Format Document (Shift+Alt+F), like VS Code — not a Cmd/Ctrl shortcut.
+      if (e.shiftKey && e.altKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        void formatDocument();
+        return;
+      }
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const key = e.key.toLowerCase();
