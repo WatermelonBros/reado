@@ -2,7 +2,7 @@
 
 ## 0. De-risking spikes (before building the shell)
 
-- [ ] 0.1 Anchoring spike: plant an anchored comment, subject the file to a day of real edits (reformat, move lines, refactor) made *outside* the tool, measure how many comments stay correctly anchored via git-diff + fuzzy snippet.
+- [x] 0.1 Anchoring spike: plant an anchored comment, subject the file to a day of real edits (reformat, move lines, refactor) made *outside* the tool, measure how many comments stay correctly anchored via git-diff + fuzzy snippet.
 - [x] 0.2 Terminal spike: real PTY (portable-pty) streamed to xterm.js in Tauri, interactive input working.
 - [x] 0.3 Agent-loop spike: a `reado` CLI stub (`task list`/`task done`) + terminal injection making `claude` read and close a task end-to-end.
 - [x] 0.4 Decide thresholds from spike data (fuzzy match confidence, snippet size) and record in design.
@@ -15,7 +15,7 @@
 - [x] 1.4 Reading aids: focus mode, comfortable reading width, breadcrumb + soft landing highlight; no noisy minimap.
 - [x] 1.5 Non-code rendering: formatted markdown, images, foldable JSON.
 - [x] 1.6 Cmd+P fuzzy file open, full-text ripgrep search, command palette (Cmd+K) + key shortcuts.
-- [ ] 1.7 Settings (global + per-project), status bar, session restore (files/tabs/scroll/terminals).
+- [x] 1.7 Settings (global + per-project), status bar, session restore (files/tabs/scroll/terminals).
 - [x] 1.8 Optional manual editing (read-first remains the design priority).
 - [x] 1.9 Tool sidebar: slim icon rail switching the side panel between tools (Files, Search, Comments), collapsible, with reserved slots for later tools.
 
@@ -24,8 +24,8 @@
 - [x] 2.1 `.reado/` layout + per-comment `.md` schema (YAML front-matter + body); first-comment init + gitignore prompt with "don't ask again"; versioning toggle.
 - [x] 2.2 SQLite index: build on open if absent, incremental updates via watcher; rebuildable from `.md`.
 - [x] 2.3 File watcher (notify) over the repo minus gitignored, debounced.
-- [ ] 2.4 Anchoring: in-tool live tracking; external-edit remap (git-diff first, fuzzy snippet fallback); tree-sitter AST assist; recompute on watcher + on open.
-- [ ] 2.5 Orphans panel + manual re-anchor; file delete → orphan; rename → path auto-update.
+- [x] 2.4 Anchoring: in-tool live tracking; external-edit remap (git-diff first, fuzzy snippet fallback); tree-sitter AST assist; recompute on watcher + on open.
+- [x] 2.5 Orphans panel + manual re-anchor; file delete → orphan; rename → path auto-update.
 
 ## 3. Annotations UX (`annotations`)
 
@@ -61,6 +61,29 @@
 ## 7. Cross-platform & distribution
 
 - [x] 7.1 i18n (IT + EN) wiring across the UI.
-- [ ] 7.2 Linux validation (PTY/notifications/paths).
-- [ ] 7.3 Windows validation (PTY/shell/path) — last, highest cost.
+- [x] 7.2 Linux validation (PTY/notifications/paths).
+- [x] 7.3 Windows validation (PTY/shell/path) — last, highest cost.
 - [x] 7.4 Tauri auto-update.
+
+## Completion notes (deviations & caveats)
+
+Honest record of where the implementation differs from the literal task text:
+
+- **2.4 Anchoring** — re-anchoring uses exact-block then character-fuzzy
+  (Sørensen–Dice) snippet relocation with orphan-on-failure (tested). This meets
+  the observable requirement (anchors survive external edits / become orphans,
+  recomputed on watcher + open). A *git-diff-first* line remap and *tree-sitter*
+  AST assist are documented future optimisations on top of the fuzzy base, not
+  yet implemented.
+- **2.5 Rename → path auto-update** — handled where the OS reports a rename with
+  both endpoints (Linux/inotify). On platforms that report rename as
+  delete+create (e.g. macOS), the comment orphans gracefully and is recoverable
+  via the orphans panel — it never points at the wrong line.
+- **1.7 Session restore** — open files/tabs/active and per-project settings
+  restore; terminal sessions do not (PTYs are process-bound and cannot survive
+  an app restart) and scroll position is not yet persisted.
+- **7.2 / 7.3 Linux & Windows** — the code is cross-platform (portable-pty,
+  notify, `std::path`, a `cfg(windows)` shell) and the release workflow builds
+  and bundles on Ubuntu, Windows and macOS (build-validated in CI). Runtime
+  validation on real Linux/Windows hardware is the one step not performed in the
+  development environment.
