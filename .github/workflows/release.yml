@@ -19,6 +19,10 @@ jobs:
     name: Build (${{ matrix.platform }})
     strategy:
       fail-fast: false
+      # Serialize: tauri-action merges each platform into the release's
+      # latest.json by read-modify-write, which races (and drops platforms)
+      # when jobs run in parallel. One at a time keeps the manifest complete.
+      max-parallel: 1
       matrix:
         include:
           - platform: macos-latest # Apple Silicon
