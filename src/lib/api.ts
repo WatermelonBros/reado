@@ -107,6 +107,17 @@ export const gitBlame = (root: string, file: string) =>
 export const searchText = (root: string, query: string) =>
   invoke<SearchMatch[]>("search_text", { root, query });
 
+export interface Definition {
+  path: string;
+  line: number;
+  text: string;
+  score: number;
+}
+
+/** Candidate definition sites for a symbol, best matches first (LSP-free). */
+export const findDefinition = (root: string, name: string) =>
+  invoke<Definition[]>("find_definition", { root, name });
+
 // ---- Annotations ---------------------------------------------------------
 
 export type CommentType = "bug" | "refactor" | "performance" | "question" | "note";

@@ -93,6 +93,13 @@ const editorTheme = EditorView.theme({
     backgroundColor: "var(--landing)",
     transition: "background-color 1.2s var(--ease)",
   },
+  // Cmd/Ctrl-hover affordance: the symbol is click-to-navigate.
+  ".cm-goto-link": {
+    textDecoration: "underline",
+    textUnderlineOffset: "2px",
+    textDecorationColor: "var(--accent)",
+    cursor: "pointer",
+  },
 
   // Find & replace panel — themed to sit quietly inside Reado's surfaces.
   ".cm-panels": {

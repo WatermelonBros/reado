@@ -38,6 +38,8 @@ reado-core = { path = "../crates/reado-core" }
 # `ignore` is ripgrep's gitignore-aware directory walker; we reuse it so the
 # file tree and search honour the exact same ignore rules as ripgrep.
 ignore = "0.4"
+# Regex engine for the symbol/definition index (go-to-definition).
+regex = "1"
 # Filesystem watcher (no polling) for re-anchoring comments on external edits.
 notify = "6"
 # Real pseudo-terminals for the integrated terminal (claude/codex run here).

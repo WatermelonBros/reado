@@ -38,6 +38,7 @@ import {
   reanchorFile,
   writeFile,
   gitBlame,
+  findDefinition,
   type Comment,
   type Context,
   type FileContent,
@@ -107,6 +108,64 @@ const blockField = StateField.define<DecorationSet>({
     return value;
   },
   provide: (f) => EditorView.decorations.from(f),
+});
+
+/** Underline of the symbol under the cursor while a modifier is held, to signal
+ *  it is click-to-navigate (VS Code style). */
+const setLink = StateEffect.define<{ from: number; to: number } | null>();
+const linkField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    value = value.map(tr.changes);
+    for (const e of tr.effects) {
+      if (e.is(setLink)) {
+        value = e.value
+          ? Decoration.set([
+              Decoration.mark({ class: "cm-goto-link" }).range(e.value.from, e.value.to),
+            ])
+          : Decoration.none;
+      }
+    }
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+/** Resolve the identifier at `pos` to its definition and jump there. */
+function goToDefinitionAt(view: EditorView, pos: number) {
+  const word = view.state.wordAt(pos);
+  if (!word) return;
+  const name = view.state.doc.sliceString(word.from, word.to);
+  findDefinition(useProject.getState().root, name)
+    .then((defs) => {
+      if (defs.length) useProject.getState().open(defs[0].path, defs[0].line);
+    })
+    .catch(() => {});
+}
+
+/** Editor DOM handlers for go-to-definition: modifier+click navigates, and
+ *  modifier+hover underlines the symbol it would resolve. */
+const gotoDefinitionHandlers = EditorView.domEventHandlers({
+  mousedown(event, view) {
+    if (!(event.metaKey || event.ctrlKey)) return false;
+    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+    if (pos == null) return false;
+    goToDefinitionAt(view, pos);
+    event.preventDefault();
+    return true;
+  },
+  mousemove(event, view) {
+    const held = event.metaKey || event.ctrlKey;
+    const current = view.state.field(linkField, false);
+    if (!held) {
+      if (current && current.size) view.dispatch({ effects: setLink.of(null) });
+      return false;
+    }
+    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+    const word = pos != null ? view.state.wordAt(pos) : null;
+    view.dispatch({ effects: setLink.of(word ? { from: word.from, to: word.to } : null) });
+    return false;
+  },
 });
 
 const human = (bytes: number) => {
@@ -415,6 +474,12 @@ function CodeView({
         }),
         landingField,
         blockField,
+        linkField,
+        gotoDefinitionHandlers,
+        // F12 jumps to the definition of the symbol at the cursor.
+        keymap.of([
+          { key: "F12", run: (v) => (goToDefinitionAt(v, v.state.selection.main.head), true) },
+        ]),
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
         blameComp.of([]),
         // Create-comment gesture (spec: a dedicated key on a selection).

@@ -12,6 +12,7 @@ mod git;
 mod index;
 mod pty;
 mod search;
+mod symbols;
 mod watcher;
 
 /// Build and run the Tauri application.
@@ -41,6 +42,7 @@ pub fn run() {
             git::git_commit,
             git::git_blame,
             search::search_text,
+            symbols::find_definition,
             annotations::create_comment,
             annotations::list_comments,
             annotations::list_archived,
