@@ -340,7 +340,10 @@ function CodeView({
   const focusComp = useMemo(() => new Compartment(), []);
   const gutterComp = useMemo(() => new Compartment(), []);
   const blameComp = useMemo(() => new Compartment(), []);
+  const tabSizeComp = useMemo(() => new Compartment(), []);
   const blame = useEditorActions((s) => s.blame);
+  const indentSize = useDocInfo((s) => s.indentSize);
+  const languageOverride = useDocInfo((s) => s.languageOverride);
   const setActiveThread = useComments((s) => s.setActive);
   const activeId = useComments((s) => s.activeId);
   const reanchoringId = useComments((s) => s.reanchoringId);
@@ -482,6 +485,7 @@ function CodeView({
         ]),
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
         blameComp.of([]),
+        tabSizeComp.of(EditorState.tabSize.of(useDocInfo.getState().indentSize)),
         // Create-comment gesture (spec: a dedicated key on a selection).
         keymap.of([{ key: "Mod-Shift-m", run: startComposer }]),
         // Save when editing.
@@ -533,6 +537,27 @@ function CodeView({
     });
   }, [wrap, wrapComp]);
 
+  // Apply the (possibly status-bar-overridden) tab display width.
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: tabSizeComp.reconfigure(EditorState.tabSize.of(indentSize)),
+    });
+  }, [indentSize, tabSizeComp]);
+
+  // Apply a manual language-mode override picked from the status bar.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !languageOverride) return;
+    const desc = languages.find((l) => l.name === languageOverride);
+    if (!desc) {
+      view.dispatch({ effects: langComp.reconfigure([]) }); // Plain Text
+      return;
+    }
+    desc.load().then((support) => {
+      viewRef.current?.dispatch({ effects: langComp.reconfigure(support) });
+    });
+  }, [languageOverride, langComp]);
+
   // Surface document info (line endings, indentation, language) to the status
   // bar. Detected from the raw text, since CodeMirror normalises line endings.
   useEffect(() => {
@@ -545,6 +570,7 @@ function CodeView({
       indentKind: indent.kind,
       indentSize: indent.size,
       language,
+      languageOverride: null,
     });
   }, [text, path]);
 

@@ -57,6 +57,9 @@ const en = {
   "status.spaces": "Spaces: {size}",
   "status.tabs": "Tab Size: {size}",
   "status.indent": "Indentation",
+  "status.useSpaces": "Indent Using Spaces",
+  "status.useTabs": "Indent Using Tabs",
+  "status.language": "Select language mode",
   "status.eol": "Line endings",
 
   "palette.placeholder": "Type a command…",
@@ -228,6 +231,9 @@ const it: Record<MessageKey, string> = {
   "status.spaces": "Spazi: {size}",
   "status.tabs": "Tab: {size}",
   "status.indent": "Indentazione",
+  "status.useSpaces": "Indenta con spazi",
+  "status.useTabs": "Indenta con tab",
+  "status.language": "Seleziona linguaggio",
   "status.eol": "Fine riga",
 
   "palette.placeholder": "Digita un comando…",

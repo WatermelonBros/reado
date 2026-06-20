@@ -19,6 +19,8 @@ interface DocInfoState {
   indentKind: "spaces" | "tabs";
   indentSize: number;
   language: string;
+  /** A manual language-mode override (by display name), or null to auto-detect. */
+  languageOverride: string | null;
   /** The focused editor's view, for status-bar commands. Null when no file. */
   view: EditorView | null;
   set: (info: Partial<Omit<DocInfoState, "set">>) => void;
@@ -29,9 +31,28 @@ export const useDocInfo = create<DocInfoState>((set) => ({
   indentKind: "spaces",
   indentSize: 2,
   language: "",
+  languageOverride: null,
   view: null,
   set: (info) => set(info),
 }));
+
+/** Language modes offered by the status-bar picker (must match language-data). */
+export const LANGUAGE_OPTIONS = [
+  "Plain Text",
+  "TypeScript",
+  "JavaScript",
+  "JSON",
+  "Rust",
+  "Python",
+  "Go",
+  "Markdown",
+  "HTML",
+  "CSS",
+  "Shell",
+  "YAML",
+  "C++",
+  "Java",
+];
 
 /** Detect line endings from raw file text (before CodeMirror normalises them). */
 export function detectEol(text: string): Eol {

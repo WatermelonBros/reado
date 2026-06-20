@@ -7,7 +7,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useCursor, useProject } from "../lib/store";
 import { useComments, openCount } from "../lib/comments";
-import { useDocInfo, goToLine, convertEol, type Eol } from "../lib/docInfo";
+import {
+  useDocInfo,
+  goToLine,
+  convertEol,
+  LANGUAGE_OPTIONS,
+  type Eol,
+} from "../lib/docInfo";
 import { useTerminals } from "../lib/terminals";
 import { useT } from "../i18n";
 import { GitBranchIcon, MessageIcon, TerminalIcon } from "./icons";
@@ -48,6 +54,30 @@ function Popover({ onClose, children }: { onClose: () => void; children: React.R
   );
 }
 
+/** A menu row with an optional check, for the status-bar popovers. */
+function MenuRow({
+  label,
+  checked,
+  onClick,
+}: {
+  label: string;
+  checked?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center justify-between gap-4 px-3 py-1.5 text-left text-sm hover:bg-surface ${
+        checked ? "text-ink" : "text-muted"
+      }`}
+    >
+      {label}
+      {checked && <span className="text-accent">✓</span>}
+    </button>
+  );
+}
+
 export function StatusBar() {
   const root = useProject((s) => s.root);
   const active = useProject((s) => s.active);
@@ -57,11 +87,12 @@ export function StatusBar() {
   const indentKind = useDocInfo((s) => s.indentKind);
   const indentSize = useDocInfo((s) => s.indentSize);
   const language = useDocInfo((s) => s.language);
+  const setDoc = useDocInfo((s) => s.set);
   const openComments = useComments((s) => openCount(s.comments));
   const toggleTerminal = useTerminals((s) => s.toggle);
   const t = useT();
 
-  const [menu, setMenu] = useState<"goto" | "eol" | null>(null);
+  const [menu, setMenu] = useState<"goto" | "eol" | "indent" | "language" | null>(null);
   const [gotoValue, setGotoValue] = useState("");
 
   const rel = relativePath(root, active);
@@ -111,9 +142,45 @@ export function StatusBar() {
       <div className="flex min-w-0 items-center gap-1">
         {active && (
           <>
-            <span className="px-1" title={t("status.indent")}>
-              {t(indentKind === "tabs" ? "status.tabs" : "status.spaces", { size: indentSize })}
-            </span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenu(menu === "indent" ? null : "indent")}
+                title={t("status.indent")}
+                className={ITEM}
+              >
+                {t(indentKind === "tabs" ? "status.tabs" : "status.spaces", {
+                  size: indentSize,
+                })}
+              </button>
+              {menu === "indent" && (
+                <Popover onClose={() => setMenu(null)}>
+                  {(["spaces", "tabs"] as const).map((kind) => (
+                    <MenuRow
+                      key={kind}
+                      label={t(kind === "tabs" ? "status.useTabs" : "status.useSpaces")}
+                      checked={indentKind === kind}
+                      onClick={() => {
+                        setDoc({ indentKind: kind });
+                        setMenu(null);
+                      }}
+                    />
+                  ))}
+                  <div className="my-1 border-t border-line" />
+                  {[2, 4, 8].map((size) => (
+                    <MenuRow
+                      key={size}
+                      label={String(size)}
+                      checked={indentSize === size}
+                      onClick={() => {
+                        setDoc({ indentSize: size });
+                        setMenu(null);
+                      }}
+                    />
+                  ))}
+                </Popover>
+              )}
+            </div>
             <span className="px-1">UTF-8</span>
             <div className="relative">
               <button
@@ -145,7 +212,35 @@ export function StatusBar() {
                 </Popover>
               )}
             </div>
-            {language && <span className="px-1">{language}</span>}
+            {language && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMenu(menu === "language" ? null : "language")}
+                  title={t("status.language")}
+                  className={ITEM}
+                >
+                  {language}
+                </button>
+                {menu === "language" && (
+                  <Popover onClose={() => setMenu(null)}>
+                    <div className="max-h-[40vh] overflow-y-auto">
+                      {LANGUAGE_OPTIONS.map((name) => (
+                        <MenuRow
+                          key={name}
+                          label={name}
+                          checked={language === name}
+                          onClick={() => {
+                            setDoc({ language: name, languageOverride: name });
+                            setMenu(null);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </Popover>
+                )}
+              </div>
+            )}
           </>
         )}
         {git.isRepo ? (
