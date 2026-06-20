@@ -21,7 +21,14 @@ export async function checkForUpdates(interactive: boolean): Promise<void> {
         useUpdate.getState().setToast({ kind: "info", text: "Reado is up to date." });
       return;
     }
-    useUpdate.getState().setAvailable(update);
+    // Don't re-nag for a version already surfaced: a background (periodic/focus)
+    // check stays quiet, while a manual check reopens the modal.
+    const st = useUpdate.getState();
+    if (st.version === update.version) {
+      if (interactive) st.reopen();
+      return;
+    }
+    st.setAvailable(update);
   } catch (error) {
     if (interactive) {
       useUpdate

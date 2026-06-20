@@ -7,8 +7,12 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { RecentProjects } from "./components/pages/RecentProjects";
 import { ProjectView } from "./components/pages/ProjectView";
 import { currentProjectPath } from "./lib/window";
-import { useApplyTheme, useApplyZoom, useGlobalShortcuts } from "./lib/hooks";
-import { checkForUpdates } from "./lib/updater";
+import {
+  useApplyTheme,
+  useApplyZoom,
+  useAutoUpdateCheck,
+  useGlobalShortcuts,
+} from "./lib/hooks";
 import { listenForMenu } from "./lib/menu";
 import { UpdatePrompt } from "./components/organisms/UpdatePrompt";
 import { EditMenu } from "./components/molecules/EditMenu";
@@ -17,6 +21,7 @@ export default function App() {
   useApplyTheme();
   useApplyZoom();
   useGlobalShortcuts();
+  useAutoUpdateCheck();
 
   const [projectPath, setProjectPath] = useState<string | null>(currentProjectPath);
 
@@ -26,11 +31,6 @@ export default function App() {
     const onHashChange = () => setProjectPath(currentProjectPath());
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
-
-  // Silent update check on the launcher window only.
-  useEffect(() => {
-    if (currentProjectPath() === null) void checkForUpdates(false);
   }, []);
 
   // Route native-menu clicks to in-app commands.

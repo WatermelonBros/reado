@@ -4,6 +4,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useSettings, usePalette, useEditorActions, type ThemeName } from "./store";
 import { useTerminals } from "./terminals";
 import { formatDocument } from "./docInfo";
+import { checkForUpdates } from "./updater";
 
 /** Resolve the active theme from settings, OS preference and time of day. */
 function resolveTheme(
@@ -47,6 +48,32 @@ export function useApplyTheme(): void {
       if (timer) clearInterval(timer);
     };
   }, [mode, theme, lightTheme, darkTheme]);
+}
+
+/** Periodically check for updates while the app stays open, plus when the window
+ * regains focus, so the update prompt appears without needing a restart. */
+export function useAutoUpdateCheck(): void {
+  useEffect(() => {
+    const INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
+    const THROTTLE_MS = 30 * 60 * 1000; // at most once per 30 min (focus churn)
+    let last = 0;
+    const run = () => {
+      const now = Date.now();
+      if (now - last < THROTTLE_MS) return;
+      last = now;
+      void checkForUpdates(false);
+    };
+    // First check shortly after launch (covers project windows, which otherwise
+    // never checked), then on an interval and whenever the window is refocused.
+    const initial = window.setTimeout(run, 4000);
+    const interval = window.setInterval(run, INTERVAL_MS);
+    window.addEventListener("focus", run);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", run);
+    };
+  }, []);
 }
 
 /** Apply the interface zoom factor to the document. */
