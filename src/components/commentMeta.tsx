@@ -30,6 +30,15 @@ export const TYPE_COLOR: Record<CommentType, string> = {
   note: "var(--text-muted)",
 };
 
+/**
+ * The shared surface colour used by both the connector line and the thread box,
+ * so they read as one shape. A neutral tone of the active theme (not tied to the
+ * comment type), so it follows the theme (sepia → sepia, dark → dark) and stays
+ * a readable background.
+ */
+export const ACCENT = (_t?: CommentType): string =>
+  `color-mix(in oklab, var(--text-muted) 16%, var(--bg-elevated))`;
+
 export const typeKey = (t: CommentType): MessageKey =>
   `comment.type.${t}` as MessageKey;
 export const stateKey = (s: CommentState): MessageKey =>

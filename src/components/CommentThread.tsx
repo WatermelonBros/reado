@@ -15,6 +15,7 @@ import {
   COMMENT_STATES,
   COMMENT_TYPES,
   TYPE_COLOR,
+  ACCENT,
   typeKey,
   stateKey,
   authorLabel,
@@ -77,13 +78,15 @@ export function CommentThread({ comment, top, onClose }: Props) {
 
   return (
     <div
-      className="absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col rounded-lg border shadow-[var(--shadow)]"
+      className="absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col shadow-[var(--shadow)]"
       style={{
         top,
-        // The box shares the connector's colour: a faint tint of it for the
-        // surface, a solid edge of it on top/left where the line flows in.
-        background: `color-mix(in oklab, ${TYPE_COLOR[comment.type]} 7%, var(--overlay))`,
-        borderColor: `color-mix(in oklab, ${TYPE_COLOR[comment.type]} 35%, var(--border-strong))`,
+        // No border: the box is just a fill of the connector's colour, so the
+        // line flows straight into it as one piece (no seam). The top-left is
+        // square (the line enters flat there); the top-right matches the
+        // connector's convex corner.
+        background: ACCENT(comment.type),
+        borderRadius: "0 8px 8px 8px",
       }}
       onMouseDown={(e) => e.stopPropagation()}
     >

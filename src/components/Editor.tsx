@@ -48,7 +48,7 @@ import { useCursor, useEditorActions, useProject, useSettings } from "../lib/sto
 import { useT } from "../i18n";
 import { CommentComposer } from "./CommentComposer";
 import { CommentThread } from "./CommentThread";
-import { TYPE_COLOR } from "./commentMeta";
+import { ACCENT } from "./commentMeta";
 import { Welcome } from "./Welcome";
 import { DiffView } from "./DiffView";
 import { PlusIcon } from "./icons";
@@ -625,28 +625,41 @@ function CodeView({
           const startTop = topForLine(openComment.anchor.startLine);
           if (startTop === null) return null;
           const w = wrapRef.current?.clientWidth ?? 0;
-          const popoverWidth = Math.min(460, w - 32);
-          const xBox = w - 16 - popoverWidth; // the box's left edge
+          const xBoxRight = w - 16; // the box's right edge (it sits at right-4)
           const xRail = 6; // in the line-number gutter, far left
-          const hY = threadTop; // horizontal run = box top = below the last line
+          const hY = threadTop; // top edge of the box = run below the last line
           const r = 8; // matches the box's rounded-lg corner
+          const down = 64; // how far the rail traces down the box's right edge
           const multi = openComment.anchor.endLine > openComment.anchor.startLine;
-          // Build a single stroke: [vertical rail ↓] → ⌞ → [horizontal →] → ⌝ into box.
-          const d = multi
-            ? `M ${xRail} ${Math.min(startTop, hY - r)} L ${xRail} ${hY - r}` +
-              ` Q ${xRail} ${hY} ${xRail + r} ${hY}` +
-              ` L ${xBox - r} ${hY} Q ${xBox} ${hY} ${xBox} ${hY + r}`
-            : `M ${xRail} ${hY} L ${xBox - r} ${hY} Q ${xBox} ${hY} ${xBox} ${hY + r}`;
+          const accent = ACCENT(openComment.type);
+          // The line is the same colour as the box, so it goes flat into it and
+          // shows only as a faint tail over the code. The vertical rail stays
+          // thin; the horizontal run (along the box's top edge, the convex
+          // top-RIGHT corner, then down the right side) is heavier.
+          const vertical = `M ${xRail} ${Math.min(startTop, hY)} L ${xRail} ${hY}`;
+          const horizontal =
+            `M ${xRail} ${hY} L ${xBoxRight - r} ${hY}` +
+            ` Q ${xBoxRight} ${hY} ${xBoxRight} ${hY + r} L ${xBoxRight} ${hY + down}`;
           return (
             <svg
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 z-20 h-full w-full"
             >
+              {multi && (
+                <path
+                  d={vertical}
+                  fill="none"
+                  stroke={accent}
+                  strokeWidth={4}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
               <path
-                d={d}
+                d={horizontal}
                 fill="none"
-                stroke={TYPE_COLOR[openComment.type]}
-                strokeWidth={3.5}
+                stroke={accent}
+                strokeWidth={6}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
