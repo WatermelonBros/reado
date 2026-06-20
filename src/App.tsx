@@ -11,6 +11,7 @@ import { useApplyTheme, useApplyZoom, useGlobalShortcuts } from "./lib/hooks";
 import { checkForUpdates } from "./lib/updater";
 import { listenForMenu } from "./lib/menu";
 import { UpdatePrompt } from "./components/organisms/UpdatePrompt";
+import { EditMenu } from "./components/molecules/EditMenu";
 
 export default function App() {
   useApplyTheme();
@@ -45,24 +46,12 @@ export default function App() {
     getCurrentWindow().setFocus().catch(() => {});
   }, []);
 
-  // Suppress the webview's default context menu (Reload/Inspect…) everywhere
-  // except editable fields, where the native copy/paste menu is useful. Our own
-  // right-click menus handle their own `contextmenu` events, so they're
-  // unaffected; this only removes the menu where there's nothing to offer.
-  useEffect(() => {
-    const onContextMenu = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest("input, textarea")) return;
-      e.preventDefault();
-    };
-    document.addEventListener("contextmenu", onContextMenu);
-    return () => document.removeEventListener("contextmenu", onContextMenu);
-  }, []);
 
   return (
     <>
       {projectPath ? <ProjectView key={projectPath} root={projectPath} /> : <RecentProjects />}
       <UpdatePrompt />
+      <EditMenu />
     </>
   );
 }

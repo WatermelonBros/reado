@@ -192,6 +192,10 @@ const en = {
   "update.indicator": "Update available",
   "branch.local": "Local",
   "branch.remote": "Remote",
+  "edit.cut": "Cut",
+  "edit.copy": "Copy",
+  "edit.paste": "Paste",
+  "edit.selectAll": "Select All",
   "orphans.lastKnown": "Last known: {loc}",
   "orphans.reanchor": "Re-anchor",
   "orphans.reanchorHint":
@@ -405,6 +409,10 @@ const it: Record<MessageKey, string> = {
   "update.indicator": "Aggiornamento disponibile",
   "branch.local": "Locali",
   "branch.remote": "Remoti",
+  "edit.cut": "Taglia",
+  "edit.copy": "Copia",
+  "edit.paste": "Incolla",
+  "edit.selectAll": "Seleziona tutto",
   "orphans.lastKnown": "Ultima posizione: {loc}",
   "orphans.reanchor": "Ri-ancora",
   "orphans.reanchorHint":
