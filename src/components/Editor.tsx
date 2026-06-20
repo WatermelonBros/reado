@@ -45,6 +45,7 @@ import {
 import { readoAppearance } from "../lib/codemirror";
 import { commentGutter, type LineComments } from "../lib/commentGutter";
 import { blameGutter } from "../lib/blameGutter";
+import { useDocInfo, detectEol, detectIndent } from "../lib/docInfo";
 import { useComments, commentsForFile, toRelative } from "../lib/comments";
 import {
   useCursor,
@@ -432,6 +433,7 @@ function CodeView({
     });
     const view = new EditorView({ state, parent: hostRef.current });
     viewRef.current = view;
+    useDocInfo.getState().set({ view });
 
     // Restore the saved scroll offset for this file, after first layout.
     const savedScroll =
@@ -453,6 +455,7 @@ function CodeView({
     return () => {
       view.destroy();
       viewRef.current = null;
+      if (useDocInfo.getState().view === view) useDocInfo.getState().set({ view: null });
     };
     // `text`/`path` identity drives recreation via the `key` prop in Editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -464,6 +467,21 @@ function CodeView({
       effects: wrapComp.reconfigure(wrap ? EditorView.lineWrapping : []),
     });
   }, [wrap, wrapComp]);
+
+  // Surface document info (line endings, indentation, language) to the status
+  // bar. Detected from the raw text, since CodeMirror normalises line endings.
+  useEffect(() => {
+    const desc = LanguageDescription.matchFilename(languages, path);
+    const ext = path.split(".").pop() ?? "";
+    const language = desc?.name ?? (ext ? ext.toUpperCase() : "Plain Text");
+    const indent = detectIndent(text);
+    useDocInfo.getState().set({
+      eol: detectEol(text),
+      indentKind: indent.kind,
+      indentSize: indent.size,
+      language,
+    });
+  }, [text, path]);
 
   // Toggle focus mode live.
   useEffect(() => {

@@ -1,9 +1,13 @@
 /**
- * Bottom status bar: active file, cursor position, git branch, open-comment
- * count and agent run status. State the tool never hides — it lives here.
+ * Bottom status bar: active file, cursor position, document info (indentation,
+ * encoding, line endings, language), git branch, open-comment count and agent
+ * run status. Some items are clickable (go to line, convert line endings), in
+ * the spirit of VS Code's status bar.
  */
+import { useEffect, useRef, useState } from "react";
 import { useCursor, useProject } from "../lib/store";
 import { useComments, openCount } from "../lib/comments";
+import { useDocInfo, goToLine, convertEol, type Eol } from "../lib/docInfo";
 import { useTerminals } from "../lib/terminals";
 import { useT } from "../i18n";
 import { GitBranchIcon, MessageIcon, TerminalIcon } from "./icons";
@@ -15,43 +19,154 @@ function relativePath(root: string, path: string | null): string | null {
   return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/");
 }
 
+/** Shared style for a clickable status-bar item. */
+const ITEM =
+  "inline-flex items-center gap-[5px] whitespace-nowrap rounded-sm px-1 transition-colors hover:bg-overlay hover:text-ink";
+
+/** A pop-up anchored above a status-bar item, dismissed on outside click/Esc. */
+function Popover({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  return (
+    <div
+      ref={ref}
+      className="absolute bottom-full left-0 z-50 mb-1 min-w-[120px] overflow-hidden rounded-md border border-line-strong bg-overlay py-1 shadow-[var(--shadow)]"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function StatusBar() {
   const root = useProject((s) => s.root);
   const active = useProject((s) => s.active);
   const git = useProject((s) => s.git);
   const { line, col } = useCursor();
-  const open = useComments((s) => openCount(s.comments));
+  const eol = useDocInfo((s) => s.eol);
+  const indentKind = useDocInfo((s) => s.indentKind);
+  const indentSize = useDocInfo((s) => s.indentSize);
+  const language = useDocInfo((s) => s.language);
+  const openComments = useComments((s) => openCount(s.comments));
   const toggleTerminal = useTerminals((s) => s.toggle);
   const t = useT();
 
+  const [menu, setMenu] = useState<"goto" | "eol" | null>(null);
+  const [gotoValue, setGotoValue] = useState("");
+
   const rel = relativePath(root, active);
 
+  const submitGoto = () => {
+    const n = parseInt(gotoValue, 10);
+    if (Number.isFinite(n)) goToLine(n);
+    setMenu(null);
+    setGotoValue("");
+  };
+
   return (
-    <footer className="flex h-[26px] flex-none items-center justify-between border-t border-line bg-surface px-3 text-xs text-muted select-none">
-      <div className="flex min-w-0 items-center gap-4">
-        <span className="max-w-[50vw] overflow-hidden text-ellipsis whitespace-nowrap">
+    <footer className="flex h-[26px] flex-none items-center justify-between border-t border-line bg-surface px-2 text-xs text-muted select-none">
+      <div className="flex min-w-0 items-center gap-1">
+        <span className="max-w-[40vw] overflow-hidden px-1 text-ellipsis whitespace-nowrap">
           {rel ?? t("status.noFile")}
         </span>
         {active && (
-          <span className="text-faint">
-            Ln {line}, Col {col}
-          </span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenu(menu === "goto" ? null : "goto")}
+              title={t("status.goToLine")}
+              className={ITEM}
+            >
+              Ln {line}, Col {col}
+            </button>
+            {menu === "goto" && (
+              <Popover onClose={() => setMenu(null)}>
+                <input
+                  autoFocus
+                  value={gotoValue}
+                  inputMode="numeric"
+                  onChange={(e) => setGotoValue(e.target.value.replace(/[^0-9]/g, ""))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitGoto();
+                  }}
+                  placeholder={t("status.goToLinePlaceholder")}
+                  className="block w-[160px] bg-transparent px-2.5 py-1 text-sm text-ink outline-none placeholder:text-faint"
+                />
+              </Popover>
+            )}
+          </div>
         )}
       </div>
-      <div className="flex min-w-0 items-center gap-4">
+
+      <div className="flex min-w-0 items-center gap-1">
+        {active && (
+          <>
+            <span className="px-1" title={t("status.indent")}>
+              {t(indentKind === "tabs" ? "status.tabs" : "status.spaces", { size: indentSize })}
+            </span>
+            <span className="px-1">UTF-8</span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenu(menu === "eol" ? null : "eol")}
+                title={t("status.eol")}
+                className={ITEM}
+              >
+                {eol}
+              </button>
+              {menu === "eol" && (
+                <Popover onClose={() => setMenu(null)}>
+                  {(["LF", "CRLF"] as Eol[]).map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        if (opt !== eol) convertEol(opt);
+                        setMenu(null);
+                      }}
+                      className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm hover:bg-surface ${
+                        opt === eol ? "text-ink" : "text-muted"
+                      }`}
+                    >
+                      {opt}
+                      {opt === eol && <span className="text-accent">✓</span>}
+                    </button>
+                  ))}
+                </Popover>
+              )}
+            </div>
+            {language && <span className="px-1">{language}</span>}
+          </>
+        )}
         {git.isRepo ? (
-          <span className="inline-flex items-center gap-[5px] whitespace-nowrap" title={t("status.branch")}>
+          <span
+            className="inline-flex items-center gap-[5px] px-1 whitespace-nowrap"
+            title={t("status.branch")}
+          >
             <GitBranchIcon className="h-[13px] w-[13px]" />
             {git.branch ?? "—"}
           </span>
         ) : (
-          <span className="text-faint">{t("status.notGit")}</span>
+          <span className="px-1 text-faint">{t("status.notGit")}</span>
         )}
-        <span className="inline-flex items-center gap-[5px] whitespace-nowrap" title="open comments">
+        <span
+          className="inline-flex items-center gap-[5px] px-1 whitespace-nowrap"
+          title="open comments"
+        >
           <MessageIcon className="h-[13px] w-[13px]" />
-          {t("status.comments", { count: open })}
+          {t("status.comments", { count: openComments })}
         </span>
-        <span className="text-faint">{t("status.agentIdle")}</span>
+        <span className="px-1 text-faint">{t("status.agentIdle")}</span>
         <button
           type="button"
           onClick={() => toggleTerminal()}
