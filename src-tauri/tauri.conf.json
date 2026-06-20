@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm build && bash scripts/bundle-cli.sh",
     "frontendDist": "../dist"
   },
   "app": {
@@ -26,6 +26,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/reado-cli"],
     "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "shortDescription": "A calm, read-first code IDE.",

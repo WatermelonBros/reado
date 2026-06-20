@@ -1,6 +1,8 @@
 /** Settings panel: theme, theme mode, language, and code font. */
+import { useEffect, useState } from "react";
 import { useSettings, usePalette, THEMES, type ThemeName, type ThemeMode } from "../../lib/store";
 import { useLocale, useT, type Locale, type MessageKey } from "../../i18n";
+import { installCli, cliInstalled } from "../../lib/api";
 import { Select } from "../atoms/Select";
 import { Drawer } from "../atoms/Drawer";
 import { Checkbox } from "../atoms/Checkbox";
@@ -116,8 +118,59 @@ export function Settings() {
               className="text-sm text-muted"
             />
           </Field>
+
+          <CliInstall />
         </div>
     </Drawer>
+  );
+}
+
+/** Install the bundled `reado` CLI onto the user's PATH (~/.local/bin). */
+function CliInstall() {
+  const t = useT();
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    cliInstalled().then(setInstalled).catch(() => setInstalled(false));
+  }, []);
+
+  const run = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const path = await installCli();
+      setInstalled(true);
+      setResult({ ok: true, text: t("settings.cliDone", { path }) });
+    } catch (e) {
+      setResult({ ok: false, text: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-sm text-muted">{t("settings.cli")}</span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={run}
+          disabled={busy}
+          className="rounded-md border border-line px-2.5 py-1.5 text-sm text-ink hover:bg-surface disabled:opacity-50"
+        >
+          {installed ? t("settings.cliReinstall") : t("settings.cliInstall")}
+        </button>
+        {installed && !result && <span className="text-xs text-faint">{t("settings.cliInstalled")}</span>}
+      </div>
+      <p className="text-xs leading-relaxed text-faint">{t("settings.cliHint")}</p>
+      {result && (
+        <p className={`text-xs leading-relaxed ${result.ok ? "text-faint" : "text-marker"}`}>
+          {result.text}
+        </p>
+      )}
+    </div>
   );
 }
 

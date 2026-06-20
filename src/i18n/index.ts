@@ -91,6 +91,13 @@ const en = {
   "settings.codeFont": "Code font",
   "settings.completionSound": "Play a sound when the agent finishes",
   "settings.notifications": "Notifications",
+  "settings.cli": "Command-line tool",
+  "settings.cliInstall": "Install 'reado' on PATH",
+  "settings.cliReinstall": "Reinstall 'reado'",
+  "settings.cliInstalled": "Installed",
+  "settings.cliDone": "Installed at {path}. Ensure ~/.local/bin is on your PATH.",
+  "settings.cliHint":
+    "Links the bundled 'reado' CLI into ~/.local/bin so AI agents can read and resolve your tasks from any project.",
   "settings.checkUpdates": "Check for updates…",
   "settings.close": "Close",
 
@@ -289,6 +296,13 @@ const it: Record<MessageKey, string> = {
   "settings.codeFont": "Font del codice",
   "settings.completionSound": "Riproduci un suono quando l'agente finisce",
   "settings.notifications": "Notifiche",
+  "settings.cli": "Strumento da riga di comando",
+  "settings.cliInstall": "Installa 'reado' nel PATH",
+  "settings.cliReinstall": "Reinstalla 'reado'",
+  "settings.cliInstalled": "Installato",
+  "settings.cliDone": "Installato in {path}. Assicurati che ~/.local/bin sia nel PATH.",
+  "settings.cliHint":
+    "Collega la CLI 'reado' inclusa in ~/.local/bin così gli agenti AI possono leggere e risolvere i task da qualsiasi progetto.",
   "settings.checkUpdates": "Controlla aggiornamenti…",
   "settings.close": "Chiudi",
 

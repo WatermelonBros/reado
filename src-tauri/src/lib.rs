@@ -6,6 +6,7 @@
 //! in the frontend via `tauri-plugin-store`.
 
 mod annotations;
+mod cli;
 mod error;
 mod format;
 mod fs;
@@ -50,6 +51,8 @@ pub fn run() {
             search::search_text,
             symbols::find_definition,
             format::format_file,
+            cli::install_cli,
+            cli::cli_installed,
             annotations::create_comment,
             annotations::list_comments,
             annotations::list_archived,

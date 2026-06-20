@@ -66,7 +66,9 @@ Reado's core loop is **read → annotate → AI-resolve**:
    watcher reflects the result live, and resolved comments move to history.
 
 The `reado` CLI is the stable contract — the on-disk format can evolve without
-breaking the agent. Build and install it onto your PATH:
+breaking the agent. The packaged app bundles the CLI: install it from
+**Settings → Command-line tool** (links `reado` into `~/.local/bin`, VS Code
+style). From a source checkout, build and link it directly:
 
 ```bash
 scripts/install-cli.sh           # builds release + links into ~/.local/bin

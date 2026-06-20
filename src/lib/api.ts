@@ -37,6 +37,11 @@ export const listDir = (root: string, dir: string, showHidden: boolean) =>
 /** Every file path in the project, for the fuzzy finder. */
 export const listFiles = (root: string) => invoke<string[]>("list_files", { root });
 
+/** Symlink/copy the bundled `reado` CLI into ~/.local/bin; returns its path. */
+export const installCli = () => invoke<string>("install_cli");
+/** Whether the `reado` CLI is already installed in ~/.local/bin. */
+export const cliInstalled = () => invoke<boolean>("cli_installed");
+
 /** Read a file for display (text, image data URL, or binary placeholder).
  * `asText` forces text decoding for formats that would otherwise render as an
  * image (e.g. SVG), so they can be edited as source. */

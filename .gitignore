@@ -17,6 +17,9 @@ dist-ssr
 target/
 crates/*/target/
 
+# Bundled CLI sidecar produced at build time (scripts/bundle-cli.sh)
+src-tauri/binaries/
+
 # Reado's own local annotations (gitignored by default, per the product)
 .reado/
 
