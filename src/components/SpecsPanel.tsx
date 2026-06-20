@@ -7,6 +7,9 @@ import { useSpecs } from "../lib/specs";
 import { useProject } from "../lib/store";
 import { useT } from "../i18n";
 
+/** Display label without the markdown extension (proposal.md → proposal). */
+const stripExt = (label: string) => label.replace(/\.(md|markdown)$/i, "");
+
 export function SpecsPanel() {
   const groups = useSpecs((s) => s.groups);
   const root = useProject((s) => s.root);
@@ -58,7 +61,7 @@ export function SpecsPanel() {
                     {item.isSpec && (
                       <span className="h-1 w-1 flex-none rounded-full bg-[var(--syn-control)]" />
                     )}
-                    <span className="truncate">{item.label}</span>
+                    <span className="truncate">{stripExt(item.label)}</span>
                   </button>
                 </li>
               );
