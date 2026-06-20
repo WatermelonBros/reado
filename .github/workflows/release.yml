@@ -91,7 +91,11 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Reado ${{ github.ref_name }}"
           releaseBody: "See the assets below to download and install Reado for your platform. Reado updates itself automatically from signed releases."
-          releaseDraft: true
+          # Publish immediately (not a draft) so the updater's `latest.json` under
+          # /releases/latest actually advances — a draft never becomes "Latest",
+          # so clients never see the new version. The serialized matrix above
+          # keeps latest.json complete as each platform is appended.
+          releaseDraft: false
           prerelease: false
           # Emit latest.json (the updater manifest) alongside the installers.
           includeUpdaterJson: true
