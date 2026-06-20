@@ -77,8 +77,14 @@ export function CommentThread({ comment, top, onClose }: Props) {
 
   return (
     <div
-      className="absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col rounded-lg border border-line-strong bg-overlay shadow-[var(--shadow)]"
-      style={{ top, borderLeftWidth: 2.5, borderLeftColor: TYPE_COLOR[comment.type] }}
+      className="absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col rounded-lg border shadow-[var(--shadow)]"
+      style={{
+        top,
+        // The box shares the connector's colour: a faint tint of it for the
+        // surface, a solid edge of it on top/left where the line flows in.
+        background: `color-mix(in oklab, ${TYPE_COLOR[comment.type]} 7%, var(--overlay))`,
+        borderColor: `color-mix(in oklab, ${TYPE_COLOR[comment.type]} 35%, var(--border-strong))`,
+      }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Header: type, state, line, close. */}

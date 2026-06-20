@@ -191,8 +191,7 @@
 
   /* The anchored block, highlighted while its comment thread is open. */
   .cm-comment-block {
-    background: color-mix(in oklch, var(--marker) 8%, transparent);
-    box-shadow: inset 2px 0 0 var(--border-strong);
+    background: color-mix(in oklch, var(--marker) 7%, transparent);
   }
 
   /* CodeMirror-injected DOM (cannot be utility classes). */

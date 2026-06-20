@@ -512,6 +512,16 @@ function CodeView({
     return coords.top - wrapRef.current.getBoundingClientRect().top;
   };
 
+  // Pixel offset of a line's *bottom* edge, relative to the overlay container.
+  const bottomForLine = (line: number): number | null => {
+    const view = viewRef.current;
+    if (!view || !wrapRef.current) return null;
+    const clamped = Math.min(Math.max(line, 1), view.state.doc.lines);
+    const coords = view.coordsAtPos(view.state.doc.line(clamped).from);
+    if (!coords) return null;
+    return coords.bottom - wrapRef.current.getBoundingClientRect().top;
+  };
+
   // Keep an overlay of the given height fully within the editor viewport, so a
   // popover anchored near the bottom edge opens upward instead of clipping.
   const clampTop = (top: number | null, panelHeight: number): number | null => {
@@ -523,8 +533,10 @@ function CodeView({
   const openComment = activeId ? comments.find((c) => c.id === activeId) ?? null : null;
   const wrapH = wrapRef.current?.clientHeight ?? 0;
   const composerTop = clampTop(composer ? topForLine(composer.endLine) : null, 260);
+  // The thread box hangs from the *bottom* of the last commented line, so the
+  // connector's horizontal run sits below the code (never crossing it).
   const threadTop = clampTop(
-    openComment ? topForLine(openComment.anchor.startLine) : null,
+    openComment ? bottomForLine(openComment.anchor.endLine) : null,
     Math.min(wrapH * 0.7, 420),
   );
 
@@ -602,34 +614,39 @@ function CodeView({
         />
       )}
 
-      {/* A horizontal rule that runs along the top edge of the commented line
-          and flows into the thread popover, in the comment's own colour so the
-          line, its block and the modal read as a single object (GitLab-style). */}
+      {/* A bracket that wraps the commented lines and flows into the thread box
+          as a single shape: a vertical rail in the line-number gutter spanning
+          every commented line, a horizontal run below the last line, and a
+          rounded (never square) turn into the box's top-left corner. Drawn in
+          the box's own colour/outline so line and box read as one object. */}
       {openComment &&
         threadTop !== null &&
         (() => {
-          const view = viewRef.current;
-          const wrapBox = wrapRef.current?.getBoundingClientRect();
-          if (!view || !wrapBox) return null;
-          const startLine = Math.min(openComment.anchor.startLine, view.state.doc.lines);
-          const coords = view.coordsAtPos(view.state.doc.line(startLine).from);
-          if (!coords) return null;
-          const lineY = coords.top - wrapBox.top; // top boundary of the line (no glyphs)
+          const startTop = topForLine(openComment.anchor.startLine);
+          if (startTop === null) return null;
           const w = wrapRef.current?.clientWidth ?? 0;
           const popoverWidth = Math.min(460, w - 32);
-          const popoverLeft = w - 16 - popoverWidth;
-          const modalY = threadTop; // meet the modal's top-left corner
-          const color = TYPE_COLOR[openComment.type];
+          const xBox = w - 16 - popoverWidth; // the box's left edge
+          const xRail = 6; // in the line-number gutter, far left
+          const hY = threadTop; // horizontal run = box top = below the last line
+          const r = 8; // matches the box's rounded-lg corner
+          const multi = openComment.anchor.endLine > openComment.anchor.startLine;
+          // Build a single stroke: [vertical rail ↓] → ⌞ → [horizontal →] → ⌝ into box.
+          const d = multi
+            ? `M ${xRail} ${Math.min(startTop, hY - r)} L ${xRail} ${hY - r}` +
+              ` Q ${xRail} ${hY} ${xRail + r} ${hY}` +
+              ` L ${xBox - r} ${hY} Q ${xBox} ${hY} ${xBox} ${hY + r}`
+            : `M ${xRail} ${hY} L ${xBox - r} ${hY} Q ${xBox} ${hY} ${xBox} ${hY + r}`;
           return (
             <svg
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 z-20 h-full w-full"
             >
               <path
-                d={`M 0 ${lineY} H ${popoverLeft} V ${modalY}`}
+                d={d}
                 fill="none"
-                stroke={color}
-                strokeWidth={2.5}
+                stroke={TYPE_COLOR[openComment.type]}
+                strokeWidth={3.5}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
