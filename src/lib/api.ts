@@ -192,6 +192,10 @@ export const setAnchor = (
 export const startWatching = (root: string) =>
   invoke<void>("start_watching", { root });
 
+/** Rebuild the SQLite comment index from the `.md` files (a cache). */
+export const rebuildIndex = (root: string) =>
+  invoke<number>("rebuild_index", { root });
+
 // ---- Integrated terminal (PTY) -------------------------------------------
 
 /** Spawn a login shell in a PTY for terminal tab `id`. */

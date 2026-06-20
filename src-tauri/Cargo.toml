@@ -16,6 +16,9 @@ edition = "2021"
 name = "reado_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[dev-dependencies]
+tempfile = "3"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -41,3 +44,5 @@ notify = "6"
 portable-pty = "0.8"
 # Surfaced, typed errors across the Tauri command boundary.
 thiserror = "2"
+# Rebuildable SQLite index of comments (a cache; the `.md` files stay the truth).
+rusqlite = { version = "0.32", features = ["bundled"] }

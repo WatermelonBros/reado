@@ -22,7 +22,7 @@
 ## 2. Annotation store & anchoring (`annotation-store`, `annotation-anchoring`)
 
 - [x] 2.1 `.reado/` layout + per-comment `.md` schema (YAML front-matter + body); first-comment init + gitignore prompt with "don't ask again"; versioning toggle.
-- [ ] 2.2 SQLite index: build on open if absent, incremental updates via watcher; rebuildable from `.md`.
+- [x] 2.2 SQLite index: build on open if absent, incremental updates via watcher; rebuildable from `.md`.
 - [x] 2.3 File watcher (notify) over the repo minus gitignored, debounced.
 - [ ] 2.4 Anchoring: in-tool live tracking; external-edit remap (git-diff first, fuzzy snippet fallback); tree-sitter AST assist; recompute on watcher + on open.
 - [ ] 2.5 Orphans panel + manual re-anchor; file delete → orphan; rename → path auto-update.

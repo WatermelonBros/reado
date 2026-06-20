@@ -9,6 +9,7 @@ mod annotations;
 mod error;
 mod fs;
 mod git;
+mod index;
 mod pty;
 mod search;
 mod watcher;
@@ -45,6 +46,7 @@ pub fn run() {
             annotations::write_project_config,
             annotations::reanchor_file,
             annotations::set_anchor,
+            index::rebuild_index,
             watcher::start_watching,
             pty::pty_spawn,
             pty::pty_write,

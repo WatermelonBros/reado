@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { gitInfo, startWatching, reanchorFile } from "../lib/api";
+import { gitInfo, startWatching, reanchorFile, rebuildIndex } from "../lib/api";
 import { useProject, useSessions, useWorkspace } from "../lib/store";
 import { useComments } from "../lib/comments";
 import { notifyResolved } from "../lib/notify";
@@ -62,6 +62,8 @@ export function ProjectView({ root }: { root: string }) {
     restored.current = true;
     setWindowTitle(basename(root));
     useComments.getState().load(root);
+    // Build the SQLite index on open if missing/stale (rebuildable cache).
+    rebuildIndex(root).catch(() => {});
     gitInfo(root)
       .then(setGit)
       .catch(() => {});
@@ -94,6 +96,7 @@ export function ProjectView({ root }: { root: string }) {
       // UI reflects done/reply/add without a manual refresh.
       listen("comments-changed", () => {
         useComments.getState().load(root);
+        rebuildIndex(root).catch(() => {});
       }),
     ];
     return () => {
