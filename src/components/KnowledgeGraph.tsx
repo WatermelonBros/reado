@@ -10,13 +10,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useComments } from "../lib/comments";
 import { useProject, useWorkspace } from "../lib/store";
+import { useSpecs } from "../lib/specs";
+import { listFiles } from "../lib/api";
+import { listDocs, type DocItem } from "../lib/knowledge";
 import { useT } from "../i18n";
 import { TYPE_COLOR } from "./commentMeta";
 import { CloseIcon } from "./icons";
 
+const stripExt = (s: string) => s.replace(/\.(md|markdown|mdx)$/i, "");
+
 interface Node {
   id: string;
-  kind: "file" | "comment";
+  kind: "file" | "comment" | "spec" | "doc" | "change";
   label: string;
   color: string;
   x: number;
@@ -40,12 +45,14 @@ const basename = (p: string) => p.split("/").pop() ?? p;
 export function KnowledgeGraph() {
   const comments = useComments((s) => s.comments);
   const setActive = useComments((s) => s.setActive);
+  const specGroups = useSpecs((s) => s.groups);
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);
   const close = useWorkspace((s) => s.toggleGraph);
   const t = useT();
 
   const size = { w: 900, h: 620 };
+  const [docs, setDocs] = useState<DocItem[]>([]);
 
   // Close on Escape.
   useEffect(() => {
@@ -53,6 +60,13 @@ export function KnowledgeGraph() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [close]);
+
+  // The KB's own docs join the graph as a layer beside comments and specs.
+  useEffect(() => {
+    listFiles(root)
+      .then((files) => setDocs(listDocs(files)))
+      .catch(() => {});
+  }, [root]);
 
   // Build the graph from current comments (positions seeded once).
   const { nodes, edges } = useMemo(() => {
@@ -105,9 +119,55 @@ export function KnowledgeGraph() {
           edges.push({ a: `c:${c.id}`, b: `c:${target}`, kind: "link" });
       }
     });
+
+    // --- Knowledge layer: specs and docs ---
+    // Each spec change/feature is a hub; its documents and capabilities orbit
+    // it. Docs hang off a single "Docs" hub. Where a comment is anchored on a
+    // doc/spec path, it links across to that knowledge node, bridging the two
+    // layers into one graph.
+    const kbByPath = new Map<string, string>();
+    let idx = comments.length;
+    const addKb = (
+      id: string,
+      kind: "spec" | "doc" | "change",
+      label: string,
+      color: string,
+      file: string,
+    ) => {
+      const p = seed(idx++, comments.length + specGroups.length + docs.length + 4);
+      nodes.push({ id, kind, label, color, x: p.x, y: p.y, vx: 0, vy: 0, file, line: file ? 1 : 0 });
+      if (file) kbByPath.set(file, id);
+    };
+
+    specGroups.forEach((g) => {
+      const chId = `ch:${g.kind}:${g.title}`;
+      addKb(chId, "change", g.title, "var(--accent)", "");
+      for (const it of g.items) {
+        const sid = `s:${it.path}`;
+        addKb(sid, "spec", stripExt(it.label), "var(--syn-control)", it.path);
+        edges.push({ a: sid, b: chId, kind: "colocation" });
+      }
+    });
+
+    if (docs.length) {
+      const hub = "dh:docs";
+      addKb(hub, "change", t("kb.docs"), "var(--accent)", "");
+      for (const d of docs) {
+        const did = `d:${d.path}`;
+        addKb(did, "doc", basename(d.path), "var(--syn-string)", d.path);
+        edges.push({ a: did, b: hub, kind: "colocation" });
+      }
+    }
+
+    // Bridge: a comment anchored on a doc/spec links to that knowledge node.
+    for (const c of comments) {
+      const kbId = c.anchor.file && kbByPath.get(c.anchor.file);
+      if (kbId) edges.push({ a: `c:${c.id}`, b: kbId, kind: "link" });
+    }
+
     return { nodes, edges };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comments]);
+  }, [comments, specGroups, docs]);
 
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
@@ -173,6 +233,8 @@ export function KnowledgeGraph() {
   }, [edges]);
 
   const navigate = (n: Node) => {
+    // Hubs (change/docs) carry no file; clicking them just rearranges, no nav.
+    if (!n.file && !n.commentId) return;
     if (n.file) open(`${root}/${n.file}`, n.kind === "comment" ? n.line : undefined);
     if (n.commentId) setActive(n.commentId);
     close(false);
@@ -249,7 +311,9 @@ export function KnowledgeGraph() {
               );
             })}
             {nodes.map((n) => {
-              const showLabel = n.kind === "file" || hoverId === n.id;
+              const isHub = n.kind === "change";
+              const isAnchor = n.kind === "file" || isHub;
+              const showLabel = isAnchor || hoverId === n.id;
               return (
                 <g
                   key={n.id}
@@ -266,17 +330,17 @@ export function KnowledgeGraph() {
                   onClick={() => !dragMoved.current && navigate(n)}
                 >
                   <circle
-                    r={n.kind === "file" ? 9 : 6}
-                    fill={n.kind === "file" ? "var(--bg-elevated)" : n.color}
+                    r={isAnchor ? 9 : 6}
+                    fill={isAnchor ? "var(--bg-elevated)" : n.color}
                     stroke={n.color}
-                    strokeWidth={n.kind === "file" ? 2 : 1}
+                    strokeWidth={isAnchor ? 2 : 1}
                   />
                   {showLabel && (
                     <text
-                      x={n.kind === "file" ? 13 : 10}
+                      x={isAnchor ? 13 : 10}
                       y={4}
-                      fontSize={n.kind === "file" ? 12 : 11}
-                      fill={n.kind === "file" ? "var(--text)" : "var(--text)"}
+                      fontSize={isAnchor ? 12 : 11}
+                      fill="var(--text)"
                       style={{ fontFamily: "var(--font-ui)", pointerEvents: "none" }}
                     >
                       {n.label}
@@ -296,6 +360,14 @@ export function KnowledgeGraph() {
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ background: "var(--syn-keyword)" }} />
               {t("graph.legend.comment")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ background: "var(--syn-control)" }} />
+              {t("graph.legend.spec")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ background: "var(--syn-string)" }} />
+              {t("graph.legend.doc")}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-px w-4" style={{ background: "var(--accent)" }} />
