@@ -100,6 +100,7 @@ const en = {
 
   "files.panel": "Files",
   "comments.panel": "Comments",
+  "graph.title": "Knowledge graph",
   "orphans.panel": "Orphans",
   "orphans.empty": "No orphaned comments.",
   "orphans.lastKnown": "Last known: {loc}",
@@ -223,6 +224,7 @@ const it: Record<MessageKey, string> = {
 
   "files.panel": "File",
   "comments.panel": "Commenti",
+  "graph.title": "Grafo della conoscenza",
   "orphans.panel": "Orfani",
   "orphans.empty": "Nessun commento orfano.",
   "orphans.lastKnown": "Ultima posizione: {loc}",

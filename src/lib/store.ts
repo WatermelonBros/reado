@@ -138,6 +138,9 @@ interface WorkspaceState {
   tool: Tool | null;
   /** Select a tool; selecting the active one collapses the panel. */
   selectTool: (tool: Tool) => void;
+  /** Whether the knowledge-graph overlay is open. */
+  graphOpen: boolean;
+  toggleGraph: (open?: boolean) => void;
 }
 
 /** Tool sidebar state (which side panel is shown), persisted per user. */
@@ -146,8 +149,10 @@ export const useWorkspace = create<WorkspaceState>()(
     (set) => ({
       tool: "files",
       selectTool: (tool) => set((s) => ({ tool: s.tool === tool ? null : tool })),
+      graphOpen: false,
+      toggleGraph: (open) => set((s) => ({ graphOpen: open ?? !s.graphOpen })),
     }),
-    { name: "reado.workspace" },
+    { name: "reado.workspace", partialize: (s) => ({ tool: s.tool }) },
   ),
 );
 

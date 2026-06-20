@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import fuzzysort from "fuzzysort";
 import { listFiles, searchText, type SearchMatch } from "../lib/api";
-import { usePalette, useProject, useSettings, useEditorActions, THEMES } from "../lib/store";
+import { usePalette, useProject, useSettings, useEditorActions, useWorkspace, THEMES } from "../lib/store";
 import { mod } from "../lib/shortcuts";
 import { useT, type MessageKey } from "../i18n";
 
@@ -86,6 +86,10 @@ export function Palette() {
         toggleSettings,
         requestCompose: () => {
           useEditorActions.getState().requestCompose();
+          close();
+        },
+        openGraph: () => {
+          useWorkspace.getState().toggleGraph(true);
           close();
         },
       }).filter((r) => r.label.toLowerCase().includes(query.toLowerCase()));
@@ -231,15 +235,17 @@ interface CommandCtx {
   open: (mode: "commands" | "files" | "search") => void;
   toggleSettings: (open?: boolean) => void;
   requestCompose: () => void;
+  openGraph: () => void;
 }
 
 /** Static command list for Cmd+K. */
 function commandRows(
   t: ReturnType<typeof useT>,
-  { project, settings, open, toggleSettings, requestCompose }: CommandCtx,
+  { project, settings, open, toggleSettings, requestCompose, openGraph }: CommandCtx,
 ): Row[] {
   const rows: Row[] = [
     { label: t("comment.new"), hint: `${mod}⇧M`, run: requestCompose },
+    { label: t("graph.title"), run: openGraph },
     { label: t("finder.placeholder"), hint: `${mod}P`, run: () => open("files") },
     { label: t("search.placeholder"), hint: `${mod}⇧F`, run: () => open("search") },
     {

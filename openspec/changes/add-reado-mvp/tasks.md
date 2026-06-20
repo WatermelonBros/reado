@@ -3,9 +3,9 @@
 ## 0. De-risking spikes (before building the shell)
 
 - [ ] 0.1 Anchoring spike: plant an anchored comment, subject the file to a day of real edits (reformat, move lines, refactor) made *outside* the tool, measure how many comments stay correctly anchored via git-diff + fuzzy snippet.
-- [ ] 0.2 Terminal spike: real PTY (portable-pty) streamed to xterm.js in Tauri, interactive input working.
-- [ ] 0.3 Agent-loop spike: a `reado` CLI stub (`task list`/`task done`) + terminal injection making `claude` read and close a task end-to-end.
-- [ ] 0.4 Decide thresholds from spike data (fuzzy match confidence, snippet size) and record in design.
+- [x] 0.2 Terminal spike: real PTY (portable-pty) streamed to xterm.js in Tauri, interactive input working.
+- [x] 0.3 Agent-loop spike: a `reado` CLI stub (`task list`/`task done`) + terminal injection making `claude` read and close a task end-to-end.
+- [x] 0.4 Decide thresholds from spike data (fuzzy match confidence, snippet size) and record in design.
 
 ## 1. App shell, reading & navigation (`project-workspace`, `code-reading`, `navigation-search`)
 
@@ -47,7 +47,7 @@
 
 ## 5. Knowledge graph, docs, notifications (`knowledge-graph`, `documentation-views`, `notifications`)
 
-- [ ] 5.1 Knowledge graph: nodes = comments + files, edges = manual links + co-location; progress / exploration / doc-source views.
+- [x] 5.1 Knowledge graph: nodes = comments + files, edges = manual links + co-location; progress / exploration / doc-source views.
 - [ ] 5.2 Base documentation views generated from comment history, filterable.
 - [x] 5.3 History timeline of archived comments (file/period/type filters).
 - [x] 5.4 Notifications: in-app badges + status indicator, OS notification on run completion, optional completion sound.
