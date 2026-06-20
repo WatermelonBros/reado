@@ -83,6 +83,9 @@ const en = {
   "comment.you": "You",
   "comment.lines": "Lines {from}–{to}",
   "comment.line": "Line {line}",
+  "comment.scope.range": "Lines",
+  "comment.scope.file": "File",
+  "comment.scope.project": "Project",
   "comment.orphan": "Orphaned — the anchored code could not be found.",
 
   "terminal.new": "New terminal",
@@ -203,6 +206,9 @@ const it: Record<MessageKey, string> = {
   "comment.you": "Tu",
   "comment.lines": "Righe {from}–{to}",
   "comment.line": "Riga {line}",
+  "comment.scope.range": "Righe",
+  "comment.scope.file": "File",
+  "comment.scope.project": "Progetto",
   "comment.orphan": "Orfano — il codice ancorato non è stato trovato.",
 
   "terminal.new": "Nuovo terminale",

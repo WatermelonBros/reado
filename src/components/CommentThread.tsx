@@ -21,7 +21,10 @@ import {
 } from "./commentMeta";
 import { Select } from "./ui/Select";
 import { Checkbox } from "./ui/Checkbox";
-import { CloseIcon } from "./icons";
+import { CloseIcon, SendIcon } from "./icons";
+import { useTerminals } from "../lib/terminals";
+import { ptyWrite } from "../lib/api";
+import { composeSingleTaskPrompt } from "../lib/review";
 
 const fmtTime = (ms: number) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
@@ -39,6 +42,14 @@ export function CommentThread({ comment, top, onClose }: Props) {
   const t = useT();
   const [replyText, setReplyText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // When non-null, the root message is being edited (holds the draft text).
+  const [editDraft, setEditDraft] = useState<string | null>(null);
+
+  const saveEdit = async () => {
+    if (editDraft === null) return;
+    await patch(comment.id, { body: editDraft.trim() });
+    setEditDraft(null);
+  };
 
   const lineLabel =
     comment.anchor.scope !== "range"
@@ -51,6 +62,17 @@ export function CommentThread({ comment, top, onClose }: Props) {
     if (!replyText.trim()) return;
     await reply(comment.id, replyText.trim());
     setReplyText("");
+  };
+
+  // "Send just this now": inject a prompt for the active agent to resolve only
+  // this task (spec 4.4).
+  const sendToAgent = () => {
+    const terminals = useTerminals.getState();
+    const id = terminals.activeId ?? terminals.add();
+    setTimeout(
+      () => ptyWrite(id, `${composeSingleTaskPrompt(comment.id)}\r`),
+      id === terminals.activeId ? 0 : 400,
+    );
   };
 
   return (
@@ -80,6 +102,17 @@ export function CommentThread({ comment, top, onClose }: Props) {
           options={COMMENT_STATES.map((st) => ({ value: st, label: t(stateKey(st)) }))}
         />
         <span className="ml-auto font-mono text-xs text-faint">{lineLabel}</span>
+        {comment.kind === "task" && comment.state !== "done" && (
+          <button
+            type="button"
+            onClick={sendToAgent}
+            title={t("terminal.sendReview")}
+            aria-label={t("terminal.sendReview")}
+            className="grid h-6 w-6 place-items-center rounded-sm text-muted hover:bg-surface hover:text-accent"
+          >
+            <SendIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
         <button
           type="button"
           aria-label={t("settings.close")}
@@ -99,7 +132,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
       {/* Thread — the conversation is the focus; metadata stays quiet. */}
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3">
         {comment.messages.map((m, i) => (
-          <div key={i} className={i > 0 ? "border-t border-line pt-3" : ""}>
+          <div key={i} className={`group/msg ${i > 0 ? "border-t border-line pt-3" : ""}`}>
             <div className="mb-1 flex items-baseline gap-2">
               <span
                 className={`text-xs font-semibold ${
@@ -109,10 +142,50 @@ export function CommentThread({ comment, top, onClose }: Props) {
                 {authorLabel(m, t("comment.you"))}
               </span>
               <span className="text-[11px] text-faint">{fmtTime(m.createdAt)}</span>
+              {i === 0 && editDraft === null && (
+                <button
+                  type="button"
+                  onClick={() => setEditDraft(m.body)}
+                  className="ml-auto text-[11px] text-faint opacity-0 transition-opacity group-hover/msg:opacity-100 hover:text-ink"
+                >
+                  {t("comment.edit")}
+                </button>
+              )}
             </div>
-            <div className="prose-reado text-[13px] leading-relaxed text-ink [&_p]:my-1">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.body}</ReactMarkdown>
-            </div>
+            {i === 0 && editDraft !== null ? (
+              <div>
+                <textarea
+                  autoFocus
+                  value={editDraft}
+                  onChange={(e) => setEditDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setEditDraft(null);
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveEdit();
+                  }}
+                  className="block max-h-40 min-h-16 w-full resize-y rounded-md bg-surface px-2 py-1.5 text-sm text-ink outline-none"
+                />
+                <div className="mt-1 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditDraft(null)}
+                    className="rounded-md px-2 py-1 text-xs text-muted hover:text-ink"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveEdit}
+                    className="rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-on-accent hover:brightness-110"
+                  >
+                    {t("editor.save")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="prose-reado text-[13px] leading-relaxed text-ink [&_p]:my-1">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.body}</ReactMarkdown>
+              </div>
+            )}
           </div>
         ))}
       </div>

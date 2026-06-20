@@ -6,12 +6,13 @@
  * code file is never modified — the comment is an external overlay.
  */
 import { useState } from "react";
-import type { CommentType, Context } from "../lib/api";
+import type { CommentType, Context, Scope } from "../lib/api";
 import { useComments } from "../lib/comments";
 import { useSettings } from "../lib/store";
-import { useT } from "../i18n";
+import { useT, type MessageKey } from "../i18n";
 import { COMMENT_TYPES, TYPE_COLOR, typeKey, Dot } from "./commentMeta";
 import { Checkbox } from "./ui/Checkbox";
+import { Select } from "./ui/Select";
 
 interface Props {
   relPath: string;
@@ -29,28 +30,31 @@ export function CommentComposer({ relPath, startLine, endLine, context, top, onC
   const t = useT();
 
   const [type, setType] = useState<CommentType>("note");
+  const [scope, setScope] = useState<Scope>("range");
   const [isTask, setIsTask] = useState(true);
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
 
   const label =
-    startLine === endLine
-      ? t("comment.line", { line: startLine })
-      : t("comment.lines", { from: startLine, to: endLine });
+    scope !== "range"
+      ? t(`comment.scope.${scope}` as MessageKey)
+      : startLine === endLine
+        ? t("comment.line", { line: startLine })
+        : t("comment.lines", { from: startLine, to: endLine });
 
   const save = async () => {
     if (!body.trim() || saving) return;
     setSaving(true);
     try {
       const { firstComment } = await create({
-        file: relPath,
-        scope: "range",
-        startLine,
-        endLine,
+        file: scope === "project" ? "" : relPath,
+        scope,
+        startLine: scope === "range" ? startLine : 0,
+        endLine: scope === "range" ? endLine : 0,
         type,
         kind: isTask ? "task" : "note",
         body: body.trim(),
-        context,
+        context: scope === "range" ? context : { snippet: "", before: "", after: "" },
       });
       if (firstComment && !gitignoreDontAsk) setGitignorePrompt(true);
       onClose();
@@ -65,9 +69,23 @@ export function CommentComposer({ relPath, startLine, endLine, context, top, onC
       style={{ top }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between border-b border-line px-3 py-2">
-        <span className="font-mono text-xs text-faint">{label}</span>
-        <div className="flex flex-wrap gap-1">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+        <div className="flex flex-none items-center gap-1.5">
+          <Select
+            ariaLabel="scope"
+            variant="ghost"
+            value={scope}
+            onChange={(v) => setScope(v as Scope)}
+            options={(["range", "file", "project"] as Scope[]).map((s) => ({
+              value: s,
+              label: t(`comment.scope.${s}` as MessageKey),
+            }))}
+          />
+          {scope === "range" && (
+            <span className="font-mono text-xs text-faint">{label}</span>
+          )}
+        </div>
+        <div className="flex flex-wrap justify-end gap-1">
           {COMMENT_TYPES.map((tp) => (
             <button
               key={tp}

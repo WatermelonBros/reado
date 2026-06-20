@@ -32,7 +32,7 @@
 - [x] 3.1 Create comment: select lines → dedicated key → inline markdown editor; gutter markers with overlap counter.
 - [x] 3.2 Floating popover thread near the line; you + AI messages with per-author identity.
 - [x] 3.3 Fixed types (Bug/Refactor/Performance/Question/Note), states (open/in-progress/done/discarded), task-vs-note flag.
-- [ ] 3.4 Edit + delete (with confirm; delete ≠ archive); line/range/file/project scope.
+- [x] 3.4 Edit + delete (with confirm; delete ≠ archive); line/range/file/project scope.
 - [x] 3.5 Comment list with filters (state/type/file) + jump to code.
 
 ## 4. AI review loop & terminal (`integrated-terminal`, `ai-review-loop`, `diff-view`)
