@@ -97,6 +97,13 @@ export const UnlinkIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const DocsIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+    <path d="M14 3v5h5M8 13h8M8 17h6" />
+  </svg>
+);
+
 export const GraphIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <circle cx="5" cy="6" r="2.2" />

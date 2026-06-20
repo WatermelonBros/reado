@@ -92,6 +92,10 @@ export function Palette() {
           useWorkspace.getState().toggleGraph(true);
           close();
         },
+        openDocs: () => {
+          useWorkspace.getState().toggleDocs(true);
+          close();
+        },
       }).filter((r) => r.label.toLowerCase().includes(query.toLowerCase()));
     }
     if (mode === "files") {
@@ -236,16 +240,18 @@ interface CommandCtx {
   toggleSettings: (open?: boolean) => void;
   requestCompose: () => void;
   openGraph: () => void;
+  openDocs: () => void;
 }
 
 /** Static command list for Cmd+K. */
 function commandRows(
   t: ReturnType<typeof useT>,
-  { project, settings, open, toggleSettings, requestCompose, openGraph }: CommandCtx,
+  { project, settings, open, toggleSettings, requestCompose, openGraph, openDocs }: CommandCtx,
 ): Row[] {
   const rows: Row[] = [
     { label: t("comment.new"), hint: `${mod}⇧M`, run: requestCompose },
     { label: t("graph.title"), run: openGraph },
+    { label: t("docs.title"), run: openDocs },
     { label: t("finder.placeholder"), hint: `${mod}P`, run: () => open("files") },
     { label: t("search.placeholder"), hint: `${mod}⇧F`, run: () => open("search") },
     {

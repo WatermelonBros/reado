@@ -141,6 +141,9 @@ interface WorkspaceState {
   /** Whether the knowledge-graph overlay is open. */
   graphOpen: boolean;
   toggleGraph: (open?: boolean) => void;
+  /** Whether the documentation overlay is open. */
+  docsOpen: boolean;
+  toggleDocs: (open?: boolean) => void;
 }
 
 /** Tool sidebar state (which side panel is shown), persisted per user. */
@@ -151,6 +154,8 @@ export const useWorkspace = create<WorkspaceState>()(
       selectTool: (tool) => set((s) => ({ tool: s.tool === tool ? null : tool })),
       graphOpen: false,
       toggleGraph: (open) => set((s) => ({ graphOpen: open ?? !s.graphOpen })),
+      docsOpen: false,
+      toggleDocs: (open) => set((s) => ({ docsOpen: open ?? !s.docsOpen })),
     }),
     { name: "reado.workspace", partialize: (s) => ({ tool: s.tool }) },
   ),

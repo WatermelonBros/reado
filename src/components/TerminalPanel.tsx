@@ -9,9 +9,10 @@ import { ptyWrite } from "../lib/api";
 import { useTerminals } from "../lib/terminals";
 import { useProject } from "../lib/store";
 import { useComments } from "../lib/comments";
-import { composeReviewPrompt } from "../lib/review";
+import { useState } from "react";
 import { useT } from "../i18n";
 import { Terminal } from "./Terminal";
+import { SendReviewDialog } from "./SendReviewDialog";
 import { PlusIcon, CloseIcon, SendIcon } from "./icons";
 
 export function TerminalPanel() {
@@ -34,13 +35,7 @@ export function TerminalPanel() {
     setTimeout(() => ptyWrite(id, `${command}\r`), id === activeId ? 0 : 400);
   };
 
-  // Inject the review prompt so the running agent fetches and resolves tasks.
-  const sendReview = () => {
-    if (openTasks.length === 0) return;
-    const id = activeId ?? add();
-    const prompt = composeReviewPrompt(openTasks.length);
-    setTimeout(() => ptyWrite(id, `${prompt}\r`), id === activeId ? 0 : 400);
-  };
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   return (
     <div className="flex h-[280px] flex-none flex-col border-t border-line bg-canvas">
@@ -87,7 +82,7 @@ export function TerminalPanel() {
         {/* Send review + launch buttons + collapse. */}
         <button
           type="button"
-          onClick={sendReview}
+          onClick={() => setReviewOpen(true)}
           disabled={openTasks.length === 0}
           title={
             openTasks.length === 0 ? t("terminal.noTasks") : t("terminal.sendReview")
@@ -140,6 +135,8 @@ export function TerminalPanel() {
           </div>
         ))}
       </div>
+
+      <SendReviewDialog open={reviewOpen} onClose={() => setReviewOpen(false)} />
     </div>
   );
 }

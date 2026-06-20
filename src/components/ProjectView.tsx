@@ -24,6 +24,7 @@ import { Palette } from "./Palette";
 import { Settings } from "./Settings";
 import { GitignorePrompt } from "./GitignorePrompt";
 import { KnowledgeGraph } from "./KnowledgeGraph";
+import { DocsView } from "./DocsView";
 import { TerminalPanel } from "./TerminalPanel";
 import { useTerminals } from "../lib/terminals";
 import { EyeIcon, EyeOffIcon } from "./icons";
@@ -93,6 +94,7 @@ export function ProjectView({ root }: { root: string }) {
 
   const tool = useWorkspace((s) => s.tool);
   const graphOpen = useWorkspace((s) => s.graphOpen);
+  const docsOpen = useWorkspace((s) => s.docsOpen);
   const showHidden = useProject((s) => s.showHidden);
   const setShowHidden = useProject((s) => s.setShowHidden);
   const terminalOpen = useTerminals((s) => s.open);
@@ -172,6 +174,7 @@ export function ProjectView({ root }: { root: string }) {
       <Settings />
       <GitignorePrompt />
       {graphOpen && <KnowledgeGraph />}
+      {docsOpen && <DocsView />}
     </div>
   );
 }

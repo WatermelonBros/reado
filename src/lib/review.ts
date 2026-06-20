@@ -17,6 +17,17 @@ export function composeReviewPrompt(taskCount: number): string {
   );
 }
 
+/** Prompt for resolving a specific selected subset of tasks. */
+export function composeReviewPromptForIds(ids: string[]): string {
+  if (ids.length === 0) return composeReviewPrompt(0);
+  return (
+    `READO REVIEW — please resolve these tasks: ${ids.join(", ")}. ` +
+    "For each, run `reado task show <id>`, make the change, then mark it " +
+    '`reado task done <id>` (or `reado task fail <id> "<reason>"` if blocked). ' +
+    "Start now."
+  );
+}
+
 /** Prompt for resolving a single specific task ("send just this now"). */
 export function composeSingleTaskPrompt(id: string): string {
   return (

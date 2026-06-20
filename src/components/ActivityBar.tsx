@@ -9,7 +9,7 @@
 import { useWorkspace, usePalette, type Tool } from "../lib/store";
 import { useComments, openCount } from "../lib/comments";
 import { useT, type MessageKey } from "../i18n";
-import { FilesIcon, SearchIcon, MessageIcon, UnlinkIcon, GraphIcon, SettingsIcon } from "./icons";
+import { FilesIcon, SearchIcon, MessageIcon, UnlinkIcon, GraphIcon, DocsIcon, SettingsIcon } from "./icons";
 
 const BASE_TOOLS: { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon }[] = [
   { id: "files", labelKey: "files.panel", Icon: FilesIcon },
@@ -21,6 +21,7 @@ export function ActivityBar() {
   const tool = useWorkspace((s) => s.tool);
   const selectTool = useWorkspace((s) => s.selectTool);
   const toggleGraph = useWorkspace((s) => s.toggleGraph);
+  const toggleDocs = useWorkspace((s) => s.toggleDocs);
   const toggleSettings = usePalette((s) => s.toggleSettings);
   const openComments = useComments((s) => openCount(s.comments));
   const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length);
@@ -72,6 +73,15 @@ export function ActivityBar() {
       </div>
 
       <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={() => toggleDocs(true)}
+          title={t("docs.title")}
+          aria-label={t("docs.title")}
+          className="grid h-9 w-9 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
+        >
+          <DocsIcon className="h-[18px] w-[18px]" />
+        </button>
         <button
           type="button"
           onClick={() => toggleGraph(true)}
