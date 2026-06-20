@@ -34,3 +34,4 @@ crates/*/target/
 *.njsproj
 *.sln
 *.sw?
+.playwright-mcp/

@@ -187,6 +187,9 @@ interface EditorActionsState {
   /** True when the active editable file has unsaved changes. */
   dirty: boolean;
   setDirty: (dirty: boolean) => void;
+  /** Show the active file as a diff against its committed version. */
+  diffing: boolean;
+  setDiffing: (diffing: boolean) => void;
 }
 
 /** Bridge for triggering editor actions from outside the editor (e.g. global
@@ -198,6 +201,8 @@ export const useEditorActions = create<EditorActionsState>((set) => ({
   setEditing: (editing) => set({ editing }),
   dirty: false,
   setDirty: (dirty) => set({ dirty }),
+  diffing: false,
+  setDiffing: (diffing) => set({ diffing }),
 }));
 
 interface CursorState {

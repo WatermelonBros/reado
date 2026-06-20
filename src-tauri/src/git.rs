@@ -51,3 +51,23 @@ pub fn git_info(root: String) -> GitInfo {
 
     GitInfo { is_repo, branch }
 }
+
+/// The committed (HEAD) contents of a tracked file, for the on-demand diff view.
+/// Returns `None` when the file is untracked, new, or git is unavailable.
+/// Unlike [`run_git`], the output is returned verbatim (no trimming) so the diff
+/// is exact.
+#[tauri::command]
+pub fn git_show_head(root: String, file: String) -> Option<String> {
+    // `git show HEAD:<path>` expects forward slashes, which is what we store.
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["show", &format!("HEAD:{file}")])
+        .output()
+        .ok()?;
+    if output.status.success() {
+        Some(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        None
+    }
+}

@@ -49,6 +49,7 @@ import { useT } from "../i18n";
 import { CommentComposer } from "./CommentComposer";
 import { CommentThread } from "./CommentThread";
 import { Welcome } from "./Welcome";
+import { DiffView } from "./DiffView";
 import { PlusIcon } from "./icons";
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
@@ -105,6 +106,7 @@ export function Editor() {
   const active = useProject((s) => s.active);
   const landing = useProject((s) => s.landing);
   const allComments = useComments((s) => s.comments);
+  const diffing = useEditorActions((s) => s.diffing);
   const { wrap, readingWidth, codeFont, focusMode } = useSettings();
   const t = useT();
 
@@ -137,10 +139,11 @@ export function Editor() {
       .catch(() => {});
   }, [root, active]);
 
-  // Each file opens read-first: reset manual editing and the dirty flag.
+  // Each file opens read-first: reset manual editing, dirty and diff state.
   useEffect(() => {
     useEditorActions.getState().setEditing(false);
     useEditorActions.getState().setDirty(false);
+    useEditorActions.getState().setDiffing(false);
   }, [active]);
 
   if (!active) {
@@ -194,6 +197,9 @@ export function Editor() {
   }
 
   const relPath = toRelative(root, active);
+  if (diffing) {
+    return <DiffView key={relPath} relPath={relPath} text={content.text} />;
+  }
   return (
     <CodeView
       key={active}

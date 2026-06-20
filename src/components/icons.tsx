@@ -79,6 +79,12 @@ export const EyeOffIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const DiffIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M5 3v14M5 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 6H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H12M12 4v4M12 14v4" />
+  </svg>
+);
+
 export const EditIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />

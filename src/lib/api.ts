@@ -48,6 +48,10 @@ export const writeFile = (root: string, path: string, content: string) =>
 /** Git status of the project root (never throws). */
 export const gitInfo = (root: string) => invoke<GitInfo>("git_info", { root });
 
+/** The committed (HEAD) contents of a tracked file, for the diff view. */
+export const gitShowHead = (root: string, file: string) =>
+  invoke<string | null>("git_show_head", { root, file });
+
 /** Full-text search across the project via ripgrep. */
 export const searchText = (root: string, query: string) =>
   invoke<SearchMatch[]>("search_text", { root, query });

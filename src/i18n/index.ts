@@ -31,6 +31,9 @@ const en = {
   "editor.measure": "Reading width",
   "editor.edit": "Toggle editing",
   "editor.save": "Save",
+  "diff.toggle": "Toggle diff vs HEAD",
+  "diff.noBase": "No committed version to diff against.",
+  "diff.noChanges": "No changes since the last commit.",
 
   "status.noFile": "No file open",
   "status.branch": "branch",
@@ -158,6 +161,9 @@ const it: Record<MessageKey, string> = {
   "editor.measure": "Larghezza di lettura",
   "editor.edit": "Attiva/disattiva modifica",
   "editor.save": "Salva",
+  "diff.toggle": "Mostra diff vs HEAD",
+  "diff.noBase": "Nessuna versione committata con cui confrontare.",
+  "diff.noChanges": "Nessuna modifica dall'ultimo commit.",
 
   "status.noFile": "Nessun file aperto",
   "status.branch": "ramo",
