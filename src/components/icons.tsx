@@ -138,6 +138,13 @@ export const BlameIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const OutlineIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M4 6h4M4 12h4M4 18h4" />
+    <path d="M11 6h9M11 12h9M11 18h9" opacity="0.55" />
+  </svg>
+);
+
 export const SpecsIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M5 4h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />

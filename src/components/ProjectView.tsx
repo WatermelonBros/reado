@@ -19,6 +19,7 @@ import { CommentsPanel } from "./CommentsPanel";
 import { GitPanel } from "./GitPanel";
 import { OrphansPanel } from "./OrphansPanel";
 import { SpecsPanel } from "./SpecsPanel";
+import { OutlinePanel } from "./OutlinePanel";
 import { useSpecs } from "../lib/specs";
 import { Tabs } from "./Tabs";
 import { Breadcrumb } from "./Breadcrumb";
@@ -37,6 +38,7 @@ const PANEL_TITLE: Record<string, MessageKey> = {
   files: "files.panel",
   search: "search.placeholder",
   comments: "comments.panel",
+  outline: "outline.panel",
   git: "git.panel",
   orphans: "orphans.panel",
   specs: "specs.panel",
@@ -158,6 +160,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "files" && <FileTree />}
             {tool === "search" && <SearchPanel />}
             {tool === "comments" && <CommentsPanel />}
+            {tool === "outline" && <OutlinePanel />}
             {tool === "git" && <GitPanel />}
             {tool === "specs" && <SpecsPanel />}
             {tool === "orphans" && <OrphansPanel />}
