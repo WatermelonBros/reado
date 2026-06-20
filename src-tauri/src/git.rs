@@ -52,7 +52,8 @@ pub fn git_info(root: String) -> GitInfo {
     GitInfo { is_repo, branch }
 }
 
-/// One changed file in the working tree.
+/// One changed file in the working tree, on one side (staged or unstaged). A
+/// file modified both in the index and the working tree produces two entries.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitChange {
@@ -60,48 +61,133 @@ pub struct GitChange {
     pub path: String,
     /// Category: "modified" | "added" | "deleted" | "renamed" | "untracked".
     pub status: String,
+    /// Whether this entry is in the index (staged) vs the working tree.
+    pub staged: bool,
 }
 
-/// Map a two-character porcelain status code to a category.
-fn categorize_status(code: &str) -> &'static str {
-    if code == "??" {
-        "untracked"
-    } else if code.contains('R') {
-        "renamed"
-    } else if code.contains('D') {
-        "deleted"
-    } else if code.contains('A') {
-        "added"
-    } else {
-        "modified"
+/// Map a single porcelain status char to a category.
+fn categorize_char(c: char) -> &'static str {
+    match c {
+        'R' | 'C' => "renamed",
+        'D' => "deleted",
+        'A' => "added",
+        '?' => "untracked",
+        _ => "modified",
     }
 }
 
-/// Parse one `git status --porcelain` line into a change, or `None` if too short.
-fn parse_status_line(line: &str) -> Option<GitChange> {
+/// Expand one `git status --porcelain` line into its staged/unstaged entries.
+/// The two status chars are X (index) and Y (working tree); "MM path" yields
+/// both a staged and an unstaged change, mirroring how SCM UIs present it.
+fn expand_status_line(line: &str) -> Vec<GitChange> {
     if line.len() <= 3 {
-        return None;
+        return Vec::new();
     }
-    let code = &line[..2];
+    let bytes = line.as_bytes();
+    let (x, y) = (bytes[0] as char, bytes[1] as char);
     let mut path = line[3..].to_string();
     // Renames are "old -> new"; keep the new path.
     if let Some(idx) = path.find(" -> ") {
         path = path[idx + 4..].to_string();
     }
-    Some(GitChange {
-        path: path.trim_matches('"').to_string(),
-        status: categorize_status(code).to_string(),
-    })
+    let path = path.trim_matches('"').to_string();
+
+    if x == '?' {
+        return vec![GitChange { path, status: "untracked".into(), staged: false }];
+    }
+    let mut out = Vec::new();
+    if x != ' ' {
+        out.push(GitChange { path: path.clone(), status: categorize_char(x).into(), staged: true });
+    }
+    if y != ' ' {
+        out.push(GitChange { path, status: categorize_char(y).into(), staged: false });
+    }
+    out
 }
 
-/// The working-tree status (read-only Source Control view). Reado never stages
-/// or commits — git stays the user's tool; this only surfaces what changed.
+/// The working-tree status for the Source Control view, split into staged and
+/// unstaged entries. (Raw, untrimmed output: porcelain lines begin with the
+/// two status columns, so the leading space of an unstaged-only change matters.)
 #[tauri::command]
 pub fn git_status(root: String) -> Vec<GitChange> {
-    let Some(out) = run_git(Path::new(&root), &["status", "--porcelain"]) else {
+    let Some(out) = run_git_raw(Path::new(&root), &["status", "--porcelain"]) else {
         return Vec::new();
     };
-    out.lines().filter_map(parse_status_line).collect()
+    out.lines().flat_map(expand_status_line).collect()
+}
+
+/// Run git and return raw stdout (no trimming), or `None` on failure.
+fn run_git_raw(root: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git").arg("-C").arg(root).args(args).output().ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Run a mutating git command, surfacing stderr on failure so the UI can show it.
+fn run_git_checked(root: &str, args: &[&str]) -> Result<(), String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+/// Stage a path (`git add`). Also stages a deletion.
+#[tauri::command]
+pub fn git_stage(root: String, path: String) -> Result<(), String> {
+    run_git_checked(&root, &["add", "--", &path])
+}
+
+/// Unstage a path (`git reset HEAD`).
+#[tauri::command]
+pub fn git_unstage(root: String, path: String) -> Result<(), String> {
+    run_git_checked(&root, &["reset", "-q", "HEAD", "--", &path])
+}
+
+/// Stage every change (`git add -A`).
+#[tauri::command]
+pub fn git_stage_all(root: String) -> Result<(), String> {
+    run_git_checked(&root, &["add", "-A"])
+}
+
+/// Unstage everything (`git reset HEAD`).
+#[tauri::command]
+pub fn git_unstage_all(root: String) -> Result<(), String> {
+    run_git_checked(&root, &["reset", "-q", "HEAD"])
+}
+
+/// Discard working-tree changes for a path. For an untracked file this deletes
+/// it; for a tracked file it restores it to HEAD. Destructive — the caller must
+/// confirm with the user first.
+#[tauri::command]
+pub fn git_discard(root: String, path: String, untracked: bool) -> Result<(), String> {
+    if untracked {
+        let full = Path::new(&root).join(&path);
+        if full.is_dir() {
+            std::fs::remove_dir_all(&full).map_err(|e| e.to_string())
+        } else {
+            std::fs::remove_file(&full).map_err(|e| e.to_string())
+        }
+    } else {
+        run_git_checked(&root, &["checkout", "--", &path])
+    }
+}
+
+/// Commit the staged changes with a message (`git commit -m`).
+#[tauri::command]
+pub fn git_commit(root: String, message: String) -> Result<(), String> {
+    if message.trim().is_empty() {
+        return Err("Empty commit message".into());
+    }
+    run_git_checked(&root, &["commit", "-m", &message])
 }
 
 #[cfg(test)]
@@ -109,30 +195,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn categorizes_status_codes() {
-        assert_eq!(categorize_status("??"), "untracked");
-        assert_eq!(categorize_status(" M"), "modified");
-        assert_eq!(categorize_status("M "), "modified");
-        assert_eq!(categorize_status("A "), "added");
-        assert_eq!(categorize_status(" D"), "deleted");
-        assert_eq!(categorize_status("R "), "renamed");
+    fn categorizes_status_chars() {
+        assert_eq!(categorize_char('?'), "untracked");
+        assert_eq!(categorize_char('M'), "modified");
+        assert_eq!(categorize_char('A'), "added");
+        assert_eq!(categorize_char('D'), "deleted");
+        assert_eq!(categorize_char('R'), "renamed");
     }
 
     #[test]
-    fn parses_status_lines() {
-        let m = parse_status_line(" M src/main.rs").unwrap();
-        assert_eq!(m.path, "src/main.rs");
-        assert_eq!(m.status, "modified");
+    fn expands_status_lines() {
+        let unstaged = expand_status_line(" M src/main.rs");
+        assert_eq!(unstaged.len(), 1);
+        assert_eq!(unstaged[0].path, "src/main.rs");
+        assert_eq!(unstaged[0].status, "modified");
+        assert!(!unstaged[0].staged);
 
-        let r = parse_status_line("R  old.rs -> new.rs").unwrap();
-        assert_eq!(r.path, "new.rs");
-        assert_eq!(r.status, "renamed");
+        let staged = expand_status_line("A  new.rs");
+        assert_eq!(staged.len(), 1);
+        assert!(staged[0].staged);
+        assert_eq!(staged[0].status, "added");
 
-        let q = parse_status_line("?? \"weird name.rs\"").unwrap();
-        assert_eq!(q.path, "weird name.rs");
-        assert_eq!(q.status, "untracked");
+        // Both index and working tree changed → two entries.
+        let both = expand_status_line("MM both.rs");
+        assert_eq!(both.len(), 2);
+        assert!(both[0].staged && !both[1].staged);
 
-        assert!(parse_status_line("").is_none());
+        let rename = expand_status_line("R  old.rs -> new.rs");
+        assert_eq!(rename[0].path, "new.rs");
+        assert_eq!(rename[0].status, "renamed");
+        assert!(rename[0].staged);
+
+        let untracked = expand_status_line("?? \"weird name.rs\"");
+        assert_eq!(untracked[0].path, "weird name.rs");
+        assert_eq!(untracked[0].status, "untracked");
+        assert!(!untracked[0].staged);
+
+        assert!(expand_status_line("").is_empty());
     }
 }
 

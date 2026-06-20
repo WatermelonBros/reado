@@ -131,6 +131,19 @@ export const PlusIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const MinusIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M5 12h14" />
+  </svg>
+);
+
+export const DiscardIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M3 7v6h6" />
+    <path d="M3.5 13a9 9 0 1 0 2.3-9.3L3 7" />
+  </svg>
+);
+
 export const MessageIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M21 11.5a8.38 8.38 0 0 1-9 8.3 8.5 8.5 0 0 1-3.8-.9L3 20l1.1-3.3A8.38 8.38 0 0 1 12 3.5a8.38 8.38 0 0 1 9 8z" />

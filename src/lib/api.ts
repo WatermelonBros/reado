@@ -51,10 +51,33 @@ export const gitInfo = (root: string) => invoke<GitInfo>("git_info", { root });
 export interface GitChange {
   path: string;
   status: "modified" | "added" | "deleted" | "renamed" | "untracked";
+  staged: boolean;
 }
 
-/** Working-tree status (read-only Source Control view). */
+/** Working-tree status (Source Control view), split into staged/unstaged. */
 export const gitStatus = (root: string) => invoke<GitChange[]>("git_status", { root });
+
+/** Stage a path (git add). */
+export const gitStage = (root: string, path: string) =>
+  invoke<void>("git_stage", { root, path });
+
+/** Unstage a path (git reset HEAD). */
+export const gitUnstage = (root: string, path: string) =>
+  invoke<void>("git_unstage", { root, path });
+
+/** Stage every change. */
+export const gitStageAll = (root: string) => invoke<void>("git_stage_all", { root });
+
+/** Unstage everything. */
+export const gitUnstageAll = (root: string) => invoke<void>("git_unstage_all", { root });
+
+/** Discard working-tree changes for a path (deletes untracked files). Destructive. */
+export const gitDiscard = (root: string, path: string, untracked: boolean) =>
+  invoke<void>("git_discard", { root, path, untracked });
+
+/** Commit the staged changes with a message. */
+export const gitCommit = (root: string, message: string) =>
+  invoke<void>("git_commit", { root, message });
 
 export interface GitRefs {
   branches: string[];
