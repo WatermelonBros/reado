@@ -85,7 +85,7 @@ pub fn find_definition(root: String, name: String) -> Vec<Definition> {
         }
     }
     // Strongest declarations first; stable within a score.
-    defs.sort_by(|a, b| b.score.cmp(&a.score));
+    defs.sort_by_key(|d| std::cmp::Reverse(d.score));
     defs
 }
 
