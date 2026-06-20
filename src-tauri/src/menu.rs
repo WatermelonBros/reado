@@ -26,10 +26,13 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .build()?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
+        .text("openFolder", "Open Folder…")
+        .separator()
         .text("save", "Save")
         .text("format", "Format Document")
         .separator()
         .text("closeEditor", "Close Editor")
+        .text("closeProject", "Close Project")
         .close_window()
         .build()?;
 

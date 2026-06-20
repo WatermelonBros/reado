@@ -4,9 +4,18 @@
  * action, reusing the same stores/helpers the keyboard shortcuts and palette use.
  */
 import { listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { usePalette, useProject, useSettings, useWorkspace } from "./store";
 import { useTerminals } from "./terminals";
 import { formatDocument, saveDocument, openFind, goToDefinitionAtCursor } from "./docInfo";
+import { openProject, closeProject } from "./window";
+
+/** Prompt for a folder and open it in this window. */
+async function pickAndOpenFolder() {
+  const selected = await openDialog({ directory: true, multiple: false });
+  const path = Array.isArray(selected) ? selected[0] : selected;
+  if (path) await openProject(path);
+}
 
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 2;
@@ -21,6 +30,12 @@ export function listenForMenu(): Promise<() => void> {
     switch (id) {
       case "settings":
         palette.toggleSettings(true);
+        break;
+      case "openFolder":
+        void pickAndOpenFolder();
+        break;
+      case "closeProject":
+        void closeProject();
         break;
       case "save":
         saveDocument();

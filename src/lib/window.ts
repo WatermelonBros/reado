@@ -1,12 +1,10 @@
 /**
  * Window management.
  *
- * Reado uses one window per project (per the spec). Opening a project either
- * focuses its existing window or spawns a new one pointing at the project via
- * the URL hash. If window creation is unavailable (e.g. permissions during
- * development), it falls back to navigating the current window.
+ * Reado is a single-window app: opening a project navigates the current window
+ * (like VS Code) rather than spawning a new one. The project path is encoded in
+ * the URL hash; `App` re-routes from the launcher to the workspace on hashchange.
  */
-import { WebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /** The project path encoded in the current window's URL hash, if any. */
@@ -16,47 +14,16 @@ export function currentProjectPath(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-/** A Tauri-safe window label derived from a filesystem path. */
-function labelFor(path: string): string {
-  // Labels allow only [a-zA-Z0-9-/:_]; hash the path to a compact, valid id.
-  let hash = 0;
-  for (let i = 0; i < path.length; i++) {
-    hash = (hash * 31 + path.charCodeAt(i)) | 0;
-  }
-  return `project_${(hash >>> 0).toString(36)}`;
+/** Open a project in the current window (no new window). */
+export async function openProject(path: string): Promise<void> {
+  // Setting the hash fires `hashchange`, which App re-routes on — switching to
+  // the workspace without a full reload.
+  window.location.hash = `project=${encodeURIComponent(path)}`;
 }
 
-const projectUrl = (path: string) =>
-  `index.html#project=${encodeURIComponent(path)}`;
-
-/**
- * Open a project in its own window, focusing it if already open. Falls back to
- * navigating the current window when window creation is not possible.
- */
-export async function openProject(path: string): Promise<void> {
-  const label = labelFor(path);
-  try {
-    const existing = await getAllWebviewWindows();
-    const match = existing.find((w) => w.label === label);
-    if (match) {
-      await match.setFocus();
-      return;
-    }
-    const win = new WebviewWindow(label, {
-      url: projectUrl(path),
-      title: path.split(/[\\/]/).pop() ?? "Reado",
-      width: 1280,
-      height: 832,
-      minWidth: 720,
-      minHeight: 480,
-    });
-    win.once("tauri://error", () => {
-      // Creation failed — fall back to navigating this window.
-      window.location.assign(projectUrl(path));
-    });
-  } catch {
-    window.location.assign(projectUrl(path));
-  }
+/** Return to the launcher (recent-projects screen) in the current window. */
+export async function closeProject(): Promise<void> {
+  window.location.hash = "";
 }
 
 /** Set the OS window title to the project name. */
