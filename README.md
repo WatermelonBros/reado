@@ -67,6 +67,10 @@ Contract: `reado task list|show|done|fail|link` and
 `reado comment add|reply|search`. Agent identity comes from `$READO_AGENT`
 (Reado sets it when launching an agent).
 
+An agent plugin in [`plugin/`](plugin/) teaches Claude Code (and Codex, via
+`AGENTS.md`) this contract so the agent resolves tasks correctly. See
+[`plugin/README.md`](plugin/README.md) to install it.
+
 ## Keyboard shortcuts
 
 | Shortcut             | Action                   |

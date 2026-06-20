@@ -1,0 +1,6 @@
+{
+  "name": "reado",
+  "description": "Resolve Reado tasks from the terminal: read anchored comments and close them through the `reado` CLI.",
+  "version": "0.1.0",
+  "author": "Reado contributors"
+}
