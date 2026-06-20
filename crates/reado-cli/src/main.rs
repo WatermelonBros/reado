@@ -49,6 +49,20 @@ enum Command {
         #[command(subcommand)]
         action: CommentCmd,
     },
+    /// Browse the project's knowledge base (docs, specs, notes) — for the agent
+    /// to consult the plan and documentation before resolving tasks.
+    Kb {
+        #[command(subcommand)]
+        action: KbCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum KbCmd {
+    /// List the knowledge sources: docs, specs, and the notes (comments) count.
+    List,
+    /// Print a knowledge document (a doc or spec markdown file) by path.
+    Show { path: String },
 }
 
 #[derive(Subcommand)]
@@ -132,8 +146,87 @@ fn run(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     match &cli.command {
         Command::Task { action } => task(cli, &root, &agent, action)?,
         Command::Comment { action } => comment(cli, &root, &agent, action)?,
+        Command::Kb { action } => kb(cli, &root, action)?,
     }
     Ok(())
+}
+
+/// The knowledge base: docs, specs and notes, so an agent can consult the plan
+/// and documentation before resolving tasks.
+fn kb(cli: &Cli, root: &str, action: &KbCmd) -> Result<(), Box<dyn std::error::Error>> {
+    let root_path = Path::new(root);
+    match action {
+        KbCmd::List => {
+            let mut md = Vec::new();
+            collect_markdown(root_path, root_path, &mut md);
+            md.sort();
+            // Specs live under openspec/ or .specify/; everything else is a doc.
+            let (specs, docs): (Vec<String>, Vec<String>) = md
+                .into_iter()
+                .partition(|p| p.contains("openspec/") || p.contains(".specify/"));
+            let active = core::list_comments(root).len();
+            let resolved = core::list_archived(root).len();
+            if cli.json {
+                let v = serde_json::json!({
+                    "docs": docs,
+                    "specs": specs,
+                    "notes": { "active": active, "resolved": resolved },
+                });
+                println!("{}", serde_json::to_string_pretty(&v)?);
+            } else {
+                println!("# Docs");
+                for d in &docs {
+                    println!("  {d}");
+                }
+                println!("# Specs");
+                for s in &specs {
+                    println!("  {s}");
+                }
+                println!("# Notes");
+                println!(
+                    "  {active} active, {resolved} resolved comments \
+                     — `reado kb show <path>` to read a doc/spec, `reado comment search <q>` for notes."
+                );
+            }
+        }
+        KbCmd::Show { path } => {
+            if path.contains("..") {
+                return Err("path must be inside the project".into());
+            }
+            let text = std::fs::read_to_string(root_path.join(path))?;
+            print!("{text}");
+        }
+    }
+    Ok(())
+}
+
+/// Recursively collect project-relative markdown paths, skipping VCS/build/vendor
+/// directories and Reado's own comment store.
+fn collect_markdown(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if path.is_dir() {
+            if matches!(
+                name.as_str(),
+                ".git" | "node_modules" | "target" | "dist" | "build" | ".next" | "vendor"
+                    | ".reado" | ".claude" | ".codex" | ".github" | ".vscode"
+            ) {
+                continue;
+            }
+            collect_markdown(root, &path, out);
+        } else {
+            let lower = name.to_lowercase();
+            if lower.ends_with(".md") || lower.ends_with(".markdown") {
+                if let Ok(rel) = path.strip_prefix(root) {
+                    out.push(rel.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
+    }
 }
 
 fn task(

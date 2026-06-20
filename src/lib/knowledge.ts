@@ -10,7 +10,8 @@ export interface DocItem {
   path: string;
 }
 
-const EXCLUDE = /(?:^|\/)(?:\.?openspec|\.specify|node_modules|\.git|target|dist|build|\.next|vendor)\//;
+const EXCLUDE =
+  /(?:^|\/)(?:\.?openspec|\.specify|node_modules|\.git|target|dist|build|\.next|vendor|\.claude|\.codex|\.github|\.vscode)\//;
 
 /** Rank docs so READMEs and root docs surface first, then `docs/`, then rest. */
 function rank(path: string): number {
