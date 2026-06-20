@@ -659,16 +659,55 @@ pub fn extract_context(content: &str, start: u32, end: u32) -> Context {
     }
 }
 
-/// Recompute a comment's 1-based line range against new file content. Returns
-/// `None` when the anchor can no longer be located (orphan).
-pub fn relocate(old_start: u32, snippet: &str, new_content: &str) -> Option<(u32, u32)> {
-    let snip: Vec<String> = snippet.lines().map(|l| l.trim().to_string()).collect();
+/// Average bigram similarity of a window against a target block (both already
+/// trimmed line-by-line), or `None` when the lengths preclude a comparison.
+fn window_score(window: &[String], target: &[String]) -> f32 {
+    if target.is_empty() {
+        return 0.0;
+    }
+    window
+        .iter()
+        .zip(target)
+        .map(|(a, b)| similarity(a, b))
+        .sum::<f32>()
+        / target.len() as f32
+}
+
+/// Best fuzzy position of `target` within `lines`, with its score.
+fn best_fuzzy(lines: &[String], target: &[String]) -> Option<(usize, f32)> {
+    let len = target.len();
+    if len == 0 || lines.len() < len {
+        return None;
+    }
+    (0..=lines.len() - len)
+        .map(|i| (i, window_score(&lines[i..i + len], target)))
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// Recompute a comment's 1-based line range against new file content, using the
+/// full anchored context (before + snippet + after). Returns `None` when the
+/// anchor can no longer be located (orphan).
+///
+/// Strategy, most-precise first:
+///   1. Exact match of the snippet block (closest to the old position).
+///   2. **Context window** — slide `before + snippet + after` and take the
+///      snippet sub-range of the best match. This survives edits to the snippet
+///      itself, as long as the surrounding lines are stable, which is the common
+///      case the plain snippet match would orphan.
+///   3. Fuzzy match of the snippet alone.
+pub fn relocate(old_start: u32, context: &Context, new_content: &str) -> Option<(u32, u32)> {
+    let trim = |s: &str| -> Vec<String> { s.lines().map(|l| l.trim().to_string()).collect() };
+    let snip = trim(&context.snippet);
     if snip.is_empty() {
         return None;
     }
-    let lines: Vec<String> = new_content.lines().map(|l| l.trim().to_string()).collect();
+    let lines = trim(new_content);
     let len = snip.len();
+    if lines.is_empty() {
+        return None;
+    }
 
+    // 1. Exact snippet block, nearest to the old line.
     let exact: Vec<usize> = (0..=lines.len().saturating_sub(len))
         .filter(|&i| lines.get(i..i + len).is_some_and(|w| w == snip.as_slice()))
         .collect();
@@ -679,23 +718,38 @@ pub fn relocate(old_start: u32, snippet: &str, new_content: &str) -> Option<(u32
         return Some(((i + 1) as u32, (i + len) as u32));
     }
 
-    if lines.is_empty() {
-        return None;
-    }
-    let mut best: Option<(usize, f32)> = None;
-    for i in 0..=lines.len().saturating_sub(len) {
-        let window = &lines[i..i + len];
-        let score: f32 = window
+    // 2. Context window: anchor by the surrounding lines so an edited snippet
+    //    still follows. Only worthwhile when there is real context to lean on.
+    let before = trim(&context.before);
+    let after = trim(&context.after);
+    if !before.is_empty() || !after.is_empty() {
+        let blen = before.len();
+        let window: Vec<String> = before
             .iter()
-            .zip(&snip)
-            .map(|(a, b)| similarity(a, b))
-            .sum::<f32>()
-            / len as f32;
-        if best.map(|(_, s)| score > s).unwrap_or(true) {
-            best = Some((i, score));
+            .chain(&snip)
+            .chain(&after)
+            .cloned()
+            .collect();
+        if let Some((i, score)) = best_fuzzy(&lines, &window) {
+            // Weight context fully but require the surrounding lines to be a
+            // strong match, so we don't drag an anchor onto unrelated code.
+            let ctx_only: Vec<String> = before.iter().chain(&after).cloned().collect();
+            let ctx_window: Vec<String> = lines[i..i + window.len()]
+                .iter()
+                .enumerate()
+                .filter(|(k, _)| *k < blen || *k >= blen + len)
+                .map(|(_, l)| l.clone())
+                .collect();
+            let ctx_score = window_score(&ctx_window, &ctx_only);
+            if score >= FUZZY_THRESHOLD && ctx_score >= FUZZY_THRESHOLD {
+                let s = i + blen;
+                return Some(((s + 1) as u32, (s + len) as u32));
+            }
         }
     }
-    match best {
+
+    // 3. Fuzzy snippet alone.
+    match best_fuzzy(&lines, &snip) {
         Some((i, score)) if score >= FUZZY_THRESHOLD => Some(((i + 1) as u32, (i + len) as u32)),
         _ => None,
     }
@@ -749,7 +803,7 @@ pub fn reanchor_file(root: &str, file: &str) -> Result<Vec<Comment>> {
 
         match content
             .as_deref()
-            .and_then(|c| relocate(start, &comment.meta.context.snippet, c).map(|r| (c, r)))
+            .and_then(|c| relocate(start, &comment.meta.context, c).map(|r| (c, r)))
         {
             Some((c, (new_start, new_end))) => {
                 if comment.meta.orphan {
@@ -830,25 +884,59 @@ mod tests {
         assert_eq!(msgs[1].agent.as_deref(), Some("claude-code"));
     }
 
+    fn ctx(snippet: &str) -> Context {
+        Context {
+            snippet: snippet.into(),
+            before: String::new(),
+            after: String::new(),
+        }
+    }
+
     #[test]
     fn relocate_follows_lines_inserted_above() {
         let snippet = "fn compute(x: i32) -> i32 {\n    x * 2\n}";
         let new = "// new\n// lines\n// here\nfn compute(x: i32) -> i32 {\n    x * 2\n}\n";
-        assert_eq!(relocate(1, snippet, new), Some((4, 6)));
+        assert_eq!(relocate(1, &ctx(snippet), new), Some((4, 6)));
     }
 
     #[test]
     fn relocate_fuzzy_tolerates_a_small_edit() {
         let snippet = "let total = items.iter().sum();\nreturn total;";
         let new = "let total = items.iter().copied().sum();\nreturn total;\n";
-        assert_eq!(relocate(1, snippet, new), Some((1, 2)));
+        assert_eq!(relocate(1, &ctx(snippet), new), Some((1, 2)));
     }
 
     #[test]
     fn relocate_orphans_when_gone() {
         let snippet = "this exact code\nno longer exists anywhere";
         let new = "completely\ndifferent\ncontent\n";
-        assert_eq!(relocate(1, snippet, new), None);
+        assert_eq!(relocate(1, &ctx(snippet), new), None);
+    }
+
+    #[test]
+    fn relocate_follows_an_edited_snippet_via_context() {
+        // The commented line itself is rewritten *and* a line is inserted above.
+        // Snippet-only fuzzy would orphan; the stable before/after carry it.
+        let context = Context {
+            before: "fn outer() {\n  let a = 1;".into(),
+            snippet: "  let b = compute(a);".into(),
+            after: "  return b;\n}".into(),
+        };
+        let new = "// header\nfn outer() {\n  let a = 1;\n  let b = compute(a, opts) ?? fallback;\n  return b;\n}\n";
+        assert_eq!(relocate(3, &context, new), Some((4, 4)));
+    }
+
+    #[test]
+    fn relocate_context_does_not_drag_onto_unrelated_code() {
+        // Snippet gone and the surrounding context also absent → orphan, not a
+        // false match somewhere else.
+        let context = Context {
+            before: "specific anchor line one\nspecific anchor line two".into(),
+            snippet: "the body that vanished".into(),
+            after: "specific tail line one\nspecific tail line two".into(),
+        };
+        let new = "totally\nunrelated\nfile\ncontents\nhere\n";
+        assert_eq!(relocate(2, &context, new), None);
     }
 
     // ---- Disk lifecycle (temp project) ----------------------------------

@@ -72,9 +72,14 @@ Honest record of where the implementation differs from the literal task text:
 - **2.4 Anchoring** — re-anchoring uses exact-block then character-fuzzy
   (Sørensen–Dice) snippet relocation with orphan-on-failure (tested). This meets
   the observable requirement (anchors survive external edits / become orphans,
-  recomputed on watcher + open). A *git-diff-first* line remap and *tree-sitter*
-  AST assist are documented future optimisations on top of the fuzzy base, not
-  yet implemented.
+  recomputed on watcher + open). A **context window** (before + snippet + after
+  slid as one block) now runs between the exact and fuzzy stages, so an anchor
+  follows an edit to the *commented line itself* while the surrounding lines are
+  stable — the most common orphan cause — without dragging onto unrelated code
+  (tested). A literal *git-diff-first* remap was rejected for the live case:
+  comments anchor to the (often uncommitted) working tree, so `git diff HEAD` is
+  not the old→new mapping the watcher needs. *tree-sitter* AST assist remains a
+  future optimisation.
 - **2.5 Rename → path auto-update** — handled where the OS reports a rename with
   both endpoints (Linux/inotify). On platforms that report rename as
   delete+create (e.g. macOS), the comment orphans gracefully and is recoverable
