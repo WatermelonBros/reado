@@ -46,7 +46,7 @@ import {
 import { readoAppearance } from "../lib/codemirror";
 import { commentGutter, type LineComments } from "../lib/commentGutter";
 import { blameGutter } from "../lib/blameGutter";
-import { useDocInfo, detectEol, detectIndent } from "../lib/docInfo";
+import { useDocInfo, detectEol, detectIndent, formatDocument } from "../lib/docInfo";
 import { useComments, commentsForFile, toRelative } from "../lib/comments";
 import {
   useCursor,
@@ -358,6 +358,10 @@ function CodeView({
   } | null>(null);
   // Line under the mouse, for the hover "+" add-comment affordance.
   const [hover, setHover] = useState<{ line: number; top: number } | null>(null);
+  // Right-click context menu (screen position + the document offset clicked).
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; pos: number } | null>(
+    null,
+  );
   // Bumped on scroll/resize so the overlays re-read their anchor coordinates.
   const [, setTick] = useState(0);
 
@@ -637,6 +641,23 @@ function CodeView({
     };
   }, []);
 
+  // Dismiss the editor context menu on any outside interaction.
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const off = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCtxMenu(null);
+    window.addEventListener("click", off);
+    window.addEventListener("resize", off);
+    document.addEventListener("scroll", off, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", off);
+      window.removeEventListener("resize", off);
+      document.removeEventListener("scroll", off, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [ctxMenu]);
+
   // Scroll to and softly highlight the landing line after a jump.
   useEffect(() => {
     const view = viewRef.current;
@@ -699,6 +720,43 @@ function CodeView({
     setActiveThread(null);
   };
 
+  // Open the editor context menu at the right-clicked position.
+  const onContextMenu = (e: React.MouseEvent) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+    if (pos == null) return;
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY, pos });
+  };
+
+  // Build the context-menu actions for the clicked position.
+  const ctxActions = () => {
+    const view = viewRef.current;
+    if (!view || !ctxMenu) return [];
+    const pos = ctxMenu.pos;
+    const word = view.state.wordAt(pos);
+    const isRepo = useProject.getState().git.isRepo;
+    return [
+      word && {
+        label: t("editor.goToDef"),
+        run: () => goToDefinitionAt(view, pos),
+      },
+      {
+        label: t("comment.new"),
+        run: () => {
+          const line = view.state.doc.lineAt(pos).number;
+          openComposerFor(line, line);
+        },
+      },
+      { label: t("editor.format"), run: () => void formatDocument() },
+      isRepo && {
+        label: t("diff.toggle"),
+        run: () => useEditorActions.getState().setDiffing(!useEditorActions.getState().diffing),
+      },
+    ].filter(Boolean) as { label: string; run: () => void }[];
+  };
+
   // Track the hovered line to show the "+" add-comment affordance.
   const onMouseMove = (e: React.MouseEvent) => {
     const view = viewRef.current;
@@ -720,6 +778,7 @@ function CodeView({
       className="relative mx-auto h-full w-full"
       onMouseMove={onMouseMove}
       onMouseLeave={() => setHover(null)}
+      onContextMenu={onContextMenu}
       style={
         {
           "--code-font": codeFont || undefined,
@@ -827,6 +886,29 @@ function CodeView({
           top={threadTop}
           onClose={closeOverlays}
         />
+      )}
+
+      {ctxMenu && (
+        <ul
+          className="fixed z-[120] min-w-[200px] overflow-hidden rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {ctxActions().map((item) => (
+            <li key={item.label}>
+              <button
+                type="button"
+                onClick={() => {
+                  setCtxMenu(null);
+                  item.run();
+                }}
+                className="flex w-full items-center px-3 py-1.5 text-left text-ink transition-colors hover:bg-surface"
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
