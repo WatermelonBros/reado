@@ -247,12 +247,53 @@
   }
   .prose-reado h1,
   .prose-reado h2,
-  .prose-reado h3 {
+  .prose-reado h3,
+  .prose-reado h4 {
     line-height: 1.3;
+    font-weight: 600;
+    color: var(--text);
     margin-top: var(--space-6, 32px);
+    margin-bottom: var(--space-2, 8px);
+  }
+  /* The first block shouldn't push the content down. */
+  .prose-reado > :first-child {
+    margin-top: 0;
   }
   .prose-reado h1 {
-    font-size: 1.9em;
+    font-size: 1.7em;
+    letter-spacing: -0.01em;
+  }
+  .prose-reado h2 {
+    font-size: 1.3em;
+    padding-bottom: 0.2em;
+    border-bottom: 1px solid var(--border);
+  }
+  .prose-reado h3 {
+    font-size: 1.1em;
+  }
+  .prose-reado h4 {
+    font-size: 1em;
+    color: var(--text-muted);
+  }
+  .prose-reado p {
+    margin: 0.75em 0;
+  }
+  .prose-reado ul,
+  .prose-reado ol {
+    margin: 0.75em 0;
+    padding-left: 1.5em;
+  }
+  .prose-reado ul {
+    list-style: disc;
+  }
+  .prose-reado ol {
+    list-style: decimal;
+  }
+  .prose-reado li {
+    margin: 0.3em 0;
+  }
+  .prose-reado li::marker {
+    color: var(--text-faint);
   }
   .prose-reado a {
     color: var(--accent);

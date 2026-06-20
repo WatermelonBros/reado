@@ -273,7 +273,7 @@ function commandRows(
     { label: t("editor.format"), hint: "⇧⌥F", run: () => void formatDocument() },
     { label: t("symbols.goto"), hint: `${mod}⇧O`, run: () => open("symbols") },
     { label: t("graph.title"), run: openGraph },
-    { label: t("docs.title"), run: openDocs },
+    { label: t("kb.title"), run: openDocs },
     { label: t("finder.placeholder"), hint: `${mod}P`, run: () => open("files") },
     { label: t("search.placeholder"), hint: `${mod}⇧F`, run: () => open("search") },
     {

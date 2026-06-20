@@ -106,8 +106,8 @@ export function ActivityBar() {
         <button
           type="button"
           onClick={() => toggleDocs(true)}
-          title={t("docs.title")}
-          aria-label={t("docs.title")}
+          title={t("kb.title")}
+          aria-label={t("kb.title")}
           className="grid h-10 w-10 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
         >
           <DocsIcon className="h-[18px] w-[18px]" />
