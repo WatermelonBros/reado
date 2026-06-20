@@ -10,6 +10,7 @@ import { currentProjectPath } from "./lib/window";
 import { useApplyTheme, useApplyZoom, useGlobalShortcuts } from "./lib/hooks";
 import { checkForUpdates } from "./lib/updater";
 import { listenForMenu } from "./lib/menu";
+import { UpdatePrompt } from "./components/organisms/UpdatePrompt";
 
 export default function App() {
   useApplyTheme();
@@ -58,9 +59,10 @@ export default function App() {
     return () => document.removeEventListener("contextmenu", onContextMenu);
   }, []);
 
-  return projectPath ? (
-    <ProjectView key={projectPath} root={projectPath} />
-  ) : (
-    <RecentProjects />
+  return (
+    <>
+      {projectPath ? <ProjectView key={projectPath} root={projectPath} /> : <RecentProjects />}
+      <UpdatePrompt />
+    </>
   );
 }
