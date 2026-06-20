@@ -337,6 +337,7 @@ function CodeView({
   const blame = useEditorActions((s) => s.blame);
   const indentSize = useDocInfo((s) => s.indentSize);
   const languageOverride = useDocInfo((s) => s.languageOverride);
+  const stickyScroll = useSettings((s) => s.stickyScroll);
   const setActiveThread = useComments((s) => s.setActive);
   const activeId = useComments((s) => s.activeId);
   const reanchoringId = useComments((s) => s.reanchoringId);
@@ -362,6 +363,8 @@ function CodeView({
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; pos: number } | null>(
     null,
   );
+  // Sticky scroll: the enclosing scope headers pinned above the viewport top.
+  const [sticky, setSticky] = useState<{ line: number; text: string }[]>([]);
   // Bumped on scroll/resize so the overlays re-read their anchor coordinates.
   const [, setTick] = useState(0);
 
@@ -625,6 +628,7 @@ function CodeView({
     let timer: number | undefined;
     const bump = () => {
       setTick((n) => n + 1);
+      computeSticky();
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         useSessions
@@ -640,6 +644,13 @@ function CodeView({
       window.removeEventListener("resize", bump);
     };
   }, []);
+
+  // Recompute (or clear) the sticky headers when the setting toggles.
+  useEffect(() => {
+    computeSticky();
+    // computeSticky reads live refs/state; safe to omit from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stickyScroll]);
 
   // Dismiss the editor context menu on any outside interaction.
   useEffect(() => {
@@ -720,6 +731,39 @@ function CodeView({
     setActiveThread(null);
   };
 
+  // Recompute the sticky-scroll headers: walk up from the first visible line,
+  // collecting scope openers ({ or :) of strictly decreasing indentation.
+  const computeSticky = () => {
+    const view = viewRef.current;
+    if (!view || !useSettings.getState().stickyScroll) {
+      setSticky([]);
+      return;
+    }
+    const doc = view.state.doc;
+    const topBlock = view.lineBlockAtHeight(view.scrollDOM.scrollTop);
+    const topLine = doc.lineAt(topBlock.from).number;
+    const indentOf = (s: string) => s.match(/^[\t ]*/)?.[0].length ?? 0;
+    const isOpener = (s: string) => /[{:]$/.test(s.trim());
+
+    const headers: { line: number; text: string }[] = [];
+    let limit = Infinity;
+    for (let n = topLine - 1; n >= 1 && headers.length < 5; n--) {
+      const text = doc.line(n).text;
+      if (!text.trim()) continue;
+      const indent = indentOf(text);
+      if (indent < limit && isOpener(text)) {
+        headers.unshift({ line: n, text: text.replace(/\s+$/, "") });
+        limit = indent;
+        if (indent === 0) break;
+      }
+    }
+    setSticky((prev) =>
+      prev.length === headers.length && prev.every((h, i) => h.line === headers[i].line)
+        ? prev
+        : headers,
+    );
+  };
+
   // Open the editor context menu at the right-clicked position.
   const onContextMenu = (e: React.MouseEvent) => {
     const view = viewRef.current;
@@ -787,6 +831,39 @@ function CodeView({
       }
     >
       <div ref={hostRef} className="h-full w-full [&_.cm-editor]:h-full" />
+
+      {sticky.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 border-b border-line bg-canvas">
+          {sticky.map((h) => (
+            <button
+              key={h.line}
+              type="button"
+              onClick={() => {
+                const v = viewRef.current;
+                if (!v) return;
+                const line = v.state.doc.line(Math.min(h.line, v.state.doc.lines));
+                v.dispatch({
+                  selection: { anchor: line.from },
+                  effects: EditorView.scrollIntoView(line.from, { y: "start" }),
+                });
+                v.focus();
+              }}
+              title={t("editor.stickyJump")}
+              className="pointer-events-auto block w-full overflow-hidden text-left whitespace-pre text-muted hover:bg-surface hover:text-ink"
+              style={{
+                paddingLeft:
+                  (hostRef.current?.querySelector(".cm-gutters") as HTMLElement | null)
+                    ?.clientWidth ?? 40,
+                fontFamily: "var(--code-font, var(--font-code))",
+                fontSize: "var(--text-md)",
+                lineHeight: "var(--code-line-height)",
+              }}
+            >
+              {h.text}
+            </button>
+          ))}
+        </div>
+      )}
 
       {reanchoringId && (
         <div className="absolute inset-x-0 top-0 z-40 flex items-center gap-3 border-b border-line bg-[color-mix(in_oklch,var(--marker)_14%,var(--bg-elevated))] px-4 py-2 text-xs text-ink">

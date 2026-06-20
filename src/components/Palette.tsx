@@ -285,6 +285,10 @@ function commandRows(
       run: () => settings.set({ focusMode: !settings.focusMode }),
     },
     {
+      label: `${t("editor.sticky")}: ${settings.stickyScroll ? "on" : "off"}`,
+      run: () => settings.set({ stickyScroll: !settings.stickyScroll }),
+    },
+    {
       label: `${t("editor.measure")}: ${settings.readingWidth ? "on" : "off"}`,
       run: () => settings.set({ readingWidth: !settings.readingWidth }),
     },

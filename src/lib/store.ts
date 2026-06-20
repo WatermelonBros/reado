@@ -43,6 +43,8 @@ export interface SettingsState {
   focusMode: boolean;
   /** Wrap long lines instead of scrolling horizontally. */
   wrap: boolean;
+  /** Pin the enclosing scope headers while scrolling. */
+  stickyScroll: boolean;
   /** Interface zoom factor (1 = 100%). */
   zoom: number;
   /** Version `.reado/` (except the rebuildable index) instead of gitignoring it. */
@@ -65,6 +67,7 @@ export const useSettings = create<SettingsState>()(
       readingWidth: false,
       focusMode: false,
       wrap: false,
+      stickyScroll: true,
       zoom: 1,
       versionReado: false,
       gitignoreDontAsk: false,
