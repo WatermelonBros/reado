@@ -173,6 +173,12 @@ interface EditorActionsState {
   /** Bumped to request the active code view to open the comment composer. */
   composeNonce: number;
   requestCompose: () => void;
+  /** Manual editing enabled for the active file (read-first stays the default). */
+  editing: boolean;
+  setEditing: (editing: boolean) => void;
+  /** True when the active editable file has unsaved changes. */
+  dirty: boolean;
+  setDirty: (dirty: boolean) => void;
 }
 
 /** Bridge for triggering editor actions from outside the editor (e.g. global
@@ -180,6 +186,10 @@ interface EditorActionsState {
 export const useEditorActions = create<EditorActionsState>((set) => ({
   composeNonce: 0,
   requestCompose: () => set((s) => ({ composeNonce: s.composeNonce + 1 })),
+  editing: false,
+  setEditing: (editing) => set({ editing }),
+  dirty: false,
+  setDirty: (dirty) => set({ dirty }),
 }));
 
 interface CursorState {

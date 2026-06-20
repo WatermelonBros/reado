@@ -25,6 +25,7 @@ pub fn run() {
             fs::list_dir,
             fs::list_files,
             fs::read_file,
+            fs::write_file,
             git::git_info,
             search::search_text,
             annotations::create_comment,

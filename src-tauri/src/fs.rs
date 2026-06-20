@@ -137,6 +137,16 @@ fn image_mime(path: &Path) -> Option<&'static str> {
     }
 }
 
+/// Write UTF-8 text back to a file (optional manual editing). The path is
+/// confined to the project root.
+#[tauri::command]
+pub fn write_file(root: String, path: String, content: String) -> Result<()> {
+    let root = PathBuf::from(&root);
+    let path = ensure_within(&root, &PathBuf::from(&path))?;
+    std::fs::write(path, content)?;
+    Ok(())
+}
+
 /// Read a file for display. Detects images (returned as data URLs) and binary
 /// files (returned as a size-only placeholder); everything else is UTF-8 text.
 #[tauri::command]

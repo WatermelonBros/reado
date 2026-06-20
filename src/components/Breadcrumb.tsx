@@ -1,10 +1,16 @@
-/** Path breadcrumb for the active file, shown above the reading surface. */
-import { useProject } from "../lib/store";
-import { ChevronIcon } from "./icons";
+/** Path breadcrumb for the active file, with a manual-editing toggle. */
+import { useProject, useEditorActions } from "../lib/store";
+import { useT } from "../i18n";
+import { mod } from "../lib/shortcuts";
+import { ChevronIcon, EditIcon } from "./icons";
 
 export function Breadcrumb() {
   const root = useProject((s) => s.root);
   const active = useProject((s) => s.active);
+  const editing = useEditorActions((s) => s.editing);
+  const setEditing = useEditorActions((s) => s.setEditing);
+  const dirty = useEditorActions((s) => s.dirty);
+  const t = useT();
   if (!active) return null;
 
   const rel = (active.startsWith(root) ? active.slice(root.length) : active)
@@ -15,7 +21,7 @@ export function Breadcrumb() {
   return (
     <nav
       aria-label="File path"
-      className="flex flex-none flex-wrap items-center gap-0.5 border-b border-line bg-canvas px-4 py-2 text-xs text-faint select-none"
+      className="flex flex-none items-center gap-0.5 border-b border-line bg-canvas px-4 py-2 text-xs text-faint select-none"
     >
       {segments.map((seg, i) => (
         <span key={i} className="inline-flex items-center gap-0.5">
@@ -23,6 +29,26 @@ export function Breadcrumb() {
           <span className={i === segments.length - 1 ? "text-muted" : ""}>{seg}</span>
         </span>
       ))}
+
+      {dirty && (
+        <span
+          className="ml-1 h-1.5 w-1.5 flex-none rounded-full bg-accent"
+          title="Unsaved changes"
+        />
+      )}
+
+      <button
+        type="button"
+        onClick={() => setEditing(!editing)}
+        aria-pressed={editing}
+        title={`${t("editor.edit")} (${mod}S ${t("editor.save")})`}
+        aria-label={t("editor.edit")}
+        className={`ml-auto grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
+          editing ? "text-accent" : "text-faint hover:text-ink"
+        }`}
+      >
+        <EditIcon className="h-3.5 w-3.5" />
+      </button>
     </nav>
   );
 }

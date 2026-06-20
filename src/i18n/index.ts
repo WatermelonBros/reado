@@ -29,6 +29,8 @@ const en = {
   "editor.wrap": "Wrap lines",
   "editor.focus": "Focus mode",
   "editor.measure": "Reading width",
+  "editor.edit": "Toggle editing",
+  "editor.save": "Save",
 
   "status.noFile": "No file open",
   "status.branch": "branch",
@@ -141,6 +143,8 @@ const it: Record<MessageKey, string> = {
   "editor.wrap": "A capo automatico",
   "editor.focus": "Modalità focus",
   "editor.measure": "Larghezza di lettura",
+  "editor.edit": "Attiva/disattiva modifica",
+  "editor.save": "Salva",
 
   "status.noFile": "Nessun file aperto",
   "status.branch": "ramo",

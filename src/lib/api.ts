@@ -41,6 +41,10 @@ export const listFiles = (root: string) => invoke<string[]>("list_files", { root
 export const readFile = (root: string, path: string) =>
   invoke<FileContent>("read_file", { root, path });
 
+/** Write UTF-8 text back to a file (manual editing). */
+export const writeFile = (root: string, path: string, content: string) =>
+  invoke<void>("write_file", { root, path, content });
+
 /** Git status of the project root (never throws). */
 export const gitInfo = (root: string) => invoke<GitInfo>("git_info", { root });
 

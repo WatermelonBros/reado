@@ -33,7 +33,14 @@ import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { readFile, reanchorFile, type Comment, type Context, type FileContent } from "../lib/api";
+import {
+  readFile,
+  reanchorFile,
+  writeFile,
+  type Comment,
+  type Context,
+  type FileContent,
+} from "../lib/api";
 import { readoAppearance } from "../lib/codemirror";
 import { commentGutter, type LineComments } from "../lib/commentGutter";
 import { useComments, commentsForFile, toRelative } from "../lib/comments";
@@ -41,6 +48,7 @@ import { useCursor, useEditorActions, useProject, useSettings } from "../lib/sto
 import { useT } from "../i18n";
 import { CommentComposer } from "./CommentComposer";
 import { CommentThread } from "./CommentThread";
+import { Welcome } from "./Welcome";
 import { PlusIcon } from "./icons";
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
@@ -86,6 +94,12 @@ const isMarkdown = (path: string) => /\.(md|markdown|mdx)$/i.test(path);
 const focusExtension = (on: boolean) =>
   EditorView.contentAttributes.of({ class: on ? "cm-focus-mode" : "" });
 
+/** Read-only vs editable, toggled by manual-editing mode (read-first default). */
+const editableExtension = (on: boolean) => [
+  EditorState.readOnly.of(!on),
+  EditorView.editable.of(on),
+];
+
 export function Editor() {
   const root = useProject((s) => s.root);
   const active = useProject((s) => s.active);
@@ -123,12 +137,14 @@ export function Editor() {
       .catch(() => {});
   }, [root, active]);
 
+  // Each file opens read-first: reset manual editing and the dirty flag.
+  useEffect(() => {
+    useEditorActions.getState().setEditing(false);
+    useEditorActions.getState().setDirty(false);
+  }, [active]);
+
   if (!active) {
-    return (
-      <div className={PLACEHOLDER} role="status">
-        {t("editor.empty")}
-      </div>
-    );
+    return <Welcome />;
   }
   if (error?.path === active) {
     return (
@@ -231,6 +247,8 @@ function CodeView({
   const applyReanchor = useComments((s) => s.applyReanchor);
   const cancelReanchor = useComments((s) => s.cancelReanchor);
   const composeNonce = useEditorActions((s) => s.composeNonce);
+  const editing = useEditorActions((s) => s.editing);
+  const editComp = useMemo(() => new Compartment(), []);
   const reanchorLabel = useComments((s) => {
     const c = s.comments.find((x) => x.id === s.reanchoringId);
     return c?.messages[0]?.body.split("\n")[0] ?? "";
@@ -286,6 +304,15 @@ function CodeView({
     setComposer({ startLine, endLine, context });
   };
 
+  // Save the editable buffer to disk (manual editing). No-op when read-only.
+  const saveFile = () => {
+    const view = viewRef.current;
+    if (!view || !useEditorActions.getState().editing) return;
+    writeFile(useProject.getState().root, relPath, view.state.doc.toString())
+      .then(() => useEditorActions.getState().setDirty(false))
+      .catch(() => {});
+  };
+
   // In re-anchor mode the same gesture sets an orphan's new anchor instead of
   // opening the composer.
   const anchorOrCompose = (start: number, end: number) => {
@@ -336,23 +363,25 @@ function CodeView({
         drawSelection(),
         bracketMatching(),
         highlightSelectionMatches(),
-        // Mirror the cursor position into the status bar.
+        // Mirror the cursor position into the status bar; track unsaved edits.
         EditorView.updateListener.of((u) => {
           if (u.selectionSet || u.docChanged) {
             const head = u.state.selection.main.head;
             const line = u.state.doc.lineAt(head);
             useCursor.getState().set(line.number, head - line.from + 1);
           }
+          if (u.docChanged) useEditorActions.getState().setDirty(true);
         }),
         landingField,
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
         // Create-comment gesture (spec: a dedicated key on a selection).
         keymap.of([{ key: "Mod-Shift-m", run: startComposer }]),
+        // Save when editing.
+        keymap.of([{ key: "Mod-s", run: () => (saveFile(), true) }]),
         keymap.of([...defaultKeymap, ...searchKeymap, ...foldKeymap]),
-        // Read-first: the viewer is non-editable by default. Manual editing
-        // (task 1.8) will swap this for a writable configuration.
-        EditorState.readOnly.of(true),
-        EditorView.editable.of(false),
+        // Read-first: the viewer is non-editable by default; manual editing
+        // (task 1.8) toggles this compartment.
+        editComp.of(editableExtension(editing)),
         readoAppearance,
         wrapComp.of(wrap ? EditorView.lineWrapping : []),
         focusComp.of(focusExtension(focusMode)),
@@ -391,6 +420,13 @@ function CodeView({
       effects: focusComp.reconfigure(focusExtension(focusMode)),
     });
   }, [focusMode, focusComp]);
+
+  // Toggle manual editing live.
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: editComp.reconfigure(editableExtension(editing)),
+    });
+  }, [editing, editComp]);
 
   // Rebuild the comment gutter when this file's comments change.
   useEffect(() => {

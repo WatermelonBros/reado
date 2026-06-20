@@ -12,15 +12,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import fuzzysort from "fuzzysort";
 import { listFiles, searchText, type SearchMatch } from "../lib/api";
 import { usePalette, useProject, useSettings, useEditorActions, THEMES } from "../lib/store";
+import { mod } from "../lib/shortcuts";
 import { useT, type MessageKey } from "../i18n";
 
 interface Row {
   /** Primary line. */
   label: string;
-  /** Secondary, dimmer line (path, hint). */
+  /** Secondary, dimmer line (path). */
   detail?: string;
-  /** Optional pre-highlighted HTML for fuzzy matches. */
-  labelHtml?: string;
+  /** Optional keyboard-shortcut chip shown on the right. */
+  hint?: string;
   run: () => void;
 }
 
@@ -200,6 +201,11 @@ export function Palette() {
                     {row.detail}
                   </span>
                 )}
+                {row.hint && (
+                  <kbd className="ml-auto flex-none rounded border border-line bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-muted">
+                    {row.hint}
+                  </kbd>
+                )}
               </li>
             ))}
           </ul>
@@ -233,9 +239,9 @@ function commandRows(
   { project, settings, open, toggleSettings, requestCompose }: CommandCtx,
 ): Row[] {
   const rows: Row[] = [
-    { label: t("comment.new"), run: requestCompose },
-    { label: t("finder.placeholder"), run: () => open("files") },
-    { label: t("search.placeholder"), run: () => open("search") },
+    { label: t("comment.new"), hint: `${mod}⇧M`, run: requestCompose },
+    { label: t("finder.placeholder"), hint: `${mod}P`, run: () => open("files") },
+    { label: t("search.placeholder"), hint: `${mod}⇧F`, run: () => open("search") },
     {
       label: `${t("editor.wrap")}: ${settings.wrap ? "on" : "off"}`,
       run: () => settings.set({ wrap: !settings.wrap }),
@@ -252,7 +258,7 @@ function commandRows(
       label: `${t("tree.showHidden")}: ${project.showHidden ? "on" : "off"}`,
       run: () => project.setShowHidden(!project.showHidden),
     },
-    { label: t("settings.title"), run: () => toggleSettings(true) },
+    { label: t("settings.title"), hint: `${mod},`, run: () => toggleSettings(true) },
   ];
   // Quick theme switches.
   for (const theme of THEMES) {
