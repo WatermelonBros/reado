@@ -33,15 +33,13 @@ const MAX_MATCHES: usize = 2000;
 ///
 /// `query` is interpreted as a ripgrep regex; ripgrep's smart-case rule makes it
 /// case-insensitive unless the query contains an uppercase letter.
-// ponytail: assumes `rg` on PATH. For distributed builds, bundle the binary and
-// resolve it via the sidecar path instead of relying on the user's environment.
 #[tauri::command]
 pub fn search_text(root: String, query: String) -> Result<Vec<SearchMatch>> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
     }
 
-    let output = Command::new("rg")
+    let output = match Command::new("rg")
         .arg("--json")
         .arg("--smart-case")
         .arg("--max-count")
@@ -49,13 +47,15 @@ pub fn search_text(root: String, query: String) -> Result<Vec<SearchMatch>> {
         .arg(&query)
         .current_dir(Path::new(&root))
         .output()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                Error::RipgrepMissing
-            } else {
-                Error::Io(e)
-            }
-        })?;
+    {
+        Ok(out) => out,
+        // No ripgrep on PATH — fall back to an in-process, gitignore-aware walk
+        // so search still works (literal smart-case match, not regex).
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(search_fallback(&root, &query));
+        }
+        Err(e) => return Err(Error::Io(e)),
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut matches = Vec::new();
@@ -87,4 +87,73 @@ pub fn search_text(root: String, query: String) -> Result<Vec<SearchMatch>> {
     }
 
     Ok(matches)
+}
+
+/// In-process search used when `rg` is unavailable. Walks `root` honouring
+/// `.gitignore` and skipping hidden/VCS dirs (via the `ignore` crate), and finds
+/// literal, smart-case matches line by line. Binary files (invalid UTF-8) are
+/// skipped. Not a regex engine — just enough to keep search working everywhere.
+fn search_fallback(root: &str, query: &str) -> Vec<SearchMatch> {
+    let smart_case = query.chars().any(|c| c.is_uppercase());
+    let needle = if smart_case {
+        query.to_string()
+    } else {
+        query.to_lowercase()
+    };
+
+    let mut matches = Vec::new();
+    for entry in ignore::WalkBuilder::new(root).build().flatten() {
+        if matches.len() >= MAX_MATCHES {
+            break;
+        }
+        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(entry.path()) else {
+            continue; // unreadable or binary
+        };
+        let mut per_file = 0;
+        for (i, line) in content.lines().enumerate() {
+            if per_file >= 100 || matches.len() >= MAX_MATCHES {
+                break;
+            }
+            let hay = if smart_case {
+                line.to_string()
+            } else {
+                line.to_lowercase()
+            };
+            if let Some(col) = hay.find(&needle) {
+                matches.push(SearchMatch {
+                    path: entry.path().to_string_lossy().into_owned(),
+                    line: (i + 1) as u64,
+                    column: col as u64,
+                    text: line.trim_end().to_string(),
+                });
+                per_file += 1;
+            }
+        }
+    }
+    matches
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_finds_smart_case_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "Hello world\nhello again\n").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "nothing here\n").unwrap();
+        let root = dir.path().to_str().unwrap();
+
+        // Lowercase query → case-insensitive: matches both "Hello" and "hello".
+        let lower = search_fallback(root, "hello");
+        assert_eq!(lower.len(), 2);
+
+        // Query with an uppercase letter → case-sensitive: only "Hello world".
+        let upper = search_fallback(root, "Hello");
+        assert_eq!(upper.len(), 1);
+        assert_eq!(upper[0].line, 1);
+    }
 }

@@ -15,9 +15,6 @@ pub enum Error {
     #[error("path is outside the project root")]
     PathEscapesRoot,
 
-    #[error("ripgrep is not available on PATH")]
-    RipgrepMissing,
-
     #[error(transparent)]
     Store(#[from] reado_core::Error),
 
