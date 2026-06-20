@@ -14,6 +14,12 @@ on:
 permissions:
   contents: write
 
+# Force HTTP/1.1 for cargo downloads: crates.io over HTTP/2 intermittently fails
+# with "Error in the HTTP2 framing layer", flaking the Linux build.
+env:
+  CARGO_HTTP_MULTIPLEXING: "false"
+  CARGO_NET_RETRY: "5"
+
 jobs:
   build:
     name: Build (${{ matrix.platform }})
