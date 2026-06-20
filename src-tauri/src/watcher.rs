@@ -81,6 +81,10 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
         // Keep the watcher alive for the lifetime of this loop.
         let _watcher = watcher;
         let mut pending: HashSet<PathBuf> = HashSet::new();
+        // Tracked per debounce window so a delete+create pair (how macOS/FSEvents
+        // reports a rename) can be reunited into a comment move instead of orphan.
+        let mut created: HashSet<PathBuf> = HashSet::new();
+        let mut removed: HashSet<PathBuf> = HashSet::new();
 
         loop {
             match rx.recv_timeout(DEBOUNCE) {
@@ -105,13 +109,79 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                         }
                         continue;
                     }
+                    // Categorise each path as a create / remove / neither so the
+                    // flush can pair a delete+create into a rename. `Side::Unknown`
+                    // is a single-ended rename (FSEvents) decided by existence.
+                    enum Side {
+                        Create,
+                        Remove,
+                        Unknown,
+                        Other,
+                    }
+                    let side = match event.kind {
+                        EventKind::Create(_)
+                        | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => Side::Create,
+                        EventKind::Remove(_)
+                        | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => Side::Remove,
+                        EventKind::Modify(ModifyKind::Name(_)) => Side::Unknown,
+                        _ => Side::Other,
+                    };
                     for path in event.paths {
+                        match side {
+                            Side::Create => {
+                                created.insert(path.clone());
+                            }
+                            Side::Remove => {
+                                removed.insert(path.clone());
+                            }
+                            Side::Unknown => {
+                                if path.exists() {
+                                    created.insert(path.clone());
+                                } else {
+                                    removed.insert(path.clone());
+                                }
+                            }
+                            Side::Other => {}
+                        }
                         pending.insert(path);
                     }
                 }
                 Ok(Err(_)) => {} // a watch error; ignore and keep going
                 Err(RecvTimeoutError::Timeout) => {
                     let mut comments_dirty = false;
+
+                    // Reunite a delete+create into a rename: if exactly one removed
+                    // file carried comments and exactly one file was created in this
+                    // window, treat it as that file's new path and move the comments.
+                    if !removed.is_empty() && !created.is_empty() {
+                        let root_str = root.to_string_lossy();
+                        let comments = reado_core::list_comments(&root_str);
+                        let removed_commented: Vec<&PathBuf> = removed
+                            .iter()
+                            .filter(|p| {
+                                relative(&root, p).is_some_and(|rel| {
+                                    comments.iter().any(|c| c.meta.anchor.file == rel)
+                                })
+                            })
+                            .collect();
+                        if removed_commented.len() == 1 && created.len() == 1 {
+                            if let (Some(from), Some(to)) = (
+                                relative(&root, removed_commented[0]),
+                                relative(&root, created.iter().next().unwrap()),
+                            ) {
+                                if from != to
+                                    && reado_core::rename_comments(&root_str, &from, &to)
+                                        .unwrap_or(0)
+                                        > 0
+                                {
+                                    comments_dirty = true;
+                                }
+                            }
+                        }
+                    }
+                    created.clear();
+                    removed.clear();
+
                     for path in pending.drain() {
                         // Changes under .reado/comments|archive mean an agent (via
                         // the `reado` CLI) mutated comments — tell the UI to reload.

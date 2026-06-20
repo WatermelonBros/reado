@@ -81,9 +81,12 @@ Honest record of where the implementation differs from the literal task text:
   not the old→new mapping the watcher needs. *tree-sitter* AST assist remains a
   future optimisation.
 - **2.5 Rename → path auto-update** — handled where the OS reports a rename with
-  both endpoints (Linux/inotify). On platforms that report rename as
-  delete+create (e.g. macOS), the comment orphans gracefully and is recoverable
-  via the orphans panel — it never points at the wrong line.
+  both endpoints (Linux/inotify), and now also where it reports a rename as a
+  delete+create (e.g. macOS/FSEvents): the watcher reunites a removed
+  *commented* file with a single created file inside the same debounce window and
+  moves the comments. When the pairing is ambiguous (several creates/removes at
+  once) the comment still orphans gracefully and is recoverable via the orphans
+  panel — it never points at the wrong line.
 - **1.7 Session restore** — open files/tabs/active and per-project settings
   restore; terminal sessions do not (PTYs are process-bound and cannot survive
   an app restart) and scroll position is not yet persisted.
