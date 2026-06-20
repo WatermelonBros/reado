@@ -217,7 +217,11 @@ fn unique_dest(path: &Path) -> PathBuf {
         return path.to_path_buf();
     }
     let parent = path.parent().unwrap_or(Path::new(""));
-    let stem = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let stem = path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
     let ext = path
         .extension()
         .map(|e| format!(".{}", e.to_string_lossy()))
@@ -323,8 +327,12 @@ mod tests {
         fs::write(root.join("a.txt"), b"hi").unwrap();
 
         // Move a.txt into sub/.
-        super::move_path(s(root.into()), s(root.join("a.txt")), s(root.join("sub/a.txt")))
-            .unwrap();
+        super::move_path(
+            s(root.into()),
+            s(root.join("a.txt")),
+            s(root.join("sub/a.txt")),
+        )
+        .unwrap();
         assert!(root.join("sub/a.txt").exists() && !root.join("a.txt").exists());
 
         // Import an external file twice — the second gets a non-clobbering name.

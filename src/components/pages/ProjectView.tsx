@@ -115,6 +115,11 @@ export function ProjectView({ root }: { root: string }) {
         useComments.getState().load(root);
         rebuildIndex(root).catch(() => {});
       }),
+      // The branch changed on disk (e.g. `git checkout` in the terminal) — refresh
+      // git state so the status bar shows the real branch.
+      listen("git-changed", () => {
+        gitInfo(root).then(setGit).catch(() => {});
+      }),
     ];
     return () => {
       offs.forEach((p) => p.then((off) => off()));

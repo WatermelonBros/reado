@@ -54,6 +54,12 @@ fn is_comment_store(path: &Path) -> bool {
     s.contains("/.reado/comments/") || s.contains("/.reado/archive/")
 }
 
+/// True if `path` is the repo's `.git/HEAD` (rewritten when the branch changes).
+fn is_git_head(path: &Path) -> bool {
+    let s = path.to_string_lossy().replace('\\', "/");
+    s.ends_with("/.git/HEAD")
+}
+
 /// Convert an absolute path to a project-relative, forward-slashed string.
 fn relative(root: &Path, path: &Path) -> Option<String> {
     let rel = path.strip_prefix(root).ok()?;
@@ -187,6 +193,14 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                         // the `reado` CLI) mutated comments — tell the UI to reload.
                         if is_comment_store(&path) {
                             comments_dirty = true;
+                            continue;
+                        }
+                        // `.git/HEAD` is rewritten on `git checkout`, so a change
+                        // there means the branch switched (even from the terminal);
+                        // tell the UI to refresh git state. `.git/` is otherwise
+                        // ignored below.
+                        if is_git_head(&path) {
+                            let _ = app.emit("git-changed", ());
                             continue;
                         }
                         if path.is_dir() || is_ignored(&matcher, &root, &path) {
