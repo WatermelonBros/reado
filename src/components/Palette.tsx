@@ -14,7 +14,8 @@ import { listFiles, searchText, type SearchMatch } from "../lib/api";
 import { usePalette, useProject, useSettings, useEditorActions, useWorkspace, THEMES } from "../lib/store";
 import { mod } from "../lib/shortcuts";
 import { checkForUpdates } from "../lib/updater";
-import { formatDocument } from "../lib/docInfo";
+import { formatDocument, goToLine, useDocInfo } from "../lib/docInfo";
+import { extractSymbols } from "../lib/outline";
 import { useT, type MessageKey } from "../i18n";
 
 interface Row {
@@ -126,6 +127,21 @@ export function Palette() {
         },
       }));
     }
+    if (mode === "symbols") {
+      const view = useDocInfo.getState().view;
+      const symbols = view ? extractSymbols(view.state.doc.toString()) : [];
+      const filtered = query
+        ? fuzzysort.go(query, symbols, { limit: 300, key: (s) => s.name }).map((r) => r.obj)
+        : symbols;
+      return filtered.map((s) => ({
+        label: s.name,
+        detail: `${s.kind} · ${s.line}`,
+        run: () => {
+          goToLine(s.line);
+          close();
+        },
+      }));
+    }
     return [];
   }, [mode, query, files, matches, project, settings, t, open, toggleSettings, close]);
 
@@ -141,7 +157,9 @@ export function Palette() {
       ? "palette.placeholder"
       : mode === "files"
         ? "finder.placeholder"
-        : "search.placeholder";
+        : mode === "symbols"
+          ? "symbols.placeholder"
+          : "search.placeholder";
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -238,7 +256,7 @@ function relative(root: string, path: string): string {
 interface CommandCtx {
   project: ReturnType<typeof useProject.getState>;
   settings: ReturnType<typeof useSettings.getState>;
-  open: (mode: "commands" | "files" | "search") => void;
+  open: (mode: "commands" | "files" | "search" | "symbols") => void;
   toggleSettings: (open?: boolean) => void;
   requestCompose: () => void;
   openGraph: () => void;
@@ -253,6 +271,7 @@ function commandRows(
   const rows: Row[] = [
     { label: t("comment.new"), hint: `${mod}⇧M`, run: requestCompose },
     { label: t("editor.format"), hint: "⇧⌥F", run: () => void formatDocument() },
+    { label: t("symbols.goto"), hint: `${mod}⇧O`, run: () => open("symbols") },
     { label: t("graph.title"), run: openGraph },
     { label: t("docs.title"), run: openDocs },
     { label: t("finder.placeholder"), hint: `${mod}P`, run: () => open("files") },

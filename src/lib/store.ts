@@ -184,7 +184,7 @@ export const useWorkspace = create<WorkspaceState>()(
   ),
 );
 
-export type PaletteMode = "commands" | "files" | "search" | null;
+export type PaletteMode = "commands" | "files" | "search" | "symbols" | null;
 
 interface PaletteState {
   mode: PaletteMode;

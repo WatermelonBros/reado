@@ -103,6 +103,9 @@ export function useGlobalShortcuts(): void {
       } else if (key === "f" && e.shiftKey) {
         e.preventDefault();
         open("search");
+      } else if (key === "o" && e.shiftKey) {
+        e.preventDefault();
+        open("symbols");
       } else if (key === "m" && e.shiftKey) {
         // Create a comment from the current selection (or cursor line).
         e.preventDefault();
