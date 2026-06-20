@@ -28,8 +28,14 @@ What works today:
   virtualization, a line-wrap toggle, comfortable reading width, and a soft
   landing highlight when you jump to a location.
 - Dedicated rendering for markdown, images and foldable JSON.
-- Fuzzy file open (`Cmd/Ctrl+P`), full-text project search via ripgrep
-  (`Cmd/Ctrl+Shift+F`), and a command palette (`Cmd/Ctrl+K`).
+- Fuzzy file open (`Cmd/Ctrl+P`), full-text project search (ripgrep when
+  present, with a built-in pure-Rust fallback), and a command palette
+  (`Cmd/Ctrl+K`).
+- Code reading aids: an outline of file symbols, sticky scope headers,
+  go-to-definition (`Cmd/Ctrl+click` / `F12`), go-to-line, and Format Document
+  through the project's own formatters (Biome/Prettier/rustfmt/…).
+- Git introspection with stage/unstage/discard/commit, inline blame, and a
+  local diff view.
 - Four research-grounded themes (dark, light, high-contrast, sepia) with manual,
   follow-system, and time-of-day selection.
 - Italian and English UI.
@@ -40,7 +46,11 @@ What works today:
   at the wrong line).
 - An integrated terminal (real PTYs, multiple tabs) with one-click launch of
   `claude`/`codex`, and **Send review** to hand your open tasks to the agent.
-- A `reado` CLI — the stable contract the agent uses to read and resolve tasks.
+- A knowledge base unifying the project's **docs**, **specs** (OpenSpec /
+  speckit), and the **notes** captured while reading, with full-text search and
+  a knowledge graph linking comments, files, specs and docs.
+- A `reado` CLI — the stable contract the agent uses to read and resolve tasks
+  (and to consult the knowledge base).
 
 ## The AI loop
 
@@ -63,8 +73,9 @@ scripts/install-cli.sh           # builds release + links into ~/.local/bin
 reado --help
 ```
 
-Contract: `reado task list|show|done|fail|link` and
-`reado comment add|reply|search`. Agent identity comes from `$READO_AGENT`
+Contract: `reado task list|show|done|fail|link`,
+`reado comment add|reply|search`, and `reado kb list|show|search` (to consult
+the docs and specs before resolving). Agent identity comes from `$READO_AGENT`
 (Reado sets it when launching an agent).
 
 An agent plugin in [`plugin/`](plugin/) teaches Claude Code (and Codex, via
@@ -85,8 +96,8 @@ An agent plugin in [`plugin/`](plugin/) teaches Claude Code (and Codex, via
 Prerequisites: [Node.js](https://nodejs.org) 22+, [pnpm](https://pnpm.io),
 the [Rust toolchain](https://rustup.rs), and the
 [Tauri system dependencies](https://tauri.app/start/prerequisites/) for your OS.
-Full-text search currently requires [ripgrep](https://github.com/BurntSushi/ripgrep)
-(`rg`) on your `PATH`.
+[ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) on your `PATH` makes
+full-text search faster; without it Reado falls back to a built-in scanner.
 
 ```bash
 pnpm install        # install frontend dependencies
