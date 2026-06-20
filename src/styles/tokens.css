@@ -1,0 +1,176 @@
+/*
+ * Reado design tokens.
+ *
+ * Every colour is authored in OKLCH (perceptually uniform, CSS-native) per the
+ * methodology in `.impeccable.md` and `docs/research/color-theory-for-reading.md`:
+ *   - desaturated bases (dark is gray-blue, never #000; light is warm off-white)
+ *   - <=6 semantic syntax colours, ordered by eye-tracking salience
+ *   - the same semantic role keeps the same hue across themes; lightness/chroma
+ *     are tuned per mode to clear the WCAG AA floor in both
+ *   - the comment-annotation marker lives OUTSIDE the syntax palette (its own hue)
+ *
+ * Themes are selected by `data-theme` on <html>. `reado-dark` is the default.
+ */
+
+:root {
+  /* Spacing, radii and motion are theme-independent. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 12px;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  /* Configurable in settings; the default favours 0/O and 1/l/I disambiguation. */
+  --font-code: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace,
+    Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  --code-line-height: 1.65;
+  /* Comfortable reading measure for long-form reading (toggleable). */
+  --reading-measure: 92ch;
+}
+
+/* ---- Reado Dark — gray-blue, low fatigue (default) ---------------------- */
+[data-theme="reado-dark"] {
+  color-scheme: dark;
+
+  --bg: oklch(0.2 0.018 250);
+  --bg-elevated: oklch(0.24 0.02 250);
+  --bg-overlay: oklch(0.27 0.022 250);
+  --border: oklch(0.32 0.02 250);
+  --border-strong: oklch(0.42 0.02 250);
+  --text: oklch(0.8 0.012 250);
+  --text-muted: oklch(0.62 0.012 250);
+  --text-faint: oklch(0.5 0.012 250);
+
+  --accent: oklch(0.74 0.11 260);
+  --accent-contrast: oklch(0.98 0.01 260);
+
+  /* Syntax palette (priority order). */
+  --syn-control: oklch(0.74 0.12 330);
+  --syn-keyword: oklch(0.74 0.11 260);
+  --syn-definition: oklch(0.8 0.11 95);
+  --syn-string: oklch(0.76 0.11 150);
+  --syn-number: oklch(0.76 0.12 55);
+  --syn-comment: oklch(0.55 0.02 250);
+  --syn-punctuation: oklch(0.66 0.012 250);
+
+  /* Reado's own annotation marker — deliberately outside the syntax palette. */
+  --marker: oklch(0.72 0.16 35);
+  --marker-soft: oklch(0.72 0.16 35 / 0.16);
+
+  --landing: oklch(0.72 0.16 35 / 0.14);
+  --selection: oklch(0.74 0.11 260 / 0.28);
+  --shadow: 0 12px 32px oklch(0.12 0.02 250 / 0.5);
+}
+
+/* ---- Reado Light — warm off-white, daytime detail reading --------------- */
+[data-theme="reado-light"] {
+  color-scheme: light;
+
+  --bg: oklch(0.97 0.008 90);
+  --bg-elevated: oklch(0.99 0.006 90);
+  --bg-overlay: oklch(1 0 0);
+  --border: oklch(0.88 0.008 90);
+  --border-strong: oklch(0.78 0.01 90);
+  --text: oklch(0.33 0.012 250);
+  --text-muted: oklch(0.5 0.012 250);
+  --text-faint: oklch(0.62 0.012 250);
+
+  --accent: oklch(0.5 0.13 260);
+  --accent-contrast: oklch(0.99 0.01 260);
+
+  --syn-control: oklch(0.5 0.15 330);
+  --syn-keyword: oklch(0.5 0.13 260);
+  --syn-definition: oklch(0.52 0.12 90);
+  --syn-string: oklch(0.5 0.12 150);
+  --syn-number: oklch(0.52 0.14 55);
+  --syn-comment: oklch(0.62 0.03 250);
+  --syn-punctuation: oklch(0.45 0.012 250);
+
+  --marker: oklch(0.55 0.18 35);
+  --marker-soft: oklch(0.55 0.18 35 / 0.12);
+
+  --landing: oklch(0.55 0.18 35 / 0.1);
+  --selection: oklch(0.5 0.13 260 / 0.18);
+  --shadow: 0 12px 32px oklch(0.5 0.02 250 / 0.16);
+}
+
+/* ---- Reado High-Contrast — accessibility variant (dark base) ------------ */
+[data-theme="reado-high-contrast"] {
+  color-scheme: dark;
+
+  --bg: oklch(0.16 0.015 250);
+  --bg-elevated: oklch(0.2 0.018 250);
+  --bg-overlay: oklch(0.24 0.02 250);
+  --border: oklch(0.4 0.02 250);
+  --border-strong: oklch(0.55 0.02 250);
+  --text: oklch(0.94 0.01 250);
+  --text-muted: oklch(0.78 0.012 250);
+  --text-faint: oklch(0.64 0.012 250);
+
+  --accent: oklch(0.82 0.13 260);
+  --accent-contrast: oklch(0.16 0.015 250);
+
+  --syn-control: oklch(0.84 0.14 330);
+  --syn-keyword: oklch(0.84 0.12 260);
+  --syn-definition: oklch(0.9 0.13 95);
+  --syn-string: oklch(0.86 0.13 150);
+  --syn-number: oklch(0.86 0.14 55);
+  --syn-comment: oklch(0.68 0.02 250);
+  --syn-punctuation: oklch(0.82 0.012 250);
+
+  --marker: oklch(0.8 0.18 35);
+  --marker-soft: oklch(0.8 0.18 35 / 0.2);
+
+  --landing: oklch(0.8 0.18 35 / 0.18);
+  --selection: oklch(0.84 0.12 260 / 0.3);
+  --shadow: 0 12px 32px oklch(0.08 0.02 250 / 0.6);
+}
+
+/* ---- Reado Sepia — warm light variant for long sessions ----------------- */
+[data-theme="reado-sepia"] {
+  color-scheme: light;
+
+  --bg: oklch(0.94 0.025 75);
+  --bg-elevated: oklch(0.96 0.022 75);
+  --bg-overlay: oklch(0.98 0.018 75);
+  --border: oklch(0.85 0.025 75);
+  --border-strong: oklch(0.74 0.03 75);
+  --text: oklch(0.34 0.02 60);
+  --text-muted: oklch(0.5 0.02 60);
+  --text-faint: oklch(0.62 0.02 60);
+
+  --accent: oklch(0.5 0.13 40);
+  --accent-contrast: oklch(0.98 0.02 75);
+
+  --syn-control: oklch(0.48 0.15 350);
+  --syn-keyword: oklch(0.48 0.13 290);
+  --syn-definition: oklch(0.5 0.12 80);
+  --syn-string: oklch(0.48 0.12 150);
+  --syn-number: oklch(0.5 0.14 45);
+  --syn-comment: oklch(0.62 0.03 70);
+  --syn-punctuation: oklch(0.46 0.02 60);
+
+  --marker: oklch(0.52 0.18 25);
+  --marker-soft: oklch(0.52 0.18 25 / 0.12);
+
+  --landing: oklch(0.52 0.18 25 / 0.1);
+  --selection: oklch(0.5 0.13 40 / 0.18);
+  --shadow: 0 12px 32px oklch(0.5 0.03 60 / 0.18);
+}

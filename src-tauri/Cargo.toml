@@ -1,0 +1,40 @@
+[package]
+name = "reado"
+version = "0.1.0"
+description = "Reado — a calm, read-first code IDE."
+authors = ["Reado contributors"]
+license = "MIT"
+repository = "https://github.com/UrionBlade/reado"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix avoids a name clash with the binary target; it is only
+# strictly required on Windows (see rust-lang/cargo#8519) but we keep it on all
+# platforms for consistency.
+name = "reado_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-store = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Shared annotation store (comment model + on-disk `.md` format), also used by
+# the `reado` CLI so the two never drift.
+reado-core = { path = "../crates/reado-core" }
+# `ignore` is ripgrep's gitignore-aware directory walker; we reuse it so the
+# file tree and search honour the exact same ignore rules as ripgrep.
+ignore = "0.4"
+# Filesystem watcher (no polling) for re-anchoring comments on external edits.
+notify = "6"
+# Real pseudo-terminals for the integrated terminal (claude/codex run here).
+portable-pty = "0.8"
+# Surfaced, typed errors across the Tauri command boundary.
+thiserror = "2"

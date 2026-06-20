@@ -1,0 +1,59 @@
+/**
+ * Presentation metadata for comments: per-type colours, the ordered state and
+ * type option lists, and author/agent identity. Kept separate so badges stay
+ * consistent across the composer, thread popover and comment list.
+ */
+import type { CommentType, CommentState, Message } from "../lib/api";
+import type { MessageKey } from "../i18n";
+
+export const COMMENT_TYPES: CommentType[] = [
+  "bug",
+  "refactor",
+  "performance",
+  "question",
+  "note",
+];
+
+export const COMMENT_STATES: CommentState[] = [
+  "open",
+  "in-progress",
+  "done",
+  "discarded",
+];
+
+/** Distinct accent per type, drawn from the theme's semantic palette. */
+export const TYPE_COLOR: Record<CommentType, string> = {
+  bug: "var(--marker)",
+  refactor: "var(--syn-keyword)",
+  performance: "var(--syn-number)",
+  question: "var(--syn-control)",
+  note: "var(--text-muted)",
+};
+
+export const typeKey = (t: CommentType): MessageKey =>
+  `comment.type.${t}` as MessageKey;
+export const stateKey = (s: CommentState): MessageKey =>
+  `comment.state.${s}` as MessageKey;
+
+/** Human label for a known agent id, else the raw id. */
+const AGENT_NAMES: Record<string, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  copilot: "Copilot",
+};
+
+/** Display name for a thread message's author. */
+export function authorLabel(message: Message, you: string): string {
+  if (message.author !== "agent") return you;
+  return message.agent ? (AGENT_NAMES[message.agent] ?? message.agent) : "AI";
+}
+
+/** A small colour dot used in badges. */
+export function Dot({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block h-2 w-2 flex-none rounded-full"
+      style={{ background: color }}
+    />
+  );
+}

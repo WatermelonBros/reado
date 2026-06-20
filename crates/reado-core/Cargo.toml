@@ -1,0 +1,15 @@
+[package]
+name = "reado-core"
+version = "0.1.0"
+description = "Reado's annotation store: the shared comment model and on-disk format."
+license = "MIT"
+edition = "2021"
+
+[lib]
+name = "reado_core"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+thiserror = "2"

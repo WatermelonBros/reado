@@ -1,0 +1,85 @@
+/** Cross-cutting React hooks: theme application and global keyboard shortcuts. */
+import { useEffect } from "react";
+import { useSettings, usePalette, useEditorActions, type ThemeName } from "./store";
+import { useTerminals } from "./terminals";
+
+/** Resolve the active theme from settings, OS preference and time of day. */
+function resolveTheme(
+  mode: string,
+  theme: ThemeName,
+  lightTheme: ThemeName,
+  darkTheme: ThemeName,
+): ThemeName {
+  if (mode === "manual") return theme;
+  if (mode === "system") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? darkTheme
+      : lightTheme;
+  }
+  // "auto" — Trust Reado: light during the day, dark in the evening/night.
+  const hour = new Date().getHours();
+  return hour >= 7 && hour < 19 ? lightTheme : darkTheme;
+}
+
+/** Apply the resolved theme to <html> and keep it live (system + time of day). */
+export function useApplyTheme(): void {
+  const { mode, theme, lightTheme, darkTheme } = useSettings();
+
+  useEffect(() => {
+    const apply = () => {
+      document.documentElement.dataset.theme = resolveTheme(
+        mode,
+        theme,
+        lightTheme,
+        darkTheme,
+      );
+    };
+    apply();
+
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", apply);
+    // Re-evaluate the time-of-day theme once a minute in "auto" mode.
+    const timer = mode === "auto" ? window.setInterval(apply, 60_000) : undefined;
+    return () => {
+      mq.removeEventListener("change", apply);
+      if (timer) clearInterval(timer);
+    };
+  }, [mode, theme, lightTheme, darkTheme]);
+}
+
+/** Bind Reado's global keyboard shortcuts. */
+export function useGlobalShortcuts(): void {
+  const open = usePalette((s) => s.open);
+  const toggleSettings = usePalette((s) => s.toggleSettings);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === "p") {
+        e.preventDefault();
+        open("files");
+      } else if (key === "k") {
+        e.preventDefault();
+        open("commands");
+      } else if (key === "f" && e.shiftKey) {
+        e.preventDefault();
+        open("search");
+      } else if (key === "m" && e.shiftKey) {
+        // Create a comment from the current selection (or cursor line).
+        e.preventDefault();
+        useEditorActions.getState().requestCompose();
+      } else if (key === ",") {
+        e.preventDefault();
+        toggleSettings(true);
+      } else if (key === "j") {
+        // Toggle the integrated terminal.
+        e.preventDefault();
+        useTerminals.getState().toggle();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, toggleSettings]);
+}
