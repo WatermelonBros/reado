@@ -67,3 +67,8 @@ theme in `src/styles/app.css` via `@theme inline`, so semantic utilities like
 
 Keep them clear and imperative ("Add orphans panel", not "added stuff"). Group
 related changes; keep diffs focused.
+
+## Code of Conduct
+
+By participating you agree to abide by our
+[Code of Conduct](CODE_OF_CONDUCT.md).

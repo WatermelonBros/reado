@@ -118,8 +118,9 @@ cargo clippy  --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ## Contributing
 
 Reado aims to be a friendly open-source project. Contributions are welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md). All code, comments and documentation are
-written in English.
+[CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md).
+Security issues: see [SECURITY.md](SECURITY.md). All code, comments and
+documentation are written in English.
 
 ## License
 
