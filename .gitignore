@@ -35,3 +35,4 @@ crates/*/target/
 *.sln
 *.sw?
 .playwright-mcp/
+icon-options/
