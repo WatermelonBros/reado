@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "cli:install": "bash scripts/install-cli.sh"
   },
   "dependencies": {
@@ -47,6 +48,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "tailwindcss": "^4.3.1",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.9"
   }
 }

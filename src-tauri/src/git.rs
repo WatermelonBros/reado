@@ -62,6 +62,38 @@ pub struct GitChange {
     pub status: String,
 }
 
+/// Map a two-character porcelain status code to a category.
+fn categorize_status(code: &str) -> &'static str {
+    if code == "??" {
+        "untracked"
+    } else if code.contains('R') {
+        "renamed"
+    } else if code.contains('D') {
+        "deleted"
+    } else if code.contains('A') {
+        "added"
+    } else {
+        "modified"
+    }
+}
+
+/// Parse one `git status --porcelain` line into a change, or `None` if too short.
+fn parse_status_line(line: &str) -> Option<GitChange> {
+    if line.len() <= 3 {
+        return None;
+    }
+    let code = &line[..2];
+    let mut path = line[3..].to_string();
+    // Renames are "old -> new"; keep the new path.
+    if let Some(idx) = path.find(" -> ") {
+        path = path[idx + 4..].to_string();
+    }
+    Some(GitChange {
+        path: path.trim_matches('"').to_string(),
+        status: categorize_status(code).to_string(),
+    })
+}
+
 /// The working-tree status (read-only Source Control view). Reado never stages
 /// or commits — git stays the user's tool; this only surfaces what changed.
 #[tauri::command]
@@ -69,32 +101,39 @@ pub fn git_status(root: String) -> Vec<GitChange> {
     let Some(out) = run_git(Path::new(&root), &["status", "--porcelain"]) else {
         return Vec::new();
     };
-    out.lines()
-        .filter(|l| l.len() > 3)
-        .map(|line| {
-            let code = &line[..2];
-            let mut path = line[3..].to_string();
-            // Renames are "old -> new"; keep the new path.
-            if let Some(idx) = path.find(" -> ") {
-                path = path[idx + 4..].to_string();
-            }
-            let status = if code == "??" {
-                "untracked"
-            } else if code.contains('R') {
-                "renamed"
-            } else if code.contains('D') {
-                "deleted"
-            } else if code.contains('A') {
-                "added"
-            } else {
-                "modified"
-            };
-            GitChange {
-                path: path.trim_matches('"').to_string(),
-                status: status.to_string(),
-            }
-        })
-        .collect()
+    out.lines().filter_map(parse_status_line).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn categorizes_status_codes() {
+        assert_eq!(categorize_status("??"), "untracked");
+        assert_eq!(categorize_status(" M"), "modified");
+        assert_eq!(categorize_status("M "), "modified");
+        assert_eq!(categorize_status("A "), "added");
+        assert_eq!(categorize_status(" D"), "deleted");
+        assert_eq!(categorize_status("R "), "renamed");
+    }
+
+    #[test]
+    fn parses_status_lines() {
+        let m = parse_status_line(" M src/main.rs").unwrap();
+        assert_eq!(m.path, "src/main.rs");
+        assert_eq!(m.status, "modified");
+
+        let r = parse_status_line("R  old.rs -> new.rs").unwrap();
+        assert_eq!(r.path, "new.rs");
+        assert_eq!(r.status, "renamed");
+
+        let q = parse_status_line("?? \"weird name.rs\"").unwrap();
+        assert_eq!(q.path, "weird name.rs");
+        assert_eq!(q.status, "untracked");
+
+        assert!(parse_status_line("").is_none());
+    }
 }
 
 /// The diff bases the user can compare against: local branches and recent commits.

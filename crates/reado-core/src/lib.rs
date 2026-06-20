@@ -850,4 +850,80 @@ mod tests {
         let new = "completely\ndifferent\ncontent\n";
         assert_eq!(relocate(1, snippet, new), None);
     }
+
+    // ---- Disk lifecycle (temp project) ----------------------------------
+
+    fn note(file: &str, body: &str) -> NewComment {
+        NewComment {
+            file: file.into(),
+            scope: Scope::Range,
+            start_line: 1,
+            end_line: 1,
+            comment_type: CommentType::Note,
+            kind: CommentKind::Task,
+            body: body.into(),
+            context: Context::default(),
+        }
+    }
+
+    #[test]
+    fn create_list_resolve_archives() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+
+        let created = create_comment(root, note("src/a.rs", "fix this"), "user", None).unwrap();
+        assert!(created.first_comment);
+        let id = created.comment.meta.id.clone();
+
+        assert_eq!(list_comments(root).len(), 1);
+        assert_eq!(list_archived(root).len(), 0);
+
+        // Resolve → moves to archive.
+        let done = set_comment_state(root, &id, CommentState::Done).unwrap();
+        assert!(done.archived);
+        assert_eq!(list_comments(root).len(), 0);
+        assert_eq!(list_archived(root).len(), 1);
+
+        // The id is still fetchable from the archive.
+        assert_eq!(
+            get_comment(root, &id).unwrap().meta.state,
+            CommentState::Done
+        );
+    }
+
+    #[test]
+    fn reply_and_search() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        let id = create_comment(root, note("src/b.rs", "needle here"), "user", None)
+            .unwrap()
+            .comment
+            .meta
+            .id;
+
+        add_reply(
+            root,
+            &id,
+            "agent",
+            Some("claude-code".into()),
+            "on it".into(),
+        )
+        .unwrap();
+        let c = get_comment(root, &id).unwrap();
+        assert_eq!(c.messages.len(), 2);
+        assert_eq!(c.messages[1].agent.as_deref(), Some("claude-code"));
+
+        assert_eq!(search_comments(root, "needle").len(), 1);
+        assert_eq!(search_comments(root, "absent").len(), 0);
+    }
+
+    #[test]
+    fn rename_moves_comment_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        create_comment(root, note("old.rs", "x"), "user", None).unwrap();
+
+        assert_eq!(rename_comments(root, "old.rs", "new.rs").unwrap(), 1);
+        assert_eq!(list_comments(root)[0].meta.anchor.file, "new.rs");
+    }
 }
