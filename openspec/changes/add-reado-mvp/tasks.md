@@ -16,7 +16,7 @@
 - [x] 1.5 Non-code rendering: formatted markdown, images, foldable JSON.
 - [x] 1.6 Cmd+P fuzzy file open, full-text ripgrep search, command palette (Cmd+K) + key shortcuts.
 - [ ] 1.7 Settings (global + per-project), status bar, session restore (files/tabs/scroll/terminals).
-- [ ] 1.8 Optional manual editing (read-first remains the design priority).
+- [x] 1.8 Optional manual editing (read-first remains the design priority).
 - [x] 1.9 Tool sidebar: slim icon rail switching the side panel between tools (Files, Search, Comments), collapsible, with reserved slots for later tools.
 
 ## 2. Annotation store & anchoring (`annotation-store`, `annotation-anchoring`)
@@ -49,8 +49,8 @@
 
 - [ ] 5.1 Knowledge graph: nodes = comments + files, edges = manual links + co-location; progress / exploration / doc-source views.
 - [ ] 5.2 Base documentation views generated from comment history, filterable.
-- [ ] 5.3 History timeline of archived comments (file/period/type filters).
-- [ ] 5.4 Notifications: in-app badges + status indicator, OS notification on run completion, optional completion sound.
+- [x] 5.3 History timeline of archived comments (file/period/type filters).
+- [x] 5.4 Notifications: in-app badges + status indicator, OS notification on run completion, optional completion sound.
 
 ## 6. Theming from research (`theming`)
 

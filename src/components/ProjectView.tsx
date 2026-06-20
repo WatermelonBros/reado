@@ -8,6 +8,7 @@ import { listen } from "@tauri-apps/api/event";
 import { gitInfo, startWatching, reanchorFile } from "../lib/api";
 import { useProject, useSessions, useWorkspace } from "../lib/store";
 import { useComments } from "../lib/comments";
+import { notifyResolved } from "../lib/notify";
 import { setWindowTitle } from "../lib/window";
 import { useT, type MessageKey } from "../i18n";
 import { ActivityBar } from "./ActivityBar";
@@ -94,6 +95,17 @@ export function ProjectView({ root }: { root: string }) {
   const setShowHidden = useProject((s) => s.setShowHidden);
   const terminalOpen = useTerminals((s) => s.open);
   const noComments = useComments((s) => s.comments.length === 0);
+  const openTaskCount = useComments(
+    (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
+  );
+  const prevOpenTasks = useRef(openTaskCount);
+
+  // Notify when the open-task count drops (the agent resolved something).
+  useEffect(() => {
+    if (openTaskCount < prevOpenTasks.current) notifyResolved(openTaskCount);
+    prevOpenTasks.current = openTaskCount;
+  }, [openTaskCount]);
+
   // First-comment hint: shown while a file is open and the project has no
   // comments yet; it disappears once the first comment exists (spec).
   const showEmptyHint = active != null && noComments;

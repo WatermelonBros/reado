@@ -15,6 +15,7 @@ import {
   setCommentState,
   deleteComment,
   setAnchor,
+  listArchived,
   type Comment,
   type CommentPatch,
   type CommentState,
@@ -30,6 +31,9 @@ export function toRelative(root: string, path: string): string {
 interface CommentsState {
   root: string;
   comments: Comment[];
+  /** Resolved comments (the history), loaded on demand. */
+  archived: Comment[];
+  loadArchived: () => Promise<void>;
   /** Comment whose thread is currently open, or null. */
   activeId: string | null;
   /** Whether the first-comment gitignore prompt is showing. */
@@ -61,6 +65,12 @@ function replace(list: Comment[], next: Comment): Comment[] {
 export const useComments = create<CommentsState>((set, get) => ({
   root: "",
   comments: [],
+  archived: [],
+  loadArchived: async () => {
+    const root = get().root;
+    const archived = await listArchived(root);
+    if (get().root === root) set({ archived });
+  },
   activeId: null,
   gitignorePromptOpen: false,
   setGitignorePrompt: (open) => set({ gitignorePromptOpen: open }),

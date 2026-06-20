@@ -47,6 +47,8 @@ interface SettingsState {
   versionReado: boolean;
   /** Suppress the first-comment gitignore prompt once the user opts out. */
   gitignoreDontAsk: boolean;
+  /** Play a soft chime when the agent finishes resolving tasks. */
+  completionSound: boolean;
   set: (patch: Partial<SettingsState>) => void;
 }
 
@@ -63,6 +65,7 @@ export const useSettings = create<SettingsState>()(
       wrap: false,
       versionReado: false,
       gitignoreDontAsk: false,
+      completionSound: false,
       set: (patch) => set(patch),
     }),
     { name: "reado.settings" },

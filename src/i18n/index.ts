@@ -53,6 +53,8 @@ const en = {
   "settings.mode.auto": "Trust Reado (time of day)",
   "settings.language": "Language",
   "settings.codeFont": "Code font",
+  "settings.completionSound": "Play a sound when the agent finishes",
+  "settings.notifications": "Notifications",
   "settings.close": "Close",
 
   "empty.firstComment":
@@ -106,6 +108,10 @@ const en = {
   "comments.filter.all": "All",
   "comments.filter.thisFile": "This file",
   "comments.jump": "Jump to code",
+  "comments.open": "Open",
+  "comments.history": "History",
+  "comments.historyEmpty": "No resolved comments yet.",
+  "comments.resolvedAt": "Resolved {date}",
 
   "gitignore.title": "Add .reado/ to .gitignore?",
   "gitignore.body":
@@ -167,6 +173,8 @@ const it: Record<MessageKey, string> = {
   "settings.mode.auto": "Affidati a Reado (ora del giorno)",
   "settings.language": "Lingua",
   "settings.codeFont": "Font del codice",
+  "settings.completionSound": "Riproduci un suono quando l'agente finisce",
+  "settings.notifications": "Notifiche",
   "settings.close": "Chiudi",
 
   "empty.firstComment":
@@ -220,6 +228,10 @@ const it: Record<MessageKey, string> = {
   "comments.filter.all": "Tutti",
   "comments.filter.thisFile": "Questo file",
   "comments.jump": "Vai al codice",
+  "comments.open": "Aperti",
+  "comments.history": "Cronologia",
+  "comments.historyEmpty": "Ancora nessun commento risolto.",
+  "comments.resolvedAt": "Risolto {date}",
 
   "gitignore.title": "Aggiungere .reado/ a .gitignore?",
   "gitignore.body":

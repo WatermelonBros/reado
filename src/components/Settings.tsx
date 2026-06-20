@@ -3,6 +3,7 @@ import { useSettings, usePalette, THEMES, type ThemeName, type ThemeMode } from 
 import { useLocale, useT, type Locale, type MessageKey } from "../i18n";
 import { Select } from "./ui/Select";
 import { Drawer } from "./ui/Drawer";
+import { Checkbox } from "./ui/Checkbox";
 import { CloseIcon } from "./icons";
 
 const FONT_PRESETS = [
@@ -104,6 +105,15 @@ export function Settings() {
                   label: f,
                 })),
               ]}
+            />
+          </Field>
+
+          <Field label={t("settings.notifications")}>
+            <Checkbox
+              checked={settings.completionSound}
+              onChange={(v) => settings.set({ completionSound: v })}
+              label={t("settings.completionSound")}
+              className="text-sm text-muted"
             />
           </Field>
         </div>
