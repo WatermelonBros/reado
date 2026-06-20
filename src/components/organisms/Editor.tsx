@@ -48,6 +48,7 @@ import { commentGutter, type LineComments } from "../../lib/commentGutter";
 import { blameGutter } from "../../lib/blameGutter";
 import { useDocInfo, detectEol, detectIndent, formatDocument } from "../../lib/docInfo";
 import { useComments, commentsForFile, toRelative } from "../../lib/comments";
+import { useTextView } from "../../lib/textView";
 import {
   useCursor,
   useEditorActions,
@@ -213,17 +214,18 @@ export function Editor() {
   );
   const [error, setError] = useState<{ path: string; message: string } | null>(null);
 
-  // Load the active file whenever it changes.
+  // Load the active file whenever it changes (or when forced to text).
+  const forceText = useTextView((s) => s.force);
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
-    readFile(root, active)
+    readFile(root, active, forceText.has(active))
       .then((c) => !cancelled && setLoaded({ path: active, content: c }))
       .catch((e) => !cancelled && setError({ path: active, message: String(e) }));
     return () => {
       cancelled = true;
     };
-  }, [root, active]);
+  }, [root, active, forceText]);
 
   // Recompute this file's comment anchors on open (spec: recompute on open).
   useEffect(() => {

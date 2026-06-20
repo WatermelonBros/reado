@@ -111,7 +111,8 @@ export function Palette() {
           label: basename(path),
           detail: relative(project.root, path),
           run: () => {
-            project.open(path);
+            // list_files returns project-relative paths; open expects absolute.
+            project.open(`${project.root}/${path}`);
             close();
           },
         };

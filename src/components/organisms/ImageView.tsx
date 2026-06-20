@@ -4,10 +4,14 @@
  * image to toggle fit ↔ actual size.
  */
 import { useState } from "react";
+import { useTextView } from "../../lib/textView";
+import { useT } from "../../i18n";
 
 const ZOOMS = [0.25, 0.5, 1, 1.5, 2, 3, 4];
 
 export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) {
+  const t = useT();
+  const isSvg = /\.svg$/i.test(name);
   // `null` zoom = fit to viewport; a number = explicit scale.
   const [zoom, setZoom] = useState<number | null>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
@@ -75,6 +79,15 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
           >
             +
           </button>
+          {isSvg && (
+            <button
+              type="button"
+              onClick={() => useTextView.getState().openAsText(name)}
+              className="ml-1 border-l border-line pl-2 rounded py-0.5 pr-1.5 hover:bg-surface hover:text-ink"
+            >
+              {t("tree.openAsText")}
+            </button>
+          )}
         </div>
       </div>
     </div>

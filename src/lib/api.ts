@@ -37,9 +37,11 @@ export const listDir = (root: string, dir: string, showHidden: boolean) =>
 /** Every file path in the project, for the fuzzy finder. */
 export const listFiles = (root: string) => invoke<string[]>("list_files", { root });
 
-/** Read a file for display (text, image data URL, or binary placeholder). */
-export const readFile = (root: string, path: string) =>
-  invoke<FileContent>("read_file", { root, path });
+/** Read a file for display (text, image data URL, or binary placeholder).
+ * `asText` forces text decoding for formats that would otherwise render as an
+ * image (e.g. SVG), so they can be edited as source. */
+export const readFile = (root: string, path: string, asText?: boolean) =>
+  invoke<FileContent>("read_file", { root, path, asText });
 
 /** Write UTF-8 text back to a file (manual editing). */
 export const writeFile = (root: string, path: string, content: string) =>

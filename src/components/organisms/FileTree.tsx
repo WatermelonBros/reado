@@ -9,9 +9,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { listDir, type DirEntry } from "../../lib/api";
 import { useProject } from "../../lib/store";
+import { useTextView } from "../../lib/textView";
 import { toRelative } from "../../lib/comments";
 import { useT } from "../../i18n";
-import { FileIcon, ChevronIcon, MessageIcon } from "../atoms/icons";
+import { FileIcon, ChevronIcon, MessageIcon, EditIcon } from "../atoms/icons";
 import { TreeCommentDialog, type CommentTarget } from "../organisms/TreeCommentDialog";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
 
@@ -19,6 +20,7 @@ type Ctx = (entry: DirEntry | null, e: React.MouseEvent) => void;
 
 export function FileTree() {
   const root = useProject((s) => s.root);
+  const open = useProject((s) => s.open);
   const showHidden = useProject((s) => s.showHidden);
   const t = useT();
 
@@ -50,6 +52,19 @@ export function FileTree() {
                     menu.entry!.isDir ? "folder" : "file",
                     toRelative(root, menu.entry!.path),
                   ),
+              },
+            ]
+          : []),
+        ...(menu.entry && !menu.entry.isDir && /\.svg$/i.test(menu.entry.path)
+          ? [
+              {
+                label: t("tree.openAsText"),
+                icon: <EditIcon className="h-3.5 w-3.5" />,
+                onSelect: () => {
+                  useTextView.getState().openAsText(menu.entry!.path);
+                  open(menu.entry!.path);
+                  setMenu(null);
+                },
               },
             ]
           : []),

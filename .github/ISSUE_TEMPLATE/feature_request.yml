@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that Reado makes hard or impossible today?
+      placeholder: "When I read code, I want to… but…"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would the ideal behavior look like?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about, and why they fall short.
+    validations:
+      required: false
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Fit with Reado
+      options:
+        - label: This fits the calm, read-first focus of Reado (not a full code editor).
+          required: false

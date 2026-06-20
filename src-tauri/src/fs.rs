@@ -98,7 +98,12 @@ pub fn list_files(root: String) -> Result<Vec<String>> {
         .filter_map(|r| r.ok())
         .filter(|entry| entry.file_type().is_some_and(|t| t.is_file()))
         .take(MAX_INDEXED_FILES)
-        .map(|entry| entry.path().to_string_lossy().into_owned())
+        // Return project-relative paths: the rest of the app (comment anchors,
+        // read_file) works in terms of the root, and consumers prepend it.
+        .map(|entry| {
+            let p = entry.path();
+            p.strip_prefix(&root).unwrap_or(p).to_string_lossy().into_owned()
+        })
         .collect();
     Ok(files)
 }
@@ -155,17 +160,20 @@ pub fn write_file(root: String, path: String, content: String) -> Result<()> {
 /// Read a file for display. Detects images (returned as data URLs) and binary
 /// files (returned as a size-only placeholder); everything else is UTF-8 text.
 #[tauri::command]
-pub fn read_file(root: String, path: String) -> Result<FileContent> {
+pub fn read_file(root: String, path: String, as_text: Option<bool>) -> Result<FileContent> {
     let root = PathBuf::from(&root);
     let path = ensure_within(&root, &PathBuf::from(&path))?;
     let metadata = std::fs::metadata(&path)?;
 
-    if let Some(mime) = image_mime(&path) {
-        let bytes = std::fs::read(&path)?;
-        let encoded = base64_encode(&bytes);
-        return Ok(FileContent::Image {
-            data_url: format!("data:{mime};base64,{encoded}"),
-        });
+    // `as_text` forces source decoding for image-renderable formats (e.g. SVG).
+    if as_text != Some(true) {
+        if let Some(mime) = image_mime(&path) {
+            let bytes = std::fs::read(&path)?;
+            let encoded = base64_encode(&bytes);
+            return Ok(FileContent::Image {
+                data_url: format!("data:{mime};base64,{encoded}"),
+            });
+        }
     }
 
     let bytes = std::fs::read(&path)?;
