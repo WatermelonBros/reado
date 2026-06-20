@@ -276,6 +276,12 @@ interface ProjectState {
   setGit: (git: GitInfo) => void;
   open: (path: string, line?: number) => void;
   close: (path: string) => void;
+  /** Close every tab except `path` (becomes active). */
+  closeOthers: (path: string) => void;
+  /** Close the tabs to the right of `path`. */
+  closeToRight: (path: string) => void;
+  /** Close all tabs. */
+  closeAll: () => void;
   setActive: (path: string) => void;
   setShowHidden: (show: boolean) => void;
 }
@@ -311,6 +317,17 @@ export const useProject = create<ProjectState>((set) => ({
         s.active === path ? (tabs[tabs.length - 1] ?? null) : s.active;
       return { tabs, active };
     }),
+  closeOthers: (path) =>
+    set((s) => (s.tabs.includes(path) ? { tabs: [path], active: path } : s)),
+  closeToRight: (path) =>
+    set((s) => {
+      const i = s.tabs.indexOf(path);
+      if (i < 0) return s;
+      const tabs = s.tabs.slice(0, i + 1);
+      const active = s.active && tabs.includes(s.active) ? s.active : path;
+      return { tabs, active };
+    }),
+  closeAll: () => set({ tabs: [], active: null }),
   setActive: (path) => set({ active: path }),
   setShowHidden: (show) => set({ showHidden: show }),
 }));
