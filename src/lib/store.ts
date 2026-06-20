@@ -116,19 +116,39 @@ export interface Session {
   tabs: string[];
   /** Active file path, or null. */
   active: string | null;
+  /** Per-file editor scroll offset (px), so reopening returns to where you were. */
+  scroll?: Record<string, number>;
 }
 
 interface SessionsState {
   byRoot: Record<string, Session>;
   save: (root: string, session: Session) => void;
+  /** Remember the editor scroll offset for a file (merged into its session). */
+  saveScroll: (root: string, path: string, top: number) => void;
 }
 
 export const useSessions = create<SessionsState>()(
   persist(
     (set) => ({
       byRoot: {},
+      // Preserve the existing scroll map when tabs/active change.
       save: (root, session) =>
-        set((s) => ({ byRoot: { ...s.byRoot, [root]: session } })),
+        set((s) => ({
+          byRoot: {
+            ...s.byRoot,
+            [root]: { ...session, scroll: session.scroll ?? s.byRoot[root]?.scroll },
+          },
+        })),
+      saveScroll: (root, path, top) =>
+        set((s) => {
+          const prev = s.byRoot[root] ?? { tabs: [], active: null };
+          return {
+            byRoot: {
+              ...s.byRoot,
+              [root]: { ...prev, scroll: { ...prev.scroll, [path]: top } },
+            },
+          };
+        }),
     }),
     { name: "reado.sessions" },
   ),

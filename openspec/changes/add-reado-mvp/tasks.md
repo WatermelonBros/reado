@@ -87,9 +87,9 @@ Honest record of where the implementation differs from the literal task text:
   moves the comments. When the pairing is ambiguous (several creates/removes at
   once) the comment still orphans gracefully and is recoverable via the orphans
   panel — it never points at the wrong line.
-- **1.7 Session restore** — open files/tabs/active and per-project settings
-  restore; terminal sessions do not (PTYs are process-bound and cannot survive
-  an app restart) and scroll position is not yet persisted.
+- **1.7 Session restore** — open files/tabs/active, per-project settings, and
+  per-file editor scroll offset restore. Terminal sessions do not (PTYs are
+  process-bound and cannot survive an app restart).
 - **7.2 / 7.3 Linux & Windows** — the code is cross-platform (portable-pty,
   notify, `std::path`, a `cfg(windows)` shell) and the release workflow builds
   and bundles on Ubuntu, Windows and macOS (build-validated in CI). Runtime

@@ -44,7 +44,13 @@ import {
 import { readoAppearance } from "../lib/codemirror";
 import { commentGutter, type LineComments } from "../lib/commentGutter";
 import { useComments, commentsForFile, toRelative } from "../lib/comments";
-import { useCursor, useEditorActions, useProject, useSettings } from "../lib/store";
+import {
+  useCursor,
+  useEditorActions,
+  useProject,
+  useSessions,
+  useSettings,
+} from "../lib/store";
 import { useT } from "../i18n";
 import { CommentComposer } from "./CommentComposer";
 import { CommentThread } from "./CommentThread";
@@ -422,6 +428,15 @@ function CodeView({
     const view = new EditorView({ state, parent: hostRef.current });
     viewRef.current = view;
 
+    // Restore the saved scroll offset for this file, after first layout.
+    const savedScroll =
+      useSessions.getState().byRoot[useProject.getState().root]?.scroll?.[relPath];
+    if (savedScroll) {
+      requestAnimationFrame(() => {
+        if (viewRef.current === view) view.scrollDOM.scrollTop = savedScroll;
+      });
+    }
+
     // Detect and lazily load the language pack for this filename.
     const desc = LanguageDescription.matchFilename(languages, path);
     if (desc) {
@@ -473,13 +488,24 @@ function CodeView({
     view.dispatch({ effects: setBlock.of(block) });
   }, [activeId, comments]);
 
-  // Re-position overlays as the editor scrolls or the window resizes.
+  // Re-position overlays as the editor scrolls or the window resizes, and
+  // remember the scroll offset (debounced) so the session can restore it.
   useEffect(() => {
-    const scroller = hostRef.current?.querySelector(".cm-scroller");
-    const bump = () => setTick((n) => n + 1);
+    const scroller = hostRef.current?.querySelector(".cm-scroller") as HTMLElement | null;
+    let timer: number | undefined;
+    const bump = () => {
+      setTick((n) => n + 1);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        useSessions
+          .getState()
+          .saveScroll(useProject.getState().root, relPath, scroller?.scrollTop ?? 0);
+      }, 300);
+    };
     scroller?.addEventListener("scroll", bump, { passive: true });
     window.addEventListener("resize", bump);
     return () => {
+      window.clearTimeout(timer);
       scroller?.removeEventListener("scroll", bump);
       window.removeEventListener("resize", bump);
     };
