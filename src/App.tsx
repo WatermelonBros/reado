@@ -3,8 +3,8 @@
  * workspace, keyed off the project path in the window's URL hash.
  */
 import { useEffect, useState } from "react";
-import { RecentProjects } from "./components/RecentProjects";
-import { ProjectView } from "./components/ProjectView";
+import { RecentProjects } from "./components/pages/RecentProjects";
+import { ProjectView } from "./components/pages/ProjectView";
 import { currentProjectPath } from "./lib/window";
 import { useApplyTheme, useApplyZoom, useGlobalShortcuts } from "./lib/hooks";
 import { checkForUpdates } from "./lib/updater";
