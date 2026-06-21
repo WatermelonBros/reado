@@ -14,7 +14,8 @@
     "tauri:build": "bash scripts/bundle-cli.sh && tauri build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "cli:install": "bash scripts/install-cli.sh"
+    "cli:install": "bash scripts/install-cli.sh",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "@ark-ui/react": "^5.37.2",
