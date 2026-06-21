@@ -126,9 +126,15 @@ export function StatusBar() {
 
   return (
     <footer className="flex h-[26px] flex-none items-center justify-between border-t border-line bg-surface px-2 text-xs text-muted select-none">
-      <div className="flex min-w-0 items-center gap-1">
-        <span className="max-w-[40vw] overflow-hidden px-1 text-ellipsis whitespace-nowrap">
-          {rel ?? t("status.noFile")}
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        {/* Left-truncate (ellipsis on the left) so the filename stays visible on
+            long paths; <bdi> keeps the path itself laid out left-to-right. */}
+        <span
+          className="block min-w-0 flex-1 overflow-hidden px-1 text-ellipsis whitespace-nowrap"
+          style={{ direction: "rtl" }}
+          title={rel ?? undefined}
+        >
+          <bdi>{rel ?? t("status.noFile")}</bdi>
         </span>
         {active && (
           <div className="relative">
@@ -159,7 +165,7 @@ export function StatusBar() {
         )}
       </div>
 
-      <div className="flex min-w-0 items-center gap-1">
+      <div className="flex flex-none items-center gap-1">
         {active && (
           <>
             <div className="relative">

@@ -163,8 +163,9 @@ export function ProjectView({ root }: { root: string }) {
   };
 
   return (
+    <div className="flex h-full flex-col overflow-hidden">
     <div
-      className="grid h-full overflow-hidden"
+      className="grid min-h-0 flex-1 overflow-hidden"
       style={{
         gridTemplateColumns: tool ? `48px ${sidebarWidth}px 1fr` : "48px 1fr",
       }}
@@ -256,13 +257,15 @@ export function ProjectView({ root }: { root: string }) {
           {terminalOpen && terminalPosition === "right" && <TerminalPanel />}
         </div>
         {terminalOpen && terminalPosition === "bottom" && <TerminalPanel />}
-        <StatusBar />
       </main>
       <Palette />
       <Settings />
       <GitignorePrompt />
       {graphOpen && <KnowledgeGraph />}
       {docsOpen && <DocsView />}
+    </div>
+    {/* Status bar spans the full window width, below the activity bar + sidebar. */}
+    <StatusBar />
     </div>
   );
 }
