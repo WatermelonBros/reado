@@ -13,6 +13,7 @@
  * mounted (hidden when not in the active group) so scrollback persists.
  */
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export interface TermSession {
   id: string;
@@ -74,7 +75,9 @@ interface TerminalsState {
   toggle: (open?: boolean) => void;
 }
 
-export const useTerminals = create<TerminalsState>((set, get) => ({
+export const useTerminals = create<TerminalsState>()(
+  persist(
+    (set, get) => ({
   sessions: [],
   activeId: null,
   groups: [],
@@ -189,7 +192,15 @@ export const useTerminals = create<TerminalsState>((set, get) => ({
       }
       return { open: next };
     }),
-}));
+    }),
+    {
+      // Persist only the layout preferences — sessions/groups reference live PTYs
+      // that don't survive a restart.
+      name: "reado.terminal-layout",
+      partialize: (s) => ({ position: s.position, height: s.height, width: s.width }),
+    },
+  ),
+);
 
 /** After removing pane(s), recompute the focused pane / active group / open flag. */
 function resolveActive(
