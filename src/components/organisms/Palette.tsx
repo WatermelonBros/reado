@@ -10,7 +10,13 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import fuzzysort from "fuzzysort";
-import { listFiles, searchText, type SearchMatch } from "../../lib/api";
+import {
+  listFiles,
+  searchText,
+  listSymbols,
+  type SearchMatch,
+  type Symbol as WorkspaceSymbol,
+} from "../../lib/api";
 import { usePalette, useProject, useSettings, useEditorActions, useWorkspace, THEMES } from "../../lib/store";
 import { useTerminals } from "../../lib/terminals";
 import { mod } from "../../lib/shortcuts";
@@ -44,6 +50,7 @@ export function Palette() {
   const [selected, setSelected] = useState(0);
   const [files, setFiles] = useState<string[]>([]);
   const [matches, setMatches] = useState<SearchMatch[]>([]);
+  const [wsymbols, setWsymbols] = useState<WorkspaceSymbol[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +69,13 @@ export function Palette() {
       listFiles(project.root).then(setFiles).catch(() => setFiles([]));
     }
   }, [mode, project.root, files.length]);
+
+  // Load the project symbol index lazily when entering workspace-symbol mode.
+  useEffect(() => {
+    if (mode === "wsymbols" && wsymbols.length === 0) {
+      listSymbols(project.root).then(setWsymbols).catch(() => setWsymbols([]));
+    }
+  }, [mode, project.root, wsymbols.length]);
 
   // Debounced full-text search.
   useEffect(() => {
@@ -144,8 +158,21 @@ export function Palette() {
         },
       }));
     }
+    if (mode === "wsymbols") {
+      const filtered = query
+        ? fuzzysort.go(query, wsymbols, { limit: 300, key: (s) => s.name }).map((r) => r.obj)
+        : wsymbols.slice(0, 300);
+      return filtered.map((s) => ({
+        label: s.name,
+        detail: `${s.kind} · ${relative(project.root, s.path)}:${s.line}`,
+        run: () => {
+          project.open(s.path, s.line);
+          close();
+        },
+      }));
+    }
     return [];
-  }, [mode, query, files, matches, project, settings, t, open, toggleSettings, close]);
+  }, [mode, query, files, matches, wsymbols, project, settings, t, open, toggleSettings, close]);
 
   // Keep the selection in range as rows change.
   useEffect(() => {
@@ -159,7 +186,7 @@ export function Palette() {
       ? "palette.placeholder"
       : mode === "files"
         ? "finder.placeholder"
-        : mode === "symbols"
+        : mode === "symbols" || mode === "wsymbols"
           ? "symbols.placeholder"
           : "search.placeholder";
 
@@ -258,7 +285,7 @@ function relative(root: string, path: string): string {
 interface CommandCtx {
   project: ReturnType<typeof useProject.getState>;
   settings: ReturnType<typeof useSettings.getState>;
-  open: (mode: "commands" | "files" | "search" | "symbols") => void;
+  open: (mode: "commands" | "files" | "search" | "symbols" | "wsymbols") => void;
   toggleSettings: (open?: boolean) => void;
   requestCompose: () => void;
   openGraph: () => void;
@@ -274,6 +301,7 @@ function commandRows(
     { label: t("comment.new"), hint: `${mod}⇧M`, run: requestCompose },
     { label: t("editor.format"), hint: "⇧⌥F", run: () => void formatDocument() },
     { label: t("symbols.goto"), hint: `${mod}⇧O`, run: () => open("symbols") },
+    { label: t("symbols.gotoWorkspace"), hint: `${mod}T`, run: () => open("wsymbols") },
     { label: t("graph.title"), run: openGraph },
     { label: t("kb.title"), run: openDocs },
     { label: t("finder.placeholder"), hint: `${mod}P`, run: () => open("files") },

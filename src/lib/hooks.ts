@@ -185,6 +185,10 @@ export function useGlobalShortcuts(): void {
         // Reopen the most recently closed tab.
         e.preventDefault();
         useProject.getState().reopenClosed();
+      } else if (key === "t") {
+        // Go to symbol in the whole project.
+        e.preventDefault();
+        open("wsymbols");
       } else if (key === "\\") {
         // Toggle the split (side-by-side) editor.
         e.preventDefault();

@@ -141,6 +141,9 @@ export function listenForMenu(): Promise<() => void> {
       case "palette:symbols":
         palette.open("symbols");
         break;
+      case "palette:wsymbols":
+        palette.open("wsymbols");
+        break;
       case "gotodef":
         goToDefinitionAtCursor();
         break;

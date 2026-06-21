@@ -55,6 +55,7 @@ pub fn run() {
             search::search_text,
             search::replace_text,
             symbols::find_definition,
+            symbols::list_symbols,
             format::format_file,
             cli::install_cli,
             cli::cli_installed,

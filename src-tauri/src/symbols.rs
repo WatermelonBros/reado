@@ -89,9 +89,68 @@ pub fn find_definition(root: String, name: String) -> Vec<Definition> {
     defs
 }
 
+/// One declared symbol, for the workspace symbol picker (Cmd+T).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Symbol {
+    pub name: String,
+    /// The declaring keyword (function/class/…), shown as a kind hint.
+    pub kind: String,
+    pub path: String,
+    pub line: u64,
+}
+
+/// List declared symbols across the project (gitignore-aware), for fuzzy
+/// jump-to-definition by name. Heuristic and capped, like `find_definition`.
+#[tauri::command]
+pub fn list_symbols(root: String) -> Vec<Symbol> {
+    let Ok(re) = Regex::new(&format!(
+        r"(?:^|[^\w.])({KEYWORDS})\s+([A-Za-z_$][A-Za-z0-9_$]*)"
+    )) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in WalkBuilder::new(&root).build().flatten() {
+        if out.len() >= 5000 {
+            break;
+        }
+        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(entry.path()) else {
+            continue;
+        };
+        let path = entry.path().to_string_lossy().into_owned();
+        for (i, line) in content.lines().enumerate() {
+            if let Some(c) = re.captures(line) {
+                out.push(Symbol {
+                    name: c[2].to_string(),
+                    kind: c[1].to_string(),
+                    path: path.clone(),
+                    line: (i + 1) as u64,
+                });
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lists_declared_symbols() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("a.ts"),
+            "export function add(a, b) {}\nclass Foo {}\nconst x = 1;\n",
+        )
+        .unwrap();
+        let syms = list_symbols(dir.path().to_str().unwrap().into());
+        let names: Vec<_> = syms.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"add") && names.contains(&"Foo") && names.contains(&"x"));
+    }
 
     #[test]
     fn ranks_declarations_above_calls() {

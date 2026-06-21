@@ -71,6 +71,7 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .separator()
         .text("palette:files", "Go to File…")
         .text("palette:symbols", "Go to Symbol in File…")
+        .text("palette:wsymbols", "Go to Symbol in Project…")
         .text("palette:commands", "Command Palette…")
         .text("palette:search", "Search in Project…")
         .separator()

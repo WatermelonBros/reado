@@ -149,6 +149,17 @@ export interface Definition {
 export const findDefinition = (root: string, name: string) =>
   invoke<Definition[]>("find_definition", { root, name });
 
+export interface Symbol {
+  name: string;
+  kind: string;
+  path: string;
+  line: number;
+}
+
+/** All declared symbols across the project, for the workspace symbol picker. */
+export const listSymbols = (root: string) =>
+  invoke<Symbol[]>("list_symbols", { root });
+
 /** Format text with the project's formatter for this file type. Throws on failure. */
 export const formatFile = (root: string, path: string, content: string) =>
   invoke<string>("format_file", { root, path, content });

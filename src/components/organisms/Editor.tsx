@@ -71,7 +71,7 @@ import { Welcome } from "../molecules/Welcome";
 import { DiffView } from "../organisms/DiffView";
 import { ImageView } from "../organisms/ImageView";
 import { ContextMenu } from "../atoms/ContextMenu";
-import { PlusIcon, DocsIcon, EditIcon } from "../atoms/icons";
+import { PlusIcon, DocsIcon, EditIcon, CloseIcon } from "../atoms/icons";
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
 const PLACEHOLDER = "grid h-full place-items-center p-8 text-center text-muted";
@@ -463,6 +463,15 @@ function CodeView({
   );
   // Sticky scroll: the enclosing scope headers pinned above the viewport top.
   const [sticky, setSticky] = useState<{ line: number; text: string }[]>([]);
+  // Peek definition: an inline preview of where the symbol at the cursor is
+  // defined, without navigating away.
+  const [peek, setPeek] = useState<{
+    top: number;
+    label: string;
+    lines: string[];
+    defLineIndex: number;
+    target: { path: string; line: number } | null;
+  } | null>(null);
   // Bumped on scroll/resize so the overlays re-read their anchor coordinates.
   const [, setTick] = useState(0);
 
@@ -519,6 +528,47 @@ function CodeView({
   const anchorOrCompose = (start: number, end: number) => {
     if (reanchoringId) applyReanchor(relPath, start, end);
     else openComposerFor(start, end);
+  };
+
+  // Dismiss the peek panel on Escape.
+  useEffect(() => {
+    if (!peek) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPeek(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [peek]);
+
+  // Peek the definition of the symbol at the cursor in an inline panel.
+  const peekDefinition = (): boolean => {
+    const view = viewRef.current;
+    if (!view) return false;
+    const word = view.state.wordAt(view.state.selection.main.head);
+    if (!word) return false;
+    const name = view.state.doc.sliceString(word.from, word.to);
+    const top = toLocalTop(view.coordsAtPos(word.from)?.bottom ?? 0) ?? 8;
+    const root = useProject.getState().root;
+    findDefinition(root, name)
+      .then(async (defs) => {
+        if (!defs.length) {
+          setPeek({ top, label: name, lines: [], defLineIndex: -1, target: null });
+          return;
+        }
+        const d = defs[0];
+        const content = await readFile(root, d.path).catch(() => null);
+        const text = content && content.kind === "text" ? content.text : "";
+        const all = text.split("\n");
+        const start = Math.max(0, d.line - 6);
+        const lines = all.slice(start, Math.min(all.length, d.line + 6));
+        setPeek({
+          top,
+          label: `${toRelative(root, d.path)}:${d.line}`,
+          lines,
+          defLineIndex: d.line - 1 - start,
+          target: { path: d.path, line: d.line },
+        });
+      })
+      .catch(() => {});
+    return true;
   };
 
   // Confirm re-anchoring to the current selection (or the cursor's line) — the
@@ -616,6 +666,8 @@ function CodeView({
         keymap.of([{ key: "Mod-g", run: gotoLine }]),
         // Shift+F12 — find references (project-wide search for the symbol).
         keymap.of([{ key: "Shift-F12", run: findReferencesAt }]),
+        // Alt+F12 — peek the definition inline.
+        keymap.of([{ key: "Alt-F12", run: () => peekDefinition() }]),
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
         blameComp.of([]),
         tabSizeComp.of(EditorState.tabSize.of(useDocInfo.getState().indentSize)),
@@ -1036,6 +1088,52 @@ function CodeView({
           >
             {t("common.cancel")}
           </button>
+        </div>
+      )}
+
+      {/* Peek definition: an inline preview anchored under the symbol. */}
+      {peek && (
+        <div
+          className="absolute right-4 left-4 z-40 overflow-hidden rounded-lg border border-line-strong bg-overlay shadow-[var(--shadow)]"
+          style={{ top: peek.top + 4 }}
+        >
+          <header className="flex items-center gap-2 border-b border-line px-3 py-1.5 text-xs">
+            <span className="min-w-0 flex-1 truncate font-mono text-muted">
+              {peek.target ? peek.label : t("peek.none", { name: peek.label })}
+            </span>
+            {peek.target && (
+              <button
+                type="button"
+                onClick={() => {
+                  useProject.getState().open(peek.target!.path, peek.target!.line);
+                  setPeek(null);
+                }}
+                className="flex-none rounded-md px-2 py-0.5 text-muted hover:bg-surface hover:text-ink"
+              >
+                {t("peek.open")}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label={t("common.cancel")}
+              onClick={() => setPeek(null)}
+              className="grid h-5 w-5 flex-none place-items-center rounded-md text-faint hover:text-ink"
+            >
+              <CloseIcon className="h-3.5 w-3.5" />
+            </button>
+          </header>
+          {peek.target && (
+            <pre className="max-h-56 overflow-auto px-3 py-2 font-mono text-xs leading-relaxed text-ink">
+              {peek.lines.map((l, i) => (
+                <div
+                  key={i}
+                  className={i === peek.defLineIndex ? "bg-selection" : undefined}
+                >
+                  {l || " "}
+                </div>
+              ))}
+            </pre>
+          )}
         </div>
       )}
 
