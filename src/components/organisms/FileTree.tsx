@@ -15,6 +15,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listDir, movePath, importPaths, type DirEntry } from "../../lib/api";
 import { useProject } from "../../lib/store";
 import { useTextView } from "../../lib/textView";
+import { useReadProgress } from "../../lib/readProgress";
 import { toRelative } from "../../lib/comments";
 import { useT } from "../../i18n";
 import {
@@ -135,6 +136,17 @@ export function FileTree() {
                 icon: <LayoutIcon className="h-3.5 w-3.5" />,
                 onSelect: () => {
                   useProject.getState().openSplit(menu.entry!.path);
+                  setMenu(null);
+                },
+              },
+              {
+                label: useReadProgress.getState().read.has(toRelative(root, menu.entry.path))
+                  ? t("tree.markUnread")
+                  : t("tree.markRead"),
+                onSelect: () => {
+                  const relP = toRelative(root, menu.entry!.path);
+                  const isRead = useReadProgress.getState().read.has(relP);
+                  useReadProgress.getState().mark(root, relP, !isRead);
                   setMenu(null);
                 },
               },
@@ -276,6 +288,8 @@ function TreeNode({
   const [over, setOver] = useState(false);
   const open = useProject((s) => s.open);
   const active = useProject((s) => s.active);
+  // Read files are dimmed (a quiet reading-progress cue).
+  const isRead = useReadProgress((s) => !entry.isDir && s.read.has(toRelative(root, entry.path)));
 
   const onClick = useCallback(() => {
     if (entry.isDir) setExpanded((e) => !e);
@@ -326,7 +340,11 @@ function TreeNode({
           <span className="w-[13px] flex-none" />
         )}
         <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} />
-        <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+        <span
+          className={`overflow-hidden text-ellipsis whitespace-nowrap ${
+            isRead ? "text-faint" : ""
+          }`}
+        >
           {entry.name}
         </span>
       </button>

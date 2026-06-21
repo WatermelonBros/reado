@@ -55,6 +55,7 @@ import { blameGutter } from "../../lib/blameGutter";
 import { useDocInfo, detectEol, detectIndent, formatDocument } from "../../lib/docInfo";
 import { useComments, commentsForFile, toRelative } from "../../lib/comments";
 import { useTextView } from "../../lib/textView";
+import { useReadProgress } from "../../lib/readProgress";
 import {
   useCursor,
   useEditorActions,
@@ -829,9 +830,22 @@ function CodeView({
   useEffect(() => {
     const scroller = hostRef.current?.querySelector(".cm-scroller") as HTMLElement | null;
     let timer: number | undefined;
+    // Auto-mark this file read once it's been scrolled to the bottom — only when
+    // the file is actually scrollable, and only once per open so a manual
+    // "unread" sticks for the session.
+    let autoMarked = false;
+    const maybeMarkRead = () => {
+      if (autoMarked || !scroller) return;
+      if (scroller.scrollHeight <= scroller.clientHeight + 24) return; // not scrollable
+      if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 24) {
+        autoMarked = true;
+        useReadProgress.getState().mark(useProject.getState().root, relPath, true);
+      }
+    };
     const bump = () => {
       setTick((n) => n + 1);
       computeSticky();
+      maybeMarkRead();
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         useSessions

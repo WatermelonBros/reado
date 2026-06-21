@@ -160,6 +160,13 @@ export interface Symbol {
 export const listSymbols = (root: string) =>
   invoke<Symbol[]>("list_symbols", { root });
 
+/** Project-relative paths the user has marked read. */
+export const listRead = (root: string) => invoke<string[]>("list_read", { root });
+
+/** Mark a project-relative path read or unread (persisted in `.reado/`). */
+export const setReadState = (root: string, path: string, read: boolean) =>
+  invoke<void>("set_read", { root, path, read });
+
 /** Format text with the project's formatter for this file type. Throws on failure. */
 export const formatFile = (root: string, path: string, content: string) =>
   invoke<string>("format_file", { root, path, content });

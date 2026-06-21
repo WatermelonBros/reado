@@ -13,6 +13,7 @@ mod fs;
 mod git;
 mod index;
 mod menu;
+mod progress;
 mod pty;
 mod search;
 mod symbols;
@@ -72,6 +73,8 @@ pub fn run() {
             annotations::reanchor_file,
             annotations::set_anchor,
             index::rebuild_index,
+            progress::list_read,
+            progress::set_read,
             watcher::start_watching,
             pty::pty_spawn,
             pty::pty_write,

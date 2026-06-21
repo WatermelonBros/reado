@@ -3,9 +3,17 @@
  * status bar, and the overlays (palette + settings). Loads git state and
  * restores the prior session on mount; persists the session as tabs change.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { gitInfo, startWatching, reanchorFile, rebuildIndex, readFile } from "../../lib/api";
+import {
+  gitInfo,
+  startWatching,
+  reanchorFile,
+  rebuildIndex,
+  readFile,
+  listFiles,
+} from "../../lib/api";
+import { useReadProgress } from "../../lib/readProgress";
 import { useProject, useSessions, useWorkspace } from "../../lib/store";
 import { useComments, toRelative } from "../../lib/comments";
 import { notifyResolved } from "../../lib/notify";
@@ -68,6 +76,10 @@ export function ProjectView({ root }: { root: string }) {
     setWindowTitle(basename(root));
     useComments.getState().load(root);
     useSpecs.getState().load(root);
+    useReadProgress.getState().load(root);
+    listFiles(root)
+      .then((f) => setTotalFiles(f.length))
+      .catch(() => setTotalFiles(0));
     // Build the SQLite index on open if missing/stale (rebuildable cache).
     rebuildIndex(root).catch(() => {});
     gitInfo(root)
@@ -138,6 +150,8 @@ export function ProjectView({ root }: { root: string }) {
   const splitPath = useProject((s) => s.splitPath);
   const closeSplit = useProject((s) => s.closeSplit);
   const swapSplit = useProject((s) => s.swapSplit);
+  const readCount = useReadProgress((s) => s.read.size);
+  const [totalFiles, setTotalFiles] = useState(0);
   const openTaskCount = useComments(
     (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
   );
@@ -179,7 +193,14 @@ export function ProjectView({ root }: { root: string }) {
             className="absolute top-0 -right-1 bottom-0 z-10 w-2 cursor-col-resize"
           />
           <header className="flex h-9 flex-none items-center justify-between border-b border-line pr-2 pl-3 text-xs font-medium tracking-wide text-muted uppercase">
-            <span>{t(PANEL_TITLE[tool])}</span>
+            <span className="flex items-center gap-2">
+              {t(PANEL_TITLE[tool])}
+              {tool === "files" && totalFiles > 0 && (
+                <span className="text-[10px] font-normal normal-case text-faint">
+                  {readCount}/{totalFiles} {t("progress.read")}
+                </span>
+              )}
+            </span>
             {tool === "files" && (
               <button
                 type="button"
