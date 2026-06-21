@@ -45,6 +45,7 @@ import {
   writeFile,
   gitBlame,
   findDefinition,
+  submitToTerminal,
   type Comment,
   type Context,
   type FileContent,
@@ -56,6 +57,8 @@ import { useDocInfo, detectEol, detectIndent, formatDocument } from "../../lib/d
 import { useComments, commentsForFile, toRelative } from "../../lib/comments";
 import { useTextView } from "../../lib/textView";
 import { useReadProgress } from "../../lib/readProgress";
+import { useTerminals } from "../../lib/terminals";
+import { composeExplainPrompt } from "../../lib/review";
 import {
   useCursor,
   useEditorActions,
@@ -992,6 +995,24 @@ function CodeView({
   };
 
   // Build the context-menu actions for the clicked position.
+  // Ask the focused agent to explain the current selection (or cursor line),
+  // optionally recording the explanation as an anchored note.
+  const explainSelection = (asNote: boolean) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const doc = view.state.doc;
+    const prompt = composeExplainPrompt(
+      relPath,
+      doc.lineAt(sel.from).number,
+      doc.lineAt(sel.to).number,
+      asNote,
+    );
+    const term = useTerminals.getState();
+    const id = term.activeId ?? term.add();
+    submitToTerminal(id, prompt, id === term.activeId ? 0 : 400);
+  };
+
   const ctxActions = () => {
     const view = viewRef.current;
     if (!view || !ctxMenu) return [];
@@ -1010,6 +1031,8 @@ function CodeView({
           openComposerFor(line, line);
         },
       },
+      { label: t("editor.explain"), run: () => explainSelection(false) },
+      { label: t("editor.explainNote"), run: () => explainSelection(true) },
       { label: t("editor.format"), run: () => void formatDocument() },
       isRepo && {
         label: t("diff.toggle"),

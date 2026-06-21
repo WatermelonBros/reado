@@ -56,6 +56,29 @@ export function composeCommitPrompt(): string {
   );
 }
 
+/**
+ * Prompt asking the agent to explain a span of code. Single line (the agent reads
+ * the file itself, so no code is embedded); optionally records the explanation as
+ * an anchored `reado` note.
+ */
+export function composeExplainPrompt(
+  file: string,
+  startLine: number,
+  endLine: number,
+  asNote: boolean,
+): string {
+  const where = startLine === endLine ? `line ${startLine}` : `lines ${startLine}-${endLine}`;
+  let p =
+    `READO EXPLAIN — read \`${file}\` ${where} and explain that code concisely ` +
+    "(what it does and why). Do NOT change any code.";
+  if (asNote) {
+    p +=
+      ` Then record your explanation as a note anchored there: ` +
+      `\`reado comment add --file ${file} --line ${startLine} --end ${endLine} --note "<explanation>"\`.`;
+  }
+  return p;
+}
+
 /** Prompt for resolving a single specific task ("send just this now"). */
 export function composeSingleTaskPrompt(id: string): string {
   return (
