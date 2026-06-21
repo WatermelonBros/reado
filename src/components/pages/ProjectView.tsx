@@ -32,7 +32,7 @@ import { KnowledgeGraph } from "../organisms/KnowledgeGraph";
 import { DocsView } from "../organisms/DocsView";
 import { TerminalPanel } from "../organisms/TerminalPanel";
 import { useTerminals } from "../../lib/terminals";
-import { EyeIcon, EyeOffIcon } from "../atoms/icons";
+import { EyeIcon, EyeOffIcon, CloseIcon } from "../atoms/icons";
 
 const PANEL_TITLE: Record<string, MessageKey> = {
   files: "files.panel",
@@ -135,6 +135,8 @@ export function ProjectView({ root }: { root: string }) {
   const setShowHidden = useProject((s) => s.setShowHidden);
   const terminalOpen = useTerminals((s) => s.open);
   const terminalPosition = useTerminals((s) => s.position);
+  const splitPath = useProject((s) => s.splitPath);
+  const closeSplit = useProject((s) => s.closeSplit);
   const openTaskCount = useComments(
     (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
   );
@@ -209,11 +211,32 @@ export function ProjectView({ root }: { root: string }) {
       <main className="flex min-w-0 flex-col overflow-hidden">
         <Tabs />
         <Breadcrumb />
-        {/* Editor + terminal: side by side when docked right, stacked when bottom. */}
+        {/* Editor + optional split pane + terminal (right dock). */}
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <div className="relative min-w-0 flex-1 overflow-hidden">
             <Editor />
           </div>
+          {splitPath && (
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-line">
+              <header className="flex h-9 flex-none items-center justify-between border-b border-line pr-2 pl-3 text-xs text-muted">
+                <span className="truncate font-mono">
+                  {splitPath.split(/[\\/]/).pop()}
+                </span>
+                <button
+                  type="button"
+                  onClick={closeSplit}
+                  aria-label={t("split.close")}
+                  title={t("split.close")}
+                  className="grid h-6 w-6 flex-none place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
+                >
+                  <CloseIcon className="h-3.5 w-3.5" />
+                </button>
+              </header>
+              <div className="relative min-h-0 flex-1 overflow-hidden">
+                <Editor paneFile={splitPath} />
+              </div>
+            </div>
+          )}
           {terminalOpen && terminalPosition === "right" && <TerminalPanel />}
         </div>
         {terminalOpen && terminalPosition === "bottom" && <TerminalPanel />}

@@ -311,6 +311,15 @@ function commandRows(
       run: () => useWorkspace.getState().toggleSidebar(),
     },
     { label: t("terminal.move"), run: () => useTerminals.getState().togglePosition() },
+    {
+      label: t("split.toggle"),
+      hint: `${mod}\\`,
+      run: () => {
+        const p = useProject.getState();
+        if (p.splitPath) p.closeSplit();
+        else p.openSplit();
+      },
+    },
     { label: t("settings.title"), hint: `${mod},`, run: () => toggleSettings(true) },
     { label: t("settings.checkUpdates"), run: () => checkForUpdates(true) },
   ];

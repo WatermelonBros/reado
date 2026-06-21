@@ -321,6 +321,11 @@ interface ProjectState {
   reopenClosed: () => void;
   /** Cycle the active tab in order (Ctrl+Tab / Ctrl+Shift+Tab). */
   cycleTab: (dir: 1 | -1) => void;
+  /** A second file shown side-by-side, or null when not split. */
+  splitPath: string | null;
+  /** Open the split pane (defaults to the current file), or set its file. */
+  openSplit: (path?: string) => void;
+  closeSplit: () => void;
   init: (root: string, git: GitInfo, session?: Session) => void;
   setGit: (git: GitInfo) => void;
   open: (path: string, line?: number) => void;
@@ -397,6 +402,9 @@ export const useProject = create<ProjectState>((set) => ({
       const next = (i + dir + s.tabs.length) % s.tabs.length;
       return { active: s.tabs[next] };
     }),
+  splitPath: null,
+  openSplit: (path) => set((s) => ({ splitPath: path ?? s.active })),
+  closeSplit: () => set({ splitPath: null }),
   init: (root, git, session) =>
     set({
       root,
@@ -406,6 +414,7 @@ export const useProject = create<ProjectState>((set) => ({
       navStack: session?.active ? [{ path: session.active }] : [],
       navIndex: session?.active ? 0 : -1,
       closedTabs: [],
+      splitPath: null,
     }),
   setGit: (git) => set({ git }),
   open: (path, line) =>

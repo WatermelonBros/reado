@@ -185,6 +185,12 @@ export function useGlobalShortcuts(): void {
         // Reopen the most recently closed tab.
         e.preventDefault();
         useProject.getState().reopenClosed();
+      } else if (key === "\\") {
+        // Toggle the split (side-by-side) editor.
+        e.preventDefault();
+        const p = useProject.getState();
+        if (p.splitPath) p.closeSplit();
+        else p.openSplit();
       }
     };
     window.addEventListener("keydown", onKey);

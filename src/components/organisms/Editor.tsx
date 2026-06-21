@@ -214,9 +214,13 @@ const editableExtension = (on: boolean) => [
   EditorView.editable.of(on),
 ];
 
-export function Editor() {
+export function Editor({ paneFile }: { paneFile?: string } = {}) {
   const root = useProject((s) => s.root);
-  const active = useProject((s) => s.active);
+  const globalActive = useProject((s) => s.active);
+  // The split (secondary) pane is driven by a prop; the primary pane follows the
+  // global active file and owns the shared editor state (status bar, cursor…).
+  const active = paneFile ?? globalActive;
+  const primary = paneFile === undefined;
   const landing = useProject((s) => s.landing);
   const allComments = useComments((s) => s.comments);
   const archived = useComments((s) => s.archived);
@@ -272,10 +276,12 @@ export function Editor() {
   }, [root, active, forceText]);
 
   // Each file opens with a clean default view: reset the dirty and diff state.
+  // Only the primary pane owns this shared state.
   useEffect(() => {
+    if (!primary) return;
     useEditorActions.getState().setDirty(false);
     useEditorActions.getState().setDiffing(false);
-  }, [active]);
+  }, [active, primary]);
 
   if (!active) {
     return <Welcome />;
@@ -347,6 +353,7 @@ export function Editor() {
             codeFont={codeFont}
             focusMode={focusMode}
             landingLine={landing?.path === active ? landing : null}
+            primary={primary}
           />
         ) : (
           <div
@@ -381,6 +388,7 @@ export function Editor() {
       codeFont={codeFont}
       focusMode={focusMode}
       landingLine={landing?.path === active ? landing : null}
+      primary={primary}
     />
   );
 }
@@ -395,6 +403,8 @@ interface CodeViewProps {
   codeFont: string;
   focusMode: boolean;
   landingLine: { line: number; nonce: number } | null;
+  /** Whether this is the primary pane (owns shared status-bar/cursor state). */
+  primary: boolean;
 }
 
 /** The CodeMirror-backed read-only code viewer, with the comment overlay. */
@@ -403,6 +413,7 @@ function CodeView({
   relPath,
   text,
   comments,
+  primary,
   wrap,
   readingWidth,
   codeFont,
@@ -569,7 +580,9 @@ function CodeView({
         // Find & replace panel (Mod-F to find, Mod-Alt-F to replace).
         search({ top: true }),
         // Mirror the cursor position into the status bar; track unsaved edits.
+        // Only the primary pane writes the shared cursor/dirty state.
         EditorView.updateListener.of((u) => {
+          if (!primary) return;
           if (u.selectionSet || u.docChanged) {
             const head = u.state.selection.main.head;
             const line = u.state.doc.lineAt(head);
@@ -610,7 +623,7 @@ function CodeView({
     });
     const view = new EditorView({ state, parent: hostRef.current });
     viewRef.current = view;
-    useDocInfo.getState().set({ view });
+    if (primary) useDocInfo.getState().set({ view });
 
     // Restore the saved scroll offset for this file, after first layout.
     const savedScroll =
@@ -684,7 +697,9 @@ function CodeView({
 
   // Surface document info (line endings, indentation, language) to the status
   // bar. Detected from the raw text, since CodeMirror normalises line endings.
+  // Only the primary pane drives the status bar.
   useEffect(() => {
+    if (!primary) return;
     const desc = LanguageDescription.matchFilename(languages, path);
     const ext = path.split(".").pop() ?? "";
     const language = desc?.name ?? (ext ? ext.toUpperCase() : "Plain Text");
@@ -696,7 +711,7 @@ function CodeView({
       language,
       languageOverride: null,
     });
-  }, [text, path]);
+  }, [text, path, primary]);
 
   // Toggle focus mode live.
   useEffect(() => {
