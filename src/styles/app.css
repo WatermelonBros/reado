@@ -196,10 +196,12 @@
     box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--accent) 50%, transparent);
   }
 
-  /* Theme the indentation guides with the quiet line tokens. */
+  /* Theme the indentation guides with the quiet line tokens. The package injects
+     its own colours at runtime (later in the cascade), so override with
+     !important on the custom properties. */
   .cm-editor {
-    --indent-marker-bg-color: color-mix(in oklch, var(--line) 70%, transparent);
-    --indent-marker-active-bg-color: var(--line-strong);
+    --indent-marker-bg-color: color-mix(in oklch, var(--border) 80%, transparent) !important;
+    --indent-marker-active-bg-color: var(--border-strong) !important;
   }
 
   /* Resolved (done) comments: a green dot/badge so they read as finished. */
