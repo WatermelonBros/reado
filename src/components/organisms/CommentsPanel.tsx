@@ -13,7 +13,7 @@ import { useT } from "../../i18n";
 import { COMMENT_STATES, COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
 import { Checkbox } from "../atoms/Checkbox";
-import { SendIcon, ClaudeIcon } from "../atoms/icons";
+import { SendIcon, SparkleIcon } from "../atoms/icons";
 import { SendReviewDialog } from "./SendReviewDialog";
 import { AuditDialog, type AuditTarget } from "./AuditDialog";
 
@@ -182,7 +182,7 @@ export function CommentsPanel() {
           title={active ? t("tree.audit") : t("comments.auditProject")}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs text-ink transition-colors hover:border-line-strong"
         >
-          <ClaudeIcon className="h-3.5 w-3.5" />
+          <SparkleIcon className="h-3.5 w-3.5" />
           {t("comments.audit")}
         </button>
       </div>

@@ -17,7 +17,14 @@ import { useProject } from "../../lib/store";
 import { useTextView } from "../../lib/textView";
 import { toRelative } from "../../lib/comments";
 import { useT } from "../../i18n";
-import { FileIcon, ChevronIcon, MessageIcon, EditIcon, ClaudeIcon } from "../atoms/icons";
+import {
+  FileIcon,
+  ChevronIcon,
+  MessageIcon,
+  EditIcon,
+  SparkleIcon,
+  LayoutIcon,
+} from "../atoms/icons";
 import { TreeCommentDialog, type CommentTarget } from "../organisms/TreeCommentDialog";
 import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
@@ -110,12 +117,24 @@ export function FileTree() {
               },
               {
                 label: t("tree.audit"),
-                icon: <ClaudeIcon className="h-3.5 w-3.5" />,
+                icon: <SparkleIcon className="h-3.5 w-3.5" />,
                 onSelect: () => {
                   setAudit({
                     path: toRelative(root, menu.entry!.path),
                     isDir: menu.entry!.isDir,
                   });
+                  setMenu(null);
+                },
+              },
+            ]
+          : []),
+        ...(menu.entry && !menu.entry.isDir
+          ? [
+              {
+                label: t("split.openSide"),
+                icon: <LayoutIcon className="h-3.5 w-3.5" />,
+                onSelect: () => {
+                  useProject.getState().openSplit(menu.entry!.path);
                   setMenu(null);
                 },
               },

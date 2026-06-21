@@ -32,7 +32,7 @@ import { KnowledgeGraph } from "../organisms/KnowledgeGraph";
 import { DocsView } from "../organisms/DocsView";
 import { TerminalPanel } from "../organisms/TerminalPanel";
 import { useTerminals } from "../../lib/terminals";
-import { EyeIcon, EyeOffIcon, CloseIcon } from "../atoms/icons";
+import { EyeIcon, EyeOffIcon, CloseIcon, SwapIcon } from "../atoms/icons";
 
 const PANEL_TITLE: Record<string, MessageKey> = {
   files: "files.panel",
@@ -137,6 +137,7 @@ export function ProjectView({ root }: { root: string }) {
   const terminalPosition = useTerminals((s) => s.position);
   const splitPath = useProject((s) => s.splitPath);
   const closeSplit = useProject((s) => s.closeSplit);
+  const swapSplit = useProject((s) => s.swapSplit);
   const openTaskCount = useComments(
     (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
   );
@@ -211,17 +212,32 @@ export function ProjectView({ root }: { root: string }) {
       <main className="flex min-w-0 flex-col overflow-hidden">
         <Tabs />
         <Breadcrumb />
-        {/* Editor + optional split pane + terminal (right dock). */}
+        {/* Editor + optional split pane + terminal (right dock). When split, the
+            primary (left) pane carries a thin accent top-border so it's clear
+            which one drives the status bar / breadcrumb. */}
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div className="relative min-w-0 flex-1 overflow-hidden">
+          <div
+            className={`relative min-w-0 flex-1 overflow-hidden ${
+              splitPath ? "border-t-2 border-t-accent" : ""
+            }`}
+          >
             <Editor />
           </div>
           {splitPath && (
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-line">
-              <header className="flex h-9 flex-none items-center justify-between border-b border-line pr-2 pl-3 text-xs text-muted">
-                <span className="truncate font-mono">
-                  {splitPath.split(/[\\/]/).pop()}
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-t-2 border-t-transparent border-l border-l-line">
+              <header className="flex h-9 flex-none items-center gap-2 border-b border-line pr-1.5 pl-3 text-xs text-muted">
+                <span className="min-w-0 flex-1 truncate font-mono" title={toRelative(root, splitPath)}>
+                  {toRelative(root, splitPath)}
                 </span>
+                <button
+                  type="button"
+                  onClick={swapSplit}
+                  aria-label={t("split.swap")}
+                  title={t("split.swap")}
+                  className="grid h-6 w-6 flex-none place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
+                >
+                  <SwapIcon className="h-3.5 w-3.5" />
+                </button>
                 <button
                   type="button"
                   onClick={closeSplit}

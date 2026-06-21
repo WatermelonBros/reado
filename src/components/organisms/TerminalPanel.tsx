@@ -18,6 +18,7 @@ import {
   PlusIcon,
   CloseIcon,
   SendIcon,
+  SparkleIcon,
   ClaudeIcon,
   CodexIcon,
   CopilotIcon,
@@ -162,36 +163,44 @@ export function TerminalPanel() {
           title={active ? t("tree.audit") : t("comments.auditProject")}
           className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong"
         >
-          <ClaudeIcon className="h-3.5 w-3.5" />
+          <SparkleIcon className="h-3.5 w-3.5" />
           {t("comments.audit")}
         </button>
+
+        {/* Agent launchers: icon-only (the logo is the label), the only spot of
+            brand colour, with a divider so the cluster reads as one group. */}
+        <span className="mx-0.5 h-4 w-px flex-none bg-line" />
         <button
           type="button"
+          aria-label={t("terminal.launchClaude")}
+          title={t("terminal.launchClaude")}
           onClick={() => launch("READO_AGENT=claude-code claude")}
-          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium transition-colors hover:border-line-strong"
+          className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: CLAUDE_ORANGE }}
         >
-          <ClaudeIcon className="h-3.5 w-3.5" />
-          {t("terminal.launchClaude")}
+          <ClaudeIcon className="h-4 w-4" />
         </button>
         <button
           type="button"
+          aria-label={t("terminal.launchCodex")}
+          title={t("terminal.launchCodex")}
           onClick={() => launch("READO_AGENT=codex codex")}
-          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium transition-colors hover:border-line-strong"
+          className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: CODEX_TEAL }}
         >
-          <CodexIcon className="h-3.5 w-3.5" />
-          {t("terminal.launchCodex")}
+          <CodexIcon className="h-4 w-4" />
         </button>
         <button
           type="button"
+          aria-label={t("terminal.launchCopilot")}
+          title={t("terminal.launchCopilot")}
           onClick={() => launch("READO_AGENT=copilot copilot")}
-          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium transition-colors hover:border-line-strong"
+          className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: COPILOT_VIOLET }}
         >
-          <CopilotIcon className="h-3.5 w-3.5" />
-          {t("terminal.launchCopilot")}
+          <CopilotIcon className="h-4 w-4" />
         </button>
+        <span className="mx-0.5 h-4 w-px flex-none bg-line" />
         <button
           type="button"
           aria-label={t("terminal.move")}

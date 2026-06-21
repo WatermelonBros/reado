@@ -326,6 +326,8 @@ interface ProjectState {
   /** Open the split pane (defaults to the current file), or set its file. */
   openSplit: (path?: string) => void;
   closeSplit: () => void;
+  /** Swap which file is primary (left) and which is in the split (right). */
+  swapSplit: () => void;
   init: (root: string, git: GitInfo, session?: Session) => void;
   setGit: (git: GitInfo) => void;
   open: (path: string, line?: number) => void;
@@ -405,6 +407,8 @@ export const useProject = create<ProjectState>((set) => ({
   splitPath: null,
   openSplit: (path) => set((s) => ({ splitPath: path ?? s.active })),
   closeSplit: () => set({ splitPath: null }),
+  swapSplit: () =>
+    set((s) => (s.splitPath ? { active: s.splitPath, splitPath: s.active } : s)),
   init: (root, git, session) =>
     set({
       root,

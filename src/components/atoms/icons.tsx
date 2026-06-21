@@ -125,6 +125,20 @@ export const TerminalIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+/** A single sparkle — the neutral "ask AI" glyph (used for Audit). */
+export const SparkleIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M12 4l1.7 4.8L18.5 10.5l-4.8 1.7L12 17l-1.7-4.8L5.5 10.5l4.8-1.7z" />
+  </svg>
+);
+
+/** Two-way arrows — swap the split panes. */
+export const SwapIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M17 4l3 3-3 3M20 7H8M7 20l-3-3 3-3M4 17h12" />
+  </svg>
+);
+
 /** Panel-dock glyph: a frame with a split-off side panel. */
 export const LayoutIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
