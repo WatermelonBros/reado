@@ -22,7 +22,7 @@ import { useProject, useEditorActions } from "../../lib/store";
 import { useTerminals } from "../../lib/terminals";
 import { composeCommitPrompt } from "../../lib/review";
 import { useT } from "../../i18n";
-import { PlusIcon, MinusIcon, DiscardIcon, ClaudeIcon } from "../atoms/icons";
+import { PlusIcon, MinusIcon, DiscardIcon, SparkleIcon } from "../atoms/icons";
 
 /** Single-letter badge + colour per change category. */
 const STATUS: Record<GitChange["status"], { letter: string; color: string }> = {
@@ -237,7 +237,7 @@ export function GitPanel() {
           title={changes.length === 0 ? t("git.clean") : t("git.aiCommit")}
           className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:border-line-strong disabled:opacity-50"
         >
-          <ClaudeIcon className="h-3.5 w-3.5" />
+          <SparkleIcon className="h-3.5 w-3.5" />
           {t("git.aiCommit")}
         </button>
       </div>

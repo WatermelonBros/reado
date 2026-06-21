@@ -213,19 +213,16 @@ export function ProjectView({ root }: { root: string }) {
       <main className="flex min-w-0 flex-col overflow-hidden">
         <Tabs />
         <Breadcrumb />
-        {/* Editor + optional split pane + terminal (right dock). When split, the
-            primary (left) pane carries a thin accent top-border so it's clear
-            which one drives the status bar / breadcrumb. */}
+        {/* Editor + optional split pane + terminal (right dock). The primary
+            (left) pane is the one with the breadcrumb/tabs above it; the split
+            pane carries its own compact header — that asymmetry signals which
+            pane drives the status bar, no loud accent needed. */}
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div
-            className={`relative min-w-0 flex-1 overflow-hidden ${
-              splitPath ? "border-t-2 border-t-accent" : ""
-            }`}
-          >
+          <div className="relative min-w-0 flex-1 overflow-hidden">
             <Editor />
           </div>
           {splitPath && (
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-t-2 border-t-transparent border-l border-l-line">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-l-line">
               <header className="flex h-9 flex-none items-center gap-2 border-b border-line pr-1.5 pl-3 text-xs text-muted">
                 <span className="min-w-0 flex-1 truncate font-mono" title={toRelative(root, splitPath)}>
                   {toRelative(root, splitPath)}

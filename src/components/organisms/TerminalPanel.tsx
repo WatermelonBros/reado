@@ -172,8 +172,8 @@ export function TerminalPanel() {
         <span className="mx-0.5 h-4 w-px flex-none bg-line" />
         <button
           type="button"
-          aria-label={t("terminal.launchClaude")}
-          title={t("terminal.launchClaude")}
+          aria-label={t("terminal.launch", { name: "Claude Code" })}
+          title={t("terminal.launch", { name: "Claude Code" })}
           onClick={() => launch("READO_AGENT=claude-code claude")}
           className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: CLAUDE_ORANGE }}
@@ -182,8 +182,8 @@ export function TerminalPanel() {
         </button>
         <button
           type="button"
-          aria-label={t("terminal.launchCodex")}
-          title={t("terminal.launchCodex")}
+          aria-label={t("terminal.launch", { name: "Codex" })}
+          title={t("terminal.launch", { name: "Codex" })}
           onClick={() => launch("READO_AGENT=codex codex")}
           className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: CODEX_TEAL }}
@@ -192,8 +192,8 @@ export function TerminalPanel() {
         </button>
         <button
           type="button"
-          aria-label={t("terminal.launchCopilot")}
-          title={t("terminal.launchCopilot")}
+          aria-label={t("terminal.launch", { name: "Copilot" })}
+          title={t("terminal.launch", { name: "Copilot" })}
           onClick={() => launch("READO_AGENT=copilot copilot")}
           className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: COPILOT_VIOLET }}
