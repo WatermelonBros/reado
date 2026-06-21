@@ -14,12 +14,14 @@ import {
   useEffect,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useT } from "../../i18n";
 import { Terminal } from "../organisms/Terminal";
 import { SendReviewDialog } from "../organisms/SendReviewDialog";
 import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
+import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
 import {
   PlusIcon,
   CloseIcon,
@@ -92,6 +94,50 @@ export function TerminalPanel() {
 
   const [reviewOpen, setReviewOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null);
+  const [paneMenu, setPaneMenu] = useState<{ x: number; y: number; paneId: string } | null>(
+    null,
+  );
+
+  // Right-click a pane → terminal management menu (also suppresses the global
+  // edit menu / native menu for this area).
+  const openPaneMenu = (e: ReactMouseEvent, paneId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActive(paneId);
+    setPaneMenu({ x: e.clientX, y: e.clientY, paneId });
+  };
+
+  const paneMenuItems = (): ContextMenuItem[] => {
+    if (!paneMenu) return [];
+    const group = groups.find((g) => g.paneIds.includes(paneMenu.paneId));
+    const isMulti = (group?.paneIds.length ?? 0) > 1;
+    return [
+      { label: t("terminal.new"), onSelect: () => add() },
+      { label: t("terminal.split"), onSelect: () => split() },
+      ...(isMulti && group
+        ? [{ label: t("terminal.orientation"), onSelect: () => setGroupDir(group.id) }]
+        : []),
+      ...(isMulti
+        ? [
+            {
+              label: t("terminal.closePane"),
+              separatorBefore: true,
+              onSelect: () => remove(paneMenu.paneId),
+            },
+          ]
+        : []),
+      {
+        label: t("terminal.close"),
+        separatorBefore: !isMulti,
+        onSelect: () => group && removeGroup(group.id),
+      },
+      {
+        label: isRight ? t("terminal.moveBottom") : t("terminal.moveRight"),
+        separatorBefore: true,
+        onSelect: togglePosition,
+      },
+    ];
+  };
   const openAudit = () =>
     setAuditTarget(
       active ? { path: toRelative(root, active), isDir: false } : { path: ".", isDir: true },
@@ -332,6 +378,7 @@ export function TerminalPanel() {
             <div
               key={s.id}
               onMouseDown={() => setActive(s.id)}
+              onContextMenu={(e) => openPaneMenu(e, s.id)}
               className="group/pane relative min-h-0 min-w-0 overflow-hidden rounded-sm"
               style={{
                 order: idx * 2,
@@ -373,6 +420,15 @@ export function TerminalPanel() {
             />
           ))}
       </div>
+
+      {paneMenu && (
+        <ContextMenu
+          x={paneMenu.x}
+          y={paneMenu.y}
+          items={paneMenuItems()}
+          onClose={() => setPaneMenu(null)}
+        />
+      )}
 
       <SendReviewDialog open={reviewOpen} onClose={() => setReviewOpen(false)} />
       <AuditDialog target={auditTarget} onClose={() => setAuditTarget(null)} />
