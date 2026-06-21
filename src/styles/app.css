@@ -188,6 +188,12 @@
   .reado-comment-gutter:hover .reado-gutter-marker:empty::before {
     transform: scale(1.15);
   }
+  /* Occurrences of the symbol under the cursor — a quiet reading highlight. */
+  .cm-occurrence {
+    background: color-mix(in oklch, var(--accent) 18%, transparent);
+    border-radius: 2px;
+  }
+
   /* Resolved (done) comments: a green dot/badge so they read as finished. */
   .reado-gutter-marker--done:empty::before {
     background: var(--syn-string);

@@ -29,7 +29,10 @@ import {
   foldKeymap,
   LanguageDescription,
 } from "@codemirror/language";
+import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { languages } from "../../lib/languages";
+import { occurrenceHighlight } from "../../lib/occurrenceHighlight";
+import { syntaxSelection, expandSelection, shrinkSelection } from "../../lib/syntaxSelection";
 import { keymap } from "@codemirror/view";
 import { defaultKeymap } from "@codemirror/commands";
 import { search, searchKeymap, gotoLine, highlightSelectionMatches } from "@codemirror/search";
@@ -577,6 +580,15 @@ function CodeView({
         EditorView.clickAddsSelectionRange.of((e) => e.altKey),
         rectangularSelection(),
         crosshairCursor(),
+        // Reading aids: highlight the symbol under the cursor, indentation guides,
+        // and syntax-aware expand/shrink selection.
+        occurrenceHighlight,
+        indentationMarkers({ hideFirstIndent: true, highlightActiveBlock: false }),
+        syntaxSelection,
+        keymap.of([
+          { key: "Shift-Alt-ArrowRight", run: expandSelection },
+          { key: "Shift-Alt-ArrowLeft", run: shrinkSelection },
+        ]),
         // Find & replace panel (Mod-F to find, Mod-Alt-F to replace).
         search({ top: true }),
         // Mirror the cursor position into the status bar; track unsaved edits.
