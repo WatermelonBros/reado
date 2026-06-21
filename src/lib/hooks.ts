@@ -1,7 +1,14 @@
 /** Cross-cutting React hooks: theme application and global keyboard shortcuts. */
 import { useEffect } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { useSettings, usePalette, useEditorActions, type ThemeName } from "./store";
+import {
+  useSettings,
+  usePalette,
+  useEditorActions,
+  useProject,
+  useWorkspace,
+  type ThemeName,
+} from "./store";
 import { useTerminals } from "./terminals";
 import { formatDocument } from "./docInfo";
 import { checkForUpdates } from "./updater";
@@ -114,6 +121,23 @@ export function useGlobalShortcuts(): void {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const key = e.key.toLowerCase();
+      // Ctrl+Tab / Ctrl+Shift+Tab cycle the open tabs (Ctrl, not Cmd, on macOS
+      // too — matching editors).
+      if (e.ctrlKey && key === "tab") {
+        e.preventDefault();
+        useProject.getState().cycleTab(e.shiftKey ? -1 : 1);
+        return;
+      }
+      // Back / forward through the navigation history (Cmd/Ctrl+Alt+←/→).
+      if (e.altKey && key === "arrowleft") {
+        e.preventDefault();
+        useProject.getState().goBack();
+        return;
+      } else if (e.altKey && key === "arrowright") {
+        e.preventDefault();
+        useProject.getState().goForward();
+        return;
+      }
       // Interface zoom: Cmd/Ctrl with +/=, -, or 0 to reset.
       if (key === "=" || key === "+") {
         e.preventDefault();
@@ -153,6 +177,14 @@ export function useGlobalShortcuts(): void {
         // Toggle the integrated terminal.
         e.preventDefault();
         useTerminals.getState().toggle();
+      } else if (key === "b") {
+        // Toggle the sidebar.
+        e.preventDefault();
+        useWorkspace.getState().toggleSidebar();
+      } else if (key === "t" && e.shiftKey) {
+        // Reopen the most recently closed tab.
+        e.preventDefault();
+        useProject.getState().reopenClosed();
       }
     };
     window.addEventListener("keydown", onKey);

@@ -133,6 +133,11 @@ export const gitBlame = (root: string, file: string) =>
 export const searchText = (root: string, query: string) =>
   invoke<SearchMatch[]>("search_text", { root, query });
 
+/** Replace every literal occurrence of `query` across the project. Returns the
+ * number of files changed. */
+export const replaceText = (root: string, query: string, replacement: string) =>
+  invoke<number>("replace_text", { root, query, replacement });
+
 export interface Definition {
   path: string;
   line: number;

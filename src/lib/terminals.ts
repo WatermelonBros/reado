@@ -21,9 +21,15 @@ interface TerminalsState {
   activeId: string | null;
   /** Whether the bottom terminal panel is visible. */
   open: boolean;
-  /** Panel height in px (drag-resizable). */
+  /** Panel height in px when docked at the bottom (drag-resizable). */
   height: number;
   setHeight: (px: number) => void;
+  /** Panel width in px when docked on the right (drag-resizable). */
+  width: number;
+  setWidth: (px: number) => void;
+  /** Where the panel docks. */
+  position: "bottom" | "right";
+  togglePosition: () => void;
   /** Create a terminal tab and focus it; opens the panel. Returns its id. */
   add: () => string;
   remove: (id: string) => void;
@@ -40,6 +46,11 @@ export const useTerminals = create<TerminalsState>((set, get) => ({
   height: 280,
   // Clamp so the panel can't swallow the whole window or vanish.
   setHeight: (px) => set({ height: Math.max(120, Math.min(px, window.innerHeight - 160)) }),
+  width: 480,
+  setWidth: (px) => set({ width: Math.max(240, Math.min(px, window.innerWidth - 360)) }),
+  position: "bottom",
+  togglePosition: () =>
+    set((s) => ({ position: s.position === "bottom" ? "right" : "bottom" })),
 
   add: () => {
     const id = newId();

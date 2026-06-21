@@ -169,8 +169,16 @@ export type Tool =
 interface WorkspaceState {
   /** Active side-panel tool, or null when the panel is collapsed. */
   tool: Tool | null;
+  /** The tool to restore when re-opening a collapsed sidebar. */
+  lastTool: Tool;
   /** Select a tool; selecting the active one collapses the panel. */
   selectTool: (tool: Tool) => void;
+  /** Collapse the sidebar, or restore the last tool (Ctrl+B). */
+  toggleSidebar: () => void;
+  /** A query to seed the search panel (find references), consumed on read. */
+  pendingSearch: string | null;
+  searchFor: (query: string) => void;
+  clearPendingSearch: () => void;
   /** Whether the knowledge-graph overlay is open. */
   graphOpen: boolean;
   toggleGraph: (open?: boolean) => void;
@@ -187,7 +195,15 @@ export const useWorkspace = create<WorkspaceState>()(
   persist(
     (set) => ({
       tool: "files",
-      selectTool: (tool) => set((s) => ({ tool: s.tool === tool ? null : tool })),
+      lastTool: "files",
+      selectTool: (tool) =>
+        set((s) => (s.tool === tool ? { tool: null } : { tool, lastTool: tool })),
+      toggleSidebar: () =>
+        set((s) => (s.tool ? { tool: null } : { tool: s.lastTool })),
+      pendingSearch: null,
+      searchFor: (query) =>
+        set({ tool: "search", lastTool: "search", pendingSearch: query }),
+      clearPendingSearch: () => set({ pendingSearch: null }),
       graphOpen: false,
       toggleGraph: (open) => set((s) => ({ graphOpen: open ?? !s.graphOpen })),
       docsOpen: false,
@@ -295,6 +311,16 @@ interface ProjectState {
   /** Bumped to make the file tree re-list directories (external/internal changes). */
   treeNonce: number;
   bumpTree: () => void;
+  /** Back/forward history of visited locations, and the cursor into it. */
+  navStack: { path: string; line?: number }[];
+  navIndex: number;
+  goBack: () => void;
+  goForward: () => void;
+  /** Recently closed tabs (newest last), for reopen. */
+  closedTabs: string[];
+  reopenClosed: () => void;
+  /** Cycle the active tab in order (Ctrl+Tab / Ctrl+Shift+Tab). */
+  cycleTab: (dir: 1 | -1) => void;
   init: (root: string, git: GitInfo, session?: Session) => void;
   setGit: (git: GitInfo) => void;
   open: (path: string, line?: number) => void;
@@ -320,29 +346,100 @@ export const useProject = create<ProjectState>((set) => ({
   landing: null,
   treeNonce: 0,
   bumpTree: () => set((s) => ({ treeNonce: s.treeNonce + 1 })),
+  navStack: [],
+  navIndex: -1,
+  closedTabs: [],
+  goBack: () =>
+    set((s) => {
+      if (s.navIndex <= 0) return s;
+      const navIndex = s.navIndex - 1;
+      const e = s.navStack[navIndex];
+      return {
+        navIndex,
+        tabs: s.tabs.includes(e.path) ? s.tabs : [...s.tabs, e.path],
+        active: e.path,
+        landing:
+          e.line !== undefined
+            ? { path: e.path, line: e.line, nonce: (s.landing?.nonce ?? 0) + 1 }
+            : s.landing,
+      };
+    }),
+  goForward: () =>
+    set((s) => {
+      if (s.navIndex >= s.navStack.length - 1) return s;
+      const navIndex = s.navIndex + 1;
+      const e = s.navStack[navIndex];
+      return {
+        navIndex,
+        tabs: s.tabs.includes(e.path) ? s.tabs : [...s.tabs, e.path],
+        active: e.path,
+        landing:
+          e.line !== undefined
+            ? { path: e.path, line: e.line, nonce: (s.landing?.nonce ?? 0) + 1 }
+            : s.landing,
+      };
+    }),
+  reopenClosed: () =>
+    set((s) => {
+      if (s.closedTabs.length === 0) return s;
+      const closedTabs = s.closedTabs.slice(0, -1);
+      const path = s.closedTabs[s.closedTabs.length - 1];
+      return {
+        closedTabs,
+        tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path],
+        active: path,
+      };
+    }),
+  cycleTab: (dir) =>
+    set((s) => {
+      if (s.tabs.length < 2) return s;
+      const i = s.active ? s.tabs.indexOf(s.active) : 0;
+      const next = (i + dir + s.tabs.length) % s.tabs.length;
+      return { active: s.tabs[next] };
+    }),
   init: (root, git, session) =>
     set({
       root,
       git,
       tabs: session?.tabs ?? [],
       active: session?.active ?? null,
+      navStack: session?.active ? [{ path: session.active }] : [],
+      navIndex: session?.active ? 0 : -1,
+      closedTabs: [],
     }),
   setGit: (git) => set({ git }),
   open: (path, line) =>
-    set((s) => ({
-      tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path],
-      active: path,
-      landing:
-        line !== undefined
-          ? { path, line, nonce: (s.landing?.nonce ?? 0) + 1 }
-          : s.landing,
-    })),
+    set((s) => {
+      const tabs = s.tabs.includes(path) ? s.tabs : [...s.tabs, path];
+      // Record into history: truncate any forward entries, collapse a repeat of
+      // the current path (just update its line), and cap the depth.
+      const cur = s.navStack[s.navIndex];
+      let navStack = s.navStack;
+      let navIndex = s.navIndex;
+      if (!cur || cur.path !== path) {
+        navStack = [...s.navStack.slice(0, s.navIndex + 1), { path, line }].slice(-50);
+        navIndex = navStack.length - 1;
+      } else if (line !== undefined) {
+        navStack = [...s.navStack];
+        navStack[s.navIndex] = { path, line };
+      }
+      return {
+        tabs,
+        active: path,
+        landing:
+          line !== undefined
+            ? { path, line, nonce: (s.landing?.nonce ?? 0) + 1 }
+            : s.landing,
+        navStack,
+        navIndex,
+      };
+    }),
   close: (path) =>
     set((s) => {
       const tabs = s.tabs.filter((t) => t !== path);
       const active =
         s.active === path ? (tabs[tabs.length - 1] ?? null) : s.active;
-      return { tabs, active };
+      return { tabs, active, closedTabs: [...s.closedTabs, path].slice(-25) };
     }),
   closeOthers: (path) =>
     set((s) => (s.tabs.includes(path) ? { tabs: [path], active: path } : s)),

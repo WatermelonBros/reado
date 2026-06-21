@@ -125,6 +125,14 @@ export const TerminalIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+/** Panel-dock glyph: a frame with a split-off side panel. */
+export const LayoutIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M15 4v16" />
+  </svg>
+);
+
 export const PlusIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M12 5v14M5 12h14" />

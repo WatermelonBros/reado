@@ -14,7 +14,7 @@ import { useT } from "../../i18n";
 import { Terminal } from "../organisms/Terminal";
 import { SendReviewDialog } from "../organisms/SendReviewDialog";
 import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
-import { PlusIcon, CloseIcon, SendIcon, ClaudeIcon, CodexIcon } from "../atoms/icons";
+import { PlusIcon, CloseIcon, SendIcon, ClaudeIcon, CodexIcon, LayoutIcon } from "../atoms/icons";
 
 // Brand colours for the agent launchers.
 const CLAUDE_ORANGE = "#D97757";
@@ -31,6 +31,11 @@ export function TerminalPanel() {
   const active = useProject((s) => s.active);
   const height = useTerminals((s) => s.height);
   const setHeight = useTerminals((s) => s.setHeight);
+  const width = useTerminals((s) => s.width);
+  const setWidth = useTerminals((s) => s.setWidth);
+  const position = useTerminals((s) => s.position);
+  const togglePosition = useTerminals((s) => s.togglePosition);
+  const isRight = position === "right";
   // Select the stable array and derive the count in render (returning a new
   // array from the selector would loop).
   const openTaskCount = useComments(
@@ -53,11 +58,12 @@ export function TerminalPanel() {
       active ? { path: toRelative(root, active), isDir: false } : { path: ".", isDir: true },
     );
 
-  // Drag the top edge to resize. Track from the pointer so it follows the
-  // cursor regardless of where on the handle the drag began.
+  // Drag the panel's inner edge to resize — top edge when docked at the bottom,
+  // left edge when docked on the right.
   const startResize = (e: ReactPointerEvent) => {
     e.preventDefault();
-    const onMove = (ev: PointerEvent) => setHeight(window.innerHeight - ev.clientY);
+    const onMove = (ev: PointerEvent) =>
+      isRight ? setWidth(window.innerWidth - ev.clientX) : setHeight(window.innerHeight - ev.clientY);
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
@@ -68,13 +74,19 @@ export function TerminalPanel() {
 
   return (
     <div
-      className="relative flex flex-none flex-col border-t border-line bg-canvas"
-      style={{ height }}
+      className={`relative flex flex-none flex-col bg-canvas ${
+        isRight ? "h-full border-l border-line" : "border-t border-line"
+      }`}
+      style={isRight ? { width } : { height }}
     >
-      {/* Resize handle straddling the top border. */}
+      {/* Resize handle straddling the inner border. */}
       <div
         onPointerDown={startResize}
-        className="absolute -top-1 right-0 left-0 z-10 h-2 cursor-row-resize"
+        className={
+          isRight
+            ? "absolute top-0 bottom-0 -left-1 z-10 w-2 cursor-col-resize"
+            : "absolute -top-1 right-0 left-0 z-10 h-2 cursor-row-resize"
+        }
       />
 
       {/* Tab bar. */}
@@ -161,6 +173,15 @@ export function TerminalPanel() {
         >
           <CodexIcon className="h-3.5 w-3.5" />
           {t("terminal.launchCodex")}
+        </button>
+        <button
+          type="button"
+          aria-label={t("terminal.move")}
+          title={isRight ? t("terminal.moveBottom") : t("terminal.moveRight")}
+          onClick={togglePosition}
+          className="grid h-6 w-6 place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
+        >
+          <LayoutIcon className={`h-3.5 w-3.5 ${isRight ? "" : "rotate-90"}`} />
         </button>
         <button
           type="button"

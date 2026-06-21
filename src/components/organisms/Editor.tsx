@@ -18,6 +18,8 @@ import {
   lineNumbers,
   highlightSpecialChars,
   drawSelection,
+  rectangularSelection,
+  crosshairCursor,
   Decoration,
   type DecorationSet,
 } from "@codemirror/view";
@@ -30,7 +32,7 @@ import {
 import { languages } from "@codemirror/language-data";
 import { keymap } from "@codemirror/view";
 import { defaultKeymap } from "@codemirror/commands";
-import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { search, searchKeymap, gotoLine, highlightSelectionMatches } from "@codemirror/search";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -56,6 +58,7 @@ import {
   useProject,
   useSessions,
   useSettings,
+  useWorkspace,
 } from "../../lib/store";
 import { useT } from "../../i18n";
 import { CommentComposer } from "../organisms/CommentComposer";
@@ -149,6 +152,15 @@ function goToDefinitionAt(view: EditorView, pos: number) {
       if (defs.length) useProject.getState().open(defs[0].path, defs[0].line);
     })
     .catch(() => {});
+}
+
+/** Find references: project-wide search for the identifier at the cursor. */
+function findReferencesAt(view: EditorView): boolean {
+  const word = view.state.wordAt(view.state.selection.main.head);
+  if (!word) return false;
+  const name = view.state.doc.sliceString(word.from, word.to);
+  if (name) useWorkspace.getState().searchFor(name);
+  return true;
 }
 
 /** Editor DOM handlers for go-to-definition: modifier+click navigates, and
@@ -548,6 +560,12 @@ function CodeView({
         drawSelection(),
         bracketMatching(),
         highlightSelectionMatches(),
+        // Multiple cursors: Cmd/Ctrl+D adds the next occurrence, Alt+click adds a
+        // caret, Alt+drag selects a column.
+        EditorState.allowMultipleSelections.of(true),
+        EditorView.clickAddsSelectionRange.of((e) => e.altKey),
+        rectangularSelection(),
+        crosshairCursor(),
         // Find & replace panel (Mod-F to find, Mod-Alt-F to replace).
         search({ top: true }),
         // Mirror the cursor position into the status bar; track unsaved edits.
@@ -569,6 +587,10 @@ function CodeView({
         keymap.of([
           { key: "F12", run: (v) => (goToDefinitionAt(v, v.state.selection.main.head), true) },
         ]),
+        // Go to line — Cmd/Ctrl+G (VS Code), alongside the default Cmd+Alt+G.
+        keymap.of([{ key: "Mod-g", run: gotoLine }]),
+        // Shift+F12 — find references (project-wide search for the symbol).
+        keymap.of([{ key: "Shift-F12", run: findReferencesAt }]),
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
         blameComp.of([]),
         tabSizeComp.of(EditorState.tabSize.of(useDocInfo.getState().indentSize)),

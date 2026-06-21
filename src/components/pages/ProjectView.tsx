@@ -134,6 +134,7 @@ export function ProjectView({ root }: { root: string }) {
   const showHidden = useProject((s) => s.showHidden);
   const setShowHidden = useProject((s) => s.setShowHidden);
   const terminalOpen = useTerminals((s) => s.open);
+  const terminalPosition = useTerminals((s) => s.position);
   const openTaskCount = useComments(
     (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
   );
@@ -208,10 +209,14 @@ export function ProjectView({ root }: { root: string }) {
       <main className="flex min-w-0 flex-col overflow-hidden">
         <Tabs />
         <Breadcrumb />
-        <div className="relative flex-1 overflow-hidden">
-          <Editor />
+        {/* Editor + terminal: side by side when docked right, stacked when bottom. */}
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="relative min-w-0 flex-1 overflow-hidden">
+            <Editor />
+          </div>
+          {terminalOpen && terminalPosition === "right" && <TerminalPanel />}
         </div>
-        {terminalOpen && <TerminalPanel />}
+        {terminalOpen && terminalPosition === "bottom" && <TerminalPanel />}
         <StatusBar />
       </main>
       <Palette />

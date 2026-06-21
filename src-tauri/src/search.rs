@@ -136,9 +136,58 @@ fn search_fallback(root: &str, query: &str) -> Vec<SearchMatch> {
     matches
 }
 
+/// Replace every literal occurrence of `query` with `replacement` across the
+/// project (gitignore-aware, text files only). Case-sensitive and literal — not
+/// a regex — so a project-wide replace can't misfire on regex metacharacters.
+/// Returns the number of files changed.
+#[tauri::command]
+pub fn replace_text(root: String, query: String, replacement: String) -> Result<usize> {
+    if query.is_empty() {
+        return Ok(0);
+    }
+    let mut changed = 0usize;
+    for entry in ignore::WalkBuilder::new(&root).build().flatten() {
+        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue; // unreadable or binary
+        };
+        if !content.contains(&query) {
+            continue;
+        }
+        let updated = content.replace(&query, &replacement);
+        if updated != content {
+            std::fs::write(path, updated)?;
+            changed += 1;
+        }
+    }
+    Ok(changed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replace_text_rewrites_literal_occurrences() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "foo bar foo\n").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "nothing\n").unwrap();
+        let root = dir.path().to_str().unwrap();
+
+        let n = super::replace_text(root.into(), "foo".into(), "baz".into()).unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+            "baz bar baz\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("b.txt")).unwrap(),
+            "nothing\n"
+        );
+    }
 
     #[test]
     fn fallback_finds_smart_case_matches() {

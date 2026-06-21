@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import fuzzysort from "fuzzysort";
 import { listFiles, searchText, type SearchMatch } from "../../lib/api";
 import { usePalette, useProject, useSettings, useEditorActions, useWorkspace, THEMES } from "../../lib/store";
+import { useTerminals } from "../../lib/terminals";
 import { mod } from "../../lib/shortcuts";
 import { checkForUpdates } from "../../lib/updater";
 import { formatDocument, goToLine, useDocInfo } from "../../lib/docInfo";
@@ -297,6 +298,19 @@ function commandRows(
       label: `${t("tree.showHidden")}: ${project.showHidden ? "on" : "off"}`,
       run: () => project.setShowHidden(!project.showHidden),
     },
+    { label: t("nav.back"), hint: "⌥←", run: () => useProject.getState().goBack() },
+    { label: t("nav.forward"), hint: "⌥→", run: () => useProject.getState().goForward() },
+    {
+      label: t("tabs.reopen"),
+      hint: `${mod}⇧T`,
+      run: () => useProject.getState().reopenClosed(),
+    },
+    {
+      label: t("sidebar.toggle"),
+      hint: `${mod}B`,
+      run: () => useWorkspace.getState().toggleSidebar(),
+    },
+    { label: t("terminal.move"), run: () => useTerminals.getState().togglePosition() },
     { label: t("settings.title"), hint: `${mod},`, run: () => toggleSettings(true) },
     { label: t("settings.checkUpdates"), run: () => checkForUpdates(true) },
   ];

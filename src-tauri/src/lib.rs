@@ -53,6 +53,7 @@ pub fn run() {
             git::git_commit,
             git::git_blame,
             search::search_text,
+            search::replace_text,
             symbols::find_definition,
             format::format_file,
             cli::install_cli,

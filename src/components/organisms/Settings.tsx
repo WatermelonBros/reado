@@ -1,8 +1,10 @@
 /** Settings panel: theme, theme mode, language, and code font. */
 import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { useSettings, usePalette, THEMES, type ThemeName, type ThemeMode } from "../../lib/store";
 import { useLocale, useT, type Locale, type MessageKey } from "../../i18n";
 import { installCli, cliInstalled } from "../../lib/api";
+import { checkForUpdates } from "../../lib/updater";
 import { Select } from "../atoms/Select";
 import { Drawer } from "../atoms/Drawer";
 import { Checkbox } from "../atoms/Checkbox";
@@ -120,6 +122,7 @@ export function Settings() {
           </Field>
 
           <CliInstall />
+          <AppVersion />
         </div>
     </Drawer>
   );
@@ -170,6 +173,31 @@ function CliInstall() {
           {result.text}
         </p>
       )}
+    </div>
+  );
+}
+
+/** App version + a manual update check. */
+function AppVersion() {
+  const t = useT();
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    getVersion()
+      .then(setVersion)
+      .catch(() => {});
+  }, []);
+  return (
+    <div className="mt-2 flex items-center justify-between border-t border-line pt-4 text-xs">
+      <span className="text-faint">
+        Reado {version ? `v${version}` : "—"}
+      </span>
+      <button
+        type="button"
+        onClick={() => checkForUpdates(true)}
+        className="rounded-md border border-line px-2 py-1 text-muted hover:border-line-strong hover:text-ink"
+      >
+        {t("settings.checkUpdates")}
+      </button>
     </div>
   );
 }

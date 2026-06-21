@@ -10,6 +10,10 @@ export function Breadcrumb() {
   const root = useProject((s) => s.root);
   const active = useProject((s) => s.active);
   const isRepo = useProject((s) => s.git.isRepo);
+  const navStack = useProject((s) => s.navStack);
+  const navIndex = useProject((s) => s.navIndex);
+  const goBack = useProject((s) => s.goBack);
+  const goForward = useProject((s) => s.goForward);
   const diffing = useEditorActions((s) => s.diffing);
   const setDiffing = useEditorActions((s) => s.setDiffing);
   const diffBase = useEditorActions((s) => s.diffBase);
@@ -46,6 +50,29 @@ export function Breadcrumb() {
       aria-label="File path"
       className="flex flex-none items-center gap-0.5 border-b border-line bg-canvas px-4 py-2 text-xs text-faint select-none"
     >
+      <div className="mr-1.5 flex flex-none items-center gap-0.5">
+        <button
+          type="button"
+          onClick={goBack}
+          disabled={navIndex <= 0}
+          title={t("nav.back")}
+          aria-label={t("nav.back")}
+          className="grid h-6 w-6 place-items-center rounded-md text-faint transition-colors hover:bg-surface hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          <ChevronIcon className="h-[13px] w-[13px] rotate-180" />
+        </button>
+        <button
+          type="button"
+          onClick={goForward}
+          disabled={navIndex >= navStack.length - 1}
+          title={t("nav.forward")}
+          aria-label={t("nav.forward")}
+          className="grid h-6 w-6 place-items-center rounded-md text-faint transition-colors hover:bg-surface hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          <ChevronIcon className="h-[13px] w-[13px]" />
+        </button>
+      </div>
+
       {segments.map((seg, i) => (
         <span key={i} className="inline-flex items-center gap-0.5">
           {i > 0 && <ChevronIcon className="h-[11px] w-[11px] opacity-60" />}
