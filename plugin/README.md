@@ -27,10 +27,13 @@ Install the plugin in `plugin/reado/`:
 Once installed, Claude gains the `reado` skill (auto-activates in projects with a
 `.reado/` folder) and the `/reado-review` command.
 
-## Codex / other agents
+## Codex / Copilot / other agents
 
-Codex reads `AGENTS.md`. Copy `plugin/reado/AGENTS.md` into your project root (or
-append its contents to an existing `AGENTS.md`).
+Codex and the GitHub Copilot CLI read `AGENTS.md`. Copy `plugin/reado/AGENTS.md`
+into your project root (or append its contents to an existing `AGENTS.md`); for
+Copilot you can also drop the same contract into `.github/copilot-instructions.md`.
+Either way, Reado's **Send review** / **Audit** prompts already include the `reado`
+commands inline, so any terminal agent can resolve tasks without extra setup.
 
 ## How Reado uses it
 

@@ -14,11 +14,20 @@ import { useT } from "../../i18n";
 import { Terminal } from "../organisms/Terminal";
 import { SendReviewDialog } from "../organisms/SendReviewDialog";
 import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
-import { PlusIcon, CloseIcon, SendIcon, ClaudeIcon, CodexIcon, LayoutIcon } from "../atoms/icons";
+import {
+  PlusIcon,
+  CloseIcon,
+  SendIcon,
+  ClaudeIcon,
+  CodexIcon,
+  CopilotIcon,
+  LayoutIcon,
+} from "../atoms/icons";
 
 // Brand colours for the agent launchers.
 const CLAUDE_ORANGE = "#D97757";
 const CODEX_TEAL = "#10A37F";
+const COPILOT_VIOLET = "#8957E5";
 
 export function TerminalPanel() {
   const sessions = useTerminals((s) => s.sessions);
@@ -173,6 +182,15 @@ export function TerminalPanel() {
         >
           <CodexIcon className="h-3.5 w-3.5" />
           {t("terminal.launchCodex")}
+        </button>
+        <button
+          type="button"
+          onClick={() => launch("READO_AGENT=copilot copilot")}
+          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium transition-colors hover:border-line-strong"
+          style={{ color: COPILOT_VIOLET }}
+        >
+          <CopilotIcon className="h-3.5 w-3.5" />
+          {t("terminal.launchCopilot")}
         </button>
         <button
           type="button"

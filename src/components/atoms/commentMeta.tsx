@@ -6,7 +6,7 @@
 import type { ReactElement } from "react";
 import type { CommentType, CommentState, Message } from "../../lib/api";
 import type { MessageKey } from "../../i18n";
-import { ClaudeIcon, CodexIcon } from "./icons";
+import { ClaudeIcon, CodexIcon, CopilotIcon } from "./icons";
 
 export const COMMENT_TYPES: CommentType[] = [
   "bug",
@@ -60,6 +60,8 @@ export const AGENT_BRAND: Record<
 > = {
   "claude-code": { color: "#D97757", Icon: ClaudeIcon },
   codex: { color: "#10A37F", Icon: CodexIcon },
+  // Copilot's mark is monochrome; a GitHub-family violet keeps it distinct.
+  copilot: { color: "#8957E5", Icon: CopilotIcon },
 };
 
 /** The brand for a message's agent author, or null (user / unknown agent). */
