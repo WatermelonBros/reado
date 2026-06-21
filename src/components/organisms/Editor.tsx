@@ -1131,7 +1131,7 @@ function CodeView({
       {/* Peek definition: an inline preview anchored under the symbol. */}
       {peek && (
         <div
-          className="absolute right-4 left-4 z-40 overflow-hidden rounded-lg border border-line-strong bg-overlay shadow-[var(--shadow)]"
+          className="absolute left-1/2 z-50 w-[min(680px,calc(100%-2rem))] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-overlay shadow-[var(--shadow)]"
           style={{ top: peek.top + 4 }}
         >
           <header className="flex items-center gap-2 border-b border-line px-3 py-1.5 text-xs">

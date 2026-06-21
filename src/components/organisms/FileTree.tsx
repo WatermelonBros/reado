@@ -342,7 +342,7 @@ function TreeNode({
         <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} />
         <span
           className={`overflow-hidden text-ellipsis whitespace-nowrap ${
-            isRead ? "text-faint" : ""
+            isRead ? "text-muted" : ""
           }`}
         >
           {entry.name}

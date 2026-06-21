@@ -188,10 +188,18 @@
   .reado-comment-gutter:hover .reado-gutter-marker:empty::before {
     transform: scale(1.15);
   }
-  /* Occurrences of the symbol under the cursor — a quiet reading highlight. */
+  /* Occurrences of the symbol under the cursor — a quiet underline so it stays
+     distinct from the (filled) text selection and doesn't shout. */
   .cm-occurrence {
-    background: color-mix(in oklch, var(--accent) 18%, transparent);
+    background: color-mix(in oklch, var(--accent) 9%, transparent);
     border-radius: 2px;
+    box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--accent) 50%, transparent);
+  }
+
+  /* Theme the indentation guides with the quiet line tokens. */
+  .cm-editor {
+    --indent-marker-bg-color: color-mix(in oklch, var(--line) 70%, transparent);
+    --indent-marker-active-bg-color: var(--line-strong);
   }
 
   /* Resolved (done) comments: a green dot/badge so they read as finished. */
