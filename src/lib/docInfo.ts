@@ -37,7 +37,7 @@ export const useDocInfo = create<DocInfoState>((set) => ({
   set: (info) => set(info),
 }));
 
-/** Language modes offered by the status-bar picker (must match language-data). */
+/** Language modes offered by the status-bar picker (must match lib/languages). */
 export const LANGUAGE_OPTIONS = [
   "Plain Text",
   "TypeScript",
@@ -46,6 +46,7 @@ export const LANGUAGE_OPTIONS = [
   "Rust",
   "Python",
   "Go",
+  "Solidity",
   "Markdown",
   "HTML",
   "CSS",

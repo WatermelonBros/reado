@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, lineNumbers, keymap } from "@codemirror/view";
 import { LanguageDescription } from "@codemirror/language";
-import { languages } from "@codemirror/language-data";
+import { languages } from "../../lib/languages";
 import {
   unifiedMergeView,
   goToNextChunk,

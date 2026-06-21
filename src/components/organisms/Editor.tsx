@@ -29,7 +29,7 @@ import {
   foldKeymap,
   LanguageDescription,
 } from "@codemirror/language";
-import { languages } from "@codemirror/language-data";
+import { languages } from "../../lib/languages";
 import { keymap } from "@codemirror/view";
 import { defaultKeymap } from "@codemirror/commands";
 import { search, searchKeymap, gotoLine, highlightSelectionMatches } from "@codemirror/search";
