@@ -5,10 +5,36 @@
  */
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { usePalette, useProject, useSettings, useWorkspace } from "./store";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  usePalette,
+  useProject,
+  useSettings,
+  useWorkspace,
+  type ThemeName,
+} from "./store";
 import { useTerminals } from "./terminals";
-import { formatDocument, saveDocument, openFind, goToDefinitionAtCursor } from "./docInfo";
+import {
+  formatDocument,
+  saveDocument,
+  openFind,
+  openReplace,
+  openGotoLine,
+  toggleLineComment,
+  addNextOccurrence,
+  copyLineUpCmd,
+  copyLineDownCmd,
+  moveLineUpCmd,
+  moveLineDownCmd,
+  findReferencesAtCursor,
+  goToDefinitionAtCursor,
+} from "./docInfo";
+import { checkForUpdates } from "./updater";
 import { openProject, closeProject } from "./window";
+
+const WEBSITE = "https://reado.watermelon-studio.it";
+const ISSUES = "https://github.com/WatermelonBros/reado/issues";
+const RELEASES = "https://github.com/WatermelonBros/reado/releases";
 
 /** Prompt for a folder and open it in this window. */
 async function pickAndOpenFolder() {
@@ -27,10 +53,27 @@ const nudgeZoom = (delta: number) =>
 export function listenForMenu(): Promise<() => void> {
   return listen<string>("menu", ({ payload: id }) => {
     const palette = usePalette.getState();
+    const project = useProject.getState();
+    const workspace = useWorkspace.getState();
+    const settings = useSettings.getState();
+    const terminals = useTerminals.getState();
+
+    // Theme submenu: ids like "theme:dark".
+    if (id.startsWith("theme:")) {
+      settings.set({ theme: id.slice(6) as ThemeName, mode: "manual" });
+      return;
+    }
+
     switch (id) {
+      // App
       case "settings":
         palette.toggleSettings(true);
         break;
+      case "checkUpdates":
+        void checkForUpdates(true);
+        break;
+
+      // File
       case "openFolder":
         void pickAndOpenFolder();
         break;
@@ -43,14 +86,49 @@ export function listenForMenu(): Promise<() => void> {
       case "format":
         void formatDocument();
         break;
-      case "closeEditor": {
-        const active = useProject.getState().active;
-        if (active) useProject.getState().close(active);
+      case "closeEditor":
+        if (project.active) project.close(project.active);
         break;
-      }
+      case "reopenClosed":
+        project.reopenClosed();
+        break;
+
+      // Edit
       case "find":
         openFind();
         break;
+      case "edit:replace":
+        openReplace();
+        break;
+      case "edit:findInFiles":
+      case "edit:replaceInFiles":
+        workspace.searchFor("");
+        break;
+      case "edit:toggleComment":
+        toggleLineComment();
+        break;
+      case "gotoLine":
+        openGotoLine();
+        break;
+
+      // Selection
+      case "sel:addNext":
+        addNextOccurrence();
+        break;
+      case "sel:copyUp":
+        copyLineUpCmd();
+        break;
+      case "sel:copyDown":
+        copyLineDownCmd();
+        break;
+      case "sel:moveUp":
+        moveLineUpCmd();
+        break;
+      case "sel:moveDown":
+        moveLineDownCmd();
+        break;
+
+      // Go
       case "palette:files":
         palette.open("files");
         break;
@@ -60,17 +138,40 @@ export function listenForMenu(): Promise<() => void> {
       case "palette:search":
         palette.open("search");
         break;
+      case "palette:symbols":
+        palette.open("symbols");
+        break;
       case "gotodef":
         goToDefinitionAtCursor();
         break;
-      case "terminal":
-        useTerminals.getState().toggle();
+      case "go:references":
+        findReferencesAtCursor();
+        break;
+      case "go:back":
+        project.goBack();
+        break;
+      case "go:forward":
+        project.goForward();
+        break;
+
+      // View
+      case "view:sidebar":
+        workspace.toggleSidebar();
+        break;
+      case "view:split":
+        project.openSplit();
+        break;
+      case "view:wrap":
+        settings.set({ wrap: !settings.wrap });
+        break;
+      case "view:focus":
+        settings.set({ focusMode: !settings.focusMode });
         break;
       case "graph":
-        useWorkspace.getState().toggleGraph(true);
+        workspace.toggleGraph(true);
         break;
       case "docs":
-        useWorkspace.getState().toggleDocs(true);
+        workspace.toggleDocs(true);
         break;
       case "zoom:in":
         nudgeZoom(0.1);
@@ -79,7 +180,29 @@ export function listenForMenu(): Promise<() => void> {
         nudgeZoom(-0.1);
         break;
       case "zoom:reset":
-        useSettings.getState().set({ zoom: 1 });
+        settings.set({ zoom: 1 });
+        break;
+
+      // Terminal
+      case "terminal":
+        terminals.toggle();
+        break;
+      case "terminal:new":
+        terminals.add();
+        break;
+      case "terminal:split":
+        terminals.split();
+        break;
+
+      // Help
+      case "help:website":
+        void openUrl(WEBSITE);
+        break;
+      case "help:report":
+        void openUrl(ISSUES);
+        break;
+      case "help:releases":
+        void openUrl(RELEASES);
         break;
     }
   });

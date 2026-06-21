@@ -139,6 +139,14 @@ export const SwapIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+/** Split glyph: a frame divided evenly in two (add/arrange a second pane). */
+export const SplitIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M12 4v16" />
+  </svg>
+);
+
 /** Panel-dock glyph: a frame with a split-off side panel. */
 export const LayoutIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">

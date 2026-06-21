@@ -8,9 +8,16 @@
  */
 import { create } from "zustand";
 import { EditorView } from "@codemirror/view";
-import { openSearchPanel } from "@codemirror/search";
+import { openSearchPanel, selectNextOccurrence, gotoLine } from "@codemirror/search";
+import {
+  toggleComment,
+  copyLineUp,
+  copyLineDown,
+  moveLineUp,
+  moveLineDown,
+} from "@codemirror/commands";
 import { writeFile, formatFile, findDefinition } from "./api";
-import { useProject, useEditorActions } from "./store";
+import { useProject, useEditorActions, useWorkspace } from "./store";
 import { toRelative } from "./comments";
 
 export type Eol = "LF" | "CRLF";
@@ -146,6 +153,33 @@ export function goToDefinitionAtCursor(): void {
       if (defs.length) useProject.getState().open(defs[0].path, defs[0].line);
     })
     .catch(() => {});
+}
+
+/** Run a CodeMirror command on the active editor view (native-menu commands). */
+function runOnView(cmd: (v: EditorView) => boolean): void {
+  const { view } = useDocInfo.getState();
+  if (!view) return;
+  cmd(view);
+  view.focus();
+}
+
+export const toggleLineComment = () => runOnView(toggleComment);
+export const addNextOccurrence = () => runOnView(selectNextOccurrence);
+export const copyLineUpCmd = () => runOnView(copyLineUp);
+export const copyLineDownCmd = () => runOnView(copyLineDown);
+export const moveLineUpCmd = () => runOnView(moveLineUp);
+export const moveLineDownCmd = () => runOnView(moveLineDown);
+export const openGotoLine = () => runOnView(gotoLine);
+export const openReplace = () => openFind(); // CM's search panel includes replace
+
+/** Find references: project-wide search for the identifier at the cursor. */
+export function findReferencesAtCursor(): void {
+  const { view } = useDocInfo.getState();
+  if (!view) return;
+  const word = view.state.wordAt(view.state.selection.main.head);
+  if (!word) return;
+  const name = view.state.doc.sliceString(word.from, word.to);
+  if (name) useWorkspace.getState().searchFor(name);
 }
 
 /** Rewrite the active file with the chosen line endings (applies + saves). */
