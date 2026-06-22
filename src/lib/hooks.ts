@@ -1,6 +1,7 @@
 /** Cross-cutting React hooks: theme application and global keyboard shortcuts. */
 import { useEffect } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   useSettings,
   usePalette,
@@ -12,6 +13,9 @@ import {
 import { useTerminals } from "./terminals";
 import { formatDocument } from "./docInfo";
 import { checkForUpdates } from "./updater";
+
+/** The dark Reado themes — used to match the native window (title bar) chrome. */
+const DARK_THEMES: ThemeName[] = ["reado-dark", "reado-high-contrast"];
 
 /** Resolve the active theme from settings, OS preference and time of day. */
 function resolveTheme(
@@ -37,12 +41,13 @@ export function useApplyTheme(): void {
 
   useEffect(() => {
     const apply = () => {
-      document.documentElement.dataset.theme = resolveTheme(
-        mode,
-        theme,
-        lightTheme,
-        darkTheme,
-      );
+      const resolved = resolveTheme(mode, theme, lightTheme, darkTheme);
+      document.documentElement.dataset.theme = resolved;
+      // Match the native window chrome (notably the Windows title bar, which is
+      // otherwise the default light bar even under a dark theme).
+      getCurrentWindow()
+        .setTheme(DARK_THEMES.includes(resolved) ? "dark" : "light")
+        .catch(() => {});
     };
     apply();
 

@@ -7,8 +7,8 @@
 Most IDEs are built for **writing** code. Reado inverts that: the primary
 experience is **reading**, and the primary action is leaving durable comments
 anchored to precise points in the code. Those comments are not throwaway notes —
-they are persistent, lifecycle-bearing artifacts that an AI agent (Claude Code /
-Codex) resolves, and that accumulate into a consultable knowledge base.
+they are persistent, lifecycle-bearing artifacts that an AI agent (Claude Code,
+Codex or Copilot) resolves, and that accumulate into a consultable knowledge base.
 
 > The mental model is an **inverted code review**: you are the reviewer (read,
 > annotate), the AI is the committer (implements the fixes).
@@ -54,12 +54,14 @@ What works today:
   survive external edits (git-diff-free fuzzy re-anchoring; orphans never point
   at the wrong line).
 - An integrated terminal (real PTYs, multiple tabs) with one-click launch of
-  `claude`/`codex`, and **Send review** to hand your open tasks to the agent.
+  `claude`, `codex` and `copilot`, and **Send review** to hand your open tasks to
+  the agent.
 - A knowledge base unifying the project's **docs**, **specs** (OpenSpec /
   speckit), and the **notes** captured while reading, with full-text search and
   a knowledge graph linking comments, files, specs and docs.
-- A `reado` CLI — the stable contract the agent uses to read and resolve tasks
-  (and to consult the knowledge base).
+- A `reado` CLI — the stable contract the agents use to read and resolve tasks
+  (and to consult the knowledge base). **The AI loop needs it installed** — the
+  agents reach Reado only through this CLI.
 
 ## The AI loop
 
@@ -67,17 +69,19 @@ Reado's core loop is **read → annotate → AI-resolve**:
 
 1. You read code and leave comments. Comments flagged as **tasks** are the work
    list; **notes** stay out of the agent's way.
-2. Open the terminal (`Cmd/Ctrl+J`), launch **Claude** or **Codex**, then click
-   **Send review**. Reado injects a prompt asking the agent to fetch and resolve
-   your tasks through the `reado` CLI.
+2. Open the terminal (`Cmd/Ctrl+J`), launch **Claude**, **Codex** or **Copilot**,
+   then click **Send review**. Reado injects a prompt asking the agent to fetch
+   and resolve your tasks through the `reado` CLI.
 3. The agent reads tasks with `reado task list`, makes the changes, and marks
    each `reado task done <id>` (or `reado task fail <id> "<reason>"`). Reado's
    watcher reflects the result live, and resolved comments move to history.
 
 The `reado` CLI is the stable contract — the on-disk format can evolve without
-breaking the agent. The packaged app bundles the CLI: install it from
-**Settings → Command-line tool** (links `reado` into `~/.local/bin`, VS Code
-style). From a source checkout, build and link it directly:
+breaking the agents, and the agents read and resolve tasks **only** through it,
+so it must be on the agent's `PATH` for the AI loop to work. The packaged app
+bundles the CLI: install it from **Settings → Command-line tool** (links `reado`
+into `~/.local/bin`, VS Code style). From a source checkout, build and link it
+directly:
 
 ```bash
 scripts/install-cli.sh           # builds release + links into ~/.local/bin
@@ -91,7 +95,9 @@ the docs and specs before resolving). Agent identity comes from `$READO_AGENT`
 
 An agent plugin in [`plugin/`](plugin/) teaches Claude Code (and Codex, via
 `AGENTS.md`) this contract so the agent resolves tasks correctly. See
-[`plugin/README.md`](plugin/README.md) to install it.
+[`plugin/README.md`](plugin/README.md) to install it. Other agents (e.g. Copilot)
+still get the contract from the **Send review** prompt Reado injects, as long as
+the `reado` CLI is installed.
 
 ## Keyboard shortcuts
 
