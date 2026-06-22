@@ -92,6 +92,10 @@ export function TerminalPanel() {
     submitToTerminal(id, command, id === activeId ? 0 : 400);
   };
 
+  const isWindows = navigator.userAgent.includes("Windows");
+  const agentLaunchCommand = (agent: "claude-code" | "codex" | "copilot", bin: string) =>
+    isWindows ? `set "READO_AGENT=${agent}" && ${bin}` : `READO_AGENT=${agent} ${bin}`;
+
   const [reviewOpen, setReviewOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null);
   const [paneMenu, setPaneMenu] = useState<{ x: number; y: number; paneId: string } | null>(
@@ -308,7 +312,7 @@ export function TerminalPanel() {
           type="button"
           aria-label={t("terminal.launch", { name: "Claude Code" })}
           title={t("terminal.launch", { name: "Claude Code" })}
-          onClick={() => launch("READO_AGENT=claude-code claude")}
+          onClick={() => launch(agentLaunchCommand("claude-code", "claude"))}
           className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: CLAUDE_ORANGE }}
         >
@@ -318,7 +322,7 @@ export function TerminalPanel() {
           type="button"
           aria-label={t("terminal.launch", { name: "Codex" })}
           title={t("terminal.launch", { name: "Codex" })}
-          onClick={() => launch("READO_AGENT=codex codex")}
+          onClick={() => launch(agentLaunchCommand("codex", "codex"))}
           className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: CODEX_TEAL }}
         >
@@ -328,7 +332,7 @@ export function TerminalPanel() {
           type="button"
           aria-label={t("terminal.launch", { name: "Copilot" })}
           title={t("terminal.launch", { name: "Copilot" })}
-          onClick={() => launch("READO_AGENT=copilot copilot")}
+          onClick={() => launch(agentLaunchCommand("copilot", "copilot"))}
           className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: COPILOT_VIOLET }}
         >
