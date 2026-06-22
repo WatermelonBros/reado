@@ -6,7 +6,7 @@
  * the entry point to the AI loop. Every pane stays mounted (hidden when not in
  * the active group) so PTYs and scrollback persist across tab/layout changes.
  */
-import { submitToTerminal } from "../../lib/api";
+import { ptyDefaultShell, submitToTerminal } from "../../lib/api";
 import { useTerminals } from "../../lib/terminals";
 import { useProject } from "../../lib/store";
 import { useComments, toRelative } from "../../lib/comments";
@@ -87,10 +87,30 @@ export function TerminalPanel() {
     return () => obs.disconnect();
   }, []);
 
+  const [defaultShell, setDefaultShell] = useState<string | null>(null);
+  useEffect(() => {
+    ptyDefaultShell().then(setDefaultShell).catch(() => setDefaultShell(null));
+  }, []);
+
   // Run a command in the focused pane, creating one if needed.
   const launch = (command: string) => {
     const id = activeId ?? add();
     submitToTerminal(id, command, id === activeId ? 0 : 400);
+  };
+
+  const isWindows = navigator.userAgent.includes("Windows");
+  const shellFamily = (shell: string | null): "cmd" | "powershell" | "posix" => {
+    const s = shell ?? "";
+    if (/(^|[\\/])(powershell|pwsh)(\.exe)?$/i.test(s)) return "powershell";
+    if (/(^|[\\/])cmd(\.exe)?$/i.test(s)) return "cmd";
+    if (/(^|[\\/])(bash|zsh|sh|fish|dash|ash)(\.exe)?$/i.test(s)) return "posix";
+    return isWindows ? "cmd" : "posix";
+  };
+  const agentLaunchCommand = (agent: "claude-code" | "codex" | "copilot", bin: string) => {
+    const family = shellFamily(defaultShell);
+    if (family === "powershell") return `$env:READO_AGENT="${agent}"; ${bin}`;
+    if (family === "cmd") return `set "READO_AGENT=${agent}" && ${bin}`;
+    return `READO_AGENT=${agent} ${bin}`;
   };
 
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -309,7 +329,7 @@ export function TerminalPanel() {
           type="button"
           aria-label={t("terminal.launch", { name: "Claude Code" })}
           title={t("terminal.launch", { name: "Claude Code" })}
-          onClick={() => launch("READO_AGENT=claude-code claude")}
+          onClick={() => launch(agentLaunchCommand("claude-code", "claude"))}
           className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: CLAUDE_ORANGE }}
         >
@@ -319,7 +339,7 @@ export function TerminalPanel() {
           type="button"
           aria-label={t("terminal.launch", { name: "Codex" })}
           title={t("terminal.launch", { name: "Codex" })}
-          onClick={() => launch("READO_AGENT=codex codex")}
+          onClick={() => launch(agentLaunchCommand("codex", "codex"))}
           className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: CODEX_TEAL }}
         >
@@ -329,7 +349,7 @@ export function TerminalPanel() {
           type="button"
           aria-label={t("terminal.launch", { name: "Copilot" })}
           title={t("terminal.launch", { name: "Copilot" })}
-          onClick={() => launch("READO_AGENT=copilot copilot")}
+          onClick={() => launch(agentLaunchCommand("copilot", "copilot"))}
           className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
           style={{ color: COPILOT_VIOLET }}
         >

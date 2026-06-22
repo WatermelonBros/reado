@@ -353,6 +353,9 @@ export const rebuildIndex = (root: string) =>
 export const ptySpawn = (id: string, cwd: string, rows: number, cols: number) =>
   invoke<void>("pty_spawn", { id, cwd, rows, cols });
 
+/** The executable used by PTY sessions (used for shell-specific command syntax). */
+export const ptyDefaultShell = () => invoke<string>("pty_default_shell");
+
 /** Forward input (keystrokes or injected text) to a terminal. */
 export const ptyWrite = (id: string, data: string) =>
   invoke<void>("pty_write", { id, data });
