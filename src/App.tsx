@@ -16,6 +16,7 @@ import {
 import { listenForMenu } from "./lib/menu";
 import { UpdatePrompt } from "./components/organisms/UpdatePrompt";
 import { EditMenu } from "./components/molecules/EditMenu";
+import { ShortcutsDialog } from "./components/organisms/ShortcutsDialog";
 
 export default function App() {
   useApplyTheme();
@@ -52,6 +53,7 @@ export default function App() {
       {projectPath ? <ProjectView key={projectPath} root={projectPath} /> : <RecentProjects />}
       <UpdatePrompt />
       <EditMenu />
+      <ShortcutsDialog />
     </>
   );
 }

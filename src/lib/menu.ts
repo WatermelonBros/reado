@@ -198,6 +198,9 @@ export function listenForMenu(): Promise<() => void> {
         break;
 
       // Help
+      case "help:shortcuts":
+        palette.toggleShortcuts(true);
+        break;
       case "help:website":
         void openUrl(WEBSITE);
         break;

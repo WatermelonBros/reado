@@ -349,6 +349,7 @@ function commandRows(
       },
     },
     { label: t("settings.title"), hint: `${mod},`, run: () => toggleSettings(true) },
+    { label: t("sc.title"), run: () => usePalette.getState().toggleShortcuts(true) },
     { label: t("settings.checkUpdates"), run: () => checkForUpdates(true) },
   ];
   // Quick theme switches.

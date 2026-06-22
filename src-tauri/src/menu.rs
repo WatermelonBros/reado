@@ -116,6 +116,7 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .build()?;
 
     let help_menu = SubmenuBuilder::new(app, "Help")
+        .text("help:shortcuts", "Keyboard Shortcuts")
         .text("docs", "Documentation")
         .text("help:website", "Reado Website")
         .text("help:report", "Report an Issue")

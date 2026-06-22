@@ -119,7 +119,12 @@ const en = {
   "settings.cliHint":
     "Links the bundled 'reado' CLI into ~/.local/bin so AI agents can read and resolve your tasks from any project.",
   "settings.checkUpdates": "Check for updates…",
+  "settings.shortcuts": "Keyboard Shortcuts…",
   "settings.close": "Close",
+  "sc.title": "Keyboard Shortcuts",
+  "sc.navigation": "Navigation",
+  "sc.editing": "Editing",
+  "sc.view": "View",
 
   "empty.firstComment":
     "Select one or more lines, then press the comment shortcut to leave your first note.",
@@ -380,7 +385,12 @@ const it: Record<MessageKey, string> = {
   "settings.cliHint":
     "Collega la CLI 'reado' inclusa in ~/.local/bin così gli agenti AI possono leggere e risolvere i task da qualsiasi progetto.",
   "settings.checkUpdates": "Controlla aggiornamenti…",
+  "settings.shortcuts": "Scorciatoie da tastiera…",
   "settings.close": "Chiudi",
+  "sc.title": "Scorciatoie da tastiera",
+  "sc.navigation": "Navigazione",
+  "sc.editing": "Modifica",
+  "sc.view": "Vista",
 
   "empty.firstComment":
     "Seleziona una o più righe, poi premi la scorciatoia per lasciare la tua prima nota.",

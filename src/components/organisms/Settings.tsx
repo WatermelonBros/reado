@@ -191,13 +191,22 @@ function AppVersion() {
       <span className="text-faint">
         Reado {version ? `v${version}` : "—"}
       </span>
-      <button
-        type="button"
-        onClick={() => checkForUpdates(true)}
-        className="rounded-md border border-line px-2 py-1 text-muted hover:border-line-strong hover:text-ink"
-      >
-        {t("settings.checkUpdates")}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => usePalette.getState().toggleShortcuts(true)}
+          className="rounded-md border border-line px-2 py-1 text-muted hover:border-line-strong hover:text-ink"
+        >
+          {t("settings.shortcuts")}
+        </button>
+        <button
+          type="button"
+          onClick={() => checkForUpdates(true)}
+          className="rounded-md border border-line px-2 py-1 text-muted hover:border-line-strong hover:text-ink"
+        >
+          {t("settings.checkUpdates")}
+        </button>
+      </div>
     </div>
   );
 }
