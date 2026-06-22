@@ -98,14 +98,19 @@ export function TerminalPanel() {
   };
 
   const isWindows = navigator.userAgent.includes("Windows");
-  const isPowerShell = (shell: string | null) =>
-    /(^|[\\/])(powershell|pwsh)(\.exe)?$/i.test(shell ?? "");
-  const agentLaunchCommand = (agent: "claude-code" | "codex" | "copilot", bin: string) =>
-    isWindows
-      ? isPowerShell(defaultShell)
-        ? `$env:READO_AGENT="${agent}"; ${bin}`
-        : `set "READO_AGENT=${agent}" && ${bin}`
-      : `READO_AGENT=${agent} ${bin}`;
+  const shellFamily = (shell: string | null): "cmd" | "powershell" | "posix" => {
+    const s = shell ?? "";
+    if (/(^|[\\/])(powershell|pwsh)(\.exe)?$/i.test(s)) return "powershell";
+    if (/(^|[\\/])cmd(\.exe)?$/i.test(s)) return "cmd";
+    if (/(^|[\\/])(bash|zsh|sh|fish|dash|ash)(\.exe)?$/i.test(s)) return "posix";
+    return isWindows ? "cmd" : "posix";
+  };
+  const agentLaunchCommand = (agent: "claude-code" | "codex" | "copilot", bin: string) => {
+    const family = shellFamily(defaultShell);
+    if (family === "powershell") return `$env:READO_AGENT="${agent}"; ${bin}`;
+    if (family === "cmd") return `set "READO_AGENT=${agent}" && ${bin}`;
+    return `READO_AGENT=${agent} ${bin}`;
+  };
 
   const [reviewOpen, setReviewOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null);
