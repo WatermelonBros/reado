@@ -6,7 +6,7 @@
  * the entry point to the AI loop. Every pane stays mounted (hidden when not in
  * the active group) so PTYs and scrollback persist across tab/layout changes.
  */
-import { submitToTerminal } from "../../lib/api";
+import { ptyDefaultShell, submitToTerminal } from "../../lib/api";
 import { useTerminals } from "../../lib/terminals";
 import { useProject } from "../../lib/store";
 import { useComments, toRelative } from "../../lib/comments";
@@ -86,6 +86,11 @@ export function TerminalPanel() {
     return () => obs.disconnect();
   }, []);
 
+  const [defaultShell, setDefaultShell] = useState<string | null>(null);
+  useEffect(() => {
+    ptyDefaultShell().then(setDefaultShell).catch(() => setDefaultShell(null));
+  }, []);
+
   // Run a command in the focused pane, creating one if needed.
   const launch = (command: string) => {
     const id = activeId ?? add();
@@ -93,8 +98,14 @@ export function TerminalPanel() {
   };
 
   const isWindows = navigator.userAgent.includes("Windows");
+  const isPowerShell = (shell: string | null) =>
+    /(^|[\\/])(powershell|pwsh)(\.exe)?$/i.test(shell ?? "");
   const agentLaunchCommand = (agent: "claude-code" | "codex" | "copilot", bin: string) =>
-    isWindows ? `set "READO_AGENT=${agent}" && ${bin}` : `READO_AGENT=${agent} ${bin}`;
+    isWindows
+      ? isPowerShell(defaultShell)
+        ? `$env:READO_AGENT="${agent}"; ${bin}`
+        : `set "READO_AGENT=${agent}" && ${bin}`
+      : `READO_AGENT=${agent} ${bin}`;
 
   const [reviewOpen, setReviewOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null);

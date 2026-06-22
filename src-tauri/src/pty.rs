@@ -60,6 +60,12 @@ fn size(rows: u16, cols: u16) -> PtySize {
     }
 }
 
+/// The executable path/name used for newly spawned PTY shells.
+#[tauri::command]
+pub fn pty_default_shell() -> String {
+    default_shell().0
+}
+
 /// Spawn a PTY for tab `id`, running a login shell in `cwd`. Output is streamed
 /// via the `pty-output-{id}` event (base64); termination fires `pty-exit-{id}`.
 #[tauri::command]

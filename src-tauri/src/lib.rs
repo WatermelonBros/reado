@@ -77,6 +77,7 @@ pub fn run() {
             progress::set_read,
             watcher::start_watching,
             pty::pty_spawn,
+            pty::pty_default_shell,
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,
