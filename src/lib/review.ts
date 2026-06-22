@@ -61,6 +61,27 @@ export function composeCommitPrompt(): string {
  * the file itself, so no code is embedded); optionally records the explanation as
  * an anchored `reado` note.
  */
+/** Explain a specific symbol — what it does and what each parameter means —
+ * using the language server's hover docs as context (handy for external
+ * libraries), then record it as an anchored note. Single line (TUI submit). */
+export function composeSymbolExplainPrompt(
+  file: string,
+  line: number,
+  symbol: string,
+  docs: string,
+): string {
+  const flat = docs.replace(/\s+/g, " ").trim().slice(0, 1500);
+  let p =
+    `READO EXPLAIN — explain the symbol \`${symbol}\` used in \`${file}\` at line ${line}: ` +
+    "what it does and what each parameter means, concisely (it may come from an external " +
+    "library). Do NOT change any code.";
+  if (flat) p += ` Its language-server docs: "${flat}".`;
+  p +=
+    ` Then record your explanation as a note: ` +
+    `\`reado comment add --file ${file} --line ${line} --end ${line} --note "<explanation>"\`.`;
+  return p;
+}
+
 export function composeExplainPrompt(
   file: string,
   startLine: number,

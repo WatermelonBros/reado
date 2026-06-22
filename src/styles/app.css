@@ -358,6 +358,17 @@
     max-width: 100%;
   }
 
+  /* Inlay hints (inferred types / parameter names) — quiet, secondary to the
+     code: faint text on a barely-there chip so they inform without competing. */
+  .cm-inlay-hint {
+    color: var(--text-faint);
+    background: color-mix(in oklch, var(--border) 45%, transparent);
+    border-radius: 4px;
+    padding: 0 4px;
+    font-size: 0.85em;
+    font-style: normal;
+  }
+
   /* ---- Language server: hover tooltips + diagnostics --------------------- */
   /* CodeMirror's defaults are loud (bright wavy underlines, a stark white
      tooltip). Re-skin both onto Reado's surface tokens so they read as calm,

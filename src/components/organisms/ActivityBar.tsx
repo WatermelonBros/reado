@@ -22,6 +22,7 @@ import {
   SettingsIcon,
   SpecsIcon,
   OutlineIcon,
+  ExtensionsIcon,
 } from "../atoms/icons";
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
@@ -31,6 +32,7 @@ const BASE_TOOLS: ToolDef[] = [
   { id: "search", labelKey: "search.placeholder", Icon: SearchIcon },
   { id: "comments", labelKey: "comments.panel", Icon: MessageIcon },
   { id: "outline", labelKey: "outline.panel", Icon: OutlineIcon },
+  { id: "extensions", labelKey: "ext.panel", Icon: ExtensionsIcon },
 ];
 
 export function ActivityBar() {

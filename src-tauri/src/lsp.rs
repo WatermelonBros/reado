@@ -7,10 +7,67 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
+use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use tauri::{AppHandle, Emitter, State};
+
+/// The user's real PATH, from their login+interactive shell — the same env the
+/// integrated terminal gets. A GUI app launched from the Finder inherits a
+/// minimal PATH that misses nvm/cargo/go/brew dirs, so we resolve it once here
+/// and use it for both spawning servers and detecting whether they're installed.
+fn login_shell_path() -> &'static str {
+    static PATH: OnceLock<String> = OnceLock::new();
+    PATH.get_or_init(|| {
+        #[cfg(not(windows))]
+        {
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+            if let Ok(out) = Command::new(&shell).args(["-ilc", "echo $PATH"]).output() {
+                if out.status.success() {
+                    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if !p.is_empty() {
+                        return p;
+                    }
+                }
+            }
+        }
+        std::env::var("PATH").unwrap_or_default()
+    })
+}
+
+/// Whether `bin` resolves to a file in any directory of the resolved PATH.
+fn on_path(bin: &str) -> bool {
+    let sep = if cfg!(windows) { ';' } else { ':' };
+    login_shell_path()
+        .split(sep)
+        .any(|dir| !dir.is_empty() && Path::new(dir).join(bin).is_file())
+}
+
+/// Whether a known language server's binary is installed (on the resolved PATH).
+#[tauri::command]
+pub fn lsp_installed(server: String) -> bool {
+    server_command(&server).is_some_and(|(bin, _)| on_path(bin))
+}
+
+/// The system package manager available on this (Linux) machine, so the
+/// marketplace can pick the right install command per distro. Returns one of
+/// "apt" | "dnf" | "pacman" | "zypper" | "brew", or null if none is found.
+#[tauri::command]
+pub fn linux_package_manager() -> Option<String> {
+    for (bin, key) in [
+        ("apt-get", "apt"),
+        ("dnf", "dnf"),
+        ("pacman", "pacman"),
+        ("zypper", "zypper"),
+        ("brew", "brew"),
+    ] {
+        if on_path(bin) {
+            return Some(key.to_string());
+        }
+    }
+    None
+}
 
 struct Server {
     child: Child,
@@ -27,6 +84,28 @@ fn server_command(server: &str) -> Option<(&'static str, Vec<&'static str>)> {
     match server {
         "typescript" => Some(("typescript-language-server", vec!["--stdio"])),
         "rust" => Some(("rust-analyzer", vec![])),
+        "python" => Some(("pyright-langserver", vec!["--stdio"])),
+        "go" => Some(("gopls", vec![])),
+        "cpp" => Some(("clangd", vec![])),
+        "bash" => Some(("bash-language-server", vec!["start"])),
+        "csharp" => Some(("csharp-ls", vec![])),
+        "java" => Some(("jdtls", vec![])),
+        "kotlin" => Some(("kotlin-language-server", vec![])),
+        "scala" => Some(("metals", vec![])),
+        "ruby" => Some(("ruby-lsp", vec![])),
+        "php" => Some(("intelephense", vec!["--stdio"])),
+        "lua" => Some(("lua-language-server", vec![])),
+        "swift" => Some(("sourcekit-lsp", vec![])),
+        "zig" => Some(("zls", vec![])),
+        "html" => Some(("vscode-html-language-server", vec!["--stdio"])),
+        "css" => Some(("vscode-css-language-server", vec!["--stdio"])),
+        "json" => Some(("vscode-json-language-server", vec!["--stdio"])),
+        "yaml" => Some(("yaml-language-server", vec!["--stdio"])),
+        "vue" => Some(("vue-language-server", vec!["--stdio"])),
+        "svelte" => Some(("svelteserver", vec!["--stdio"])),
+        "solidity" => Some(("solidity-ls", vec!["--stdio"])),
+        "terraform" => Some(("terraform-ls", vec!["serve"])),
+        "toml" => Some(("taplo", vec!["lsp", "stdio"])),
         _ => None,
     }
 }
@@ -51,6 +130,7 @@ pub fn lsp_start(
     let mut child = Command::new(command)
         .args(&args)
         .current_dir(&cwd)
+        .env("PATH", login_shell_path()) // find servers in nvm/cargo/brew dirs
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

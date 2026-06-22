@@ -164,7 +164,8 @@ export type Tool =
   | "outline"
   | "git"
   | "orphans"
-  | "specs";
+  | "specs"
+  | "extensions";
 
 interface WorkspaceState {
   /** Active side-panel tool, or null when the panel is collapsed. */

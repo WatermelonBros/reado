@@ -97,6 +97,8 @@ pub fn run() {
             lsp::lsp_start,
             lsp::lsp_send,
             lsp::lsp_stop,
+            lsp::lsp_installed,
+            lsp::linux_package_manager,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")

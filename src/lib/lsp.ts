@@ -16,14 +16,26 @@ import {
   signatureHelp,
   formatKeymap,
   renameKeymap,
-  jumpToDefinitionKeymap,
-  findReferencesKeymap,
 } from "@codemirror/lsp-client";
 import type { Transport } from "@codemirror/lsp-client";
-import { keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import {
+  keymap,
+  ViewPlugin,
+  EditorView,
+  Decoration,
+  WidgetType,
+  type DecorationSet,
+  type ViewUpdate,
+} from "@codemirror/view";
 import { setDiagnostics, type Diagnostic } from "@codemirror/lint";
-import type { Extension } from "@codemirror/state";
+import {
+  StateField,
+  StateEffect,
+  RangeSetBuilder,
+  type Extension,
+} from "@codemirror/state";
 import { lspStart, lspSend, lspStop } from "./api";
+import { useExtensions } from "./extensions";
 import { useDiagnostics } from "./diagnostics";
 import { taskFromDiagnostic } from "./lspActions";
 import { t } from "../i18n";
@@ -39,6 +51,28 @@ interface ServerDef {
 const SERVERS: ServerDef[] = [
   { id: "typescript", exts: ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"] },
   { id: "rust", exts: ["rs"] },
+  { id: "python", exts: ["py", "pyi"] },
+  { id: "go", exts: ["go"] },
+  { id: "cpp", exts: ["c", "h", "cc", "cpp", "cxx", "hpp", "hh"] },
+  { id: "bash", exts: ["sh", "bash"] },
+  { id: "csharp", exts: ["cs"] },
+  { id: "java", exts: ["java"] },
+  { id: "kotlin", exts: ["kt", "kts"] },
+  { id: "scala", exts: ["scala", "sbt", "sc"] },
+  { id: "ruby", exts: ["rb"] },
+  { id: "php", exts: ["php"] },
+  { id: "lua", exts: ["lua"] },
+  { id: "swift", exts: ["swift"] },
+  { id: "zig", exts: ["zig"] },
+  { id: "html", exts: ["html", "htm"] },
+  { id: "css", exts: ["css", "scss", "less"] },
+  { id: "json", exts: ["json", "jsonc"] },
+  { id: "yaml", exts: ["yaml", "yml"] },
+  { id: "vue", exts: ["vue"] },
+  { id: "svelte", exts: ["svelte"] },
+  { id: "solidity", exts: ["sol"] },
+  { id: "terraform", exts: ["tf", "tfvars"] },
+  { id: "toml", exts: ["toml"] },
 ];
 
 // LSP language identifiers per extension. Crucially `.tsx`/`.jsx` are *react*
@@ -54,10 +88,54 @@ const LANG_IDS: Record<string, string> = {
   cjs: "javascript",
   jsx: "javascriptreact",
   rs: "rust",
+  py: "python",
+  pyi: "python",
+  go: "go",
+  c: "c",
+  h: "c",
+  cc: "cpp",
+  cpp: "cpp",
+  cxx: "cpp",
+  hpp: "cpp",
+  hh: "cpp",
+  sh: "shellscript",
+  bash: "shellscript",
+  cs: "csharp",
+  java: "java",
+  kt: "kotlin",
+  kts: "kotlin",
+  scala: "scala",
+  sbt: "scala",
+  sc: "scala",
+  rb: "ruby",
+  php: "php",
+  lua: "lua",
+  swift: "swift",
+  zig: "zig",
+  html: "html",
+  htm: "html",
+  css: "css",
+  scss: "scss",
+  less: "less",
+  json: "json",
+  jsonc: "jsonc",
+  yaml: "yaml",
+  yml: "yaml",
+  vue: "vue",
+  svelte: "svelte",
+  sol: "solidity",
+  tf: "terraform",
+  tfvars: "terraform",
+  toml: "toml",
 };
 
 const extOf = (path: string) => path.split(".").pop()?.toLowerCase() ?? "";
-const serverFor = (path: string) => SERVERS.find((s) => s.exts.includes(extOf(path))) ?? null;
+// A server applies only if its extension matches *and* the user hasn't disabled
+// it in the marketplace.
+const serverFor = (path: string) =>
+  SERVERS.find(
+    (s) => s.exts.includes(extOf(path)) && useExtensions.getState().isEnabled(s.id),
+  ) ?? null;
 const langIdFor = (path: string) => LANG_IDS[extOf(path)] ?? extOf(path);
 
 /** A file:// URI for an absolute path (spaces and the like encoded). */
@@ -171,16 +249,177 @@ function serverDiagnostics() {
   };
 }
 
-/** The per-client LSP feature set: completion, hover, signature help, the LSP
- * keymaps, and our diagnostics. Mirrors the library's `languageServerExtensions`
- * but swaps in our `serverDiagnostics`. */
+interface HoverResult {
+  contents: string | { value: string } | (string | { value: string })[];
+}
+
+/** Fetch the language server's hover documentation for the symbol at `pos`
+ * (signature + docs), flattened to plain markdown text. Null when no server is
+ * attached or there's nothing to show. Used to give the AI real context about a
+ * symbol — especially from external libraries whose source isn't in the repo. */
+export function lspHover(view: EditorView, pos: number): Promise<string | null> {
+  const plugin = LSPPlugin.get(view);
+  if (!plugin) return Promise.resolve(null);
+  plugin.client.sync();
+  return plugin.client
+    .request<unknown, HoverResult | null>("textDocument/hover", {
+      textDocument: { uri: plugin.uri },
+      position: plugin.toPosition(pos),
+    })
+    .then((res) => {
+      const c = res?.contents;
+      if (!c) return null;
+      const text = typeof c === "string"
+        ? c
+        : Array.isArray(c)
+          ? c.map((x) => (typeof x === "string" ? x : x.value)).join("\n\n")
+          : c.value;
+      return text.trim() || null;
+    })
+    .catch(() => null);
+}
+
+// ---- Inlay hints (inferred types + parameter names, inline) ---------------
+
+interface InlayHint {
+  position: { line: number; character: number };
+  label: string | { value: string }[];
+  paddingLeft?: boolean;
+  paddingRight?: boolean;
+}
+
+class InlayWidget extends WidgetType {
+  constructor(
+    readonly label: string,
+    readonly padL: boolean,
+    readonly padR: boolean,
+  ) {
+    super();
+  }
+  eq(o: InlayWidget) {
+    return o.label === this.label && o.padL === this.padL && o.padR === this.padR;
+  }
+  toDOM() {
+    const s = document.createElement("span");
+    s.className = "cm-inlay-hint";
+    if (this.padL) s.style.marginLeft = "0.4ch";
+    if (this.padR) s.style.marginRight = "0.4ch";
+    s.textContent = this.label;
+    return s;
+  }
+}
+
+const setInlays = StateEffect.define<DecorationSet>();
+const inlayField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    value = value.map(tr.changes);
+    for (const e of tr.effects) if (e.is(setInlays)) value = e.value;
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+// Fetches inlay hints for the viewport (debounced) and pushes them into the
+// field. A no-op when the server has no inlayHintProvider (request rejects).
+const inlayFetcher = ViewPlugin.fromClass(
+  class {
+    pending = -1;
+    constructor(view: EditorView) {
+      this.schedule(view);
+    }
+    update(u: ViewUpdate) {
+      if (u.docChanged || u.viewportChanged) this.schedule(u.view);
+    }
+    schedule(view: EditorView) {
+      if (this.pending > -1) clearTimeout(this.pending);
+      this.pending = window.setTimeout(() => {
+        this.pending = -1;
+        this.fetch(view);
+      }, 400);
+    }
+    fetch(view: EditorView) {
+      const plugin = LSPPlugin.get(view);
+      if (!plugin) return;
+      const { from, to } = view.viewport;
+      plugin.client
+        .request<unknown, InlayHint[] | null>("textDocument/inlayHint", {
+          textDocument: { uri: plugin.uri },
+          range: { start: plugin.toPosition(from), end: plugin.toPosition(to) },
+        })
+        .then((hints) => {
+          if (!hints) return;
+          const items = hints
+            .map((h) => ({ pos: plugin.fromPosition(h.position), h }))
+            .sort((a, b) => a.pos - b.pos);
+          const b = new RangeSetBuilder<Decoration>();
+          for (const { pos, h } of items) {
+            const label =
+              typeof h.label === "string" ? h.label : h.label.map((p) => p.value).join("");
+            b.add(
+              pos,
+              pos,
+              Decoration.widget({
+                widget: new InlayWidget(label, !!h.paddingLeft, !!h.paddingRight),
+                side: 1,
+              }),
+            );
+          }
+          view.dispatch({ effects: setInlays.of(b.finish()) });
+        })
+        .catch(() => {});
+    }
+    destroy() {
+      if (this.pending > -1) clearTimeout(this.pending);
+    }
+  },
+);
+
+const inlayHints = (): Extension => [inlayField, inlayFetcher];
+
+/** The per-client LSP feature set: completion, hover, signature help, our
+ * diagnostics, inlay hints, and the rename/format keymaps. Definition/references
+ * navigation is handled by the editor's own gestures (which fall back to the
+ * index), so the library's F12/Shift-F12 keymaps are intentionally left out. */
 const clientExtensions = () => [
   serverCompletion(),
   hoverTooltips(),
-  keymap.of([...formatKeymap, ...renameKeymap, ...jumpToDefinitionKeymap, ...findReferencesKeymap]),
+  keymap.of([...formatKeymap, ...renameKeymap]),
   signatureHelp(),
   serverDiagnostics(),
+  inlayHints(),
 ];
+
+interface LspLocation {
+  uri: string;
+  range: { start: { line: number; character: number } };
+}
+
+/** Ask the server to locate a symbol (definition/typeDefinition/implementation)
+ * at `pos` and open the result through the app's own navigation. Returns true
+ * when a server is attached (so the caller falls back to the index only when no
+ * server is present). */
+export function lspLocate(
+  view: EditorView,
+  pos: number,
+  method: "definition" | "typeDefinition" | "implementation",
+  open: (path: string, line: number) => void,
+): boolean {
+  const plugin = LSPPlugin.get(view);
+  if (!plugin) return false;
+  plugin.client.sync();
+  plugin.client
+    .request<unknown, LspLocation | LspLocation[] | null>(`textDocument/${method}`, {
+      textDocument: { uri: plugin.uri },
+      position: plugin.toPosition(pos),
+    })
+    .then((res) => {
+      const loc = Array.isArray(res) ? res[0] : res;
+      if (loc) open(fromUri(loc.uri), loc.range.start.line + 1);
+    })
+    .catch(() => {});
+  return true;
+}
 
 interface Conn {
   client: LSPClient;

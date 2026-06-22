@@ -61,8 +61,8 @@ import { useComments, commentsForFile, toRelative } from "../../lib/comments";
 import { useTextView } from "../../lib/textView";
 import { useReadProgress, noteSelfWrite } from "../../lib/readProgress";
 import { useTerminals } from "../../lib/terminals";
-import { composeExplainPrompt } from "../../lib/review";
-import { lspSupport, hasServer } from "../../lib/lsp";
+import { composeExplainPrompt, composeSymbolExplainPrompt } from "../../lib/review";
+import { lspSupport, hasServer, lspLocate, lspHover } from "../../lib/lsp";
 import { taskFromDiagnostic } from "../../lib/lspActions";
 import {
   useCursor,
@@ -188,6 +188,9 @@ function goToDefinitionAt(view: EditorView, pos: number) {
       return;
     }
   }
+  // Prefer the language server when one is attached; it returns true so we only
+  // fall back to the symbol index for files with no server.
+  if (lspLocate(view, pos, "definition", (p, l) => useProject.getState().open(p, l))) return;
   const word = view.state.wordAt(pos);
   if (!word) return;
   const name = view.state.doc.sliceString(word.from, word.to);
@@ -196,6 +199,15 @@ function goToDefinitionAt(view: EditorView, pos: number) {
       if (defs.length) useProject.getState().open(defs[0].path, defs[0].line);
     })
     .catch(() => {});
+}
+
+/** Go to the type definition / implementation of the symbol at `pos` via the
+ *  language server (no index equivalent; a no-op when no server is attached). */
+function goToTypeDefinitionAt(view: EditorView, pos: number) {
+  lspLocate(view, pos, "typeDefinition", (p, l) => useProject.getState().open(p, l));
+}
+function goToImplementationAt(view: EditorView, pos: number) {
+  lspLocate(view, pos, "implementation", (p, l) => useProject.getState().open(p, l));
 }
 
 /** Find references: project-wide search for the identifier at the cursor. */
@@ -723,6 +735,7 @@ function CodeView({
         // F12 jumps to the definition of the symbol at the cursor.
         keymap.of([
           { key: "F12", run: (v) => (goToDefinitionAt(v, v.state.selection.main.head), true) },
+          { key: "Mod-F12", run: (v) => (goToImplementationAt(v, v.state.selection.main.head), true) },
         ]),
         // Go to line — Cmd/Ctrl+G (VS Code), alongside the default Cmd+Alt+G.
         keymap.of([{ key: "Mod-g", run: gotoLine }]),
@@ -1094,6 +1107,23 @@ function CodeView({
     submitToTerminal(id, prompt, id === term.activeId ? 0 : 400);
   };
 
+  // Explain a single symbol using the language server's hover docs as context
+  // (great for external libraries), and let the agent leave a note on the line.
+  const explainSymbol = (pos: number) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const word = view.state.wordAt(pos);
+    if (!word) return;
+    const symbol = view.state.doc.sliceString(word.from, word.to);
+    const line = view.state.doc.lineAt(pos).number;
+    lspHover(view, pos).then((docs) => {
+      const prompt = composeSymbolExplainPrompt(relPath, line, symbol, docs ?? "");
+      const term = useTerminals.getState();
+      const tid = term.activeId ?? term.add();
+      submitToTerminal(tid, prompt, tid === term.activeId ? 0 : 400);
+    });
+  };
+
   const ctxActions = () => {
     const view = viewRef.current;
     if (!view || !ctxMenu) return [];
@@ -1113,6 +1143,21 @@ function CodeView({
         label: t("editor.goToDef"),
         run: () => goToDefinitionAt(view, pos),
       },
+      hasServer(path) &&
+        word && {
+          label: t("editor.goToTypeDef"),
+          run: () => goToTypeDefinitionAt(view, pos),
+        },
+      hasServer(path) &&
+        word && {
+          label: t("editor.goToImpl"),
+          run: () => goToImplementationAt(view, pos),
+        },
+      hasServer(path) &&
+        word && {
+          label: t("editor.explainSymbol"),
+          run: () => explainSymbol(pos),
+        },
       diagMessage && {
         label: t("lsp.createTaskFromProblem"),
         run: () => openComposerFor(clickLine.number, clickLine.number, { body: diagMessage!, type: "bug" }),

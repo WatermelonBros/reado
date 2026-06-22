@@ -27,6 +27,7 @@ import { CommentsPanel } from "../organisms/CommentsPanel";
 import { GitPanel } from "../organisms/GitPanel";
 import { OrphansPanel } from "../organisms/OrphansPanel";
 import { SpecsPanel } from "../organisms/SpecsPanel";
+import { ExtensionsPanel } from "../organisms/ExtensionsPanel";
 import { OutlinePanel } from "../organisms/OutlinePanel";
 import { useSpecs } from "../../lib/specs";
 import { Tabs } from "../organisms/Tabs";
@@ -51,6 +52,7 @@ const PANEL_TITLE: Record<string, MessageKey> = {
   git: "git.panel",
   orphans: "orphans.panel",
   specs: "specs.panel",
+  extensions: "ext.panel",
 };
 
 const basename = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? p;
@@ -246,6 +248,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "git" && <GitPanel />}
             {tool === "specs" && <SpecsPanel />}
             {tool === "orphans" && <OrphansPanel />}
+            {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>
       )}

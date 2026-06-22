@@ -43,6 +43,9 @@
     "viewSource": "Sorgente",
     "viewRendered": "Anteprima",
     "goToDef": "Vai alla definizione",
+    "goToTypeDef": "Vai alla definizione del tipo",
+    "goToImpl": "Vai all'implementazione",
+    "explainSymbol": "Spiegamelo con l'AI",
     "sticky": "Sticky scroll",
     "stickyJump": "Vai a questo scope",
     "measure": "Larghezza di lettura",
@@ -289,6 +292,16 @@
   "lsp": {
     "createTask": "Crea task",
     "createTaskFromProblem": "Crea task dal problema"
+  },
+  "ext": {
+    "panel": "Estensioni",
+    "languageServers": "Language server",
+    "recheck": "Ricontrolla installati",
+    "installed": "Installato",
+    "install": "Installa",
+    "manual": "Installazione manuale",
+    "enabled": "Abilitato",
+    "requires": "Richiede {name}"
   },
   "specs": {
     "panel": "Spec",

@@ -386,5 +386,14 @@ export const lspSend = (id: string, message: string) =>
 /** Stop a language server. */
 export const lspStop = (id: string) => invoke<void>("lsp_stop", { id });
 
+/** Whether a known language server's binary is installed (on the real PATH). */
+export const lspInstalled = (server: string) =>
+  invoke<boolean>("lsp_installed", { server });
+
+/** The Linux package manager available ("apt"|"dnf"|"pacman"|"zypper"|"brew"),
+ * or null — so the marketplace picks the right per-distro install command. */
+export const linuxPackageManager = () =>
+  invoke<string | null>("linux_package_manager");
+
 /** Kill a terminal session. */
 export const ptyKill = (id: string) => invoke<void>("pty_kill", { id });

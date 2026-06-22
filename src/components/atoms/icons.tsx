@@ -29,6 +29,15 @@ export const CollapseAllIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const ExtensionsIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <rect x="3" y="3" width="7.5" height="7.5" rx="1" />
+    <rect x="13.5" y="3" width="7.5" height="7.5" rx="1" />
+    <rect x="3" y="13.5" width="7.5" height="7.5" rx="1" />
+    <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1" />
+  </svg>
+);
+
 export const PullIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M12 3v11M8 10l4 4 4-4M5 21h14" />
