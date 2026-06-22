@@ -7,9 +7,10 @@ import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useUpdate } from "../../lib/update";
-import { useT } from "../../i18n";
+
 import { Modal } from "../atoms/Modal";
 import { CloseIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
 
 export function UpdatePrompt() {
   const { update, version, notes, open, dismissed, installing, toast } = useUpdate();
@@ -17,7 +18,7 @@ export function UpdatePrompt() {
   const dismiss = useUpdate((s) => s.dismiss);
   const install = useUpdate((s) => s.install);
   const clearToast = useUpdate((s) => s.clearToast);
-  const t = useT();
+  const { t } = useTranslation();
 
   // Auto-dismiss the toast.
   useEffect(() => {

@@ -16,8 +16,9 @@ import { listDir, movePath, importPaths, type DirEntry } from "../../lib/api";
 import { useProject } from "../../lib/store";
 import { useTextView } from "../../lib/textView";
 import { useReadProgress } from "../../lib/readProgress";
+import { useDiagnostics } from "../../lib/diagnostics";
 import { toRelative } from "../../lib/comments";
-import { useT } from "../../i18n";
+
 import {
   FileIcon,
   ChevronIcon,
@@ -29,6 +30,7 @@ import {
 import { TreeCommentDialog, type CommentTarget } from "../organisms/TreeCommentDialog";
 import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
+import { useTranslation } from "react-i18next";
 
 type Ctx = (entry: DirEntry | null, e: React.MouseEvent) => void;
 
@@ -44,7 +46,7 @@ export function FileTree() {
   const open = useProject((s) => s.open);
   const showHidden = useProject((s) => s.showHidden);
   const treeNonce = useProject((s) => s.treeNonce);
-  const t = useT();
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [menu, setMenu] = useState<{ x: number; y: number; entry: DirEntry | null } | null>(
@@ -165,6 +167,21 @@ export function FileTree() {
               },
             ]
           : []),
+        ...(menu.entry && !menu.entry.isDir && /\.(md|markdown|mdx)$/i.test(menu.entry.path)
+          ? [
+              {
+                // Markdown opens as rendered prose by default; this opens it
+                // straight into the editable source view.
+                label: t("tree.editSource"),
+                icon: <EditIcon className="h-3.5 w-3.5" />,
+                onSelect: () => {
+                  useTextView.getState().openAsText(menu.entry!.path);
+                  open(menu.entry!.path);
+                  setMenu(null);
+                },
+              },
+            ]
+          : []),
         {
           label: t("tree.commentProject"),
           icon: <MessageIcon className="h-3.5 w-3.5" />,
@@ -225,7 +242,7 @@ function DirChildren({
   onMove,
 }: DirChildrenProps) {
   const [entries, setEntries] = useState<DirEntry[] | null>(null);
-  const t = useT();
+  const { t } = useTranslation();
 
   useEffect(() => {
     let cancelled = false;
@@ -286,22 +303,44 @@ function TreeNode({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [over, setOver] = useState(false);
+  const rowRef = useRef<HTMLButtonElement>(null);
+  const { t } = useTranslation();
   const open = useProject((s) => s.open);
   const active = useProject((s) => s.active);
+
+  // Reveal the open file: ancestor folders auto-expand (the chain cascades as
+  // each level mounts), and the active row scrolls into view.
+  useEffect(() => {
+    if (entry.isDir && active && active.startsWith(entry.path + sep(entry.path))) {
+      setExpanded(true);
+    }
+  }, [active, entry.isDir, entry.path]);
+  const isActive = !entry.isDir && active === entry.path;
+  useEffect(() => {
+    if (isActive) rowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [isActive]);
+  // Collapse-all from the panel header (skip the initial 0).
+  const collapseNonce = useProject((s) => s.collapseNonce);
+  useEffect(() => {
+    if (collapseNonce && entry.isDir) setExpanded(false);
+  }, [collapseNonce, entry.isDir]);
   // Read files are dimmed (a quiet reading-progress cue).
   const isRead = useReadProgress((s) => !entry.isDir && s.read.has(toRelative(root, entry.path)));
+  // Error count from the language server — a quiet trailing count, not a loud
+  // red filename (and honest: its absence means "none found", not "clean").
+  const errorCount = useDiagnostics((s) => (entry.isDir ? 0 : (s.errors[entry.path] ?? 0)));
 
   const onClick = useCallback(() => {
     if (entry.isDir) setExpanded((e) => !e);
     else open(entry.path);
   }, [entry, open]);
 
-  const isActive = !entry.isDir && active === entry.path;
   const dragging = (e: React.DragEvent) => e.dataTransfer.types.includes(DRAG_TYPE);
 
   return (
     <>
       <button
+        ref={rowRef}
         type="button"
         style={indent(depth)}
         data-dir={dropDir(entry)}
@@ -341,12 +380,20 @@ function TreeNode({
         )}
         <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} />
         <span
-          className={`overflow-hidden text-ellipsis whitespace-nowrap ${
+          className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${
             isRead ? "text-muted" : ""
           }`}
         >
           {entry.name}
         </span>
+        {errorCount > 0 && (
+          <span
+            title={t("tree.problems", { count: errorCount })}
+            className="flex-none pl-1 text-[10px] font-medium text-danger tabular-nums"
+          >
+            {errorCount}
+          </span>
+        )}
       </button>
       {entry.isDir && expanded && (
         <DirChildren

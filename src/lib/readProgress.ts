@@ -7,6 +7,24 @@
 import { create } from "zustand";
 import { listRead, setReadState } from "./api";
 
+// Paths we just wrote ourselves (a manual save/format). The watcher's resulting
+// `file-changed` should not flip the file back to "unread" — only *external*
+// changes (e.g. an agent's edit) mean there's new content to re-read.
+const selfWrites = new Set<string>();
+/** Note that we just wrote `relPath`, suppressing the unread-on-change for it.
+ *  A generous window tolerates a slow watcher; the flag is also consumed on the
+ *  first matching change so a *later* external edit isn't wrongly suppressed. */
+export function noteSelfWrite(relPath: string) {
+  selfWrites.add(relPath);
+  setTimeout(() => selfWrites.delete(relPath), 4000);
+}
+/** Whether `relPath`'s pending change is our own write (consumes the flag). */
+export function wasSelfWrite(relPath: string): boolean {
+  if (!selfWrites.has(relPath)) return false;
+  selfWrites.delete(relPath);
+  return true;
+}
+
 interface ReadProgressState {
   /** Project-relative paths marked read. */
   read: Set<string>;

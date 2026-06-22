@@ -10,7 +10,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Comment, CommentState, CommentType } from "../../lib/api";
 import { useComments } from "../../lib/comments";
-import { useT } from "../../i18n";
+
 import {
   COMMENT_STATES,
   COMMENT_TYPES,
@@ -27,6 +27,7 @@ import { CloseIcon, SendIcon } from "../atoms/icons";
 import { useTerminals } from "../../lib/terminals";
 import { ptyWrite } from "../../lib/api";
 import { composeSingleTaskPrompt } from "../../lib/review";
+import { useTranslation } from "react-i18next";
 
 const fmtTime = (ms: number) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
@@ -41,7 +42,7 @@ interface Props {
 
 export function CommentThread({ comment, top, onClose }: Props) {
   const { patch, reply, setState, remove } = useComments();
-  const t = useT();
+  const { t } = useTranslation();
   const [replyText, setReplyText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // When non-null, the root message is being edited (holds the draft text).

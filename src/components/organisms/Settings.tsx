@@ -2,13 +2,15 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useSettings, usePalette, THEMES, type ThemeName, type ThemeMode } from "../../lib/store";
-import { useLocale, useT, type Locale, type MessageKey } from "../../i18n";
+import { useLocale, type Locale, type MessageKey } from "../../i18n";
 import { installCli, cliInstalled } from "../../lib/api";
 import { checkForUpdates } from "../../lib/updater";
 import { Select } from "../atoms/Select";
 import { Drawer } from "../atoms/Drawer";
 import { Checkbox } from "../atoms/Checkbox";
 import { CloseIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 const FONT_PRESETS = [
   "JetBrains Mono",
@@ -24,7 +26,7 @@ export function Settings() {
   const toggle = usePalette((s) => s.toggleSettings);
   const settings = useSettings();
   const { locale, setLocale } = useLocale();
-  const t = useT();
+  const { t } = useTranslation();
 
   return (
     <Drawer
@@ -130,7 +132,7 @@ export function Settings() {
 
 /** Install the bundled `reado` CLI onto the user's PATH (~/.local/bin). */
 function CliInstall() {
-  const t = useT();
+  const { t } = useTranslation();
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -179,7 +181,7 @@ function CliInstall() {
 
 /** App version + a manual update check. */
 function AppVersion() {
-  const t = useT();
+  const { t } = useTranslation();
   const [version, setVersion] = useState("");
   useEffect(() => {
     getVersion()
@@ -229,7 +231,7 @@ function ThemeChoice({
   value: ThemeName;
   onChange: (theme: ThemeName) => void;
   filter?: (theme: ThemeName) => boolean;
-  t: ReturnType<typeof useT>;
+  t: TFunction;
 }) {
   const options = filter ? THEMES.filter(filter) : THEMES;
   return (

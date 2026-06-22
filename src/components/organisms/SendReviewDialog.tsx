@@ -8,11 +8,12 @@ import { submitToTerminal } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useTerminals } from "../../lib/terminals";
 import { composeReviewPrompt, composeReviewPromptForIds } from "../../lib/review";
-import { useT } from "../../i18n";
+
 import { TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
 import { Modal } from "../atoms/Modal";
 import { Checkbox } from "../atoms/Checkbox";
 import { Select } from "../atoms/Select";
+import { useTranslation } from "react-i18next";
 
 export function SendReviewDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const comments = useComments((s) => s.comments);
@@ -20,7 +21,7 @@ export function SendReviewDialog({ open, onClose }: { open: boolean; onClose: ()
   const sessions = useTerminals((s) => s.sessions);
   const activeId = useTerminals((s) => s.activeId);
   const add = useTerminals((s) => s.add);
-  const t = useT();
+  const { t } = useTranslation();
 
   // All tasks selected by default; the target is the active terminal.
   const [excluded, setExcluded] = useState<Set<string>>(new Set());

@@ -311,6 +311,60 @@ pub(crate) fn base64_encode(input: &[u8]) -> String {
     out
 }
 
+/// Resolve a relative import specifier (`./foo`, `../lib/bar`) from `from_file`
+/// to an existing file inside `root`, trying the usual extensions and `index`
+/// files. Returns the absolute path, or `None` when nothing resolves. Used for
+/// modifier-click navigation on import paths.
+#[tauri::command]
+pub fn resolve_import(root: String, from_file: String, spec: String) -> Result<Option<String>> {
+    // Only relative specifiers — bare specs (npm packages) aren't navigable.
+    if !(spec.starts_with("./") || spec.starts_with("../")) {
+        return Ok(None);
+    }
+    let root = PathBuf::from(&root);
+    let from_dir = PathBuf::from(&from_file);
+    let base = from_dir.parent().unwrap_or(Path::new(".")).join(&spec);
+
+    const EXTS: &[&str] = &[
+        "ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "css", "scss", "rs",
+    ];
+    let mut candidates = vec![base.clone()];
+    candidates.extend(
+        EXTS.iter()
+            .map(|ext| PathBuf::from(format!("{}.{ext}", base.display()))),
+    );
+    candidates.extend(
+        ["ts", "tsx", "js", "jsx"]
+            .iter()
+            .map(|ext| base.join(format!("index.{ext}"))),
+    );
+
+    for cand in candidates {
+        if cand.is_file() {
+            if let Ok(p) = ensure_within(&root, &cand) {
+                return Ok(Some(p.to_string_lossy().into_owned()));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Resolve a path printed in the terminal (`src/foo.ts`, or an absolute path) to
+/// an existing file inside `root`. Returns the absolute path, or `None`. Used to
+/// make `path:line:col` in agent/build output clickable.
+#[tauri::command]
+pub fn resolve_path(root: String, spec: String) -> Result<Option<String>> {
+    let root = PathBuf::from(&root);
+    let p = PathBuf::from(&spec);
+    let cand = if p.is_absolute() { p } else { root.join(&spec) };
+    if cand.is_file() {
+        if let Ok(abs) = ensure_within(&root, &cand) {
+            return Ok(Some(abs.to_string_lossy().into_owned()));
+        }
+    }
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::base64_encode;

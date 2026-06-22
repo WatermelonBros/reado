@@ -4,12 +4,13 @@
  * saying "no file open".
  */
 import { SHORTCUTS } from "../../lib/shortcuts";
-import { useT, type MessageKey } from "../../i18n";
+import { type MessageKey } from "../../i18n";
+import { useTranslation } from "react-i18next";
 
 const STEPS: MessageKey[] = ["welcome.step1", "welcome.step2", "welcome.step3"];
 
 export function Welcome() {
-  const t = useT();
+  const { t } = useTranslation();
   return (
     <div className="grid h-full place-items-center p-8">
       <div className="w-full max-w-[380px]">

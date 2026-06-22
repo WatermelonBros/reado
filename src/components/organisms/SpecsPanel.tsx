@@ -5,7 +5,7 @@
  */
 import { useSpecs } from "../../lib/specs";
 import { useProject } from "../../lib/store";
-import { useT } from "../../i18n";
+import { useTranslation } from "react-i18next";
 
 /** Display label without the markdown extension (proposal.md → proposal). */
 const stripExt = (label: string) => label.replace(/\.(md|markdown)$/i, "");
@@ -15,7 +15,7 @@ export function SpecsPanel() {
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);
   const active = useProject((s) => s.active);
-  const t = useT();
+  const { t } = useTranslation();
 
   if (groups.length === 0) {
     return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("specs.empty")}</p>;

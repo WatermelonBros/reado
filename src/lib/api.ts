@@ -60,6 +60,16 @@ export const movePath = (root: string, from: string, to: string) =>
 export const importPaths = (root: string, sources: string[], destDir: string) =>
   invoke<void>("import_paths", { root, sources, destDir });
 
+/** Resolve a relative import spec to an existing file (for modifier-click on a
+ * path); returns the absolute path or null. */
+export const resolveImport = (root: string, fromFile: string, spec: string) =>
+  invoke<string | null>("resolve_import", { root, fromFile, spec });
+
+/** Resolve a path printed in the terminal (project-relative or absolute) to an
+ * existing file inside the project; returns the absolute path or null. */
+export const resolvePath = (root: string, spec: string) =>
+  invoke<string | null>("resolve_path", { root, spec });
+
 /** Git status of the project root (never throws). */
 export const gitInfo = (root: string) => invoke<GitInfo>("git_info", { root });
 
@@ -101,9 +111,51 @@ export const gitUnstageAll = (root: string) => invoke<void>("git_unstage_all", {
 export const gitDiscard = (root: string, path: string, untracked: boolean) =>
   invoke<void>("git_discard", { root, path, untracked });
 
+/** Discard all working-tree changes; `untracked` also removes untracked files. Destructive. */
+export const gitDiscardAll = (root: string, untracked: boolean) =>
+  invoke<void>("git_discard_all", { root, untracked });
+
 /** Commit the staged changes with a message. */
 export const gitCommit = (root: string, message: string) =>
   invoke<void>("git_commit", { root, message });
+
+/** Create and switch to a new branch. */
+export const gitCreateBranch = (root: string, name: string) =>
+  invoke<void>("git_create_branch", { root, name });
+
+/** Fetch all remotes (with prune). */
+export const gitFetch = (root: string) => invoke<void>("git_fetch", { root });
+
+/** Pull the current branch from upstream. */
+export const gitPull = (root: string) => invoke<void>("git_pull", { root });
+
+/** Push the current branch (sets upstream to origin if needed). */
+export const gitPush = (root: string) => invoke<void>("git_push", { root });
+
+export interface StashEntry {
+  index: number;
+  message: string;
+}
+
+/** List saved stashes (most recent first). */
+export const gitStashList = (root: string) =>
+  invoke<StashEntry[]>("git_stash_list", { root });
+
+/** Stash working-tree changes (optionally including untracked). */
+export const gitStash = (root: string, message: string, untracked: boolean) =>
+  invoke<void>("git_stash", { root, message, untracked });
+
+/** Apply and drop a stash. */
+export const gitStashPop = (root: string, index: number) =>
+  invoke<void>("git_stash_pop", { root, index });
+
+/** Apply a stash, keeping it. */
+export const gitStashApply = (root: string, index: number) =>
+  invoke<void>("git_stash_apply", { root, index });
+
+/** Delete a stash without applying. */
+export const gitStashDrop = (root: string, index: number) =>
+  invoke<void>("git_stash_drop", { root, index });
 
 export interface GitRefs {
   branches: string[];
@@ -321,6 +373,18 @@ export function submitToTerminal(id: string, command: string, delay = 0): void {
 /** Resize a terminal's PTY. */
 export const ptyResize = (id: string, rows: number, cols: number) =>
   invoke<void>("pty_resize", { id, rows, cols });
+
+/** Start a known language `server` (resolved to a binary in Rust) for connection
+ * `id`, running in `cwd`; output via `lsp-{id}`. */
+export const lspStart = (id: string, server: string, cwd: string) =>
+  invoke<void>("lsp_start", { id, server, cwd });
+
+/** Send a JSON-RPC message to language server `id`. */
+export const lspSend = (id: string, message: string) =>
+  invoke<void>("lsp_send", { id, message });
+
+/** Stop a language server. */
+export const lspStop = (id: string) => invoke<void>("lsp_stop", { id });
 
 /** Kill a terminal session. */
 export const ptyKill = (id: string) => invoke<void>("pty_kill", { id });

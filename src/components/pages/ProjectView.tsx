@@ -13,13 +13,13 @@ import {
   readFile,
   listFiles,
 } from "../../lib/api";
-import { useReadProgress } from "../../lib/readProgress";
+import { useReadProgress, wasSelfWrite } from "../../lib/readProgress";
 import { useProject, useSessions, useWorkspace } from "../../lib/store";
 import { useComments, toRelative } from "../../lib/comments";
 import { notifyResolved } from "../../lib/notify";
 import { loadProjectConfig, watchProjectConfig } from "../../lib/projectConfig";
 import { setWindowTitle } from "../../lib/window";
-import { useT, type MessageKey } from "../../i18n";
+import { type MessageKey } from "../../i18n";
 import { ActivityBar } from "../organisms/ActivityBar";
 import { FileTree } from "../organisms/FileTree";
 import { SearchPanel } from "../organisms/SearchPanel";
@@ -40,7 +40,8 @@ import { KnowledgeGraph } from "../organisms/KnowledgeGraph";
 import { DocsView } from "../organisms/DocsView";
 import { TerminalPanel } from "../organisms/TerminalPanel";
 import { useTerminals } from "../../lib/terminals";
-import { EyeIcon, EyeOffIcon, CloseIcon, SwapIcon } from "../atoms/icons";
+import { EyeIcon, EyeOffIcon, CloseIcon, SwapIcon, CollapseAllIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
 
 const PANEL_TITLE: Record<string, MessageKey> = {
   files: "files.panel",
@@ -60,7 +61,7 @@ export function ProjectView({ root }: { root: string }) {
   const tabs = useProject((s) => s.tabs);
   const active = useProject((s) => s.active);
   const saveSession = useSessions((s) => s.save);
-  const t = useT();
+  const { t } = useTranslation();
 
   // True once the saved session has been restored. We must not persist the
   // (empty) initial state before then, or it would clobber the saved session.
@@ -106,6 +107,12 @@ export function ProjectView({ root }: { root: string }) {
     const offs = [
       listen<{ file: string }>("file-changed", (event) => {
         const { file } = event.payload;
+        // An external change (e.g. an agent's edit) to a file marked read means
+        // there's new content to look at — flip it back to unread. Our own saves
+        // are suppressed via wasSelfWrite.
+        if (!wasSelfWrite(file) && useReadProgress.getState().read.has(file)) {
+          useReadProgress.getState().mark(root, file, false);
+        }
         reanchorFile(root, file)
           .then((list) => useComments.getState().replaceForFile(file, list))
           .catch(() => {});
@@ -202,22 +209,33 @@ export function ProjectView({ root }: { root: string }) {
               )}
             </span>
             {tool === "files" && (
-              <button
-                type="button"
-                onClick={() => setShowHidden(!showHidden)}
-                aria-pressed={showHidden}
-                title={t("tree.showHidden")}
-                aria-label={t("tree.showHidden")}
-                className={`grid h-6 w-6 place-items-center rounded-md transition-colors hover:bg-overlay hover:text-ink ${
-                  showHidden ? "text-accent" : "text-faint"
-                }`}
-              >
-                {showHidden ? (
-                  <EyeIcon className="h-[15px] w-[15px]" />
-                ) : (
-                  <EyeOffIcon className="h-[15px] w-[15px]" />
-                )}
-              </button>
+              <span className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => useProject.getState().collapseTree()}
+                  title={t("tree.collapseAll")}
+                  aria-label={t("tree.collapseAll")}
+                  className="grid h-6 w-6 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-ink"
+                >
+                  <CollapseAllIcon className="h-[15px] w-[15px]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowHidden(!showHidden)}
+                  aria-pressed={showHidden}
+                  title={t("tree.showHidden")}
+                  aria-label={t("tree.showHidden")}
+                  className={`grid h-6 w-6 place-items-center rounded-md transition-colors hover:bg-overlay hover:text-ink ${
+                    showHidden ? "text-accent" : "text-faint"
+                  }`}
+                >
+                  {showHidden ? (
+                    <EyeIcon className="h-[15px] w-[15px]" />
+                  ) : (
+                    <EyeOffIcon className="h-[15px] w-[15px]" />
+                  )}
+                </button>
+              </span>
             )}
           </header>
           <div className="min-h-0 flex-1 overflow-hidden">

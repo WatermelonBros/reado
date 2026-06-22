@@ -12,6 +12,7 @@ mod format;
 mod fs;
 mod git;
 mod index;
+mod lsp;
 mod menu;
 mod progress;
 mod pty;
@@ -33,6 +34,7 @@ pub fn run() {
             Ok(())
         })
         .manage(pty::PtyState::default())
+        .manage(lsp::LspState::default())
         .invoke_handler(tauri::generate_handler![
             fs::list_dir,
             fs::list_files,
@@ -40,6 +42,8 @@ pub fn run() {
             fs::write_file,
             fs::move_path,
             fs::import_paths,
+            fs::resolve_import,
+            fs::resolve_path,
             git::git_info,
             git::git_branches,
             git::git_checkout,
@@ -51,8 +55,18 @@ pub fn run() {
             git::git_stage_all,
             git::git_unstage_all,
             git::git_discard,
+            git::git_discard_all,
             git::git_commit,
             git::git_blame,
+            git::git_create_branch,
+            git::git_fetch,
+            git::git_pull,
+            git::git_push,
+            git::git_stash,
+            git::git_stash_list,
+            git::git_stash_pop,
+            git::git_stash_apply,
+            git::git_stash_drop,
             search::search_text,
             search::replace_text,
             symbols::find_definition,
@@ -80,6 +94,9 @@ pub fn run() {
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,
+            lsp::lsp_start,
+            lsp::lsp_send,
+            lsp::lsp_stop,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")
@@ -89,6 +106,7 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 use tauri::Manager;
                 pty::kill_all(&app.state::<pty::PtyState>());
+                lsp::kill_all(&app.state::<lsp::LspState>());
             }
         });
 }

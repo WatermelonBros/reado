@@ -7,12 +7,21 @@
  */
 import { useEffect, useState } from "react";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
-import { useT } from "../../i18n";
+import { useTranslation } from "react-i18next";
 
 type Field = HTMLInputElement | HTMLTextAreaElement;
 
+/** Set a field's value through the native setter and fire `input`, so React's
+ *  controlled-component onChange sees the change (a plain `el.value =` doesn't). */
+function setFieldValue(el: Field, value: string, caret: number) {
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.setSelectionRange(caret, caret);
+}
+
 export function EditMenu() {
-  const t = useT();
+  const { t } = useTranslation();
   const [menu, setMenu] = useState<{ x: number; y: number; el: Field } | null>(null);
 
   useEffect(() => {
@@ -32,20 +41,37 @@ export function EditMenu() {
   const { el } = menu;
   const hasSelection = el.selectionStart !== el.selectionEnd;
 
-  const run = (fn: () => void) => {
+  const run = (fn: () => void | Promise<void>) => {
     el.focus();
-    fn();
+    void fn();
   };
+  const selection = () => el.value.slice(el.selectionStart ?? 0, el.selectionEnd ?? 0);
   const items: ContextMenuItem[] = [
-    { label: t("edit.cut"), disabled: !hasSelection, onSelect: () => run(() => document.execCommand("cut")) },
-    { label: t("edit.copy"), disabled: !hasSelection, onSelect: () => run(() => document.execCommand("copy")) },
+    {
+      label: t("edit.cut"),
+      disabled: !hasSelection,
+      onSelect: () =>
+        run(async () => {
+          const start = el.selectionStart ?? 0;
+          await navigator.clipboard.writeText(selection());
+          setFieldValue(el, el.value.slice(0, start) + el.value.slice(el.selectionEnd ?? 0), start);
+        }),
+    },
+    {
+      label: t("edit.copy"),
+      disabled: !hasSelection,
+      onSelect: () => run(() => navigator.clipboard.writeText(selection())),
+    },
     {
       label: t("edit.paste"),
       onSelect: () =>
         run(async () => {
           try {
             const text = await navigator.clipboard.readText();
-            if (text) document.execCommand("insertText", false, text);
+            if (!text) return;
+            const start = el.selectionStart ?? 0;
+            const end = el.selectionEnd ?? 0;
+            setFieldValue(el, el.value.slice(0, start) + text + el.value.slice(end), start + text.length);
           } catch {
             /* clipboard unavailable */
           }

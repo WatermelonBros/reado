@@ -9,7 +9,8 @@
 import { useWorkspace, usePalette, useProject, type Tool } from "../../lib/store";
 import { useComments, openCount } from "../../lib/comments";
 import { useSpecs } from "../../lib/specs";
-import { useT, type MessageKey } from "../../i18n";
+import { type MessageKey } from "../../i18n";
+import { useTranslation } from "react-i18next";
 import {
   FilesIcon,
   SearchIcon,
@@ -42,7 +43,7 @@ export function ActivityBar() {
   const openComments = useComments((s) => openCount(s.comments));
   const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length);
   const hasSpecs = useSpecs((s) => s.groups.length > 0);
-  const t = useT();
+  const { t } = useTranslation();
 
   // Source Control appears in git repos; Orphans only when there's something to
   // fix; Specs only when the project has an OpenSpec/speckit plan.

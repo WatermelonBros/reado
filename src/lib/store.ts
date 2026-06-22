@@ -323,6 +323,9 @@ interface ProjectState {
   /** Bumped to make the file tree re-list directories (external/internal changes). */
   treeNonce: number;
   bumpTree: () => void;
+  /** Bumped to collapse every expanded folder in the tree. */
+  collapseNonce: number;
+  collapseTree: () => void;
   /** Back/forward history of visited locations, and the cursor into it. */
   navStack: { path: string; line?: number }[];
   navIndex: number;
@@ -365,6 +368,8 @@ export const useProject = create<ProjectState>((set) => ({
   landing: null,
   treeNonce: 0,
   bumpTree: () => set((s) => ({ treeNonce: s.treeNonce + 1 })),
+  collapseNonce: 0,
+  collapseTree: () => set((s) => ({ collapseNonce: s.collapseNonce + 1 })),
   navStack: [],
   navIndex: -1,
   closedTabs: [],

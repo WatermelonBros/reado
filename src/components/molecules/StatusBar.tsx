@@ -5,7 +5,7 @@
  * the spirit of VS Code's status bar.
  */
 import { useEffect, useRef, useState } from "react";
-import { gitBranches, gitCheckout, type GitBranches } from "../../lib/api";
+import { gitBranches, gitCheckout, gitInfo, type GitBranches } from "../../lib/api";
 import { useCursor, useProject } from "../../lib/store";
 import { useComments, openCount } from "../../lib/comments";
 import {
@@ -16,8 +16,9 @@ import {
   type Eol,
 } from "../../lib/docInfo";
 import { useTerminals } from "../../lib/terminals";
-import { useT } from "../../i18n";
+
 import { GitBranchIcon, MessageIcon, TerminalIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
 
 /** Path relative to the project root, with forward slashes. */
 function relativePath(root: string, path: string | null): string | null {
@@ -91,7 +92,7 @@ export function StatusBar() {
   const setDoc = useDocInfo((s) => s.set);
   const openComments = useComments((s) => openCount(s.comments));
   const toggleTerminal = useTerminals((s) => s.toggle);
-  const t = useT();
+  const { t } = useTranslation();
 
   const [menu, setMenu] = useState<"goto" | "eol" | "indent" | "language" | "branch" | null>(null);
   const [gotoValue, setGotoValue] = useState("");
@@ -108,8 +109,12 @@ export function StatusBar() {
   const checkout = async (name: string, remote: boolean) => {
     try {
       await gitCheckout(root, name, remote);
-      // The working tree now reflects the new branch; reload to re-init cleanly.
-      window.location.reload();
+      // Refresh in place. A full page reload would tear down the terminals and
+      // tabs; instead update the branch + tree now, and let the file watcher
+      // reload the open file and re-anchor comments for the new working tree.
+      setMenu(null);
+      useProject.getState().setGit(await gitInfo(root));
+      useProject.getState().bumpTree();
     } catch (e) {
       setBranchError(String(e));
     }

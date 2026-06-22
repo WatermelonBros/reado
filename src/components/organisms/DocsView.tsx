@@ -15,10 +15,12 @@ import { useComments } from "../../lib/comments";
 import { useProject, useWorkspace } from "../../lib/store";
 import { useSpecs } from "../../lib/specs";
 import { listDocs, type DocItem } from "../../lib/knowledge";
-import { useT } from "../../i18n";
+
 import { COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
 import { CloseIcon, DocsIcon, SpecsIcon, MessageIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 type Selection =
   | { kind: "notes" }
@@ -36,7 +38,7 @@ export function DocsView() {
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);
   const close = useWorkspace((s) => s.toggleDocs);
-  const t = useT();
+  const { t } = useTranslation();
 
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [query, setQuery] = useState("");
@@ -291,7 +293,7 @@ function NotesDigest({
   typeFilter: CommentType | "all";
   setTypeFilter: (v: CommentType | "all") => void;
   onJump: (c: Comment) => void;
-  t: ReturnType<typeof useT>;
+  t: TFunction;
 }) {
   return (
     <div className="mx-auto max-w-[680px]">

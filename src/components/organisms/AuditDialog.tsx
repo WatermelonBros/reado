@@ -10,9 +10,10 @@ import { useState } from "react";
 import { submitToTerminal } from "../../lib/api";
 import { useTerminals } from "../../lib/terminals";
 import { composeAuditPrompt } from "../../lib/review";
-import { useT } from "../../i18n";
+
 import { Modal } from "../atoms/Modal";
 import { Select } from "../atoms/Select";
+import { useTranslation } from "react-i18next";
 
 export interface AuditTarget {
   /** Project-relative path of the file or folder to audit. */
@@ -30,7 +31,7 @@ export function AuditDialog({
   const sessions = useTerminals((s) => s.sessions);
   const activeId = useTerminals((s) => s.activeId);
   const add = useTerminals((s) => s.add);
-  const t = useT();
+  const { t } = useTranslation();
 
   const [instructions, setInstructions] = useState("");
   const [agent, setAgent] = useState("");

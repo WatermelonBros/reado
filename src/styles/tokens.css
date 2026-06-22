@@ -74,6 +74,12 @@
   --marker: oklch(0.72 0.16 35);
   --marker-soft: oklch(0.72 0.16 35 / 0.16);
 
+  /* Diagnostic severities (LSP) — tuned per theme for legibility on this
+     background; error hue sits at ~20 so it reads as red, not marker-orange. */
+  --diag-error: oklch(0.66 0.18 20);
+  --diag-warn: oklch(0.76 0.13 70);
+  --diag-info: oklch(0.7 0.11 250);
+
   --landing: oklch(0.72 0.16 35 / 0.14);
   --selection: oklch(0.74 0.11 260 / 0.28);
   --shadow: 0 12px 32px oklch(0.12 0.02 250 / 0.5);
@@ -105,6 +111,11 @@
 
   --marker: oklch(0.55 0.18 35);
   --marker-soft: oklch(0.55 0.18 35 / 0.12);
+
+  /* Darker on this near-white background so error text clears WCAG AA. */
+  --diag-error: oklch(0.52 0.2 20);
+  --diag-warn: oklch(0.56 0.13 70);
+  --diag-info: oklch(0.5 0.14 250);
 
   --landing: oklch(0.55 0.18 35 / 0.1);
   --selection: oklch(0.5 0.13 260 / 0.18);
@@ -138,6 +149,11 @@
   --marker: oklch(0.8 0.18 35);
   --marker-soft: oklch(0.8 0.18 35 / 0.2);
 
+  /* Brighter for the deep high-contrast background. */
+  --diag-error: oklch(0.72 0.19 20);
+  --diag-warn: oklch(0.82 0.15 80);
+  --diag-info: oklch(0.76 0.12 250);
+
   --landing: oklch(0.8 0.18 35 / 0.18);
   --selection: oklch(0.84 0.12 260 / 0.3);
   --shadow: 0 12px 32px oklch(0.08 0.02 250 / 0.6);
@@ -169,6 +185,11 @@
 
   --marker: oklch(0.52 0.18 25);
   --marker-soft: oklch(0.52 0.18 25 / 0.12);
+
+  /* Darker for the warm light background; nudge error hue off the marker's 25. */
+  --diag-error: oklch(0.5 0.19 18);
+  --diag-warn: oklch(0.55 0.12 70);
+  --diag-info: oklch(0.5 0.13 250);
 
   --landing: oklch(0.52 0.18 25 / 0.1);
   --selection: oklch(0.5 0.13 40 / 0.18);

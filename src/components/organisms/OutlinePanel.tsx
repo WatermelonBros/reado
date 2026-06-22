@@ -8,7 +8,7 @@ import { useDocInfo, goToLine } from "../../lib/docInfo";
 import { useProject } from "../../lib/store";
 import { extractSymbols, type OutlineSymbol } from "../../lib/outline";
 import { useCursor } from "../../lib/store";
-import { useT } from "../../i18n";
+import { useTranslation } from "react-i18next";
 
 /** A faint type label + colour per symbol kind. */
 const KIND_COLOR: Record<OutlineSymbol["kind"], string> = {
@@ -23,7 +23,7 @@ export function OutlinePanel() {
   const view = useDocInfo((s) => s.view);
   const active = useProject((s) => s.active);
   const line = useCursor((s) => s.line);
-  const t = useT();
+  const { t } = useTranslation();
   const [symbols, setSymbols] = useState<OutlineSymbol[]>([]);
 
   // Re-extract when the file changes (or its editor view is (re)created).

@@ -177,7 +177,9 @@ fn expand_status_line(line: &str) -> Vec<GitChange> {
 /// two status columns, so the leading space of an unstaged-only change matters.)
 #[tauri::command]
 pub fn git_status(root: String) -> Vec<GitChange> {
-    let Some(out) = run_git_raw(Path::new(&root), &["status", "--porcelain"]) else {
+    // `-uall` lists individual untracked files instead of collapsing an
+    // untracked directory to a single folder entry.
+    let Some(out) = run_git_raw(Path::new(&root), &["status", "--porcelain", "-uall"]) else {
         return Vec::new();
     };
     out.lines().flat_map(expand_status_line).collect()
@@ -260,6 +262,108 @@ pub fn git_commit(root: String, message: String) -> Result<(), String> {
         return Err("Empty commit message".into());
     }
     run_git_checked(&root, &["commit", "-m", &message])
+}
+
+/// Discard working-tree changes in bulk. Always restores tracked files to the
+/// index (`checkout -- .`); when `untracked` is set, also removes untracked
+/// files and directories (`clean -fd`). Destructive — confirm first.
+#[tauri::command]
+pub fn git_discard_all(root: String, untracked: bool) -> Result<(), String> {
+    run_git_checked(&root, &["checkout", "--", "."])?;
+    if untracked {
+        run_git_checked(&root, &["clean", "-fd"])?;
+    }
+    Ok(())
+}
+
+/// Create and switch to a new branch (`git checkout -b`).
+#[tauri::command]
+pub fn git_create_branch(root: String, name: String) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Empty branch name".into());
+    }
+    run_git_checked(&root, &["checkout", "-b", name])
+}
+
+/// Fetch all remotes and prune deleted remote branches.
+#[tauri::command]
+pub fn git_fetch(root: String) -> Result<(), String> {
+    run_git_checked(&root, &["fetch", "--all", "--prune"])
+}
+
+/// Pull the current branch from its upstream.
+#[tauri::command]
+pub fn git_pull(root: String) -> Result<(), String> {
+    run_git_checked(&root, &["pull"])
+}
+
+/// Push the current branch, setting upstream to origin if not already tracked
+/// (so a brand-new branch is published in one step).
+#[tauri::command]
+pub fn git_push(root: String) -> Result<(), String> {
+    run_git_checked(&root, &["push", "-u", "origin", "HEAD"])
+}
+
+/// One saved stash entry.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StashEntry {
+    /// Index into the stash stack (0 = most recent).
+    pub index: u32,
+    /// Human-readable description (the part after `stash@{N}:`).
+    pub message: String,
+}
+
+/// List saved stashes (most recent first).
+#[tauri::command]
+pub fn git_stash_list(root: String) -> Vec<StashEntry> {
+    let Some(out) = run_git_raw(Path::new(&root), &["stash", "list"]) else {
+        return Vec::new();
+    };
+    out.lines()
+        .enumerate()
+        .map(|(i, line)| StashEntry {
+            index: i as u32,
+            message: line
+                .split_once(": ")
+                .map(|(_, m)| m.to_string())
+                .unwrap_or_else(|| line.to_string()),
+        })
+        .collect()
+}
+
+/// Stash the working-tree changes (optionally including untracked files).
+#[tauri::command]
+pub fn git_stash(root: String, message: Option<String>, untracked: bool) -> Result<(), String> {
+    let mut args = vec!["stash", "push"];
+    if untracked {
+        args.push("--include-untracked");
+    }
+    let msg = message.unwrap_or_default();
+    if !msg.trim().is_empty() {
+        args.push("-m");
+        args.push(&msg);
+    }
+    run_git_checked(&root, &args)
+}
+
+/// Apply a stash and drop it (`git stash pop stash@{index}`).
+#[tauri::command]
+pub fn git_stash_pop(root: String, index: u32) -> Result<(), String> {
+    run_git_checked(&root, &["stash", "pop", &format!("stash@{{{index}}}")])
+}
+
+/// Apply a stash, keeping it in the stack (`git stash apply`).
+#[tauri::command]
+pub fn git_stash_apply(root: String, index: u32) -> Result<(), String> {
+    run_git_checked(&root, &["stash", "apply", &format!("stash@{{{index}}}")])
+}
+
+/// Delete a stash without applying it (`git stash drop`).
+#[tauri::command]
+pub fn git_stash_drop(root: String, index: u32) -> Result<(), String> {
+    run_git_checked(&root, &["stash", "drop", &format!("stash@{{{index}}}")])
 }
 
 /// Blame attribution for one line of a file.

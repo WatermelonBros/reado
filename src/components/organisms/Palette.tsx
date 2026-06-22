@@ -23,7 +23,9 @@ import { mod } from "../../lib/shortcuts";
 import { checkForUpdates } from "../../lib/updater";
 import { formatDocument, goToLine, useDocInfo } from "../../lib/docInfo";
 import { extractSymbols } from "../../lib/outline";
-import { useT, type MessageKey } from "../../i18n";
+import { type MessageKey } from "../../i18n";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 interface Row {
   /** Primary line. */
@@ -44,7 +46,7 @@ export function Palette() {
   const toggleSettings = usePalette((s) => s.toggleSettings);
   const project = useProject();
   const settings = useSettings();
-  const t = useT();
+  const { t } = useTranslation();
 
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
@@ -294,7 +296,7 @@ interface CommandCtx {
 
 /** Static command list for Cmd+K. */
 function commandRows(
-  t: ReturnType<typeof useT>,
+  t: TFunction,
   { project, settings, open, toggleSettings, requestCompose, openGraph, openDocs }: CommandCtx,
 ): Row[] {
   const rows: Row[] = [

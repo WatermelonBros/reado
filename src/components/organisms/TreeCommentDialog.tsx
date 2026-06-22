@@ -7,10 +7,11 @@ import { useState } from "react";
 import type { CommentType } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useSettings } from "../../lib/store";
-import { useT, type MessageKey } from "../../i18n";
+import { type MessageKey } from "../../i18n";
 import { COMMENT_TYPES, TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
 import { Checkbox } from "../atoms/Checkbox";
 import { Modal } from "../atoms/Modal";
+import { useTranslation } from "react-i18next";
 
 export interface CommentTarget {
   kind: "file" | "folder" | "project";
@@ -34,7 +35,7 @@ export function TreeCommentDialog({
   const create = useComments((s) => s.create);
   const setGitignorePrompt = useComments((s) => s.setGitignorePrompt);
   const gitignoreDontAsk = useSettings((s) => s.gitignoreDontAsk);
-  const t = useT();
+  const { t } = useTranslation();
 
   const [type, setType] = useState<CommentType>("note");
   // type=note → a note; actionable types default to a task (toggleable).

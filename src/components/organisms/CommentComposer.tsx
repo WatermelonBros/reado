@@ -9,10 +9,11 @@ import { useState } from "react";
 import type { CommentType, Context, Scope } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useSettings } from "../../lib/store";
-import { useT, type MessageKey } from "../../i18n";
+import { type MessageKey } from "../../i18n";
 import { COMMENT_TYPES, TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
 import { Checkbox } from "../atoms/Checkbox";
 import { Select } from "../atoms/Select";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   relPath: string;
@@ -21,24 +22,36 @@ interface Props {
   context: Context;
   top: number;
   onClose: () => void;
+  /** Seed the body/type (e.g. opening from an LSP diagnostic's "Create task"). */
+  initialBody?: string;
+  initialType?: CommentType;
 }
 
-export function CommentComposer({ relPath, startLine, endLine, context, top, onClose }: Props) {
+export function CommentComposer({
+  relPath,
+  startLine,
+  endLine,
+  context,
+  top,
+  onClose,
+  initialBody,
+  initialType,
+}: Props) {
   const create = useComments((s) => s.create);
   const setGitignorePrompt = useComments((s) => s.setGitignorePrompt);
   const gitignoreDontAsk = useSettings((s) => s.gitignoreDontAsk);
-  const t = useT();
+  const { t } = useTranslation();
 
-  const [type, setType] = useState<CommentType>("note");
+  const [type, setType] = useState<CommentType>(initialType ?? "note");
   const [scope, setScope] = useState<Scope>("range");
   // A "note" type defaults to a note (not sent to the AI); actionable types
   // (bug/refactor/…) default to a task. The user can still toggle it.
-  const [isTask, setIsTask] = useState(false);
+  const [isTask, setIsTask] = useState(initialType ? initialType !== "note" : false);
   const pickType = (tp: CommentType) => {
     setType(tp);
     setIsTask(tp !== "note");
   };
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(initialBody ?? "");
   const [saving, setSaving] = useState(false);
 
   const label =

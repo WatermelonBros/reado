@@ -14,15 +14,39 @@ import {
   gitStageAll,
   gitUnstageAll,
   gitDiscard,
+  gitDiscardAll,
   gitCommit,
+  gitFetch,
+  gitPull,
+  gitPush,
+  gitCreateBranch,
+  gitStash,
+  gitStashList,
+  gitStashPop,
+  gitStashApply,
+  gitStashDrop,
   submitToTerminal,
   type GitChange,
+  type StashEntry,
 } from "../../lib/api";
 import { useProject, useEditorActions } from "../../lib/store";
 import { useTerminals } from "../../lib/terminals";
 import { composeCommitPrompt } from "../../lib/review";
-import { useT } from "../../i18n";
-import { PlusIcon, MinusIcon, DiscardIcon, SparkleIcon } from "../atoms/icons";
+
+import {
+  PlusIcon,
+  MinusIcon,
+  DiscardIcon,
+  SparkleIcon,
+  FetchIcon,
+  PullIcon,
+  PushIcon,
+  StashIcon,
+  MoreIcon,
+  GitBranchIcon,
+  CloseIcon,
+} from "../atoms/icons";
+import { useTranslation } from "react-i18next";
 
 /** Single-letter badge + colour per change category. */
 const STATUS: Record<GitChange["status"], { letter: string; color: string }> = {
@@ -45,17 +69,29 @@ export function GitPanel() {
   const setDiffing = useEditorActions((s) => s.setDiffing);
   const activeTerminal = useTerminals((s) => s.activeId);
   const addTerminal = useTerminals((s) => s.add);
-  const t = useT();
+  const { t } = useTranslation();
   const [changes, setChanges] = useState<GitChange[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   // Path armed for discard confirmation (inline, like the comment delete flow).
   const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
+  // Repo-level "more actions" dropdown + its data.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [stashes, setStashes] = useState<StashEntry[]>([]);
+  const [branchName, setBranchName] = useState<string | null>(null); // null = input hidden
+  const [confirmDiscardAll, setConfirmDiscardAll] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     gitStatus(root)
       .then(setChanges)
       .catch(() => setChanges([]));
+  }, [root]);
+
+  const refreshStashes = useCallback(() => {
+    gitStashList(root)
+      .then(setStashes)
+      .catch(() => setStashes([]));
   }, [root]);
 
   useEffect(() => {
@@ -77,14 +113,36 @@ export function GitPanel() {
   // Run a mutation, then refresh — optimism isn't worth a stale index here.
   const act = (p: Promise<unknown>) => {
     setBusy(true);
+    setError(null);
     p.then(refresh)
-      .catch(() => {})
+      .catch((e) => setError(String(e)))
+      .finally(() => setBusy(false));
+  };
+
+  // Repo-level op (fetch/pull/push/stash/…): refresh both status and stashes,
+  // close the menu, and surface git's stderr on failure.
+  const runRepo = (p: Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    setMenuOpen(false);
+    p.then(() => {
+      refresh();
+      refreshStashes();
+    })
+      .catch((e) => setError(String(e)))
       .finally(() => setBusy(false));
   };
 
   const discard = (c: GitChange) => {
     setConfirmDiscard(null);
     act(gitDiscard(root, c.path, c.status === "untracked"));
+  };
+
+  const createBranch = () => {
+    const name = (branchName ?? "").trim();
+    if (!name) return;
+    setBranchName(null);
+    runRepo(gitCreateBranch(root, name));
   };
 
   const commit = () => {
@@ -182,33 +240,216 @@ export function GitPanel() {
   const GroupHeader = ({
     label,
     count,
-    action,
-    actionLabel,
-    Icon,
+    actions,
   }: {
     label: string;
     count: number;
-    action: () => void;
-    actionLabel: string;
-    Icon: typeof PlusIcon;
+    actions: { onClick: () => void; label: string; Icon: typeof PlusIcon; danger?: boolean }[];
   }) => (
     <div className="group/hdr flex items-center gap-2 px-3 pt-3 pb-1 text-xs font-medium tracking-wide text-muted uppercase">
       <span>{label}</span>
       <span className="text-faint">{count}</span>
-      <button
-        type="button"
-        onClick={action}
-        title={actionLabel}
-        aria-label={actionLabel}
-        className="ml-auto grid h-5 w-5 place-items-center rounded text-muted opacity-0 transition-opacity group-hover/hdr:opacity-100 hover:bg-overlay hover:text-ink"
-      >
-        <Icon className="h-3.5 w-3.5" />
-      </button>
+      <div className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover/hdr:opacity-100">
+        {actions.map((a) => (
+          <button
+            key={a.label}
+            type="button"
+            onClick={a.onClick}
+            title={a.label}
+            aria-label={a.label}
+            className={`grid h-5 w-5 place-items-center rounded text-muted hover:bg-overlay ${
+              a.danger ? "hover:text-marker" : "hover:text-ink"
+            }`}
+          >
+            <a.Icon className="h-3.5 w-3.5" />
+          </button>
+        ))}
+      </div>
     </div>
+  );
+
+  const ToolButton = ({
+    onClick,
+    label,
+    Icon,
+  }: {
+    onClick: () => void;
+    label: string;
+    Icon: typeof PlusIcon;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      title={label}
+      aria-label={label}
+      className="grid h-7 w-7 place-items-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-ink disabled:opacity-40"
+    >
+      <Icon className="h-4 w-4" />
+    </button>
   );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {/* Repo toolbar: fetch / pull / push, plus a "more" menu */}
+      <div className="relative flex flex-none items-center gap-0.5 border-b border-line px-2 py-1.5">
+        <ToolButton onClick={() => runRepo(gitFetch(root))} label={t("git.fetch")} Icon={FetchIcon} />
+        <ToolButton onClick={() => runRepo(gitPull(root))} label={t("git.pull")} Icon={PullIcon} />
+        <ToolButton onClick={() => runRepo(gitPush(root))} label={t("git.push")} Icon={PushIcon} />
+        <div className="relative ml-auto">
+          <ToolButton
+            onClick={() => {
+              const next = !menuOpen;
+              setMenuOpen(next);
+              if (next) refreshStashes();
+            }}
+            label={t("git.more")}
+            Icon={MoreIcon}
+          />
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 z-30 mt-1 max-h-[60vh] w-60 overflow-y-auto rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setBranchName("");
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                >
+                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
+                  {t("git.newBranch")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runRepo(gitStash(root, "", false))}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                >
+                  <StashIcon className="h-3.5 w-3.5 text-muted" />
+                  {t("git.stash")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runRepo(gitStash(root, "", true))}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                >
+                  <StashIcon className="h-3.5 w-3.5 text-muted" />
+                  {t("git.stashUntracked")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setConfirmDiscardAll(true);
+                  }}
+                  disabled={unstaged.length === 0}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-marker hover:bg-surface disabled:opacity-40"
+                >
+                  <DiscardIcon className="h-3.5 w-3.5" />
+                  {t("git.discardAll")}
+                </button>
+
+                <div className="mt-1 border-t border-line px-3 pt-1.5 pb-0.5 text-[10px] font-medium tracking-wide text-faint uppercase">
+                  {t("git.stashes")}
+                </div>
+                {stashes.length === 0 ? (
+                  <p className="px-3 py-1.5 text-xs text-faint">{t("git.noStashes")}</p>
+                ) : (
+                  stashes.map((s) => (
+                    <div
+                      key={s.index}
+                      className="group/stash flex items-center gap-1 px-3 py-1 hover:bg-surface"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-xs text-muted" title={s.message}>
+                        {s.message}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => runRepo(gitStashApply(root, s.index))}
+                        className="flex-none text-[11px] text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 hover:text-ink"
+                      >
+                        {t("git.stashApply")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => runRepo(gitStashPop(root, s.index))}
+                        className="flex-none text-[11px] text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 hover:text-ink"
+                      >
+                        {t("git.stashPop")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => runRepo(gitStashDrop(root, s.index))}
+                        className="flex-none text-[11px] text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 hover:text-marker"
+                      >
+                        {t("git.stashDrop")}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* New-branch inline input */}
+      {branchName !== null && (
+        <div className="flex flex-none items-center gap-1 border-b border-line px-2 py-1.5">
+          <input
+            autoFocus
+            value={branchName}
+            onChange={(e) => setBranchName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") createBranch();
+              if (e.key === "Escape") setBranchName(null);
+            }}
+            placeholder={t("git.newBranchPlaceholder")}
+            className="min-w-0 flex-1 rounded-md bg-surface px-2 py-1 text-sm text-ink outline-none placeholder:text-faint"
+          />
+          <button
+            type="button"
+            onClick={() => setBranchName(null)}
+            title={t("common.cancel")}
+            className="grid h-6 w-6 flex-none place-items-center rounded text-muted hover:text-ink"
+          >
+            <CloseIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex-none border-b border-line bg-surface px-3 py-1.5 text-xs text-marker">
+          {error}
+        </div>
+      )}
+
+      {confirmDiscardAll && (
+        <div className="flex-none border-b border-line bg-surface px-3 py-2 text-xs">
+          <p className="mb-1.5 text-muted">{t("git.discardAllConfirm")}</p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmDiscardAll(false);
+                act(gitDiscardAll(root, true));
+              }}
+              className="font-semibold text-marker hover:underline"
+            >
+              {t("git.discardAll")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDiscardAll(false)}
+              className="text-muted hover:text-ink"
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Commit box */}
       <div className="flex-none border-b border-line p-2">
         <textarea
@@ -251,9 +492,9 @@ export function GitPanel() {
               <GroupHeader
                 label={t("git.staged")}
                 count={staged.length}
-                action={() => act(gitUnstageAll(root))}
-                actionLabel={t("git.unstageAll")}
-                Icon={MinusIcon}
+                actions={[
+                  { onClick: () => act(gitUnstageAll(root)), label: t("git.unstageAll"), Icon: MinusIcon },
+                ]}
               />
               <ul className="m-0 list-none p-0">
                 {staged.map((c, i) => (
@@ -267,9 +508,15 @@ export function GitPanel() {
               <GroupHeader
                 label={t("git.changes")}
                 count={unstaged.length}
-                action={() => act(gitStageAll(root))}
-                actionLabel={t("git.stageAll")}
-                Icon={PlusIcon}
+                actions={[
+                  {
+                    onClick: () => setConfirmDiscardAll(true),
+                    label: t("git.discardAll"),
+                    Icon: DiscardIcon,
+                    danger: true,
+                  },
+                  { onClick: () => act(gitStageAll(root)), label: t("git.stageAll"), Icon: PlusIcon },
+                ]}
               />
               <ul className="m-0 list-none p-0">
                 {unstaged.map((c, i) => (

@@ -6,14 +6,14 @@ import { useEffect, useState } from "react";
 import { searchText, replaceText, type SearchMatch } from "../../lib/api";
 import { useProject, useWorkspace } from "../../lib/store";
 import { toRelative } from "../../lib/comments";
-import { useT } from "../../i18n";
+import { useTranslation } from "react-i18next";
 
 export function SearchPanel() {
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);
   const pendingSearch = useWorkspace((s) => s.pendingSearch);
   const clearPendingSearch = useWorkspace((s) => s.clearPendingSearch);
-  const t = useT();
+  const { t } = useTranslation();
 
   const [query, setQuery] = useState("");
 

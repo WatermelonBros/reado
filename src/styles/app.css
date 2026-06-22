@@ -25,6 +25,7 @@
   --color-on-accent: var(--accent-contrast);
   --color-marker: var(--marker);
   --color-selection: var(--selection);
+  --color-danger: var(--diag-error);
 
   --font-sans: var(--font-ui);
   --font-mono: var(--font-code);
@@ -355,5 +356,107 @@
   }
   .prose-reado img {
     max-width: 100%;
+  }
+
+  /* ---- Language server: hover tooltips + diagnostics --------------------- */
+  /* CodeMirror's defaults are loud (bright wavy underlines, a stark white
+     tooltip). Re-skin both onto Reado's surface tokens so they read as calm,
+     native parts of the editor across all four themes. */
+  .cm-tooltip {
+    max-width: 480px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-overlay);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    font-family: var(--font-ui);
+    font-size: var(--text-sm);
+    overflow: hidden;
+  }
+  .cm-tooltip.cm-tooltip-arrow::before {
+    border-top-color: var(--border);
+    border-bottom-color: var(--border);
+  }
+  .cm-tooltip.cm-tooltip-arrow::after {
+    border-top-color: var(--bg-overlay);
+    border-bottom-color: var(--bg-overlay);
+  }
+  .cm-tooltip-hover .cm-tooltip-section {
+    padding: 6px 10px;
+    line-height: 1.5;
+  }
+  .cm-tooltip-hover .cm-tooltip-section + .cm-tooltip-section {
+    border-top: 1px solid var(--border);
+  }
+  /* Hover docs often arrive as code/markdown — keep them in the mono face but
+     never let a long signature blow out the box. */
+  .cm-tooltip-hover code,
+  .cm-tooltip-hover pre {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Diagnostic rows inside the lint tooltip: a quiet severity rail, no fill. */
+  .cm-tooltip.cm-tooltip-lint {
+    padding: 0;
+  }
+  .cm-diagnostic {
+    margin: 0;
+    padding: 6px 10px 6px 8px;
+    border-left: 3px solid var(--border-strong);
+    font-size: var(--text-sm);
+  }
+  .cm-diagnostic + .cm-diagnostic {
+    border-top: 1px solid var(--border);
+  }
+  /* "Create task" (and any future quick-fix): a calm chip, not lint's stock
+     grey button. Default lint styles are injected unlayered, hence !important. */
+  .cm-diagnosticAction {
+    display: inline-block;
+    margin: 6px 0 2px;
+    padding: 2px 8px !important;
+    border: 1px solid var(--border-strong) !important;
+    border-radius: 999px !important;
+    background: var(--bg-elevated) !important;
+    color: var(--text) !important;
+    font-size: var(--text-xs);
+    cursor: pointer;
+  }
+  .cm-diagnosticAction:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+  }
+  .cm-diagnostic-error {
+    border-left-color: var(--diag-error);
+  }
+  .cm-diagnostic-warning {
+    border-left-color: var(--diag-warn);
+  }
+  .cm-diagnostic-info {
+    border-left-color: var(--diag-info);
+  }
+
+  /* Inline underlines: a single quiet wavy stroke in the severity colour
+     (CodeMirror's default is a denser, brighter SVG). */
+  .cm-lintRange {
+    /* CodeMirror's default wavy SVG is injected unlayered, so it beats this
+       layer without !important — suppress it and draw our own quiet stroke. */
+    background-image: none !important;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-skip-ink: none;
+    text-underline-offset: 3px;
+  }
+  .cm-lintRange-error {
+    text-decoration-color: var(--diag-error);
+  }
+  .cm-lintRange-warning {
+    text-decoration-color: var(--diag-warn);
+  }
+  .cm-lintRange-info,
+  .cm-lintRange-hint {
+    text-decoration-color: var(--diag-info);
   }
 }

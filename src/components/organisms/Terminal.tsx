@@ -4,15 +4,29 @@
  * Stays mounted (hidden when inactive) so the PTY connection and scrollback
  * survive tab switches. Streams output from `pty-output-{id}` and forwards
  * keystrokes and resizes back to the PTY.
+ *
+ * Output is navigable: `path:line:col` tokens are clickable (open the file in
+ * the editor) and URLs open in the browser. Cmd+F searches the scrollback.
  */
-import { useCallback, useEffect, useRef } from "react";
-import { Terminal as XTerm } from "@xterm/xterm";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Terminal as XTerm, type ILink } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { ptySpawn, ptyWrite, ptyResize, ptyKill } from "../../lib/api";
+import { ptySpawn, ptyWrite, ptyResize, ptyKill, resolvePath } from "../../lib/api";
+import { useProject } from "../../lib/store";
 import { xtermTheme } from "../../lib/xtermTheme";
+import { useTranslation } from "react-i18next";
+import { SearchIcon, ChevronIcon, CloseIcon } from "../atoms/icons";
 
 const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+// A file path printed in output, with an optional :line:col or (line,col) suffix.
+// Requires a real extension so we don't underline arbitrary words.
+const PATH_RE =
+  /(\/?[\w.\-~/@]*[\w\-]+\.[A-Za-z][\w]*)(?::(\d+)(?::\d+)?|\((\d+),\d+\))?/g;
 
 interface Props {
   id: string;
@@ -24,14 +38,12 @@ export function Terminal({ id, cwd, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
-  // Last size pushed to the PTY. Resending an unchanged size still raises
-  // SIGWINCH, which makes a TUI (Claude/Codex use Ink) repaint its whole frame —
-  // and xterm's reflow turns repeated repaints into duplicated lines. So we only
-  // forward a resize when the dimensions actually change.
+  const searchRef = useRef<SearchAddon | null>(null);
+  const { t } = useTranslation();
+  // null = search box hidden; a string = open with that query.
+  const [query, setQuery] = useState<string | null>(null);
   const lastSize = useRef({ rows: 0, cols: 0 });
 
-  // Fit to the container and forward the size to the PTY, but only when it
-  // changed. Safe to call as often as we like.
   const syncSize = useCallback(() => {
     const fit = fitRef.current;
     const term = termRef.current;
@@ -40,7 +52,7 @@ export function Terminal({ id, cwd, active }: Props) {
     try {
       fit.fit();
     } catch {
-      return; // not measurable right now
+      return;
     }
     const { rows, cols } = term;
     if (rows === lastSize.current.rows && cols === lastSize.current.cols) return;
@@ -60,15 +72,50 @@ export function Terminal({ id, cwd, active }: Props) {
       allowProposedApi: true,
     });
     const fit = new FitAddon();
+    const search = new SearchAddon();
     term.loadAddon(fit);
+    term.loadAddon(search);
+    // URLs in output open in the browser via the OS, not an in-app webview.
+    term.loadAddon(new WebLinksAddon((_e, uri) => void openUrl(uri)));
     term.open(hostRef.current);
     termRef.current = term;
     fitRef.current = fit;
+    searchRef.current = search;
+
+    // Make `path:line:col` tokens clickable → open the file in the editor.
+    term.registerLinkProvider({
+      provideLinks(y, cb) {
+        const buf = term.buffer.active.getLine(y - 1);
+        if (!buf) return cb(undefined);
+        const text = buf.translateToString(true);
+        const links: ILink[] = [];
+        PATH_RE.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = PATH_RE.exec(text))) {
+          // Skip matches that are actually the tail of a URL (WebLinks owns those).
+          if (/[a-zA-Z][\w+.-]*:\/\/\S*$/.test(text.slice(0, m.index))) continue;
+          const full = m[0];
+          const path = m[1];
+          const lineNo = m[2] ? +m[2] : m[3] ? +m[3] : undefined;
+          const startX = m.index + 1;
+          links.push({
+            text: full,
+            range: { start: { x: startX, y }, end: { x: startX + full.length - 1, y } },
+            activate: () => {
+              const root = useProject.getState().root;
+              resolvePath(root, path)
+                .then((abs) => abs && useProject.getState().open(abs, lineNo))
+                .catch(() => {});
+            },
+          });
+        }
+        cb(links.length ? links : undefined);
+      },
+    });
 
     const unlisten: UnlistenFn[] = [];
     let disposed = false;
 
-    // Fit, spawn the PTY at the fitted size, then wire output and input.
     requestAnimationFrame(async () => {
       if (disposed) return;
       try {
@@ -87,10 +134,23 @@ export function Terminal({ id, cwd, active }: Props) {
           term.write("\r\n\x1b[2m[process exited]\x1b[0m\r\n"),
         ),
       );
+      term.attachCustomKeyEventHandler((e) => {
+        if (e.type !== "keydown") return true;
+        // Cmd+F (or Ctrl+Shift+F) opens search — Ctrl+F alone stays readline's.
+        if (e.key.toLowerCase() === "f" && (e.metaKey || (e.ctrlKey && e.shiftKey))) {
+          setQuery((q) => (q === null ? "" : q));
+          return false;
+        }
+        // Shift+Enter inserts a newline instead of submitting: ESC+CR is the
+        // sequence TUI agents (Claude/Codex) and readline read as "newline".
+        if (e.key === "Enter" && e.shiftKey) {
+          void ptyWrite(id, "\x1b\r");
+          return false;
+        }
+        return true;
+      });
       term.onData((data) => ptyWrite(id, data));
 
-      // Once the web font is ready the cell metrics change; refit so the PTY's
-      // column count matches what's actually rendered before an agent reads it.
       document.fonts?.ready.then(() => !disposed && syncSize());
     });
 
@@ -104,8 +164,6 @@ export function Terminal({ id, cwd, active }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep the PTY size in sync with the rendered terminal. Coalesce bursts of
-  // resize events (e.g. dragging the panel edge) into one sync per frame.
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -121,7 +179,6 @@ export function Terminal({ id, cwd, active }: Props) {
     };
   }, [syncSize]);
 
-  // Refit and focus when this tab becomes active (it may have been hidden).
   useEffect(() => {
     if (!active) return;
     const term = termRef.current;
@@ -132,5 +189,63 @@ export function Terminal({ id, cwd, active }: Props) {
     });
   }, [active, syncSize]);
 
-  return <div ref={hostRef} className="h-full w-full" />;
+  const find = (q: string, back = false) => {
+    if (!q) return;
+    if (back) searchRef.current?.findPrevious(q);
+    else searchRef.current?.findNext(q);
+  };
+  const closeSearch = () => {
+    setQuery(null);
+    searchRef.current?.clearDecorations?.();
+    termRef.current?.focus();
+  };
+
+  return (
+    <div className="relative h-full w-full">
+      {query !== null && (
+        <div className="absolute top-2 right-3 z-30 flex items-center gap-1 rounded-md border border-line-strong bg-overlay px-1.5 py-1 shadow-[var(--shadow)]">
+          <SearchIcon className="h-3.5 w-3.5 flex-none text-faint" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              find(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") find(query, e.shiftKey);
+              if (e.key === "Escape") closeSearch();
+            }}
+            placeholder={t("terminal.search")}
+            className="w-44 bg-transparent text-sm text-ink outline-none placeholder:text-faint"
+          />
+          <button
+            type="button"
+            onClick={() => find(query, true)}
+            title={t("terminal.searchPrev")}
+            className="grid h-5 w-5 flex-none place-items-center rounded text-muted hover:bg-surface hover:text-ink"
+          >
+            <ChevronIcon className="h-3.5 w-3.5 -rotate-90" />
+          </button>
+          <button
+            type="button"
+            onClick={() => find(query)}
+            title={t("terminal.searchNext")}
+            className="grid h-5 w-5 flex-none place-items-center rounded text-muted hover:bg-surface hover:text-ink"
+          >
+            <ChevronIcon className="h-3.5 w-3.5 rotate-90" />
+          </button>
+          <button
+            type="button"
+            onClick={closeSearch}
+            title={t("common.cancel")}
+            className="grid h-5 w-5 flex-none place-items-center rounded text-muted hover:bg-surface hover:text-ink"
+          >
+            <CloseIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+      <div ref={hostRef} className="h-full w-full" />
+    </div>
+  );
 }

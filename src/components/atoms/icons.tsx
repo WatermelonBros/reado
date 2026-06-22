@@ -23,6 +23,44 @@ export const ChevronIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const CollapseAllIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M7 5l5 5 5-5M7 19l5-5 5 5" />
+  </svg>
+);
+
+export const PullIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M12 3v11M8 10l4 4 4-4M5 21h14" />
+  </svg>
+);
+
+export const PushIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M12 21V10M8 14l4-4 4 4M5 3h14" />
+  </svg>
+);
+
+export const FetchIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v4h-4" />
+  </svg>
+);
+
+export const StashIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M3 7h18v5H3zM3 12v7h18v-7M9 15h6" />
+  </svg>
+);
+
+export const MoreIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <circle cx="5" cy="12" r="1" />
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="19" cy="12" r="1" />
+  </svg>
+);
+
 export const SearchIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <circle cx="11" cy="11" r="7" />

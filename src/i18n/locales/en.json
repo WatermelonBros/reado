@@ -1,0 +1,363 @@
+{
+  "app": {
+    "tagline": "A calm place to read code."
+  },
+  "welcome": {
+    "how": "How it works",
+    "step1": "Read — open files and move through the code.",
+    "step2": "Comment — select lines and leave a note or task.",
+    "step3": "Resolve — run an agent; it answers your tasks via the reado CLI.",
+    "shortcuts": "Shortcuts"
+  },
+  "recents": {
+    "title": "Recent projects",
+    "empty": "No projects yet. Open a folder to start reading.",
+    "open": "Open folder…",
+    "openHint": "Open any local folder — a git repository or not.",
+    "remove": "Remove from list"
+  },
+  "tree": {
+    "showHidden": "Show hidden & ignored files",
+    "collapseAll": "Collapse all folders",
+    "empty": "This folder is empty.",
+    "search": "Filter files…",
+    "audit": "Ask AI for an audit",
+    "markRead": "Mark as read",
+    "markUnread": "Mark as unread",
+    "commentFile": "Comment on file",
+    "commentFolder": "Comment on folder",
+    "commentProject": "Comment on project",
+    "openAsText": "Open as text",
+    "editSource": "Edit source",
+    "problems_one": "{count} problem",
+    "problems_other": "{count} problems"
+  },
+  "editor": {
+    "empty": "Select a file from the tree to start reading.",
+    "binary": "Binary file — preview not available ({size}).",
+    "wrap": "Wrap lines",
+    "focus": "Focus mode",
+    "format": "Format Document",
+    "explain": "Explain selection with AI",
+    "explainNote": "Explain & save as note",
+    "viewSource": "Source",
+    "viewRendered": "Preview",
+    "goToDef": "Go to Definition",
+    "sticky": "Sticky scroll",
+    "stickyJump": "Jump to this scope",
+    "measure": "Reading width",
+    "edit": "Toggle editing",
+    "save": "Save"
+  },
+  "symbols": {
+    "goto": "Go to Symbol in File…",
+    "gotoWorkspace": "Go to Symbol in Project…",
+    "placeholder": "Go to symbol…"
+  },
+  "peek": {
+    "def": "Peek Definition",
+    "open": "Open",
+    "none": "No definition found for “{name}”"
+  },
+  "outline": {
+    "panel": "Outline",
+    "empty": "No symbols in this file.",
+    "noFile": "Open a file to see its outline."
+  },
+  "nav": {
+    "back": "Go back (⌥←)",
+    "forward": "Go forward (⌥→)"
+  },
+  "tabs": {
+    "reopen": "Reopen closed tab",
+    "close": "Close",
+    "closeOthers": "Close Others",
+    "closeRight": "Close to the Right",
+    "closeAll": "Close All"
+  },
+  "sidebar": {
+    "toggle": "Toggle sidebar"
+  },
+  "split": {
+    "toggle": "Split editor",
+    "close": "Close split",
+    "swap": "Swap panes",
+    "openSide": "Open to the side"
+  },
+  "diff": {
+    "toggle": "Toggle diff",
+    "base": "Diff base",
+    "head": "HEAD (uncommitted)",
+    "noBase": "Not present in the selected base.",
+    "noChanges": "No changes versus the selected base.",
+    "prevChange": "Previous change (Alt+Up)",
+    "nextChange": "Next change (Alt+Down)",
+    "changes": "{count} changes"
+  },
+  "blame": {
+    "toggle": "Toggle blame"
+  },
+  "status": {
+    "noFile": "No file open",
+    "branch": "branch",
+    "comments": "{count} open",
+    "agentIdle": "Agent idle",
+    "notGit": "Not a git repository",
+    "goToLine": "Go to line",
+    "goToLinePlaceholder": "Line number…",
+    "spaces": "Spaces: {size}",
+    "tabs": "Tab Size: {size}",
+    "indent": "Indentation",
+    "useSpaces": "Indent Using Spaces",
+    "useTabs": "Indent Using Tabs",
+    "language": "Select language mode",
+    "eol": "Line endings"
+  },
+  "palette": {
+    "placeholder": "Type a command…"
+  },
+  "finder": {
+    "placeholder": "Go to file…"
+  },
+  "search": {
+    "placeholder": "Search in project…",
+    "noResults": "No matches.",
+    "replacePlaceholder": "Replace…",
+    "replaceAll": "Replace all",
+    "replaceConfirm": "Confirm replace",
+    "replaced": "Replaced in {count} file(s).",
+    "results": "{count} matches",
+    "ripgrepMissing": "ripgrep (rg) is not installed or not on PATH."
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "themeMode": "Theme mode",
+    "mode": {
+      "manual": "Manual",
+      "system": "Follow system",
+      "auto": "Trust Reado (time of day)"
+    },
+    "language": "Language",
+    "codeFont": "Code font",
+    "completionSound": "Play a sound when the agent finishes",
+    "notifications": "Notifications",
+    "cli": "Command-line tool",
+    "cliInstall": "Install 'reado' on PATH",
+    "cliReinstall": "Reinstall 'reado'",
+    "cliInstalled": "Installed",
+    "cliDone": "Installed at {path}. Ensure ~/.local/bin is on your PATH.",
+    "cliHint": "Links the bundled 'reado' CLI into ~/.local/bin so AI agents can read and resolve your tasks from any project.",
+    "checkUpdates": "Check for updates…",
+    "shortcuts": "Keyboard Shortcuts…",
+    "close": "Close"
+  },
+  "sc": {
+    "title": "Keyboard Shortcuts",
+    "navigation": "Navigation",
+    "editing": "Editing",
+    "view": "View"
+  },
+  "empty": {
+    "firstComment": "Select one or more lines, then press the comment shortcut to leave your first note."
+  },
+  "comment": {
+    "type": {
+      "bug": "Bug",
+      "refactor": "Refactor",
+      "performance": "Performance",
+      "question": "Question",
+      "note": "Note"
+    },
+    "state": {
+      "open": "Open",
+      "in-progress": "In progress",
+      "done": "Done",
+      "discarded": "Discarded"
+    },
+    "task": "Task",
+    "note": "Note",
+    "taskHint": "Tasks are sent to the AI; notes are not.",
+    "bodyPlaceholder": "Leave a comment… Markdown supported.",
+    "replyPlaceholder": "Reply…",
+    "new": "New comment on selection",
+    "save": "Comment",
+    "reply": "Reply",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this comment? This cannot be undone.",
+    "you": "You",
+    "lines": "Lines {from}–{to}",
+    "line": "Line {line}",
+    "scope": {
+      "range": "Lines",
+      "file": "File",
+      "project": "Project"
+    },
+    "orphan": "Orphaned — the anchored code could not be found."
+  },
+  "terminal": {
+    "new": "New terminal",
+    "close": "Close terminal",
+    "hide": "Hide terminal",
+    "move": "Move terminal",
+    "moveRight": "Dock to the right",
+    "moveBottom": "Dock to the bottom",
+    "toggle": "Toggle terminal",
+    "launchClaude": "Claude",
+    "launchCodex": "Codex",
+    "launchCopilot": "Copilot",
+    "launch": "Launch {name}",
+    "split": "Split terminal",
+    "orientation": "Toggle split orientation",
+    "closePane": "Close pane",
+    "sendReview": "Send review",
+    "reviewSent": "{count} task(s) sent to the agent.",
+    "noTasks": "No open tasks to send.",
+    "search": "Search…",
+    "searchPrev": "Previous match",
+    "searchNext": "Next match"
+  },
+  "review": {
+    "title": "Send review",
+    "target": "Send to",
+    "send": "Send {count}",
+    "selectAll": "Select all"
+  },
+  "audit": {
+    "title": "Ask AI for an audit",
+    "target": "Auditing",
+    "instructions": "What should the AI look for?",
+    "placeholder": "e.g. correctness bugs, security issues, dead code… (leave empty for a general audit)",
+    "hint": "The AI writes its findings as comments anchored to the code, so you can read them inline.",
+    "send": "Send to AI"
+  },
+  "progress": {
+    "read": "read"
+  },
+  "comments": {
+    "review": "Review",
+    "audit": "Audit",
+    "auditProject": "Audit the project",
+    "panel": "Comments",
+    "empty": "No comments yet. Hover a line and click +, or select code and press the comment shortcut.",
+    "filter": {
+      "all": "All",
+      "thisFile": "This file"
+    },
+    "jump": "Jump to code",
+    "open": "Open",
+    "history": "History",
+    "historyEmpty": "No resolved comments yet.",
+    "resolvedAt": "Resolved {date}"
+  },
+  "files": {
+    "panel": "Files"
+  },
+  "git": {
+    "panel": "Source control",
+    "clean": "No changes — the working tree is clean.",
+    "staged": "Staged Changes",
+    "changes": "Changes",
+    "stage": "Stage",
+    "unstage": "Unstage",
+    "stageAll": "Stage all changes",
+    "unstageAll": "Unstage all",
+    "discard": "Discard changes",
+    "discardConfirm": "Discard changes to {name}? This cannot be undone.",
+    "commitPlaceholder": "Message (Cmd+Enter to commit)",
+    "commit": "Commit",
+    "aiCommit": "Commit & push with AI",
+    "committing": "Committing…",
+    "nothingStaged": "Stage changes to commit.",
+    "fetch": "Fetch",
+    "pull": "Pull",
+    "push": "Push",
+    "more": "More actions",
+    "newBranch": "Create branch…",
+    "newBranchPlaceholder": "New branch name…",
+    "stash": "Stash changes",
+    "stashUntracked": "Stash (include untracked)",
+    "stashes": "Stashes",
+    "noStashes": "No stashes.",
+    "stashApply": "Apply",
+    "stashPop": "Pop",
+    "stashDrop": "Drop",
+    "discardAll": "Discard all changes",
+    "discardAllConfirm": "Discard all working-tree changes (including untracked files)? This cannot be undone."
+  },
+  "lsp": {
+    "createTask": "Create task",
+    "createTaskFromProblem": "Create task from problem"
+  },
+  "specs": {
+    "panel": "Specs",
+    "empty": "No specs found — this isn't an OpenSpec/speckit project.",
+    "change": "Change",
+    "spec": "Spec"
+  },
+  "graph": {
+    "title": "Knowledge graph",
+    "legend": {
+      "file": "File",
+      "comment": "Comment",
+      "spec": "Spec",
+      "doc": "Doc",
+      "link": "Linked"
+    }
+  },
+  "docs": {
+    "title": "Documentation"
+  },
+  "kb": {
+    "title": "Knowledge base",
+    "search": "Filter…",
+    "docs": "Docs",
+    "specs": "Specs",
+    "notes": "Notes"
+  },
+  "orphans": {
+    "panel": "Orphans",
+    "empty": "No orphaned comments.",
+    "lastKnown": "Last known: {loc}",
+    "reanchor": "Re-anchor",
+    "reanchorHint": "Re-anchoring “{label}” — select a line or range in the editor and confirm.",
+    "confirm": "Anchor here"
+  },
+  "update": {
+    "title": "Update available",
+    "available": "Reado {version} is available.",
+    "install": "Install & restart",
+    "installing": "Installing…",
+    "later": "Later",
+    "indicator": "Update available"
+  },
+  "branch": {
+    "local": "Local",
+    "remote": "Remote"
+  },
+  "edit": {
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "selectAll": "Select All"
+  },
+  "gitignore": {
+    "title": "Add .reado/ to .gitignore?",
+    "body": "Reado stores your comments under .reado/. By default they stay local and are not committed. You can version them later in Settings.",
+    "add": "Add to .gitignore",
+    "keep": "Keep tracked",
+    "dontAsk": "Don't ask again"
+  },
+  "theme": {
+    "reado-dark": "Reado Dark",
+    "reado-light": "Reado Light",
+    "reado-high-contrast": "Reado High-Contrast",
+    "reado-sepia": "Reado Sepia"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "loading": "Loading…",
+    "error": "Something went wrong."
+  }
+}

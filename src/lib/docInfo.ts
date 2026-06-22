@@ -19,6 +19,7 @@ import {
 import { writeFile, formatFile, findDefinition } from "./api";
 import { useProject, useEditorActions, useWorkspace } from "./store";
 import { toRelative } from "./comments";
+import { noteSelfWrite } from "./readProgress";
 
 export type Eol = "LF" | "CRLF";
 
@@ -127,6 +128,7 @@ export function saveDocument(): void {
   const { view } = useDocInfo.getState();
   const { root, active } = useProject.getState();
   if (!view || !active) return;
+  noteSelfWrite(toRelative(root, active));
   writeFile(root, toRelative(root, active), view.state.doc.toString())
     .then(() => useEditorActions.getState().setDirty(false))
     .catch(() => {});
@@ -189,6 +191,7 @@ export function convertEol(eol: Eol): void {
   if (!view || !active) return;
   const normalised = view.state.doc.toString().replace(/\r\n/g, "\n");
   const out = eol === "CRLF" ? normalised.replace(/\n/g, "\r\n") : normalised;
+  noteSelfWrite(toRelative(root, active));
   writeFile(root, toRelative(root, active), out)
     .then(() => {
       set({ eol });

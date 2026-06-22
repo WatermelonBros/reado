@@ -9,13 +9,14 @@ import { useEffect, useMemo, useState } from "react";
 import type { Comment, CommentState, CommentType } from "../../lib/api";
 import { useComments, toRelative } from "../../lib/comments";
 import { useProject } from "../../lib/store";
-import { useT } from "../../i18n";
+
 import { COMMENT_STATES, COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
 import { Checkbox } from "../atoms/Checkbox";
 import { SendIcon, SparkleIcon } from "../atoms/icons";
 import { SendReviewDialog } from "./SendReviewDialog";
 import { AuditDialog, type AuditTarget } from "./AuditDialog";
+import { useTranslation } from "react-i18next";
 
 const fmtDate = (ms: number) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(ms));
@@ -29,7 +30,7 @@ export function CommentsPanel() {
   const root = useProject((s) => s.root);
   const active = useProject((s) => s.active);
   const open = useProject((s) => s.open);
-  const t = useT();
+  const { t } = useTranslation();
 
   const [view, setView] = useState<"open" | "history">("open");
   const [typeFilter, setTypeFilter] = useState<CommentType | "all">("all");

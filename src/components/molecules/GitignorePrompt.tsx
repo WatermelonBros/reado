@@ -9,9 +9,10 @@ import { useState } from "react";
 import { addReadoGitignore } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useProject, useSettings } from "../../lib/store";
-import { useT } from "../../i18n";
+
 import { Modal } from "../atoms/Modal";
 import { Checkbox } from "../atoms/Checkbox";
+import { useTranslation } from "react-i18next";
 
 export function GitignorePrompt() {
   const open = useComments((s) => s.gitignorePromptOpen);
@@ -19,7 +20,7 @@ export function GitignorePrompt() {
   const root = useProject((s) => s.root);
   const { versionReado, set } = useSettings();
   const [dontAsk, setDontAsk] = useState(false);
-  const t = useT();
+  const { t } = useTranslation();
 
   const close = () => {
     if (dontAsk) set({ gitignoreDontAsk: true });

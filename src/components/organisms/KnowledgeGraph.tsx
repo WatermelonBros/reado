@@ -13,9 +13,10 @@ import { useProject, useWorkspace } from "../../lib/store";
 import { useSpecs } from "../../lib/specs";
 import { listFiles } from "../../lib/api";
 import { listDocs, type DocItem } from "../../lib/knowledge";
-import { useT } from "../../i18n";
+
 import { TYPE_COLOR } from "../atoms/commentMeta";
 import { CloseIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
 
 const stripExt = (s: string) => s.replace(/\.(md|markdown|mdx)$/i, "");
 
@@ -49,7 +50,7 @@ export function KnowledgeGraph() {
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);
   const close = useWorkspace((s) => s.toggleGraph);
-  const t = useT();
+  const { t } = useTranslation();
 
   const size = { w: 900, h: 620 };
   const [docs, setDocs] = useState<DocItem[]>([]);

@@ -5,14 +5,15 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useRecents } from "../../lib/store";
 import { openProject } from "../../lib/window";
-import { useT } from "../../i18n";
+
 import { FolderOpenIcon, CloseIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
 
 export function RecentProjects() {
   const projects = useRecents((s) => s.projects);
   const touch = useRecents((s) => s.touch);
   const remove = useRecents((s) => s.remove);
-  const t = useT();
+  const { t } = useTranslation();
 
   const pick = async () => {
     const selected = await openDialog({ directory: true, multiple: false });

@@ -17,11 +17,12 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { useT } from "../../i18n";
+
 import { Terminal } from "../organisms/Terminal";
 import { SendReviewDialog } from "../organisms/SendReviewDialog";
 import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
+import { useTranslation } from "react-i18next";
 import {
   PlusIcon,
   CloseIcon,
@@ -68,7 +69,7 @@ export function TerminalPanel() {
   const openTaskCount = useComments(
     (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
   );
-  const t = useT();
+  const { t } = useTranslation();
 
   const activeGroup = groups.find((g) => g.id === activeGroupId) ?? null;
   const titleOf = (paneId: string) =>

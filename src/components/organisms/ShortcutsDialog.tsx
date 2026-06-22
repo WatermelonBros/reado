@@ -4,14 +4,15 @@
  */
 import { usePalette } from "../../lib/store";
 import { SHORTCUT_GROUPS } from "../../lib/shortcuts";
-import { useT } from "../../i18n";
+
 import { Modal } from "../atoms/Modal";
 import { CloseIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
 
 export function ShortcutsDialog() {
   const open = usePalette((s) => s.shortcutsOpen);
   const toggle = usePalette((s) => s.toggleShortcuts);
-  const t = useT();
+  const { t } = useTranslation();
 
   return (
     <Modal

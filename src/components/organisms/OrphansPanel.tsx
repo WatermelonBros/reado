@@ -6,8 +6,9 @@
 import type { Comment } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useProject } from "../../lib/store";
-import { useT } from "../../i18n";
+
 import { TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
+import { useTranslation } from "react-i18next";
 
 export function OrphansPanel() {
   const comments = useComments((s) => s.comments);
@@ -15,7 +16,7 @@ export function OrphansPanel() {
   const startReanchor = useComments((s) => s.startReanchor);
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);
-  const t = useT();
+  const { t } = useTranslation();
 
   const reanchor = (c: Comment) => {
     if (c.anchor.file) open(`${root}/${c.anchor.file}`);

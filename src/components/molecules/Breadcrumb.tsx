@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import { gitRefs, type GitRefs } from "../../lib/api";
 import { useProject, useEditorActions } from "../../lib/store";
-import { useT } from "../../i18n";
+
 import { ChevronIcon, DiffIcon, BlameIcon } from "../atoms/icons";
 import { Select } from "../atoms/Select";
+import { useTranslation } from "react-i18next";
 
 export function Breadcrumb() {
   const root = useProject((s) => s.root);
@@ -21,7 +22,7 @@ export function Breadcrumb() {
   const blame = useEditorActions((s) => s.blame);
   const setBlame = useEditorActions((s) => s.setBlame);
   const dirty = useEditorActions((s) => s.dirty);
-  const t = useT();
+  const { t } = useTranslation();
   const [refs, setRefs] = useState<GitRefs>({ branches: [], commits: [] });
 
   // Load the diff base options when the diff turns on.

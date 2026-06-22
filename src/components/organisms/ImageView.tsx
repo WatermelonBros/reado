@@ -5,12 +5,12 @@
  */
 import { useState } from "react";
 import { useTextView } from "../../lib/textView";
-import { useT } from "../../i18n";
+import { useTranslation } from "react-i18next";
 
 const ZOOMS = [0.25, 0.5, 1, 1.5, 2, 3, 4];
 
 export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) {
-  const t = useT();
+  const { t } = useTranslation();
   const isSvg = /\.svg$/i.test(name);
   // `null` zoom = fit to viewport; a number = explicit scale.
   const [zoom, setZoom] = useState<number | null>(null);

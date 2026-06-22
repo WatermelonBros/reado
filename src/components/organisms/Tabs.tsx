@@ -2,9 +2,10 @@
 import { useState } from "react";
 import { useProject } from "../../lib/store";
 import { formatDocument } from "../../lib/docInfo";
-import { useT } from "../../i18n";
+
 import { CloseIcon } from "../atoms/icons";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
+import { useTranslation } from "react-i18next";
 
 const basename = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
@@ -16,7 +17,7 @@ export function Tabs() {
   const closeOthers = useProject((s) => s.closeOthers);
   const closeToRight = useProject((s) => s.closeToRight);
   const closeAll = useProject((s) => s.closeAll);
-  const t = useT();
+  const { t } = useTranslation();
 
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null);
 

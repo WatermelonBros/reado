@@ -20,8 +20,9 @@ import {
 import { gitShowRef } from "../../lib/api";
 import { readoAppearance } from "../../lib/codemirror";
 import { useProject, useSettings, useEditorActions } from "../../lib/store";
-import { useT } from "../../i18n";
+
 import { ChevronIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   relPath: string;
@@ -32,7 +33,7 @@ export function DiffView({ relPath, text }: Props) {
   const root = useProject((s) => s.root);
   const base = useEditorActions((s) => s.diffBase);
   const { codeFont, readingWidth } = useSettings();
-  const t = useT();
+  const { t } = useTranslation();
   const [head, setHead] = useState<string | null | undefined>(undefined);
 
   // Fetch the base version whenever the file or chosen base changes.
@@ -92,7 +93,7 @@ function DiffEditor({
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const langComp = useMemo(() => new Compartment(), []);
-  const t = useT();
+  const { t } = useTranslation();
   const [chunkCount, setChunkCount] = useState(0);
 
   useEffect(() => {

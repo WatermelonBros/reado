@@ -1,0 +1,363 @@
+{
+  "app": {
+    "tagline": "Un posto tranquillo per leggere il codice."
+  },
+  "welcome": {
+    "how": "Come funziona",
+    "step1": "Leggi — apri i file e muoviti nel codice.",
+    "step2": "Commenta — seleziona righe e lascia una nota o un task.",
+    "step3": "Risolvi — lancia un agente; risponde ai tuoi task via CLI reado.",
+    "shortcuts": "Scorciatoie"
+  },
+  "recents": {
+    "title": "Progetti recenti",
+    "empty": "Ancora nessun progetto. Apri una cartella per iniziare a leggere.",
+    "open": "Apri cartella…",
+    "openHint": "Apri una cartella locale qualsiasi — repository git o no.",
+    "remove": "Rimuovi dalla lista"
+  },
+  "tree": {
+    "showHidden": "Mostra file nascosti e ignorati",
+    "collapseAll": "Comprimi tutte le cartelle",
+    "empty": "Questa cartella è vuota.",
+    "search": "Filtra i file…",
+    "audit": "Chiedi un audit all'AI",
+    "markRead": "Segna come letto",
+    "markUnread": "Segna come non letto",
+    "commentFile": "Commenta il file",
+    "commentFolder": "Commenta la cartella",
+    "commentProject": "Commenta il progetto",
+    "openAsText": "Apri come testo",
+    "editSource": "Modifica sorgente",
+    "problems_one": "{count} problema",
+    "problems_other": "{count} problemi"
+  },
+  "editor": {
+    "empty": "Seleziona un file dall'albero per iniziare a leggere.",
+    "binary": "File binario — anteprima non disponibile ({size}).",
+    "wrap": "A capo automatico",
+    "focus": "Modalità focus",
+    "format": "Formatta documento",
+    "explain": "Spiega selezione con l'AI",
+    "explainNote": "Spiega e salva come nota",
+    "viewSource": "Sorgente",
+    "viewRendered": "Anteprima",
+    "goToDef": "Vai alla definizione",
+    "sticky": "Sticky scroll",
+    "stickyJump": "Vai a questo scope",
+    "measure": "Larghezza di lettura",
+    "edit": "Attiva/disattiva modifica",
+    "save": "Salva"
+  },
+  "symbols": {
+    "goto": "Vai al simbolo nel file…",
+    "gotoWorkspace": "Vai al simbolo nel progetto…",
+    "placeholder": "Vai al simbolo…"
+  },
+  "peek": {
+    "def": "Anteprima definizione",
+    "open": "Apri",
+    "none": "Nessuna definizione trovata per “{name}”"
+  },
+  "outline": {
+    "panel": "Struttura",
+    "empty": "Nessun simbolo in questo file.",
+    "noFile": "Apri un file per vederne la struttura."
+  },
+  "nav": {
+    "back": "Indietro (⌥←)",
+    "forward": "Avanti (⌥→)"
+  },
+  "tabs": {
+    "reopen": "Riapri tab chiusa",
+    "close": "Chiudi",
+    "closeOthers": "Chiudi le altre",
+    "closeRight": "Chiudi a destra",
+    "closeAll": "Chiudi tutte"
+  },
+  "sidebar": {
+    "toggle": "Mostra/nascondi sidebar"
+  },
+  "split": {
+    "toggle": "Dividi editor",
+    "close": "Chiudi divisione",
+    "swap": "Scambia pannelli",
+    "openSide": "Apri di fianco"
+  },
+  "diff": {
+    "toggle": "Mostra/nascondi diff",
+    "base": "Base del diff",
+    "head": "HEAD (non committato)",
+    "noBase": "Non presente nella base selezionata.",
+    "noChanges": "Nessuna modifica rispetto alla base selezionata.",
+    "prevChange": "Modifica precedente (Alt+Su)",
+    "nextChange": "Modifica successiva (Alt+Giù)",
+    "changes": "{count} modifiche"
+  },
+  "blame": {
+    "toggle": "Mostra/nascondi blame"
+  },
+  "status": {
+    "noFile": "Nessun file aperto",
+    "branch": "ramo",
+    "comments": "{count} aperti",
+    "agentIdle": "Agente inattivo",
+    "notGit": "Non è un repository git",
+    "goToLine": "Vai alla riga",
+    "goToLinePlaceholder": "Numero di riga…",
+    "spaces": "Spazi: {size}",
+    "tabs": "Tab: {size}",
+    "indent": "Indentazione",
+    "useSpaces": "Indenta con spazi",
+    "useTabs": "Indenta con tab",
+    "language": "Seleziona linguaggio",
+    "eol": "Fine riga"
+  },
+  "palette": {
+    "placeholder": "Digita un comando…"
+  },
+  "finder": {
+    "placeholder": "Vai al file…"
+  },
+  "search": {
+    "placeholder": "Cerca nel progetto…",
+    "noResults": "Nessun risultato.",
+    "replacePlaceholder": "Sostituisci…",
+    "replaceAll": "Sostituisci tutto",
+    "replaceConfirm": "Conferma sostituzione",
+    "replaced": "Sostituito in {count} file.",
+    "results": "{count} risultati",
+    "ripgrepMissing": "ripgrep (rg) non è installato o non è nel PATH."
+  },
+  "settings": {
+    "title": "Impostazioni",
+    "theme": "Tema",
+    "themeMode": "Modalità tema",
+    "mode": {
+      "manual": "Manuale",
+      "system": "Segui il sistema",
+      "auto": "Affidati a Reado (ora del giorno)"
+    },
+    "language": "Lingua",
+    "codeFont": "Font del codice",
+    "completionSound": "Riproduci un suono quando l'agente finisce",
+    "notifications": "Notifiche",
+    "cli": "Strumento da riga di comando",
+    "cliInstall": "Installa 'reado' nel PATH",
+    "cliReinstall": "Reinstalla 'reado'",
+    "cliInstalled": "Installato",
+    "cliDone": "Installato in {path}. Assicurati che ~/.local/bin sia nel PATH.",
+    "cliHint": "Collega la CLI 'reado' inclusa in ~/.local/bin così gli agenti AI possono leggere e risolvere i task da qualsiasi progetto.",
+    "checkUpdates": "Controlla aggiornamenti…",
+    "shortcuts": "Scorciatoie da tastiera…",
+    "close": "Chiudi"
+  },
+  "sc": {
+    "title": "Scorciatoie da tastiera",
+    "navigation": "Navigazione",
+    "editing": "Modifica",
+    "view": "Vista"
+  },
+  "empty": {
+    "firstComment": "Seleziona una o più righe, poi premi la scorciatoia per lasciare la tua prima nota."
+  },
+  "comment": {
+    "type": {
+      "bug": "Bug",
+      "refactor": "Refactor",
+      "performance": "Performance",
+      "question": "Domanda",
+      "note": "Nota"
+    },
+    "state": {
+      "open": "Aperto",
+      "in-progress": "In corso",
+      "done": "Risolto",
+      "discarded": "Scartato"
+    },
+    "task": "Task",
+    "note": "Nota",
+    "taskHint": "I task vengono inviati all'AI; le note no.",
+    "bodyPlaceholder": "Lascia un commento… Markdown supportato.",
+    "replyPlaceholder": "Rispondi…",
+    "new": "Nuovo commento sulla selezione",
+    "save": "Commenta",
+    "reply": "Rispondi",
+    "edit": "Modifica",
+    "delete": "Elimina",
+    "deleteConfirm": "Eliminare questo commento? L'azione è irreversibile.",
+    "you": "Tu",
+    "lines": "Righe {from}–{to}",
+    "line": "Riga {line}",
+    "scope": {
+      "range": "Righe",
+      "file": "File",
+      "project": "Progetto"
+    },
+    "orphan": "Orfano — il codice ancorato non è stato trovato."
+  },
+  "terminal": {
+    "new": "Nuovo terminale",
+    "close": "Chiudi terminale",
+    "hide": "Nascondi terminale",
+    "move": "Sposta terminale",
+    "moveRight": "Aggancia a destra",
+    "moveBottom": "Aggancia in basso",
+    "toggle": "Mostra/nascondi terminale",
+    "launchClaude": "Claude",
+    "launchCodex": "Codex",
+    "launchCopilot": "Copilot",
+    "launch": "Avvia {name}",
+    "split": "Dividi terminale",
+    "orientation": "Cambia orientamento divisione",
+    "closePane": "Chiudi pannello",
+    "sendReview": "Invia review",
+    "reviewSent": "{count} task inviati all'agente.",
+    "noTasks": "Nessun task aperto da inviare.",
+    "search": "Cerca…",
+    "searchPrev": "Risultato precedente",
+    "searchNext": "Risultato successivo"
+  },
+  "review": {
+    "title": "Invia review",
+    "target": "Invia a",
+    "send": "Invia {count}",
+    "selectAll": "Seleziona tutti"
+  },
+  "audit": {
+    "title": "Chiedi un audit all'AI",
+    "target": "Audit di",
+    "instructions": "Cosa deve cercare l'AI?",
+    "placeholder": "es. bug di correttezza, problemi di sicurezza, codice morto… (lascia vuoto per un audit generale)",
+    "hint": "L'AI scrive i risultati come commenti ancorati al codice, così li leggi direttamente inline.",
+    "send": "Invia all'AI"
+  },
+  "progress": {
+    "read": "letti"
+  },
+  "comments": {
+    "review": "Review",
+    "audit": "Audit",
+    "auditProject": "Audit del progetto",
+    "panel": "Commenti",
+    "empty": "Ancora nessun commento. Passa su una riga e clicca +, oppure seleziona del codice e premi la scorciatoia.",
+    "filter": {
+      "all": "Tutti",
+      "thisFile": "Questo file"
+    },
+    "jump": "Vai al codice",
+    "open": "Aperti",
+    "history": "Cronologia",
+    "historyEmpty": "Ancora nessun commento risolto.",
+    "resolvedAt": "Risolto {date}"
+  },
+  "files": {
+    "panel": "File"
+  },
+  "git": {
+    "panel": "Controllo sorgente",
+    "clean": "Nessuna modifica — working tree pulito.",
+    "staged": "Modifiche in stage",
+    "changes": "Modifiche",
+    "stage": "Aggiungi a stage",
+    "unstage": "Togli da stage",
+    "stageAll": "Aggiungi tutto a stage",
+    "unstageAll": "Togli tutto da stage",
+    "discard": "Scarta modifiche",
+    "discardConfirm": "Scartare le modifiche a {name}? Non è reversibile.",
+    "commitPlaceholder": "Messaggio (Cmd+Invio per commit)",
+    "commit": "Commit",
+    "aiCommit": "Commit & push con AI",
+    "committing": "Commit in corso…",
+    "nothingStaged": "Aggiungi modifiche a stage per fare commit.",
+    "fetch": "Fetch",
+    "pull": "Pull",
+    "push": "Push",
+    "more": "Altre azioni",
+    "newBranch": "Crea branch…",
+    "newBranchPlaceholder": "Nome del nuovo branch…",
+    "stash": "Stash delle modifiche",
+    "stashUntracked": "Stash (includi non tracciati)",
+    "stashes": "Stash",
+    "noStashes": "Nessuno stash.",
+    "stashApply": "Applica",
+    "stashPop": "Pop",
+    "stashDrop": "Elimina",
+    "discardAll": "Scarta tutte le modifiche",
+    "discardAllConfirm": "Scartare tutte le modifiche del working tree (inclusi i file non tracciati)? Non è reversibile."
+  },
+  "lsp": {
+    "createTask": "Crea task",
+    "createTaskFromProblem": "Crea task dal problema"
+  },
+  "specs": {
+    "panel": "Spec",
+    "empty": "Nessuna spec — non è un progetto OpenSpec/speckit.",
+    "change": "Change",
+    "spec": "Spec"
+  },
+  "graph": {
+    "title": "Grafo della conoscenza",
+    "legend": {
+      "file": "File",
+      "comment": "Commento",
+      "spec": "Spec",
+      "doc": "Doc",
+      "link": "Collegato"
+    }
+  },
+  "docs": {
+    "title": "Documentazione"
+  },
+  "kb": {
+    "title": "Knowledge base",
+    "search": "Filtra…",
+    "docs": "Doc",
+    "specs": "Spec",
+    "notes": "Note"
+  },
+  "orphans": {
+    "panel": "Orfani",
+    "empty": "Nessun commento orfano.",
+    "lastKnown": "Ultima posizione: {loc}",
+    "reanchor": "Ri-ancora",
+    "reanchorHint": "Ri-ancoraggio di “{label}” — seleziona una riga o un intervallo nell'editor e conferma.",
+    "confirm": "Ancora qui"
+  },
+  "update": {
+    "title": "Aggiornamento disponibile",
+    "available": "Reado {version} è disponibile.",
+    "install": "Installa e riavvia",
+    "installing": "Installazione…",
+    "later": "Più tardi",
+    "indicator": "Aggiornamento disponibile"
+  },
+  "branch": {
+    "local": "Locali",
+    "remote": "Remoti"
+  },
+  "edit": {
+    "cut": "Taglia",
+    "copy": "Copia",
+    "paste": "Incolla",
+    "selectAll": "Seleziona tutto"
+  },
+  "gitignore": {
+    "title": "Aggiungere .reado/ a .gitignore?",
+    "body": "Reado salva i tuoi commenti in .reado/. Per impostazione predefinita restano locali e non vengono committati. Puoi versionarli più avanti dalle Impostazioni.",
+    "add": "Aggiungi a .gitignore",
+    "keep": "Mantieni tracciato",
+    "dontAsk": "Non chiedere più"
+  },
+  "theme": {
+    "reado-dark": "Reado Scuro",
+    "reado-light": "Reado Chiaro",
+    "reado-high-contrast": "Reado Alto Contrasto",
+    "reado-sepia": "Reado Seppia"
+  },
+  "common": {
+    "cancel": "Annulla",
+    "loading": "Caricamento…",
+    "error": "Qualcosa è andato storto."
+  }
+}

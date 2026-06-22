@@ -11,7 +11,7 @@
  * Syntax highlighting and the editor theme come from `lib/codemirror.ts`.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EditorState, Compartment, StateEffect, StateField, Annotation } from "@codemirror/state";
+import { EditorState, Compartment, StateEffect, StateField, Annotation, Facet } from "@codemirror/state";
 import { listen } from "@tauri-apps/api/event";
 import {
   EditorView,
@@ -34,8 +34,9 @@ import { languages } from "../../lib/languages";
 import { occurrenceHighlight } from "../../lib/occurrenceHighlight";
 import { syntaxSelection, expandSelection, shrinkSelection } from "../../lib/syntaxSelection";
 import { keymap } from "@codemirror/view";
-import { defaultKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { search, searchKeymap, gotoLine, highlightSelectionMatches } from "@codemirror/search";
+import { forEachDiagnostic } from "@codemirror/lint";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -45,8 +46,10 @@ import {
   writeFile,
   gitBlame,
   findDefinition,
+  resolveImport,
   submitToTerminal,
   type Comment,
+  type CommentType,
   type Context,
   type FileContent,
 } from "../../lib/api";
@@ -56,9 +59,11 @@ import { blameGutter } from "../../lib/blameGutter";
 import { useDocInfo, detectEol, detectIndent, formatDocument } from "../../lib/docInfo";
 import { useComments, commentsForFile, toRelative } from "../../lib/comments";
 import { useTextView } from "../../lib/textView";
-import { useReadProgress } from "../../lib/readProgress";
+import { useReadProgress, noteSelfWrite } from "../../lib/readProgress";
 import { useTerminals } from "../../lib/terminals";
 import { composeExplainPrompt } from "../../lib/review";
+import { lspSupport, hasServer } from "../../lib/lsp";
+import { taskFromDiagnostic } from "../../lib/lspActions";
 import {
   useCursor,
   useEditorActions,
@@ -67,7 +72,7 @@ import {
   useSettings,
   useWorkspace,
 } from "../../lib/store";
-import { useT } from "../../i18n";
+
 import { CommentComposer } from "../organisms/CommentComposer";
 import { CommentThread } from "../organisms/CommentThread";
 import { ACCENT } from "../atoms/commentMeta";
@@ -76,6 +81,7 @@ import { DiffView } from "../organisms/DiffView";
 import { ImageView } from "../organisms/ImageView";
 import { ContextMenu } from "../atoms/ContextMenu";
 import { PlusIcon, DocsIcon, EditIcon, CloseIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next";
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
 const PLACEHOLDER = "grid h-full place-items-center p-8 text-center text-muted";
@@ -149,8 +155,39 @@ const linkField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-/** Resolve the identifier at `pos` to its definition and jump there. */
+/** The open file's absolute path for a view, so module-level handlers resolve
+ *  imports against the right file even in a split pane. */
+const filePathFacet = Facet.define<string, string>({ combine: (v) => v[0] ?? "" });
+
+/** The contents of a quoted string literal containing `pos` on its line, if
+ *  any (handles ', " and ` with escapes). Used to detect import paths. */
+function stringLiteralAt(view: EditorView, pos: number): string | null {
+  const line = view.state.doc.lineAt(pos);
+  const col = pos - line.from;
+  const re = /(['"`])((?:\\.|(?!\1).)*)\1/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line.text))) {
+    const start = m.index + 1;
+    const end = start + m[2].length;
+    if (col >= start && col <= end) return m[2];
+  }
+  return null;
+}
+
+/** Resolve the thing at `pos` to its definition and jump there. A relative
+ *  import path opens the file it points at; otherwise the identifier is resolved
+ *  via the symbol index. */
 function goToDefinitionAt(view: EditorView, pos: number) {
+  const str = stringLiteralAt(view, pos);
+  if (str && (str.startsWith("./") || str.startsWith("../"))) {
+    const fromFile = view.state.facet(filePathFacet) || useProject.getState().active;
+    if (fromFile) {
+      resolveImport(useProject.getState().root, fromFile, str)
+        .then((p) => p && useProject.getState().open(p))
+        .catch(() => {});
+      return;
+    }
+  }
   const word = view.state.wordAt(pos);
   if (!word) return;
   const name = view.state.doc.sliceString(word.from, word.to);
@@ -234,7 +271,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   const reanchoringId = useComments((s) => s.reanchoringId);
   const diffing = useEditorActions((s) => s.diffing);
   const { wrap, readingWidth, codeFont, focusMode } = useSettings();
-  const t = useT();
+  const { t } = useTranslation();
 
   // The loaded content is kept together with the path it belongs to. Loading is
   // async, so binding content to its path prevents ever rendering one file's
@@ -436,6 +473,7 @@ function CodeView({
   const gutterComp = useMemo(() => new Compartment(), []);
   const blameComp = useMemo(() => new Compartment(), []);
   const tabSizeComp = useMemo(() => new Compartment(), []);
+  const lspComp = useMemo(() => new Compartment(), []);
   const blame = useEditorActions((s) => s.blame);
   const indentSize = useDocInfo((s) => s.indentSize);
   const languageOverride = useDocInfo((s) => s.languageOverride);
@@ -451,13 +489,15 @@ function CodeView({
     return c?.messages[0]?.body.split("\n")[0] ?? "";
   });
   const lastComposeNonce = useRef(composeNonce);
-  const t = useT();
+  const { t } = useTranslation();
 
   // Comment-overlay state, local to this file's view.
   const [composer, setComposer] = useState<{
     startLine: number;
     endLine: number;
     context: Context;
+    initialBody?: string;
+    initialType?: CommentType;
   } | null>(null);
   // Line under the mouse, for the hover "+" add-comment affordance.
   const [hover, setHover] = useState<{ line: number; top: number } | null>(null);
@@ -501,7 +541,12 @@ function CodeView({
   };
 
   // Open the composer for a line range, capturing an adaptive context snapshot.
-  const openComposerFor = (startLine: number, endLine: number) => {
+  // `prefill` seeds the body/type (e.g. a "Create task" from an LSP diagnostic).
+  const openComposerFor = (
+    startLine: number,
+    endLine: number,
+    prefill?: { body?: string; type?: CommentType },
+  ) => {
     const view = viewRef.current;
     if (!view) return;
     const doc = view.state.doc;
@@ -515,13 +560,14 @@ function CodeView({
       after: ctxEnd > endLine ? slice(endLine + 1, ctxEnd) : "",
     };
     setActiveThread(null);
-    setComposer({ startLine, endLine, context });
+    setComposer({ startLine, endLine, context, initialBody: prefill?.body, initialType: prefill?.type });
   };
 
   // Save the buffer to disk (Cmd/Ctrl+S).
   const saveFile = () => {
     const view = viewRef.current;
     if (!view) return;
+    noteSelfWrite(relPath); // our own save — don't let it mark the file unread
     writeFile(useProject.getState().root, relPath, view.state.doc.toString())
       .then(() => useEditorActions.getState().setDirty(false))
       .catch(() => {});
@@ -658,9 +704,21 @@ function CodeView({
             useEditorActions.getState().setDirty(true);
           }
         }),
+        // "Create task" from an LSP diagnostic tooltip: open the composer for the
+        // problem's line, prefilled with the message as an actionable task.
+        EditorView.updateListener.of((u) => {
+          for (const tr of u.transactions) {
+            for (const eff of tr.effects) {
+              if (!eff.is(taskFromDiagnostic)) continue;
+              const line = u.state.doc.lineAt(eff.value.from).number;
+              openComposerFor(line, line, { body: eff.value.message, type: "bug" });
+            }
+          }
+        }),
         landingField,
         blockField,
         linkField,
+        filePathFacet.of(path),
         gotoDefinitionHandlers,
         // F12 jumps to the definition of the symbol at the cursor.
         keymap.of([
@@ -674,12 +732,16 @@ function CodeView({
         keymap.of([{ key: "Alt-F12", run: () => peekDefinition() }]),
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
         blameComp.of([]),
+        lspComp.of([]),
         tabSizeComp.of(EditorState.tabSize.of(useDocInfo.getState().indentSize)),
         // Create-comment gesture (spec: a dedicated key on a selection).
         keymap.of([{ key: "Mod-Shift-m", run: startComposer }]),
         // Save when editing.
         keymap.of([{ key: "Mod-s", run: () => (saveFile(), true) }]),
-        keymap.of([...defaultKeymap, ...searchKeymap, ...foldKeymap]),
+        // Undo/redo: the history field plus its keymap (Mod-z / Mod-Shift-z).
+        // These bindings live in historyKeymap, not defaultKeymap.
+        history(),
+        keymap.of([...historyKeymap, ...defaultKeymap, ...searchKeymap, ...foldKeymap]),
         // Editing is always available; read-first is about the clean default
         // view (no diff/AI overlay), not about being read-only.
         editableExtension(true),
@@ -741,6 +803,25 @@ function CodeView({
       effects: wrapComp.reconfigure(wrap ? EditorView.lineWrapping : []),
     });
   }, [wrap, wrapComp]);
+
+  // Connect the language server for this file (primary pane only, to avoid two
+  // editors syncing the same document). Falls back to nothing when no server is
+  // installed for the language.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    if (!primary || !hasServer(path)) {
+      view.dispatch({ effects: lspComp.reconfigure([]) });
+      return;
+    }
+    let cancelled = false;
+    lspSupport(useProject.getState().root, path).then((ext) => {
+      if (!cancelled) viewRef.current?.dispatch({ effects: lspComp.reconfigure(ext ?? []) });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [path, primary, lspComp]);
 
   // Apply the (possibly status-bar-overridden) tab display width.
   useEffect(() => {
@@ -1019,10 +1100,22 @@ function CodeView({
     const pos = ctxMenu.pos;
     const word = view.state.wordAt(pos);
     const isRepo = useProject.getState().git.isRepo;
+    // A language-server diagnostic at the clicked line — offered as a quick
+    // "create task" so the problem can become an anchored task without hovering.
+    const clickLine = view.state.doc.lineAt(pos);
+    let diagMessage: string | null = null;
+    forEachDiagnostic(view.state, (d, from, to) => {
+      if (diagMessage) return;
+      if (to >= clickLine.from && from <= clickLine.to) diagMessage = d.message;
+    });
     return [
       word && {
         label: t("editor.goToDef"),
         run: () => goToDefinitionAt(view, pos),
+      },
+      diagMessage && {
+        label: t("lsp.createTaskFromProblem"),
+        run: () => openComposerFor(clickLine.number, clickLine.number, { body: diagMessage!, type: "bug" }),
       },
       {
         label: t("comment.new"),
@@ -1193,6 +1286,8 @@ function CodeView({
           startLine={composer.startLine}
           endLine={composer.endLine}
           context={composer.context}
+          initialBody={composer.initialBody}
+          initialType={composer.initialType}
           top={composerTop}
           onClose={closeOverlays}
         />
