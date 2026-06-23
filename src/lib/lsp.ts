@@ -34,7 +34,8 @@ import {
   RangeSetBuilder,
   type Extension,
 } from "@codemirror/state";
-import { lspStart, lspSend, lspStop } from "./api";
+import { lspStart, lspSend, lspStop, resolvePath } from "./api";
+import type { OutlineSymbol } from "./outline";
 import { useExtensions } from "./extensions";
 import { useDiagnostics } from "./diagnostics";
 import { taskFromDiagnostic } from "./lspActions";
@@ -421,6 +422,86 @@ export function lspLocate(
   return true;
 }
 
+/** Resolve the definition location of the symbol at `pos` via the server, for
+ *  callers (like Peek) that render the result themselves instead of navigating.
+ *  Returns null synchronously when no server is attached, so the caller can fall
+ *  back to the symbol index; otherwise a promise of the location (or null). */
+export function lspDefinition(
+  view: EditorView,
+  pos: number,
+): Promise<{ path: string; line: number } | null> | null {
+  const plugin = LSPPlugin.get(view);
+  if (!plugin) return null;
+  plugin.client.sync();
+  return plugin.client
+    .request<unknown, LspLocation | LspLocation[] | null>("textDocument/definition", {
+      textDocument: { uri: plugin.uri },
+      position: plugin.toPosition(pos),
+    })
+    .then((res) => {
+      const loc = Array.isArray(res) ? res[0] : res;
+      return loc ? { path: fromUri(loc.uri), line: loc.range.start.line + 1 } : null;
+    })
+    .catch(() => null);
+}
+
+// LSP SymbolKind (a subset) → the outline's coarser kinds. Unmapped kinds fall
+// through to "variable" so nothing is silently dropped.
+const SYMBOL_KIND: Record<number, OutlineSymbol["kind"]> = {
+  5: "class", // Class
+  23: "class", // Struct
+  6: "method", // Method
+  9: "method", // Constructor
+  12: "function", // Function
+  11: "type", // Interface
+  10: "type", // Enum
+  26: "type", // TypeParameter
+  13: "variable", // Variable
+  14: "variable", // Constant
+  8: "variable", // Field
+  7: "variable", // Property
+};
+
+interface DocSymbol {
+  name: string;
+  kind: number;
+  range?: { start: { line: number } };
+  selectionRange?: { start: { line: number } };
+  location?: { range: { start: { line: number } } };
+  children?: DocSymbol[];
+}
+
+/** Ask the server for the active file's document symbols, mapped to the outline
+ *  shape. Returns null synchronously when no server is attached (caller falls
+ *  back to the heuristic extractor); otherwise a promise of symbols (or null). */
+export function lspDocumentSymbols(
+  view: EditorView,
+): Promise<OutlineSymbol[] | null> | null {
+  const plugin = LSPPlugin.get(view);
+  if (!plugin) return null;
+  plugin.client.sync();
+  return plugin.client
+    .request<unknown, DocSymbol[] | null>("textDocument/documentSymbol", {
+      textDocument: { uri: plugin.uri },
+    })
+    .then((res) => {
+      if (!res || !res.length) return null;
+      const out: OutlineSymbol[] = [];
+      const walk = (syms: DocSymbol[]) => {
+        for (const s of syms) {
+          const line =
+            (s.selectionRange ?? s.range ?? s.location?.range)?.start.line ?? 0;
+          out.push({ name: s.name, kind: SYMBOL_KIND[s.kind] ?? "variable", line: line + 1 });
+          if (s.children?.length) walk(s.children);
+        }
+      };
+      walk(res);
+      out.sort((a, b) => a.line - b.line);
+      return out;
+    })
+    .catch(() => null);
+}
+
 interface Conn {
   client: LSPClient;
   unlisten: Promise<UnlistenFn>;
@@ -465,12 +546,36 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
   return p;
 }
 
+// Angular has no extension of its own — it shares .ts/.html with TypeScript and
+// HTML. Detect an Angular project (angular.json present) once per root so we can
+// route those files to the Angular server instead.
+const angularCache = new Map<string, Promise<boolean>>();
+function isAngularProject(root: string): Promise<boolean> {
+  let p = angularCache.get(root);
+  if (!p) {
+    p = resolvePath(root, "angular.json")
+      .then((r) => r !== null)
+      .catch(() => false);
+    angularCache.set(root, p);
+  }
+  return p;
+}
+
 /**
  * The LSP editor extension for `path` in `root`, or null when no server is
  * configured/installed for the file's language.
  */
 export async function lspSupport(root: string, path: string): Promise<Extension | null> {
-  const server = serverFor(path);
+  const ext = extOf(path);
+  let server = serverFor(path);
+  // In an Angular project, .ts/.html go to the Angular language server.
+  if (
+    (ext === "ts" || ext === "html" || ext === "htm") &&
+    useExtensions.getState().isEnabled("angular") &&
+    (await isAngularProject(root))
+  ) {
+    server = { id: "angular", exts: server?.exts ?? [ext] };
+  }
   if (!server) return null;
   try {
     const { client } = await connect(server, root);

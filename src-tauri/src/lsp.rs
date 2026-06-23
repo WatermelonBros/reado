@@ -83,6 +83,7 @@ pub struct LspState(Mutex<HashMap<String, Server>>);
 fn server_command(server: &str) -> Option<(&'static str, Vec<&'static str>)> {
     match server {
         "typescript" => Some(("typescript-language-server", vec!["--stdio"])),
+        "angular" => Some(("ngserver", vec!["--stdio"])),
         "rust" => Some(("rust-analyzer", vec![])),
         "python" => Some(("pyright-langserver", vec!["--stdio"])),
         "go" => Some(("gopls", vec![])),
@@ -125,8 +126,17 @@ pub fn lsp_start(
     if state.0.lock().unwrap().contains_key(&id) {
         return Ok(());
     }
-    let (command, args) =
+    let (command, base_args) =
         server_command(&server).ok_or_else(|| format!("unknown server: {server}"))?;
+    let mut args: Vec<String> = base_args.iter().map(|s| (*s).to_string()).collect();
+    // The Angular server needs to be told where to find typescript and
+    // @angular/language-service — the project's own node_modules (the cwd).
+    if server == "angular" {
+        for flag in ["--tsProbeLocations", "--ngProbeLocations"] {
+            args.push(flag.to_string());
+            args.push(cwd.clone());
+        }
+    }
     let mut child = Command::new(command)
         .args(&args)
         .current_dir(&cwd)

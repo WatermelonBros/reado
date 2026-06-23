@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useDocInfo, goToLine } from "../../lib/docInfo";
 import { useProject } from "../../lib/store";
 import { extractSymbols, type OutlineSymbol } from "../../lib/outline";
+import { lspDocumentSymbols } from "../../lib/lsp";
 import { useCursor } from "../../lib/store";
 import { useTranslation } from "react-i18next";
 
@@ -26,9 +27,26 @@ export function OutlinePanel() {
   const { t } = useTranslation();
   const [symbols, setSymbols] = useState<OutlineSymbol[]>([]);
 
-  // Re-extract when the file changes (or its editor view is (re)created).
+  // Re-derive symbols when the file changes (or its editor view is (re)created).
+  // Prefer the language server's document symbols; fall back to the heuristic
+  // extractor when no server is attached or it returns nothing.
   useEffect(() => {
-    setSymbols(view ? extractSymbols(view.state.doc.toString()) : []);
+    if (!view) {
+      setSymbols([]);
+      return;
+    }
+    const heuristic = () => extractSymbols(view.state.doc.toString());
+    setSymbols(heuristic());
+    let cancelled = false;
+    const fromServer = lspDocumentSymbols(view);
+    if (fromServer) {
+      void fromServer.then((syms) => {
+        if (!cancelled && syms && syms.length) setSymbols(syms);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [view, active]);
 
   if (!active) {

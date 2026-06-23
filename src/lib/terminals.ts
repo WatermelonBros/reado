@@ -30,9 +30,14 @@ export interface TermGroup {
   sizes: number[];
 }
 
+// A per-window salt so PTY/group ids never collide across windows: each window
+// runs its own module instance with `counter` starting at 0, so without the salt
+// two windows opening a terminal in the same millisecond would mint the same id
+// and then share one backend PTY (crossed output, double writes).
+const WIN = (globalThis.crypto?.randomUUID?.() ?? `${Math.random()}`).slice(0, 8);
 let counter = 0;
-const newId = () => `t_${Date.now().toString(36)}_${counter++}`;
-const newGroupId = () => `g_${Date.now().toString(36)}_${counter++}`;
+const newId = () => `t_${WIN}_${Date.now().toString(36)}_${counter++}`;
+const newGroupId = () => `g_${WIN}_${Date.now().toString(36)}_${counter++}`;
 
 /** Evenly weighted sizes for `n` panes. */
 const even = (n: number): number[] => Array(n).fill(1 / n);
@@ -60,6 +65,9 @@ interface TerminalsState {
   split: () => string;
   /** Remove a pane; removes its group when it was the last one. */
   remove: (id: string) => void;
+  /** Restart a pane in place: swap its id so its <Terminal> remounts (kills the
+   *  old PTY, spawns a fresh shell) while keeping its slot in the layout. */
+  restart: (id: string) => void;
   /** Remove a whole group (tab) and all its panes. */
   removeGroup: (groupId: string) => void;
   /** Focus a pane (and select its group). */
@@ -133,6 +141,21 @@ export const useTerminals = create<TerminalsState>()(
         })
         .filter((g) => g.paneIds.length > 0);
       return { sessions, groups, ...resolveActive(s, groups, id) };
+    }),
+
+  restart: (id) =>
+    set((s) => {
+      if (!s.sessions.some((t) => t.id === id)) return s;
+      const nid = newId();
+      return {
+        sessions: s.sessions.map((t) => (t.id === id ? { ...t, id: nid } : t)),
+        groups: s.groups.map((g) =>
+          g.paneIds.includes(id)
+            ? { ...g, paneIds: g.paneIds.map((p) => (p === id ? nid : p)) }
+            : g,
+        ),
+        activeId: s.activeId === id ? nid : s.activeId,
+      };
     }),
 
   removeGroup: (groupId) =>

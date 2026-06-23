@@ -35,11 +35,31 @@ pub fn run() {
         })
         .manage(pty::PtyState::default())
         .manage(lsp::LspState::default())
+        .manage(menu::LastFocused::default())
+        .on_window_event(|window, event| {
+            use tauri::Manager;
+            // Remember the focused window so menu actions target it (the menu is
+            // shared across windows).
+            if let tauri::WindowEvent::Focused(true) = event {
+                if let Ok(mut last) = window.app_handle().state::<menu::LastFocused>().0.lock() {
+                    *last = Some(window.label().to_string());
+                }
+            }
+            // Reap a closing window's PTYs so its shells/dev servers don't linger
+            // as orphans while other windows keep the app alive.
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                pty::kill_for_window(
+                    &window.app_handle().state::<pty::PtyState>(),
+                    window.label(),
+                );
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             fs::list_dir,
             fs::list_files,
             fs::read_file,
             fs::write_file,
+            fs::create_file,
             fs::move_path,
             fs::import_paths,
             fs::resolve_import,

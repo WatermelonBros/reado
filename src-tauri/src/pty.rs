@@ -22,6 +22,9 @@ struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn Child + Send + Sync>,
+    /// The window that owns this session, so closing that window can reap its
+    /// PTYs (a webview teardown won't reliably run the React unmount cleanup).
+    window: String,
 }
 
 /// Tauri-managed registry of terminal sessions, keyed by the UI's tab id.
@@ -71,6 +74,7 @@ pub fn pty_default_shell() -> String {
 #[tauri::command]
 pub fn pty_spawn(
     app: AppHandle,
+    window: tauri::Window,
     state: State<PtyState>,
     id: String,
     cwd: String,
@@ -123,6 +127,7 @@ pub fn pty_spawn(
             master: pair.master,
             writer,
             child,
+            window: window.label().to_string(),
         },
     );
     Ok(())
@@ -185,6 +190,23 @@ pub fn kill_all(state: &PtyState) {
     if let Ok(mut map) = state.0.lock() {
         for (_, mut session) in map.drain() {
             terminate(&mut session);
+        }
+    }
+}
+
+/// Terminate every session owned by `window` — called when that window closes so
+/// its shells/dev servers don't linger as orphans while the app keeps running.
+pub fn kill_for_window(state: &PtyState, window: &str) {
+    if let Ok(mut map) = state.0.lock() {
+        let ids: Vec<String> = map
+            .iter()
+            .filter(|(_, s)| s.window == window)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            if let Some(mut session) = map.remove(&id) {
+                terminate(&mut session);
+            }
         }
     }
 }

@@ -12,17 +12,21 @@ import {
   useApplyZoom,
   useAutoUpdateCheck,
   useGlobalShortcuts,
+  useCrossWindowSync,
 } from "./lib/hooks";
 import { listenForMenu } from "./lib/menu";
 import { UpdatePrompt } from "./components/organisms/UpdatePrompt";
 import { EditMenu } from "./components/molecules/EditMenu";
 import { ShortcutsDialog } from "./components/organisms/ShortcutsDialog";
+import { PromptDialog } from "./components/organisms/PromptDialog";
+import { TitleBar } from "./components/organisms/TitleBar";
 
 export default function App() {
   useApplyTheme();
   useApplyZoom();
   useGlobalShortcuts();
   useAutoUpdateCheck();
+  useCrossWindowSync();
 
   const [projectPath, setProjectPath] = useState<string | null>(currentProjectPath);
 
@@ -48,12 +52,18 @@ export default function App() {
   }, []);
 
 
+  const projectName = projectPath ? (projectPath.split(/[\\/]/).pop() ?? null) : null;
+
   return (
-    <>
-      {projectPath ? <ProjectView key={projectPath} root={projectPath} /> : <RecentProjects />}
+    <div className="flex h-full flex-col">
+      <TitleBar projectName={projectName} />
+      <div className="min-h-0 flex-1">
+        {projectPath ? <ProjectView key={projectPath} root={projectPath} /> : <RecentProjects />}
+      </div>
       <UpdatePrompt />
       <EditMenu />
       <ShortcutsDialog />
-    </>
+      <PromptDialog />
+    </div>
   );
 }

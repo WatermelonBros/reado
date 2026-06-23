@@ -1,7 +1,14 @@
 /** Settings panel: theme, theme mode, language, and code font. */
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { useSettings, usePalette, THEMES, type ThemeName, type ThemeMode } from "../../lib/store";
+import {
+  useSettings,
+  usePalette,
+  THEMES,
+  type ThemeName,
+  type ThemeMode,
+  type SettingsState,
+} from "../../lib/store";
 import { useLocale, type Locale, type MessageKey } from "../../i18n";
 import { installCli, cliInstalled } from "../../lib/api";
 import { checkForUpdates } from "../../lib/updater";
@@ -110,6 +117,18 @@ export function Settings() {
                   value: `"${f}", ui-monospace, monospace`,
                   label: f,
                 })),
+              ]}
+            />
+          </Field>
+
+          <Field label={t("settings.autoSave")}>
+            <Select
+              value={settings.autoSave}
+              onChange={(v) => settings.set({ autoSave: v as SettingsState["autoSave"] })}
+              options={[
+                { value: "off", label: t("settings.autoSaveOff") },
+                { value: "afterDelay", label: t("settings.autoSaveAfterDelay") },
+                { value: "onFocusChange", label: t("settings.autoSaveOnFocusChange") },
               ]}
             />
           </Field>

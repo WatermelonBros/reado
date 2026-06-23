@@ -18,13 +18,22 @@
 
 ## 3. Navigation (Phase 2)
 
-- [ ] 3.1 Definition/References via the server when available; fall back to the index otherwise (shared entry points with existing Go to Definition / Find References / Peek).
-- [ ] 3.2 Document symbols feed the Outline (and Workspace Symbols when present).
+- [x] 3.1 Definition + Peek go through the server when attached, falling back to
+      the symbol index (`lspLocate` / `lspDefinition`). Find References still uses
+      project-wide text search (server-precise references need a results panel —
+      deferred; documented).
+- [x] 3.2 Document symbols feed the Outline and the "Go to Symbol in File" palette
+      via `lspDocumentSymbols`, falling back to the heuristic extractor. (Workspace
+      Symbols via the server is deferred; the index-based list stays.)
 
 ## 4. Breadth & write-side (later phases)
 
-- [ ] 4.1 Enable Rust + Solidity via config; verify each.
-- [ ] 4.2 Optional: completion, signature help, rename, code actions.
+- [x] 4.1 Rust (`rust-analyzer`) + Solidity (`solidity-ls --stdio`) enabled in both
+      the frontend `SERVERS` table and the Rust allowlist. (Live verification needs
+      each server installed on the machine — manual.)
+- [x] 4.2 Completion, signature help, and rename are wired in `clientExtensions()`
+      (`serverCompletion` / `signatureHelp` / `renameKeymap`). Code actions: the
+      diagnostic→task affordance ships; broader code-action UI deferred.
 
 ## 5. Verify
 

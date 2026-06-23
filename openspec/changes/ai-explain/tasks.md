@@ -5,7 +5,7 @@
 
 ## 2. Affordances
 
-- [ ] 2.1 Selection context-menu item "Explain selection" + the "+" composer area, command palette, and Edit/Selection menu entry.
+- [x] 2.1 Selection context-menu item "Explain selection" + the "+" composer area, command palette, and Edit/Selection menu entry.
 - [x] 2.2 A toggle/second item for "Explain & save as note".
 - [x] 2.3 i18n (EN + IT).
 

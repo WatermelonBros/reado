@@ -14,7 +14,7 @@ import {
   listFiles,
 } from "../../lib/api";
 import { useReadProgress, wasSelfWrite } from "../../lib/readProgress";
-import { useProject, useSessions, useWorkspace } from "../../lib/store";
+import { useProject, useSessions, useWorkspace, useSettings } from "../../lib/store";
 import { useComments, toRelative } from "../../lib/comments";
 import { notifyResolved } from "../../lib/notify";
 import { loadProjectConfig, watchProjectConfig } from "../../lib/projectConfig";
@@ -154,6 +154,9 @@ export function ProjectView({ root }: { root: string }) {
   const setSidebarWidth = useWorkspace((s) => s.setSidebarWidth);
   const showHidden = useProject((s) => s.showHidden);
   const setShowHidden = useProject((s) => s.setShowHidden);
+  const showActivityBar = useSettings((s) => s.showActivityBar);
+  const showStatusBar = useSettings((s) => s.showStatusBar);
+  const showBreadcrumbs = useSettings((s) => s.showBreadcrumbs);
   const terminalOpen = useTerminals((s) => s.open);
   const terminalPosition = useTerminals((s) => s.position);
   const splitPath = useProject((s) => s.splitPath);
@@ -193,7 +196,7 @@ export function ProjectView({ root }: { root: string }) {
         gridTemplateColumns: tool ? `48px ${sidebarWidth}px 1fr` : "48px 1fr",
       }}
     >
-      <ActivityBar />
+      {showActivityBar && <ActivityBar />}
       {tool && (
         <aside className="relative flex min-w-0 flex-col overflow-hidden border-r border-line bg-surface">
           {/* Resize handle straddling the right border. */}
@@ -254,7 +257,7 @@ export function ProjectView({ root }: { root: string }) {
       )}
       <main className="flex min-w-0 flex-col overflow-hidden">
         <Tabs />
-        <Breadcrumb />
+        {showBreadcrumbs && <Breadcrumb />}
         {/* Editor + optional split pane + terminal (right dock). The primary
             (left) pane is the one with the breadcrumb/tabs above it; the split
             pane carries its own compact header — that asymmetry signals which
@@ -304,7 +307,7 @@ export function ProjectView({ root }: { root: string }) {
       {docsOpen && <DocsView />}
     </div>
     {/* Status bar spans the full window width, below the activity bar + sidebar. */}
-    <StatusBar />
+    {showStatusBar && <StatusBar />}
     </div>
   );
 }

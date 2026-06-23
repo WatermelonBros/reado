@@ -17,12 +17,32 @@ import {
   type SearchMatch,
   type Symbol as WorkspaceSymbol,
 } from "../../lib/api";
-import { usePalette, useProject, useSettings, useEditorActions, useWorkspace, THEMES } from "../../lib/store";
+import {
+  usePalette,
+  useProject,
+  useSettings,
+  useEditorActions,
+  useWorkspace,
+  useRecents,
+  THEMES,
+} from "../../lib/store";
+import { openProject } from "../../lib/window";
 import { useTerminals } from "../../lib/terminals";
 import { mod } from "../../lib/shortcuts";
 import { checkForUpdates } from "../../lib/updater";
-import { formatDocument, goToLine, useDocInfo } from "../../lib/docInfo";
-import { extractSymbols } from "../../lib/outline";
+import {
+  formatDocument,
+  goToLine,
+  goToBracket,
+  gotoLastEdit,
+  addCursorsToLineEnds,
+  useDocInfo,
+} from "../../lib/docInfo";
+import { clearTerminal, restartTerminal } from "../../lib/agents";
+import { extractSymbols, type OutlineSymbol } from "../../lib/outline";
+import { lspDocumentSymbols } from "../../lib/lsp";
+import { useReadProgress } from "../../lib/readProgress";
+import { toRelative } from "../../lib/comments";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -53,6 +73,7 @@ export function Palette() {
   const [files, setFiles] = useState<string[]>([]);
   const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [wsymbols, setWsymbols] = useState<WorkspaceSymbol[]>([]);
+  const [fsymbols, setFsymbols] = useState<OutlineSymbol[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +99,28 @@ export function Palette() {
       listSymbols(project.root).then(setWsymbols).catch(() => setWsymbols([]));
     }
   }, [mode, project.root, wsymbols.length]);
+
+  // Load the active file's symbols when entering file-symbol mode: prefer the
+  // language server's document symbols, fall back to the heuristic extractor.
+  useEffect(() => {
+    if (mode !== "symbols") return;
+    const view = useDocInfo.getState().view;
+    if (!view) {
+      setFsymbols([]);
+      return;
+    }
+    setFsymbols(extractSymbols(view.state.doc.toString()));
+    let cancelled = false;
+    const fromServer = lspDocumentSymbols(view);
+    if (fromServer) {
+      void fromServer.then((syms) => {
+        if (!cancelled && syms && syms.length) setFsymbols(syms);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
 
   // Debounced full-text search.
   useEffect(() => {
@@ -106,6 +149,14 @@ export function Palette() {
         toggleSettings,
         requestCompose: () => {
           useEditorActions.getState().requestCompose();
+          close();
+        },
+        requestExplain: () => {
+          useEditorActions.getState().requestExplain();
+          close();
+        },
+        requestPeek: () => {
+          useEditorActions.getState().requestPeek();
           close();
         },
         openGraph: () => {
@@ -146,11 +197,9 @@ export function Palette() {
       }));
     }
     if (mode === "symbols") {
-      const view = useDocInfo.getState().view;
-      const symbols = view ? extractSymbols(view.state.doc.toString()) : [];
       const filtered = query
-        ? fuzzysort.go(query, symbols, { limit: 300, key: (s) => s.name }).map((r) => r.obj)
-        : symbols;
+        ? fuzzysort.go(query, fsymbols, { limit: 300, key: (s) => s.name }).map((r) => r.obj)
+        : fsymbols;
       return filtered.map((s) => ({
         label: s.name,
         detail: `${s.kind} · ${s.line}`,
@@ -173,8 +222,22 @@ export function Palette() {
         },
       }));
     }
+    if (mode === "recents") {
+      const recents = useRecents.getState().projects;
+      const filtered = query
+        ? fuzzysort.go(query, recents, { limit: 100, key: (p) => p.path }).map((r) => r.obj)
+        : recents;
+      return filtered.map((p) => ({
+        label: basename(p.path),
+        detail: p.path,
+        run: () => {
+          openProject(p.path);
+          close();
+        },
+      }));
+    }
     return [];
-  }, [mode, query, files, matches, wsymbols, project, settings, t, open, toggleSettings, close]);
+  }, [mode, query, files, matches, wsymbols, fsymbols, project, settings, t, open, toggleSettings, close]);
 
   // Keep the selection in range as rows change.
   useEffect(() => {
@@ -190,7 +253,9 @@ export function Palette() {
         ? "finder.placeholder"
         : mode === "symbols" || mode === "wsymbols"
           ? "symbols.placeholder"
-          : "search.placeholder";
+          : mode === "recents"
+            ? "recents.title"
+            : "search.placeholder";
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -290,6 +355,8 @@ interface CommandCtx {
   open: (mode: "commands" | "files" | "search" | "symbols" | "wsymbols") => void;
   toggleSettings: (open?: boolean) => void;
   requestCompose: () => void;
+  requestExplain: () => void;
+  requestPeek: () => void;
   openGraph: () => void;
   openDocs: () => void;
 }
@@ -297,11 +364,28 @@ interface CommandCtx {
 /** Static command list for Cmd+K. */
 function commandRows(
   t: TFunction,
-  { project, settings, open, toggleSettings, requestCompose, openGraph, openDocs }: CommandCtx,
+  {
+    project,
+    settings,
+    open,
+    toggleSettings,
+    requestCompose,
+    requestExplain,
+    requestPeek,
+    openGraph,
+    openDocs,
+  }: CommandCtx,
 ): Row[] {
   const rows: Row[] = [
     { label: t("comment.new"), hint: `${mod}⇧M`, run: requestCompose },
+    { label: t("editor.explain"), run: requestExplain },
+    { label: t("peek.def"), run: requestPeek },
+    { label: t("editor.goToBracket"), run: goToBracket },
+    { label: t("editor.lastEdit"), run: gotoLastEdit },
+    { label: t("editor.cursorsLineEnds"), run: addCursorsToLineEnds },
     { label: t("editor.format"), hint: "⇧⌥F", run: () => void formatDocument() },
+    { label: t("terminal.clear"), run: clearTerminal },
+    { label: t("terminal.restart"), run: restartTerminal },
     { label: t("symbols.goto"), hint: `${mod}⇧O`, run: () => open("symbols") },
     { label: t("symbols.gotoWorkspace"), hint: `${mod}T`, run: () => open("wsymbols") },
     { label: t("graph.title"), run: openGraph },
@@ -323,6 +407,18 @@ function commandRows(
     {
       label: `${t("editor.measure")}: ${settings.readingWidth ? "on" : "off"}`,
       run: () => settings.set({ readingWidth: !settings.readingWidth }),
+    },
+    {
+      label:
+        project.active && useReadProgress.getState().read.has(toRelative(project.root, project.active))
+          ? t("tree.markUnread")
+          : t("tree.markRead"),
+      run: () => {
+        if (!project.active) return;
+        const rel = toRelative(project.root, project.active);
+        const isRead = useReadProgress.getState().read.has(rel);
+        useReadProgress.getState().mark(project.root, rel, !isRead);
+      },
     },
     {
       label: `${t("tree.showHidden")}: ${project.showHidden ? "on" : "off"}`,

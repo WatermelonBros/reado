@@ -17,6 +17,7 @@ import {
   EditorView,
   lineNumbers,
   highlightSpecialChars,
+  highlightWhitespace,
   drawSelection,
   rectangularSelection,
   crosshairCursor,
@@ -56,13 +57,13 @@ import {
 import { readoAppearance } from "../../lib/codemirror";
 import { commentGutter, type LineComments } from "../../lib/commentGutter";
 import { blameGutter } from "../../lib/blameGutter";
-import { useDocInfo, detectEol, detectIndent, formatDocument } from "../../lib/docInfo";
+import { useDocInfo, detectEol, detectIndent, formatDocument, setLastEdit } from "../../lib/docInfo";
 import { useComments, commentsForFile, toRelative } from "../../lib/comments";
 import { useTextView } from "../../lib/textView";
 import { useReadProgress, noteSelfWrite } from "../../lib/readProgress";
 import { useTerminals } from "../../lib/terminals";
 import { composeExplainPrompt, composeSymbolExplainPrompt } from "../../lib/review";
-import { lspSupport, hasServer, lspLocate, lspHover } from "../../lib/lsp";
+import { lspSupport, hasServer, lspLocate, lspDefinition, lspHover } from "../../lib/lsp";
 import { taskFromDiagnostic } from "../../lib/lspActions";
 import {
   useCursor,
@@ -282,7 +283,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   const archived = useComments((s) => s.archived);
   const reanchoringId = useComments((s) => s.reanchoringId);
   const diffing = useEditorActions((s) => s.diffing);
-  const { wrap, readingWidth, codeFont, focusMode } = useSettings();
+  const { wrap, readingWidth, codeFont, focusMode, renderWhitespace } = useSettings();
   const { t } = useTranslation();
 
   // The loaded content is kept together with the path it belongs to. Loading is
@@ -408,6 +409,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             readingWidth={readingWidth}
             codeFont={codeFont}
             focusMode={focusMode}
+            renderWhitespace={renderWhitespace}
             landingLine={landing?.path === active ? landing : null}
             primary={primary}
           />
@@ -443,6 +445,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
       readingWidth={readingWidth}
       codeFont={codeFont}
       focusMode={focusMode}
+      renderWhitespace={renderWhitespace}
       landingLine={landing?.path === active ? landing : null}
       primary={primary}
     />
@@ -458,6 +461,7 @@ interface CodeViewProps {
   readingWidth: boolean;
   codeFont: string;
   focusMode: boolean;
+  renderWhitespace: boolean;
   landingLine: { line: number; nonce: number } | null;
   /** Whether this is the primary pane (owns shared status-bar/cursor state). */
   primary: boolean;
@@ -474,12 +478,15 @@ function CodeView({
   readingWidth,
   codeFont,
   focusMode,
+  renderWhitespace,
   landingLine,
 }: CodeViewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const autoSaveTimer = useRef<number | undefined>(undefined);
   const wrapComp = useMemo(() => new Compartment(), []);
+  const whitespaceComp = useMemo(() => new Compartment(), []);
   const langComp = useMemo(() => new Compartment(), []);
   const focusComp = useMemo(() => new Compartment(), []);
   const gutterComp = useMemo(() => new Compartment(), []);
@@ -501,6 +508,10 @@ function CodeView({
     return c?.messages[0]?.body.split("\n")[0] ?? "";
   });
   const lastComposeNonce = useRef(composeNonce);
+  const explainNonce = useEditorActions((s) => s.explainNonce);
+  const peekNonce = useEditorActions((s) => s.peekNonce);
+  const lastExplainNonce = useRef(explainNonce);
+  const lastPeekNonce = useRef(peekNonce);
   const { t } = useTranslation();
 
   // Comment-overlay state, local to this file's view.
@@ -585,6 +596,11 @@ function CodeView({
       .catch(() => {});
   };
 
+  // Auto Save: write only when there are unsaved edits (avoids needless writes).
+  const autoSave = () => {
+    if (useEditorActions.getState().dirty) saveFile();
+  };
+
   // In re-anchor mode the same gesture sets an orphan's new anchor instead of
   // opening the composer.
   const anchorOrCompose = (start: number, end: number) => {
@@ -600,36 +616,45 @@ function CodeView({
     return () => window.removeEventListener("keydown", onKey);
   }, [peek]);
 
-  // Peek the definition of the symbol at the cursor in an inline panel.
+  // Peek the definition of the symbol at the cursor in an inline panel. Prefers
+  // the language server when one is attached, falling back to the symbol index.
   const peekDefinition = (): boolean => {
     const view = viewRef.current;
     if (!view) return false;
-    const word = view.state.wordAt(view.state.selection.main.head);
+    const pos = view.state.selection.main.head;
+    const word = view.state.wordAt(pos);
     if (!word) return false;
     const name = view.state.doc.sliceString(word.from, word.to);
     const top = toLocalTop(view.coordsAtPos(word.from)?.bottom ?? 0) ?? 8;
     const root = useProject.getState().root;
-    findDefinition(root, name)
-      .then(async (defs) => {
-        if (!defs.length) {
-          setPeek({ top, label: name, lines: [], defLineIndex: -1, target: null });
-          return;
-        }
-        const d = defs[0];
-        const content = await readFile(root, d.path).catch(() => null);
-        const text = content && content.kind === "text" ? content.text : "";
-        const all = text.split("\n");
-        const start = Math.max(0, d.line - 6);
-        const lines = all.slice(start, Math.min(all.length, d.line + 6));
-        setPeek({
-          top,
-          label: `${toRelative(root, d.path)}:${d.line}`,
-          lines,
-          defLineIndex: d.line - 1 - start,
-          target: { path: d.path, line: d.line },
-        });
-      })
-      .catch(() => {});
+    // Render a peek panel for a resolved definition location.
+    const showAt = async (path: string, line: number) => {
+      const content = await readFile(root, path).catch(() => null);
+      const text = content && content.kind === "text" ? content.text : "";
+      const all = text.split("\n");
+      const start = Math.max(0, line - 6);
+      const lines = all.slice(start, Math.min(all.length, line + 6));
+      setPeek({
+        top,
+        label: `${toRelative(root, path)}:${line}`,
+        lines,
+        defLineIndex: line - 1 - start,
+        target: { path, line },
+      });
+    };
+    const showNone = () =>
+      setPeek({ top, label: name, lines: [], defLineIndex: -1, target: null });
+    // Index fallback: search the symbol index by name.
+    const fromIndex = () =>
+      findDefinition(root, name)
+        .then((defs) => (defs.length ? showAt(defs[0].path, defs[0].line) : showNone()))
+        .catch(() => {});
+    const fromServer = lspDefinition(view, pos);
+    if (fromServer) {
+      void fromServer.then((loc) => (loc ? showAt(loc.path, loc.line) : fromIndex()));
+    } else {
+      void fromIndex();
+    }
     return true;
   };
 
@@ -674,6 +699,20 @@ function CodeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composeNonce]);
 
+  // Explain / Peek requested from the palette or menu (primary pane only).
+  useEffect(() => {
+    if (explainNonce === lastExplainNonce.current) return;
+    lastExplainNonce.current = explainNonce;
+    if (primary) explainSelection(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [explainNonce]);
+  useEffect(() => {
+    if (peekNonce === lastPeekNonce.current) return;
+    lastPeekNonce.current = peekNonce;
+    if (primary) peekDefinition();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peekNonce]);
+
   // Create the editor once per file.
   useEffect(() => {
     if (!hostRef.current) return;
@@ -714,7 +753,20 @@ function CodeView({
           }
           if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ExternalReload))) {
             useEditorActions.getState().setDirty(true);
+            setLastEdit(u.state.selection.main.head);
+            // Auto Save (after-delay): debounce a write while the user types.
+            if (useSettings.getState().autoSave === "afterDelay") {
+              clearTimeout(autoSaveTimer.current);
+              autoSaveTimer.current = window.setTimeout(autoSave, 1000);
+            }
           }
+        }),
+        // Auto Save (on-focus-change): write when the editor loses focus.
+        EditorView.domEventHandlers({
+          blur: () => {
+            if (useSettings.getState().autoSave === "onFocusChange") autoSave();
+            return false;
+          },
         }),
         // "Create task" from an LSP diagnostic tooltip: open the composer for the
         // problem's line, prefilled with the message as an actionable task.
@@ -760,6 +812,7 @@ function CodeView({
         editableExtension(true),
         readoAppearance,
         wrapComp.of(wrap ? EditorView.lineWrapping : []),
+        whitespaceComp.of(renderWhitespace ? highlightWhitespace() : []),
         focusComp.of(focusExtension(focusMode)),
         langComp.of([]),
       ],
@@ -816,6 +869,13 @@ function CodeView({
       effects: wrapComp.reconfigure(wrap ? EditorView.lineWrapping : []),
     });
   }, [wrap, wrapComp]);
+
+  // Toggle whitespace rendering live.
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: whitespaceComp.reconfigure(renderWhitespace ? highlightWhitespace() : []),
+    });
+  }, [renderWhitespace, whitespaceComp]);
 
   // Connect the language server for this file (primary pane only, to avoid two
   // editors syncing the same document). Falls back to nothing when no server is

@@ -11,8 +11,9 @@
  * in. The tree re-lists itself when files change on disk (`treeNonce`).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { listDir, movePath, importPaths, type DirEntry } from "../../lib/api";
+import { listDir, listFiles, movePath, importPaths, type DirEntry } from "../../lib/api";
 import { useProject } from "../../lib/store";
 import { useTextView } from "../../lib/textView";
 import { useReadProgress } from "../../lib/readProgress";
@@ -34,6 +35,23 @@ import { useTranslation } from "react-i18next";
 
 type Ctx = (entry: DirEntry | null, e: React.MouseEvent) => void;
 
+/** The project's full file list (rel paths, "/"-separated), cached so each folder
+ *  row can show a quiet read/total aggregate without re-walking the disk. */
+const useProjectFiles = create<{ files: string[]; load: (root: string) => void }>((set) => ({
+  files: [],
+  load: (root) =>
+    void listFiles(root)
+      .then((fs) => set({ files: fs.map((f) => f.replace(/\\/g, "/")) }))
+      .catch(() => set({ files: [] })),
+}));
+
+/** How many of `items` (a file list or read-set) sit under `prefix` ("dir/"). */
+const countPrefix = (items: Iterable<string>, prefix: string) => {
+  let n = 0;
+  for (const p of items) if (p.startsWith(prefix)) n++;
+  return n;
+};
+
 const DRAG_TYPE = "application/reado-path";
 const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 const sep = (p: string) => (p.includes("\\") ? "\\" : "/");
@@ -54,6 +72,11 @@ export function FileTree() {
   );
   const [target, setTarget] = useState<CommentTarget | null>(null);
   const [audit, setAudit] = useState<AuditTarget | null>(null);
+
+  // Keep the file-list cache fresh for the per-folder read/total aggregate.
+  useEffect(() => {
+    useProjectFiles.getState().load(root);
+  }, [root, treeNonce]);
 
   // Internal drag-and-drop: move a dragged path into a destination folder.
   const move = useCallback(
@@ -325,7 +348,20 @@ function TreeNode({
     if (collapseNonce && entry.isDir) setExpanded(false);
   }, [collapseNonce, entry.isDir]);
   // Read files are dimmed (a quiet reading-progress cue).
-  const isRead = useReadProgress((s) => !entry.isDir && s.read.has(toRelative(root, entry.path)));
+  const relPath = toRelative(root, entry.path);
+  const isRead = useReadProgress((s) => !entry.isDir && s.read.has(relPath));
+  // Per-folder aggregate: how many files under this folder have been read.
+  // Selectors short-circuit for files so file rows never scan the lists.
+  const folderTotal = useProjectFiles((s) =>
+    entry.isDir ? countPrefix(s.files, relPath + "/") : 0,
+  );
+  const folderRead = useReadProgress((s) =>
+    entry.isDir ? countPrefix(s.read, relPath + "/") : 0,
+  );
+  // A fully-read folder dims like a read file; a partially-read one shows a quiet
+  // count. Empty/untouched folders stay neutral (no zero-noise on every row).
+  const folderDone = entry.isDir && folderTotal > 0 && folderRead >= folderTotal;
+  const dimmed = entry.isDir ? folderDone : isRead;
   // Error count from the language server — a quiet trailing count, not a loud
   // red filename (and honest: its absence means "none found", not "clean").
   const errorCount = useDiagnostics((s) => (entry.isDir ? 0 : (s.errors[entry.path] ?? 0)));
@@ -381,11 +417,19 @@ function TreeNode({
         <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} />
         <span
           className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${
-            isRead ? "text-muted" : ""
+            dimmed ? "text-muted" : ""
           }`}
         >
           {entry.name}
         </span>
+        {entry.isDir && folderRead > 0 && !folderDone && (
+          <span
+            title={t("tree.readProgress", { read: folderRead, total: folderTotal })}
+            className="flex-none pl-1 text-[10px] text-faint tabular-nums"
+          >
+            {folderRead}/{folderTotal}
+          </span>
+        )}
         {errorCount > 0 && (
           <span
             title={t("tree.problems", { count: errorCount })}

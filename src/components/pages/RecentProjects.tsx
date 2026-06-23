@@ -2,9 +2,8 @@
  * Launcher screen shown when no project is open: recent projects plus an
  * "open folder" action. Opening a project launches it in its own window.
  */
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useRecents } from "../../lib/store";
-import { openProject } from "../../lib/window";
+import { openProject, pickFolderAndOpen } from "../../lib/window";
 
 import { FolderOpenIcon, CloseIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
@@ -15,10 +14,7 @@ export function RecentProjects() {
   const remove = useRecents((s) => s.remove);
   const { t } = useTranslation();
 
-  const pick = async () => {
-    const selected = await openDialog({ directory: true, multiple: false });
-    if (typeof selected === "string") launch(selected);
-  };
+  const pick = () => void pickFolderAndOpen();
 
   const launch = (path: string) => {
     touch(path);

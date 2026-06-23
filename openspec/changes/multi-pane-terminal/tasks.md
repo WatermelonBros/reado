@@ -32,5 +32,8 @@
 ## 5. Verification
 
 - [ ] 5.1 Scrollback survives: split, resize, toggle orientation, switch tabs, dock bottom↔right — no PTY respawn, no lost output.
-- [ ] 5.2 Closing panes and groups cleans up PTYs (process-group kill still applies).
+- [x] 5.2 Closing panes/groups kills their PTYs (`pty_kill`, process-group kill);
+      closing a whole window reaps that window's PTYs in Rust on `CloseRequested`
+      (`kill_for_window`) since a webview teardown won't run the React cleanup; ids
+      are now per-window-salted so PTYs never cross windows.
 - [x] 5.3 typecheck + build green.

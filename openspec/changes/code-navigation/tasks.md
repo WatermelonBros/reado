@@ -8,7 +8,7 @@
 
 - [x] 2.1 Resolve the symbol at the cursor with the existing `find_definition`; fetch the target's surrounding lines.
 - [x] 2.2 Inline panel over the editor (CodeMirror panel or an overlay) showing the snippet; Escape closes, an action opens the file; "no definition found" state.
-- [ ] 2.3 Bind a key (e.g. `⌥F12`) + Go menu + palette entry.
+- [x] 2.3 Bind a key (e.g. `⌥F12`) + Go menu + palette entry.
 
 ## 3. Verify
 

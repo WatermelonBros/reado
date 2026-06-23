@@ -53,6 +53,14 @@ export interface SettingsState {
   gitignoreDontAsk: boolean;
   /** Play a soft chime when the agent finishes resolving tasks. */
   completionSound: boolean;
+  /** Automatically write edits to disk: never / after a short pause / on blur. */
+  autoSave: "off" | "afterDelay" | "onFocusChange";
+  /** Chrome visibility toggles (View menu). */
+  showActivityBar: boolean;
+  showStatusBar: boolean;
+  showBreadcrumbs: boolean;
+  /** Show spaces/tabs as faint marks in the editor. */
+  renderWhitespace: boolean;
   set: (patch: Partial<SettingsState>) => void;
 }
 
@@ -72,6 +80,11 @@ export const useSettings = create<SettingsState>()(
       versionReado: false,
       gitignoreDontAsk: false,
       completionSound: false,
+      autoSave: "off",
+      showActivityBar: true,
+      showStatusBar: true,
+      showBreadcrumbs: true,
+      renderWhitespace: false,
       set: (patch) => set(patch),
     }),
     { name: "reado.settings" },
@@ -227,6 +240,7 @@ export type PaletteMode =
   | "search"
   | "symbols"
   | "wsymbols"
+  | "recents"
   | null;
 
 interface PaletteState {
@@ -258,6 +272,12 @@ interface EditorActionsState {
   /** Bumped to request the active code view to open the comment composer. */
   composeNonce: number;
   requestCompose: () => void;
+  /** Bumped to ask the active view to explain the current selection with AI. */
+  explainNonce: number;
+  requestExplain: () => void;
+  /** Bumped to ask the active view to peek the definition at the cursor. */
+  peekNonce: number;
+  requestPeek: () => void;
   /** Manual editing enabled for the active file (read-first stays the default). */
   editing: boolean;
   setEditing: (editing: boolean) => void;
@@ -280,6 +300,10 @@ interface EditorActionsState {
 export const useEditorActions = create<EditorActionsState>((set) => ({
   composeNonce: 0,
   requestCompose: () => set((s) => ({ composeNonce: s.composeNonce + 1 })),
+  explainNonce: 0,
+  requestExplain: () => set((s) => ({ explainNonce: s.explainNonce + 1 })),
+  peekNonce: 0,
+  requestPeek: () => set((s) => ({ peekNonce: s.peekNonce + 1 })),
   editing: false,
   setEditing: (editing) => set({ editing }),
   dirty: false,

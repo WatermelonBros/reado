@@ -52,6 +52,10 @@ export const readFile = (root: string, path: string, asText?: boolean) =>
 export const writeFile = (root: string, path: string, content: string) =>
   invoke<void>("write_file", { root, path, content });
 
+/** Create a new empty file (project-relative path); returns its absolute path. */
+export const createFile = (root: string, path: string) =>
+  invoke<string>("create_file", { root, path });
+
 /** Move/rename a file or folder within the project (internal drag-and-drop). */
 export const movePath = (root: string, from: string, to: string) =>
   invoke<void>("move_path", { root, from, to });

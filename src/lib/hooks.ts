@@ -11,6 +11,7 @@ import {
   type ThemeName,
 } from "./store";
 import { useTerminals } from "./terminals";
+import { useExtensions } from "./extensions";
 import { formatDocument } from "./docInfo";
 import { checkForUpdates } from "./updater";
 
@@ -103,6 +104,24 @@ export function useApplyZoom(): void {
         document.documentElement.style.zoom = String(zoom);
       });
   }, [zoom]);
+}
+
+/** Keep global preferences in sync across windows. zustand `persist` writes to
+ *  localStorage (shared per origin), but an already-open window won't see another
+ *  window's change until it re-reads. The `storage` event fires in *other*
+ *  windows on every write, so rehydrating the matching store there applies the
+ *  change live — e.g. switching theme or toggling a setting updates every window.
+ *  (Per-window UI like the sidebar tool and terminal layout are intentionally
+ *  not synced.) */
+export function useCrossWindowSync(): void {
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "reado.settings") void useSettings.persist.rehydrate();
+      else if (e.key === "reado.extensions") void useExtensions.persist.rehydrate();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 }
 
 /** Interface zoom bounds. */

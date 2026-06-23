@@ -30,7 +30,8 @@
     "openAsText": "Apri come testo",
     "editSource": "Modifica sorgente",
     "problems_one": "{count} problema",
-    "problems_other": "{count} problemi"
+    "problems_other": "{count} problemi",
+    "readProgress": "{read} di {total} file letti"
   },
   "editor": {
     "empty": "Seleziona un file dall'albero per iniziare a leggere.",
@@ -45,6 +46,9 @@
     "goToDef": "Vai alla definizione",
     "goToTypeDef": "Vai alla definizione del tipo",
     "goToImpl": "Vai all'implementazione",
+    "goToBracket": "Vai alla parentesi",
+    "lastEdit": "Vai all'ultima modifica",
+    "cursorsLineEnds": "Aggiungi cursori a fine riga",
     "explainSymbol": "Spiegamelo con l'AI",
     "sticky": "Sticky scroll",
     "stickyJump": "Vai a questo scope",
@@ -142,6 +146,10 @@
       "auto": "Affidati a Reado (ora del giorno)"
     },
     "language": "Lingua",
+    "autoSave": "Salvataggio automatico",
+    "autoSaveOff": "Off",
+    "autoSaveAfterDelay": "Dopo una pausa",
+    "autoSaveOnFocusChange": "Al cambio focus",
     "codeFont": "Font del codice",
     "completionSound": "Riproduci un suono quando l'agente finisce",
     "notifications": "Notifiche",
@@ -212,6 +220,8 @@
     "launchCopilot": "Copilot",
     "launch": "Avvia {name}",
     "split": "Dividi terminale",
+    "clear": "Pulisci terminale",
+    "restart": "Riavvia terminale",
     "orientation": "Cambia orientamento divisione",
     "closePane": "Chiudi pannello",
     "sendReview": "Invia review",
@@ -292,6 +302,25 @@
   "lsp": {
     "createTask": "Crea task",
     "createTaskFromProblem": "Crea task dal problema"
+  },
+  "file": {
+    "newFile": "Nuovo file",
+    "create": "Crea",
+    "saveAs": "Salva come"
+  },
+  "window": {
+    "openFolderTitle": "Apri cartella",
+    "openWhere": "Aprire questa cartella in una nuova finestra?",
+    "newWindow": "Nuova finestra",
+    "thisWindow": "Questa finestra",
+    "minimize": "Riduci a icona",
+    "maximize": "Ingrandisci",
+    "restore": "Ripristina",
+    "close": "Chiudi"
+  },
+  "titlebar": {
+    "menu": "Menu",
+    "search": "Cerca file e comandi"
   },
   "ext": {
     "panel": "Estensioni",

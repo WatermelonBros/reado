@@ -6,8 +6,17 @@
 //! accelerators, so the existing in-app keyboard shortcuts keep working without
 //! being intercepted by the menu.
 
-use tauri::menu::{MenuBuilder, SubmenuBuilder};
-use tauri::{App, Emitter};
+use std::sync::Mutex;
+
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::{App, Emitter, Manager};
+
+/// The label of the most recently focused window. The app menu is shared across
+/// windows, so a menu action must be delivered here — `is_focused()` is often
+/// false at click time (the menu bar holds focus), which would otherwise fall
+/// back to broadcasting and run the action in the wrong window.
+#[derive(Default)]
+pub struct LastFocused(pub Mutex<Option<String>>);
 
 /// Build the menu, install it, and forward custom-item clicks to the frontend.
 pub fn init(app: &App) -> tauri::Result<()> {
@@ -26,10 +35,28 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .quit()
         .build()?;
 
+    // New Window carries an accelerator (a window-management action with no
+    // in-app handler to shadow), unlike the other custom items.
+    let new_window = MenuItemBuilder::new("New Window")
+        .id("window:new")
+        .accelerator("CmdOrCtrl+Shift+N")
+        .build(app)?;
+    let autosave_menu = SubmenuBuilder::new(app, "Auto Save")
+        .text("autosave:off", "Off")
+        .text("autosave:afterDelay", "After Delay")
+        .text("autosave:onFocusChange", "On Focus Change")
+        .build()?;
     let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&new_window)
+        .text("newFile", "New File…")
+        .text("openFile", "Open File…")
         .text("openFolder", "Open Folder…")
+        .text("openRecent", "Open Recent…")
         .separator()
         .text("save", "Save")
+        .text("saveAs", "Save As…")
+        .item(&autosave_menu)
+        .text("revert", "Revert File")
         .text("format", "Format Document")
         .separator()
         .text("reopenClosed", "Reopen Closed Editor")
@@ -54,10 +81,21 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .text("edit:replaceInFiles", "Replace in Files…")
         .separator()
         .text("edit:toggleComment", "Toggle Line Comment")
+        .text("edit:toggleBlockComment", "Toggle Block Comment")
         .build()?;
 
     let selection_menu = SubmenuBuilder::new(app, "Selection")
+        .text("sel:expand", "Expand Selection")
+        .text("sel:shrink", "Shrink Selection")
+        .separator()
         .text("sel:addNext", "Add Selection to Next Match")
+        .text("sel:allOccurrences", "Select All Occurrences")
+        .text("sel:cursorAbove", "Add Cursor Above")
+        .text("sel:cursorBelow", "Add Cursor Below")
+        .text("sel:lineEnds", "Add Cursors to Line Ends")
+        .text("sel:duplicate", "Duplicate Selection")
+        .separator()
+        .text("sel:explain", "Explain Selection with AI")
         .separator()
         .text("sel:copyUp", "Copy Line Up")
         .text("sel:copyDown", "Copy Line Down")
@@ -76,8 +114,19 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .text("palette:search", "Search in Project…")
         .separator()
         .text("gotodef", "Go to Definition")
+        .text("go:peek", "Peek Definition")
+        .text("go:typedef", "Go to Type Definition")
+        .text("go:impl", "Go to Implementation")
         .text("go:references", "Find References")
         .text("gotoLine", "Go to Line…")
+        .text("go:bracket", "Go to Bracket")
+        .text("go:lastEdit", "Go to Last Edit Location")
+        .separator()
+        .text("go:nextProblem", "Next Problem")
+        .text("go:prevProblem", "Previous Problem")
+        .separator()
+        .text("go:nextTab", "Next Editor")
+        .text("go:prevTab", "Previous Editor")
         .build()?;
 
     let appearance_menu = SubmenuBuilder::new(app, "Appearance")
@@ -87,13 +136,29 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .text("theme:reado-sepia", "Sepia")
         .build()?;
 
+    let open_view_menu = SubmenuBuilder::new(app, "Open View")
+        .text("view:open:files", "Files")
+        .text("view:open:search", "Search")
+        .text("view:open:comments", "Comments")
+        .text("view:open:outline", "Outline")
+        .text("view:open:git", "Source Control")
+        .text("view:open:extensions", "Extensions")
+        .build()?;
     let view_menu = SubmenuBuilder::new(app, "View")
+        .text("palette:commands", "Command Palette…")
+        .item(&open_view_menu)
+        .separator()
         .text("view:sidebar", "Toggle Sidebar")
+        .text("view:activityBar", "Toggle Activity Bar")
+        .text("view:statusBar", "Toggle Status Bar")
+        .text("view:breadcrumbs", "Toggle Breadcrumbs")
         .text("terminal", "Toggle Terminal")
         .text("view:split", "Split Editor")
         .separator()
         .text("view:wrap", "Toggle Word Wrap")
+        .text("view:whitespace", "Render Whitespace")
         .text("view:focus", "Focus Mode")
+        .text("view:readingWidth", "Centered/Reading Layout")
         .separator()
         .text("graph", "Knowledge Graph")
         .text("docs", "Documentation")
@@ -107,6 +172,13 @@ pub fn init(app: &App) -> tauri::Result<()> {
     let terminal_menu = SubmenuBuilder::new(app, "Terminal")
         .text("terminal:new", "New Terminal")
         .text("terminal:split", "Split Terminal")
+        .text("terminal:clear", "Clear Terminal")
+        .text("terminal:restart", "Restart Terminal")
+        .separator()
+        .text("terminal:launch:claude", "Launch Claude")
+        .text("terminal:launch:codex", "Launch Codex")
+        .text("terminal:launch:copilot", "Launch Copilot")
+        .text("terminal:sendReview", "Send Review")
         .build()?;
 
     let window_menu = SubmenuBuilder::new(app, "Window")
@@ -143,8 +215,33 @@ pub fn init(app: &App) -> tauri::Result<()> {
 
     app.on_menu_event(|app, event| {
         // Predefined items are handled natively; forward our custom ids so the
-        // frontend can run the matching command.
-        let _ = app.emit("menu", event.id().0.clone());
+        // frontend can run the matching command. Send to the *focused* window
+        // only — otherwise, with multiple windows open, one menu action would
+        // fire in every window.
+        let id = event.id().0.clone();
+        // Prefer the last-focused window (tracked on focus); fall back to whichever
+        // currently reports focus, then to a broadcast.
+        let last_label = app
+            .state::<LastFocused>()
+            .0
+            .lock()
+            .ok()
+            .and_then(|g| g.clone());
+        let target = last_label
+            .and_then(|l| app.get_webview_window(&l))
+            .or_else(|| {
+                app.webview_windows()
+                    .into_values()
+                    .find(|w| w.is_focused().unwrap_or(false))
+            });
+        match target {
+            Some(win) => {
+                let _ = win.emit("menu", id);
+            }
+            None => {
+                let _ = app.emit("menu", id);
+            }
+        }
     });
 
     Ok(())

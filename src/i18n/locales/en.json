@@ -30,7 +30,8 @@
     "openAsText": "Open as text",
     "editSource": "Edit source",
     "problems_one": "{count} problem",
-    "problems_other": "{count} problems"
+    "problems_other": "{count} problems",
+    "readProgress": "{read} of {total} files read"
   },
   "editor": {
     "empty": "Select a file from the tree to start reading.",
@@ -45,6 +46,9 @@
     "goToDef": "Go to Definition",
     "goToTypeDef": "Go to Type Definition",
     "goToImpl": "Go to Implementation",
+    "goToBracket": "Go to Bracket",
+    "lastEdit": "Go to Last Edit Location",
+    "cursorsLineEnds": "Add Cursors to Line Ends",
     "explainSymbol": "Explain this with AI",
     "sticky": "Sticky scroll",
     "stickyJump": "Jump to this scope",
@@ -142,6 +146,10 @@
       "auto": "Trust Reado (time of day)"
     },
     "language": "Language",
+    "autoSave": "Auto Save",
+    "autoSaveOff": "Off",
+    "autoSaveAfterDelay": "After delay",
+    "autoSaveOnFocusChange": "On focus change",
     "codeFont": "Code font",
     "completionSound": "Play a sound when the agent finishes",
     "notifications": "Notifications",
@@ -212,6 +220,8 @@
     "launchCopilot": "Copilot",
     "launch": "Launch {name}",
     "split": "Split terminal",
+    "clear": "Clear terminal",
+    "restart": "Restart terminal",
     "orientation": "Toggle split orientation",
     "closePane": "Close pane",
     "sendReview": "Send review",
@@ -292,6 +302,25 @@
   "lsp": {
     "createTask": "Create task",
     "createTaskFromProblem": "Create task from problem"
+  },
+  "file": {
+    "newFile": "New file",
+    "create": "Create",
+    "saveAs": "Save as"
+  },
+  "window": {
+    "openFolderTitle": "Open Folder",
+    "openWhere": "Open this folder in a new window?",
+    "newWindow": "New window",
+    "thisWindow": "This window",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
+  "titlebar": {
+    "menu": "Menu",
+    "search": "Search files & commands"
   },
   "ext": {
     "panel": "Extensions",

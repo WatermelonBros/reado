@@ -9,8 +9,8 @@
 
 ## 3. UI
 
-- [ ] 3.1 File tree: quiet per-file read/unread indicator; per-folder aggregate (read/total).
-- [ ] 3.2 Mark read/unread action (file-tree context menu + command palette).
+- [x] 3.1 File tree: quiet per-file read/unread indicator; per-folder aggregate (read/total).
+- [x] 3.2 Mark read/unread action (file-tree context menu + command palette).
 - [x] 3.3 Per-project progress summary (status bar or a small header in the tree).
 
 ## 4. Verify

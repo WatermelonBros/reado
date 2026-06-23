@@ -160,6 +160,24 @@ pub fn write_file(root: String, path: String, content: String) -> Result<()> {
     Ok(())
 }
 
+/// Create a new empty file at `path` (project-relative), making parent dirs as
+/// needed. Confined to `root`; errors if the file already exists. Returns its
+/// absolute path.
+#[tauri::command]
+pub fn create_file(root: String, path: String) -> Result<String> {
+    let root = PathBuf::from(&root);
+    let target = root.join(&path);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let target = ensure_dest_within(&root, &target)?;
+    if target.exists() {
+        return Err(Error::Other("a file with that name already exists".into()));
+    }
+    std::fs::write(&target, "")?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
 /// Read a file for display. Detects images (returned as data URLs) and binary
 /// files (returned as a size-only placeholder); everything else is UTF-8 text.
 #[tauri::command]

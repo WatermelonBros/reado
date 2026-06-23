@@ -61,9 +61,18 @@ export interface LangServerExt {
 export const LANG_SERVERS: LangServerExt[] = [
   {
     id: "typescript",
-    name: "TypeScript / JavaScript",
-    description: "typescript-language-server — types, diagnostics, navigation for TS/JS/JSX.",
+    name: "TypeScript / JavaScript / React",
+    description:
+      "typescript-language-server — types, diagnostics and navigation for TS, JS, and React (JSX/TSX).",
     install: all("npm install -g typescript-language-server typescript"),
+    requires: "Node.js",
+  },
+  {
+    id: "angular",
+    name: "Angular",
+    description:
+      "Angular language server — template type-checking and IntelliSense; auto-used in projects with angular.json.",
+    install: all("npm install -g @angular/language-server typescript"),
     requires: "Node.js",
   },
   {

@@ -8,18 +8,31 @@
  */
 import { create } from "zustand";
 import { EditorView } from "@codemirror/view";
-import { openSearchPanel, selectNextOccurrence, gotoLine } from "@codemirror/search";
+import { EditorSelection } from "@codemirror/state";
+import {
+  openSearchPanel,
+  selectNextOccurrence,
+  selectSelectionMatches,
+  gotoLine,
+} from "@codemirror/search";
 import {
   toggleComment,
+  toggleBlockComment,
   copyLineUp,
   copyLineDown,
   moveLineUp,
   moveLineDown,
+  cursorMatchingBracket,
 } from "@codemirror/commands";
-import { writeFile, formatFile, findDefinition } from "./api";
+import { forEachDiagnostic } from "@codemirror/lint";
+import { writeFile, formatFile, findDefinition, readFile, createFile } from "./api";
 import { useProject, useEditorActions, useWorkspace } from "./store";
 import { toRelative } from "./comments";
 import { noteSelfWrite } from "./readProgress";
+import { lspLocate } from "./lsp";
+import { expandSelection, shrinkSelection } from "./syntaxSelection";
+import { prompt } from "./prompt";
+import { t } from "../i18n";
 
 export type Eol = "LF" | "CRLF";
 
@@ -166,7 +179,168 @@ function runOnView(cmd: (v: EditorView) => boolean): void {
 }
 
 export const toggleLineComment = () => runOnView(toggleComment);
+export const toggleBlockCommentCmd = () => runOnView(toggleBlockComment);
 export const addNextOccurrence = () => runOnView(selectNextOccurrence);
+export const selectAllOccurrences = () => runOnView(selectSelectionMatches);
+
+/** Add a cursor one line above/below each current cursor (multi-cursor). */
+function addCursorVertical(dir: -1 | 1) {
+  return (view: EditorView): boolean => {
+    const { state } = view;
+    const extra = [];
+    for (const r of state.selection.ranges) {
+      const line = state.doc.lineAt(r.head);
+      const col = r.head - line.from;
+      const n = line.number + dir;
+      if (n >= 1 && n <= state.doc.lines) {
+        const tl = state.doc.line(n);
+        extra.push(EditorSelection.cursor(Math.min(tl.from + col, tl.to)));
+      }
+    }
+    if (!extra.length) return false;
+    view.dispatch({ selection: EditorSelection.create([...state.selection.ranges, ...extra]) });
+    return true;
+  };
+}
+export const addCursorAbove = () => runOnView(addCursorVertical(-1));
+export const addCursorBelow = () => runOnView(addCursorVertical(1));
+
+/** Move each cursor to the matching bracket (Go to Bracket). */
+export const goToBracket = () => runOnView(cursorMatchingBracket);
+
+/** Expand / shrink the selection along the syntax tree. */
+export const expandSelectionCmd = () => runOnView(expandSelection);
+export const shrinkSelectionCmd = () => runOnView(shrinkSelection);
+
+/** Replace each multi-line selection with a cursor at the end of every spanned
+ *  line (VS Code's "Add Cursors to Line Ends"). */
+export const addCursorsToLineEnds = () =>
+  runOnView((view) => {
+    const { state } = view;
+    const cursors = [];
+    for (const r of state.selection.ranges) {
+      const first = state.doc.lineAt(r.from).number;
+      const last = state.doc.lineAt(r.to).number;
+      if (last > first) {
+        for (let n = first; n <= last; n++) cursors.push(EditorSelection.cursor(state.doc.line(n).to));
+      } else {
+        cursors.push(EditorSelection.cursor(r.head));
+      }
+    }
+    view.dispatch({ selection: EditorSelection.create(cursors) });
+    return true;
+  });
+
+// Last edit location: the editor records where the document last changed, so the
+// reader can jump back to it after navigating away.
+let lastEditPos: number | null = null;
+export const setLastEdit = (pos: number) => {
+  lastEditPos = pos;
+};
+export const gotoLastEdit = () =>
+  runOnView((view) => {
+    if (lastEditPos === null) return false;
+    const pos = Math.min(lastEditPos, view.state.doc.length);
+    view.dispatch({ selection: EditorSelection.cursor(pos), scrollIntoView: true });
+    return true;
+  });
+
+/** Duplicate each non-empty selection in place (after itself). */
+export const duplicateSelection = () =>
+  runOnView((view) => {
+    const changes = view.state.selection.ranges
+      .filter((r) => !r.empty)
+      .map((r) => ({ from: r.to, insert: view.state.sliceDoc(r.from, r.to) }));
+    if (!changes.length) return false;
+    view.dispatch({ changes });
+    return true;
+  });
+
+/** Go to the type definition / implementation of the symbol at the cursor (LSP). */
+export function goToTypeDefinitionAtCursor(): void {
+  const { view } = useDocInfo.getState();
+  if (view) lspLocate(view, view.state.selection.main.head, "typeDefinition", (p, l) => useProject.getState().open(p, l));
+}
+export function goToImplementationAtCursor(): void {
+  const { view } = useDocInfo.getState();
+  if (view) lspLocate(view, view.state.selection.main.head, "implementation", (p, l) => useProject.getState().open(p, l));
+}
+
+/** Move the cursor to the next/previous diagnostic in the active file. */
+function jumpProblem(dir: 1 | -1): void {
+  const { view } = useDocInfo.getState();
+  if (!view) return;
+  const at: number[] = [];
+  forEachDiagnostic(view.state, (_d, from) => at.push(from));
+  if (!at.length) return;
+  at.sort((a, b) => a - b);
+  const cur = view.state.selection.main.head;
+  const target =
+    dir > 0
+      ? (at.find((p) => p > cur) ?? at[0])
+      : ([...at].reverse().find((p) => p < cur) ?? at[at.length - 1]);
+  view.dispatch({
+    selection: { anchor: target },
+    effects: EditorView.scrollIntoView(target, { y: "center" }),
+  });
+  view.focus();
+}
+export const nextProblem = () => jumpProblem(1);
+export const prevProblem = () => jumpProblem(-1);
+
+/** Prompt for a name and create a new empty file in the project, then open it. */
+export async function newFile(): Promise<void> {
+  const root = useProject.getState().root;
+  if (!root) return;
+  const name = await prompt({
+    title: t("file.newFile"),
+    placeholder: "path/name.ext",
+    confirmLabel: t("file.create"),
+  });
+  if (!name) return;
+  try {
+    const abs = await createFile(root, name);
+    useProject.getState().open(abs);
+    useProject.getState().bumpTree();
+  } catch {
+    /* already exists / invalid path */
+  }
+}
+
+/** Prompt for a destination and write the active buffer there, then open it. */
+export async function saveAs(): Promise<void> {
+  const { view } = useDocInfo.getState();
+  const { root, active } = useProject.getState();
+  if (!view || !root) return;
+  const dest = await prompt({
+    title: t("file.saveAs"),
+    value: active ? toRelative(root, active) : "",
+    confirmLabel: t("editor.save"),
+  });
+  if (!dest) return;
+  await createFile(root, dest).catch(() => {}); // ensure it exists (no-op if so)
+  noteSelfWrite(dest);
+  await writeFile(root, dest, view.state.doc.toString()).catch(() => {});
+  useProject.getState().open(`${root}/${dest}`);
+  useProject.getState().bumpTree();
+}
+
+/** Reload the active file from disk, discarding unsaved edits. */
+export function revertFile(): void {
+  const { view } = useDocInfo.getState();
+  const { root, active } = useProject.getState();
+  if (!view || !active) return;
+  readFile(root, active)
+    .then((c) => {
+      if (c.kind !== "text") return;
+      noteSelfWrite(toRelative(root, active));
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: c.text },
+      });
+      useEditorActions.getState().setDirty(false);
+    })
+    .catch(() => {});
+}
 export const copyLineUpCmd = () => runOnView(copyLineUp);
 export const copyLineDownCmd = () => runOnView(copyLineDown);
 export const moveLineUpCmd = () => runOnView(moveLineUp);

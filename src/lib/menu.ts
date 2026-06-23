@@ -4,14 +4,15 @@
  * action, reusing the same stores/helpers the keyboard shortcuts and palette use.
  */
 import { listen } from "@tauri-apps/api/event";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   usePalette,
   useProject,
   useSettings,
   useWorkspace,
+  useEditorActions,
   type ThemeName,
+  type SettingsState,
 } from "./store";
 import { useTerminals } from "./terminals";
 import {
@@ -22,26 +23,39 @@ import {
   openGotoLine,
   toggleLineComment,
   addNextOccurrence,
+  selectAllOccurrences,
+  addCursorAbove,
+  addCursorBelow,
+  addCursorsToLineEnds,
+  duplicateSelection,
+  expandSelectionCmd,
+  shrinkSelectionCmd,
+  goToBracket,
+  gotoLastEdit,
   copyLineUpCmd,
   copyLineDownCmd,
   moveLineUpCmd,
   moveLineDownCmd,
   findReferencesAtCursor,
   goToDefinitionAtCursor,
+  goToTypeDefinitionAtCursor,
+  goToImplementationAtCursor,
+  toggleBlockCommentCmd,
+  nextProblem,
+  prevProblem,
+  revertFile,
+  newFile,
+  saveAs,
 } from "./docInfo";
 import { checkForUpdates } from "./updater";
-import { openProject, closeProject } from "./window";
+import { launchAgent, runInTerminal, clearTerminal, restartTerminal } from "./agents";
+import { composeReviewPrompt } from "./review";
+import { useComments, openCount } from "./comments";
+import { closeProject, openInNewWindow, pickFolderAndOpen, openFileDialog } from "./window";
 
 const WEBSITE = "https://reado.watermelon-studio.it";
 const ISSUES = "https://github.com/WatermelonBros/reado/issues";
 const RELEASES = "https://github.com/WatermelonBros/reado/releases";
-
-/** Prompt for a folder and open it in this window. */
-async function pickAndOpenFolder() {
-  const selected = await openDialog({ directory: true, multiple: false });
-  const path = Array.isArray(selected) ? selected[0] : selected;
-  if (path) await openProject(path);
-}
 
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 2;
@@ -63,6 +77,11 @@ export function listenForMenu(): Promise<() => void> {
       settings.set({ theme: id.slice(6) as ThemeName, mode: "manual" });
       return;
     }
+    // Auto Save submenu: ids like "autosave:afterDelay".
+    if (id.startsWith("autosave:")) {
+      settings.set({ autoSave: id.slice(9) as SettingsState["autoSave"] });
+      return;
+    }
 
     switch (id) {
       // App
@@ -74,11 +93,26 @@ export function listenForMenu(): Promise<() => void> {
         break;
 
       // File
+      case "window:new":
+        openInNewWindow();
+        break;
+      case "openFile":
+        void openFileDialog();
+        break;
       case "openFolder":
-        void pickAndOpenFolder();
+        void pickFolderAndOpen();
+        break;
+      case "openRecent":
+        palette.open("recents");
         break;
       case "closeProject":
         void closeProject();
+        break;
+      case "newFile":
+        void newFile();
+        break;
+      case "saveAs":
+        void saveAs();
         break;
       case "save":
         saveDocument();
@@ -91,6 +125,9 @@ export function listenForMenu(): Promise<() => void> {
         break;
       case "reopenClosed":
         project.reopenClosed();
+        break;
+      case "revert":
+        revertFile();
         break;
 
       // Edit
@@ -107,13 +144,40 @@ export function listenForMenu(): Promise<() => void> {
       case "edit:toggleComment":
         toggleLineComment();
         break;
+      case "edit:toggleBlockComment":
+        toggleBlockCommentCmd();
+        break;
       case "gotoLine":
         openGotoLine();
         break;
 
       // Selection
+      case "sel:expand":
+        expandSelectionCmd();
+        break;
+      case "sel:shrink":
+        shrinkSelectionCmd();
+        break;
       case "sel:addNext":
         addNextOccurrence();
+        break;
+      case "sel:allOccurrences":
+        selectAllOccurrences();
+        break;
+      case "sel:cursorAbove":
+        addCursorAbove();
+        break;
+      case "sel:cursorBelow":
+        addCursorBelow();
+        break;
+      case "sel:lineEnds":
+        addCursorsToLineEnds();
+        break;
+      case "sel:duplicate":
+        duplicateSelection();
+        break;
+      case "sel:explain":
+        useEditorActions.getState().requestExplain();
         break;
       case "sel:copyUp":
         copyLineUpCmd();
@@ -147,8 +211,35 @@ export function listenForMenu(): Promise<() => void> {
       case "gotodef":
         goToDefinitionAtCursor();
         break;
+      case "go:peek":
+        useEditorActions.getState().requestPeek();
+        break;
+      case "go:typedef":
+        goToTypeDefinitionAtCursor();
+        break;
+      case "go:impl":
+        goToImplementationAtCursor();
+        break;
       case "go:references":
         findReferencesAtCursor();
+        break;
+      case "go:bracket":
+        goToBracket();
+        break;
+      case "go:lastEdit":
+        gotoLastEdit();
+        break;
+      case "go:nextProblem":
+        nextProblem();
+        break;
+      case "go:prevProblem":
+        prevProblem();
+        break;
+      case "go:nextTab":
+        project.cycleTab(1);
+        break;
+      case "go:prevTab":
+        project.cycleTab(-1);
         break;
       case "go:back":
         project.goBack();
@@ -167,8 +258,41 @@ export function listenForMenu(): Promise<() => void> {
       case "view:wrap":
         settings.set({ wrap: !settings.wrap });
         break;
+      case "view:whitespace":
+        settings.set({ renderWhitespace: !settings.renderWhitespace });
+        break;
       case "view:focus":
         settings.set({ focusMode: !settings.focusMode });
+        break;
+      case "view:readingWidth":
+        settings.set({ readingWidth: !settings.readingWidth });
+        break;
+      case "view:activityBar":
+        settings.set({ showActivityBar: !settings.showActivityBar });
+        break;
+      case "view:statusBar":
+        settings.set({ showStatusBar: !settings.showStatusBar });
+        break;
+      case "view:breadcrumbs":
+        settings.set({ showBreadcrumbs: !settings.showBreadcrumbs });
+        break;
+      case "view:open:files":
+        workspace.selectTool("files");
+        break;
+      case "view:open:search":
+        workspace.selectTool("search");
+        break;
+      case "view:open:comments":
+        workspace.selectTool("comments");
+        break;
+      case "view:open:outline":
+        workspace.selectTool("outline");
+        break;
+      case "view:open:git":
+        workspace.selectTool("git");
+        break;
+      case "view:open:extensions":
+        workspace.selectTool("extensions");
         break;
       case "graph":
         workspace.toggleGraph(true);
@@ -196,6 +320,26 @@ export function listenForMenu(): Promise<() => void> {
       case "terminal:split":
         terminals.split();
         break;
+      case "terminal:clear":
+        clearTerminal();
+        break;
+      case "terminal:restart":
+        restartTerminal();
+        break;
+      case "terminal:launch:claude":
+        void launchAgent("claude-code", "claude");
+        break;
+      case "terminal:launch:codex":
+        void launchAgent("codex", "codex");
+        break;
+      case "terminal:launch:copilot":
+        void launchAgent("copilot", "copilot");
+        break;
+      case "terminal:sendReview": {
+        const count = openCount(useComments.getState().comments);
+        runInTerminal(composeReviewPrompt(count));
+        break;
+      }
 
       // Help
       case "help:shortcuts":

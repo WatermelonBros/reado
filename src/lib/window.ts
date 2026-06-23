@@ -1,11 +1,70 @@
 /**
  * Window management.
  *
- * Reado is a single-window app: opening a project navigates the current window
- * (like VS Code) rather than spawning a new one. The project path is encoded in
- * the URL hash; `App` re-routes from the launcher to the workspace on hashchange.
+ * A project opens either in the current window (navigating via the URL hash,
+ * like VS Code) or in a brand-new OS window. The project path is encoded in the
+ * hash; `App` re-routes from the launcher to the workspace on load and on
+ * hashchange — so a new window pointed at `#project=…` boots straight into it.
  */
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { open as openDialog, ask } from "@tauri-apps/plugin-dialog";
+import { useRecents, useProject } from "./store";
+import { currentOS } from "./extensions";
+import { t } from "../i18n";
+
+// A per-window salt keeps new-window labels unique even if two windows spawn a
+// window in the same millisecond (each runs its own module with windowSeq = 0).
+const WIN_SALT = (globalThis.crypto?.randomUUID?.() ?? `${Math.random()}`).slice(0, 8);
+let windowSeq = 0;
+
+/** Open a fresh OS window — empty (launcher) or pointed at a project. The label
+ * matches the `project_*` capability glob so it inherits the app permissions. */
+export function openInNewWindow(projectPath?: string): void {
+  const label = `project_${WIN_SALT}_${Date.now().toString(36)}_${windowSeq++}`;
+  const hash = projectPath ? `#project=${encodeURIComponent(projectPath)}` : "";
+  const mac = currentOS() === "mac";
+  new WebviewWindow(label, {
+    url: `index.html${hash}`,
+    title: "Reado",
+    width: 1280,
+    height: 832,
+    minWidth: 720,
+    minHeight: 480,
+    // Match the main window's custom chrome: native traffic lights over a
+    // transparent bar on macOS, no native decorations elsewhere.
+    titleBarStyle: mac ? "overlay" : undefined,
+    decorations: mac,
+  });
+}
+
+/** Pick a folder, then ask whether to open it here or in a new window. */
+export async function pickFolderAndOpen(): Promise<void> {
+  const selected = await openDialog({ directory: true, multiple: false });
+  const path = Array.isArray(selected) ? selected[0] : selected;
+  if (!path) return;
+  const newWindow = await ask(t("window.openWhere"), {
+    title: t("window.openFolderTitle"),
+    okLabel: t("window.newWindow"),
+    cancelLabel: t("window.thisWindow"),
+  });
+  useRecents.getState().touch(path);
+  if (newWindow) openInNewWindow(path);
+  else await openProject(path);
+}
+
+/** Pick a single file (defaulting into the open project) and open it. Reads are
+ *  confined to the project root in Rust, so files outside it won't load. */
+export async function openFileDialog(): Promise<void> {
+  const root = useProject.getState().root;
+  const selected = await openDialog({
+    directory: false,
+    multiple: false,
+    defaultPath: root || undefined,
+  });
+  const path = Array.isArray(selected) ? selected[0] : selected;
+  if (path) useProject.getState().open(path);
+}
 
 /** The project path encoded in the current window's URL hash, if any. */
 export function currentProjectPath(): string | null {
