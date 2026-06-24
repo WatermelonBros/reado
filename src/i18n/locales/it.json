@@ -363,7 +363,11 @@
     "open": "Aperti",
     "history": "Cronologia",
     "historyEmpty": "Ancora nessun commento risolto.",
-    "resolvedAt": "Risolto {date}"
+    "resolvedAt": "Risolto {date}",
+    "pending": "Da rivedere",
+    "agentChanged": "L'agente ha modificato questo file",
+    "reviewChange": "Rivedi modifica",
+    "resolve": "Risolvi"
   },
   "files": {
     "panel": "File"

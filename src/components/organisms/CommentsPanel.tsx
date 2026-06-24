@@ -8,7 +8,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Comment, CommentState, CommentType } from "../../lib/api";
 import { useComments, toRelative } from "../../lib/comments";
-import { useProject } from "../../lib/store";
+import { useProject, useEditorActions } from "../../lib/store";
+import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
 
 import { COMMENT_STATES, COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
@@ -30,7 +31,17 @@ export function CommentsPanel() {
   const root = useProject((s) => s.root);
   const active = useProject((s) => s.active);
   const open = useProject((s) => s.open);
+  // Files the agent changed since you last read them → open comments on those
+  // files are "pending review" (the agent may have resolved them).
+  const changed = useReadProgress((s) => s.changed);
   const { t } = useTranslation();
+
+  // Open the comment's file at its anchor and show the delta the agent produced.
+  const reviewChange = (c: Comment) => {
+    open(`${root}/${c.anchor.file}`, c.anchor.scope === "range" ? c.anchor.startLine : 1);
+    useEditorActions.getState().setDiffBase(LAST_READ_BASE);
+    useEditorActions.getState().setDiffing(true);
+  };
 
   const [view, setView] = useState<"open" | "history">("open");
   const [typeFilter, setTypeFilter] = useState<CommentType | "all">("all");
@@ -129,12 +140,14 @@ export function CommentsPanel() {
           </p>
         ) : (
           <ul className="m-0 list-none p-0">
-            {filtered.map((c) => (
-              <li key={c.id}>
+            {filtered.map((c) => {
+              const pending = view === "open" && c.state === "open" && changed.has(c.anchor.file);
+              return (
+              <li key={c.id} className={`border-b border-line ${pending ? "bg-accent/5" : ""}`}>
                 <button
                   type="button"
                   onClick={() => jump(c)}
-                  className={`flex w-full flex-col gap-1 border-b border-line px-3 py-2 text-left transition-colors hover:bg-surface ${
+                  className={`flex w-full flex-col gap-1 px-3 py-2 text-left transition-colors hover:bg-surface ${
                     activeId === c.id ? "bg-selection" : ""
                   }`}
                 >
@@ -143,9 +156,11 @@ export function CommentsPanel() {
                     <span className="text-xs font-medium text-ink">{t(typeKey(c.type))}</span>
                     {c.orphan && <span className="text-xs text-marker">⚠</span>}
                     <span className="ml-auto text-[10px] text-faint">
-                      {view === "history"
-                        ? t("comments.resolvedAt", { date: fmtDate(c.updatedAt) })
-                        : t(stateKey(c.state)).toUpperCase()}
+                      {pending
+                        ? t("comments.pending").toUpperCase()
+                        : view === "history"
+                          ? t("comments.resolvedAt", { date: fmtDate(c.updatedAt) })
+                          : t(stateKey(c.state)).toUpperCase()}
                     </span>
                   </span>
                   <span className="line-clamp-2 text-sm text-muted">{c.messages[0]?.body || ""}</span>
@@ -154,8 +169,28 @@ export function CommentsPanel() {
                     {c.anchor.scope === "range" ? `:${c.anchor.startLine}` : ""}
                   </span>
                 </button>
+                {pending && (
+                  <div className="flex items-center gap-2 px-3 pb-2">
+                    <span className="mr-auto text-[10px] text-accent">{t("comments.agentChanged")}</span>
+                    <button
+                      type="button"
+                      onClick={() => reviewChange(c)}
+                      className="rounded-md bg-surface px-2 py-0.5 text-[11px] text-muted hover:text-ink"
+                    >
+                      {t("comments.reviewChange")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void useComments.getState().setState(c.id, "done")}
+                      className="rounded-md bg-surface px-2 py-0.5 text-[11px] text-accent hover:text-ink"
+                    >
+                      {t("comments.resolve")}
+                    </button>
+                  </div>
+                )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

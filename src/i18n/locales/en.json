@@ -363,7 +363,11 @@
     "open": "Open",
     "history": "History",
     "historyEmpty": "No resolved comments yet.",
-    "resolvedAt": "Resolved {date}"
+    "resolvedAt": "Resolved {date}",
+    "pending": "Review",
+    "agentChanged": "The agent changed this file",
+    "reviewChange": "Review change",
+    "resolve": "Resolve"
   },
   "files": {
     "panel": "Files"
