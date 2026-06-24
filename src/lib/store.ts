@@ -184,6 +184,7 @@ export type Tool =
   | "timeline"
   | "activity"
   | "qa"
+  | "tours"
   | "extensions";
 
 interface WorkspaceState {

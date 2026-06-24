@@ -35,7 +35,9 @@ import { HierarchyPanel } from "../organisms/HierarchyPanel";
 import { TimelinePanel } from "../organisms/TimelinePanel";
 import { ActivityPanel } from "../organisms/ActivityPanel";
 import { QaPanel } from "../organisms/QaPanel";
+import { ToursPanel, TourBar } from "../organisms/ToursPanel";
 import { useSpecs } from "../../lib/specs";
+import { useTours } from "../../lib/tours";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useActivity } from "../../lib/activity";
 import { useQa } from "../../lib/qa";
@@ -91,6 +93,7 @@ export function ProjectView({ root }: { root: string }) {
     useReadProgress.getState().load(root);
     useBookmarks.getState().load(root);
     useQa.getState().load(root);
+    useTours.getState().load(root);
     listFiles(root)
       .then((f) => setTotalFiles(f.length))
       .catch(() => setTotalFiles(0));
@@ -276,6 +279,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "timeline" && <TimelinePanel />}
             {tool === "activity" && <ActivityPanel />}
             {tool === "qa" && <QaPanel />}
+            {tool === "tours" && <ToursPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>
@@ -290,6 +294,7 @@ export function ProjectView({ root }: { root: string }) {
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <div className="relative min-w-0 flex-1 overflow-hidden">
             <Editor />
+            <TourBar />
           </div>
           {splitPath && (
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-l-line">

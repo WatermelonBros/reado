@@ -420,6 +420,13 @@ function commandRows(
       },
     },
     {
+      label: t("tours.open"),
+      run: () => {
+        useWorkspace.getState().selectTool("tours");
+        close();
+      },
+    },
+    {
       label: t("hier.showCall"),
       run: () => {
         showCallHierarchy();

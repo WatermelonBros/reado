@@ -243,6 +243,14 @@ export const ActivityIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const TourIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <circle cx="6" cy="6" r="2.5" />
+    <circle cx="18" cy="18" r="2.5" />
+    <path d="M6 8.5v4a3 3 0 0 0 3 3h3.5M18 15.5v-4a3 3 0 0 0-3-3h-3.5" />
+  </svg>
+);
+
 export const TimelineIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <circle cx="12" cy="12" r="9" />

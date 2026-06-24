@@ -98,6 +98,23 @@
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file."
   },
+  "tours": {
+    "panel": "Tour",
+    "open": "Tour di lettura",
+    "empty": "Nessun tour. Creane uno o generane uno con l'AI.",
+    "new": "Nuovo tour",
+    "create": "Crea",
+    "generate": "Genera (AI)",
+    "generating": "Generazione…",
+    "start": "Avvia",
+    "addStep": "Aggiungi passo qui",
+    "stepNote": "Nota per questo passo",
+    "removeStep": "Rimuovi passo",
+    "removeTour": "Rimuovi tour",
+    "prev": "Precedente",
+    "next": "Successivo",
+    "exit": "Esci"
+  },
   "qa": {
     "title": "Chiedi sulla selezione",
     "ask": "Chiedi all'AI sulla selezione",
