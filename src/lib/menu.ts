@@ -273,6 +273,9 @@ export function runMenuCommand(id: string): void {
       case "view:whitespace":
         settings.set({ renderWhitespace: !settings.renderWhitespace });
         break;
+      case "view:ribbon":
+        settings.set({ showRibbon: !settings.showRibbon });
+        break;
       case "view:focus":
         settings.set({ focusMode: !settings.focusMode });
         break;

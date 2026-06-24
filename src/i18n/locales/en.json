@@ -49,6 +49,7 @@
     "goToBracket": "Go to Bracket",
     "lastEdit": "Go to Last Edit Location",
     "cursorsLineEnds": "Add Cursors to Line Ends",
+    "ribbon": "Structure ribbon",
     "explainSymbol": "Explain this with AI",
     "sticky": "Sticky scroll",
     "stickyJump": "Jump to this scope",

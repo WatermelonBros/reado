@@ -59,6 +59,9 @@ import { commentGutter, type LineComments } from "../../lib/commentGutter";
 import { blameGutter } from "../../lib/blameGutter";
 import { bookmarkGutter } from "../../lib/bookmarkGutter";
 import { useBookmarks } from "../../lib/bookmarks";
+import { useDiagnostics } from "../../lib/diagnostics";
+import { extractSymbols } from "../../lib/outline";
+import { StructureRibbon, type RibbonMark } from "./StructureRibbon";
 import { useDocInfo, detectEol, detectIndent, formatDocument, setLastEdit } from "../../lib/docInfo";
 import { useComments, commentsForFile, toRelative } from "../../lib/comments";
 import { useTextView } from "../../lib/textView";
@@ -579,6 +582,37 @@ function CodeView({
     },
     [relPath],
   );
+
+  // Structure ribbon: marks for symbols, comment anchors, and diagnostics.
+  const showRibbon = useSettings((s) => s.showRibbon);
+  const diagByFile = useDiagnostics((s) => s.byFile[path]);
+  const totalLines = useMemo(() => text.split("\n").length, [text]);
+  const ribbonMarks = useMemo<RibbonMark[]>(() => {
+    const out: RibbonMark[] = [];
+    for (const s of extractSymbols(text)) out.push({ line: s.line, kind: "symbol" });
+    for (const c of comments) {
+      if (c.anchor.scope === "range") out.push({ line: c.anchor.startLine, kind: "comment" });
+    }
+    for (const d of diagByFile ?? []) {
+      if (d.severity <= 2) out.push({ line: d.line, kind: d.severity === 1 ? "error" : "warn" });
+    }
+    return out;
+  }, [text, comments, diagByFile]);
+  const jumpToRibbon = (line: number) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const n = Math.max(1, Math.min(line, view.state.doc.lines));
+    view.dispatch({ effects: EditorView.scrollIntoView(view.state.doc.line(n).from, { y: "center" }) });
+  };
+  // Visible range as percentages, recomputed each render (renders fire on scroll).
+  const scrollerEl = hostRef.current?.querySelector(".cm-scroller") as HTMLElement | null;
+  const ribbonBand =
+    scrollerEl && scrollerEl.scrollHeight > scrollerEl.clientHeight + 4
+      ? {
+          top: (scrollerEl.scrollTop / scrollerEl.scrollHeight) * 100,
+          height: (scrollerEl.clientHeight / scrollerEl.scrollHeight) * 100,
+        }
+      : null;
 
   // Open the thread for the topmost comment on a clicked gutter line.
   const openThreadAtLine = (_line: number, ids: string[]) => {
@@ -1301,6 +1335,15 @@ function CodeView({
       }
     >
       <div ref={hostRef} className="h-full w-full [&_.cm-editor]:h-full" />
+
+      {showRibbon && (
+        <StructureRibbon
+          marks={ribbonMarks}
+          totalLines={totalLines}
+          band={ribbonBand}
+          onJump={jumpToRibbon}
+        />
+      )}
 
       {sticky.length > 0 && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 border-b border-line bg-canvas">

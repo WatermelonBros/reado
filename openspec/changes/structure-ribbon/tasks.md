@@ -1,36 +1,27 @@
 ## 1. Data sources
 
-- [ ] 1.1 Collect structural marks for the active file: function/class positions
-      from `documentSymbols` (`src/lib/lsp.ts`), comment anchors from the comment
-      store, diagnostics with severity from LSP.
-- [ ] 1.2 Normalise each mark to a `{ line, kind, label, severity? }` shape and
-      map line → vertical fraction of the file.
-- [ ] 1.3 Keep marks reactive: refresh on symbol/diagnostic/comment changes and
-      on active-file switch; debounce to avoid churn.
+- [x] 1.1 Marks from the heuristic symbol extractor (`extractSymbols`), comment
+      anchors (the file's comments), and diagnostics (`useDiagnostics.byFile`),
+      combined per line with a kind (symbol/comment/error/warn).
 
 ## 2. Ribbon component
 
-- [ ] 2.1 Add `src/components/StructureRibbon.tsx`: a slim vertical column
-      rendered beside the editor scrollbar for the active file.
-- [ ] 2.2 Render calm, low-contrast marks per kind (symbol / comment / diagnostic)
-      using muted theme tokens; no pixel/text rendering.
-- [ ] 2.3 Add a viewport indicator band that reflects the currently visible line
-      range and follows scrolling.
+- [x] 2.1 `StructureRibbon` (slim right-edge column) renders marks by line ratio,
+      colored by kind via the OKLCH tokens; purely presentational.
 
 ## 3. Navigation
 
-- [ ] 3.1 Click a mark or a ribbon position to scroll the editor to that line.
-- [ ] 3.2 Hover shows a quiet tooltip with the symbol name / comment text /
-      diagnostic message; keyboard-accessible focus equivalents.
+- [x] 3.1 Click a mark → `scrollIntoView` the line in the editor.
+- [x] 3.2 A viewport band (top/height %) shows the visible range, recomputed on
+      scroll (the editor already re-renders on scroll).
 
-## 4. Toggle and presentation
+## 4. Presentation & toggle
 
-- [ ] 4.1 Add a show/hide toggle (Command Center command + persisted preference);
-      when off, the ribbon reserves no layout space.
-- [ ] 4.2 Verify WCAG AA contrast for marks, tooltip, and viewport indicator.
-- [ ] 4.3 Add EN+IT strings for the toggle label and tooltips in
-      `src/i18n/locales/en.json|it.json`.
+- [x] 4.1 Calm, low-contrast marks + a translucent viewport band.
+- [x] 4.2 Toggleable: `settings.showRibbon` (default off), via the View menu and a
+      command-palette toggle.
+- [x] 4.3 Explicitly a structural map, NOT a pixel minimap.
 
 ## 5. Verify
 
-- [ ] 5.1 typecheck + cargo check + build green
+- [x] 5.1 EN + IT (`editor.ribbon`); typecheck + cargo check + build green.

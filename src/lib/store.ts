@@ -61,6 +61,8 @@ export interface SettingsState {
   showBreadcrumbs: boolean;
   /** Show spaces/tabs as faint marks in the editor. */
   renderWhitespace: boolean;
+  /** Show the structure ribbon (symbols/comments/diagnostics overview column). */
+  showRibbon: boolean;
   set: (patch: Partial<SettingsState>) => void;
 }
 
@@ -85,6 +87,7 @@ export const useSettings = create<SettingsState>()(
       showStatusBar: true,
       showBreadcrumbs: true,
       renderWhitespace: false,
+      showRibbon: false,
       set: (patch) => set(patch),
     }),
     { name: "reado.settings" },

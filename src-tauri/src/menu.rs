@@ -160,6 +160,7 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .separator()
         .text("view:wrap", "Toggle Word Wrap")
         .text("view:whitespace", "Render Whitespace")
+        .text("view:ribbon", "Structure Ribbon")
         .text("view:focus", "Focus Mode")
         .text("view:readingWidth", "Centered/Reading Layout")
         .separator()

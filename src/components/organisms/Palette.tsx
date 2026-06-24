@@ -505,6 +505,10 @@ function commandRows(
       run: () => settings.set({ readingWidth: !settings.readingWidth }),
     },
     {
+      label: `${t("editor.ribbon")}: ${settings.showRibbon ? "on" : "off"}`,
+      run: () => settings.set({ showRibbon: !settings.showRibbon }),
+    },
+    {
       label:
         project.active && useReadProgress.getState().read.has(toRelative(project.root, project.active))
           ? t("tree.markUnread")
