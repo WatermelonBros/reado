@@ -99,6 +99,12 @@
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file."
   },
+  "mcp": {
+    "title": "Reado MCP",
+    "enable": "Abilita Reado MCP per l'agente",
+    "enabled": "Aggiunto il server MCP di Reado a .mcp.json. Riavvia l'agente (Claude Code) così legge commenti, task, progresso di lettura e segnalibri come contesto.",
+    "parseError": "Il tuo .mcp.json non è JSON valido — correggilo prima, poi riprova."
+  },
   "tests": {
     "panel": "Test",
     "empty": "Nessun setup di test rilevato (script test in package.json, Cargo, go.mod o pytest).",

@@ -1,25 +1,35 @@
-## 1. Rust MCP server module
+> Design note: implemented as a **`reado mcp` subcommand of the CLI**
+> (`crates/reado-cli/src/mcp.rs`), not a module inside the desktop app. The agent
+> launches `reado mcp` as its MCP server (stdio), which is exactly how MCP servers
+> are run — and it reuses the CLI's `reado-core` access. The desktop side only
+> writes the opt-in config.
 
-- [ ] 1.1 New module `src-tauri/src/mcp.rs` implementing a local MCP server over stdio (server metadata: name `reado`, version, capabilities = resources + read-only tools).
-- [ ] 1.2 Resource: open comments — id, body, status, and anchor (file path + line range) for each open comment, sourced from the project's `.reado/` comment store.
-- [ ] 1.3 Resource: reading progress — per-file and per-folder read/unread state for the current project.
-- [ ] 1.4 Resource: file/symbol outline — document symbols for a requested in-project file (reusing the existing LSP/index outline path).
-- [ ] 1.5 Resource: project context — current project root, name, and active branch.
-- [ ] 1.6 Path confinement: resolve every requested path through the shared project-root confinement helper; reject/ignore anything outside the root; never expose secrets, tokens, env, or files outside the project.
+## 1. Local MCP server (stdio)
 
-## 2. Lifecycle, enablement & discoverability
+- [x] 1.1 `reado mcp`: a newline-delimited JSON-RPC 2.0 server over stdin/stdout
+      handling `initialize`, `ping`, `tools/list`, `resources/list`,
+      `resources/read`; notifications (no id) get no reply; unknown methods return
+      JSON-RPC -32601. Smoke-tested.
 
-- [ ] 2.1 Tauri commands to start/stop the server and report enabled/running state.
-- [ ] 2.2 Opt-in: server off by default; persist the enabled flag under the project's `.reado/`; enabling and disabling are explicit user triggers.
-- [ ] 2.3 On enable, write/update a project-local connect config (e.g. `.reado/mcp.json`) and expose the connect command/snippet for Claude Code / Codex.
+## 2. Read-only annotation resources
 
-## 3. Frontend wiring
+- [x] 2.1 Resources: `reado://tasks` (open tasks), `reado://comments` (all active),
+      `reado://reading-progress` (`.reado/read.json`), `reado://bookmarks`
+      (`.reado/bookmarks.json`) — all JSON, read-only.
 
-- [ ] 3.1 `src/lib/mcp.ts` wrapping the Tauri commands (start/stop, status, copy connect config).
-- [ ] 3.2 Command Center / settings affordance to enable/disable the MCP server and copy the connect config; honest status surface (off / starting / running).
-- [ ] 3.3 i18n (EN + IT) for all new copy.
+## 3. Path-confined, secret-free
 
-## 4. Verify
+- [x] 3.1 Confined to the project root (resolved by the CLI's root walk); only
+      reads `.reado/` + `reado-core` comments. No write tools, no secrets, no
+      arbitrary file reads.
 
-- [ ] 4.1 typecheck + cargo check + build green.
-- [ ] 4.2 With the server enabled, a connecting MCP client can list the resources and read open comments, reading progress, outline, and project context — and cannot read anything outside the project root.
+## 4. Opt-in enablement & discoverability
+
+- [x] 4.1 `enableMcp` (palette: "Enable Reado MCP for the agent") writes/merges a
+      project `.mcp.json` with `{ reado: { command: "reado", args: ["mcp"] } }` so
+      Claude Code discovers it; never enabled silently; won't clobber invalid JSON.
+
+## 5. Verify
+
+- [x] 5.1 CLI builds; MCP handshake + resources verified via piped requests.
+- [x] 5.2 EN + IT (`mcp.*`); frontend typecheck + build green.

@@ -21,6 +21,8 @@ use clap::{Parser, Subcommand};
 use reado_core as core;
 use reado_core::{Comment, CommentKind, CommentState, CommentType, NewComment, Scope};
 
+mod mcp;
+
 #[derive(Parser)]
 #[command(name = "reado", version, about = "Read and resolve Reado tasks.")]
 struct Cli {
@@ -55,6 +57,9 @@ enum Command {
         #[command(subcommand)]
         action: KbCmd,
     },
+    /// Run a Model Context Protocol server (stdio) exposing the project's
+    /// comments, tasks, reading progress, and bookmarks as read-only resources.
+    Mcp,
 }
 
 #[derive(Subcommand)]
@@ -149,6 +154,7 @@ fn run(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::Task { action } => task(cli, &root, &agent, action)?,
         Command::Comment { action } => comment(cli, &root, &agent, action)?,
         Command::Kb { action } => kb(cli, &root, action)?,
+        Command::Mcp => mcp::serve(&root)?,
     }
     Ok(())
 }

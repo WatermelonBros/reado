@@ -50,6 +50,7 @@ import { useBookmarks } from "../../lib/bookmarks";
 import { exportSettings, importSettings } from "../../lib/settingsSync";
 import { useOnboarding } from "../../lib/onboarding";
 import { usePreReview } from "../../lib/preReview";
+import { enableMcp } from "../../lib/mcp";
 import { toRelative } from "../../lib/comments";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
@@ -439,6 +440,13 @@ function commandRows(
       label: t("tests.panel"),
       run: () => {
         useWorkspace.getState().selectTool("tests");
+        close();
+      },
+    },
+    {
+      label: t("mcp.enable"),
+      run: () => {
+        void enableMcp(project.root);
         close();
       },
     },
