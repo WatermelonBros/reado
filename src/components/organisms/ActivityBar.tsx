@@ -16,6 +16,7 @@ import { useActivity } from "../../lib/activity";
 import { useQa } from "../../lib/qa";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
+import { useTests } from "../../lib/tests";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
 import {
@@ -37,6 +38,7 @@ import {
   ActivityIcon,
   SparkleIcon,
   TourIcon,
+  TestIcon,
 } from "../atoms/icons";
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
@@ -68,6 +70,7 @@ export function ActivityBar() {
   const qaCount = useQa((s) => s.notes.length);
   const tourCount = useTours((s) => s.tours.length);
   const preReviewCount = usePreReview((s) => s.drafts.length);
+  const hasTests = useTests((s) => s.runners.length > 0);
   const { t } = useTranslation();
 
   // Source Control appears in git repos; Orphans only when there's something to
@@ -106,6 +109,9 @@ export function ActivityBar() {
       : []),
     ...(preReviewCount > 0
       ? [{ id: "prereview" as Tool, labelKey: "prereview.panel" as MessageKey, Icon: SparkleIcon }]
+      : []),
+    ...(hasTests
+      ? [{ id: "tests" as Tool, labelKey: "tests.panel" as MessageKey, Icon: TestIcon }]
       : []),
   ];
   const badgeFor = (id: Tool) =>

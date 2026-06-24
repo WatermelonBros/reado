@@ -436,6 +436,13 @@ function commandRows(
       },
     },
     {
+      label: t("tests.panel"),
+      run: () => {
+        useWorkspace.getState().selectTool("tests");
+        close();
+      },
+    },
+    {
       label: t("hier.showCall"),
       run: () => {
         showCallHierarchy();

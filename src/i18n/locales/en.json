@@ -98,6 +98,13 @@
     "noFile": "Open a file to see its history.",
     "empty": "No history for this file."
   },
+  "tests": {
+    "panel": "Tests",
+    "empty": "No test setup detected (package.json test script, Cargo, go.mod, or pytest).",
+    "runAll": "Run all",
+    "runFile": "Run current file",
+    "note": "Tests run in the integrated terminal, where their output appears."
+  },
   "prereview": {
     "panel": "AI Review",
     "run": "AI pre-review changes",

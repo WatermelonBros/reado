@@ -37,9 +37,11 @@ import { ActivityPanel } from "../organisms/ActivityPanel";
 import { QaPanel } from "../organisms/QaPanel";
 import { ToursPanel, TourBar } from "../organisms/ToursPanel";
 import { PreReviewPanel } from "../organisms/PreReviewPanel";
+import { TestsPanel } from "../organisms/TestsPanel";
 import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
+import { useTests } from "../../lib/tests";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useActivity } from "../../lib/activity";
 import { useQa } from "../../lib/qa";
@@ -97,6 +99,7 @@ export function ProjectView({ root }: { root: string }) {
     useQa.getState().load(root);
     useTours.getState().load(root);
     usePreReview.getState().load(root);
+    void useTests.getState().detect(root);
     listFiles(root)
       .then((f) => setTotalFiles(f.length))
       .catch(() => setTotalFiles(0));
@@ -284,6 +287,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "qa" && <QaPanel />}
             {tool === "tours" && <ToursPanel />}
             {tool === "prereview" && <PreReviewPanel />}
+            {tool === "tests" && <TestsPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>

@@ -98,6 +98,13 @@
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file."
   },
+  "tests": {
+    "panel": "Test",
+    "empty": "Nessun setup di test rilevato (script test in package.json, Cargo, go.mod o pytest).",
+    "runAll": "Esegui tutti",
+    "runFile": "Esegui file corrente",
+    "note": "I test girano nel terminale integrato, dove appare il loro output."
+  },
   "prereview": {
     "panel": "Revisione AI",
     "run": "Pre-revisione AI delle modifiche",

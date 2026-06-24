@@ -243,6 +243,13 @@ export const ActivityIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const TestIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M9 3h6M10 3v5L5 18a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-10V3" />
+    <path d="M8 14h8" />
+  </svg>
+);
+
 export const TourIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <circle cx="6" cy="6" r="2.5" />

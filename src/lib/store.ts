@@ -186,6 +186,7 @@ export type Tool =
   | "qa"
   | "tours"
   | "prereview"
+  | "tests"
   | "extensions";
 
 interface WorkspaceState {
