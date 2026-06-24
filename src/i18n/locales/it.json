@@ -120,6 +120,12 @@
     "nextChange": "Modifica successiva (Alt+Giù)",
     "changes": "{count} modifiche"
   },
+  "delta": {
+    "review": "Rivedi le modifiche dall'ultima lettura",
+    "noBase": "Nessuno snapshot dell'ultima lettura da confrontare.",
+    "noChanges": "Nessuna modifica dall'ultima lettura.",
+    "markReviewed": "Segna come rivisto"
+  },
   "blame": {
     "toggle": "Mostra/nascondi blame"
   },

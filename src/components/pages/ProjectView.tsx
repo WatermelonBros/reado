@@ -117,6 +117,9 @@ export function ProjectView({ root }: { root: string }) {
         // there's new content to look at — flip it back to unread. Our own saves
         // are suppressed via wasSelfWrite.
         if (!wasSelfWrite(file) && useReadProgress.getState().read.has(file)) {
+          // Flag the delta *before* unmarking (mark(read=false) doesn't touch the
+          // snapshot), so "review changes" can diff current vs the last-read state.
+          useReadProgress.getState().markChanged(file);
           useReadProgress.getState().mark(root, file, false);
         }
         reanchorFile(root, file)

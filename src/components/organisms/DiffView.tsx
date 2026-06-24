@@ -17,9 +17,10 @@ import {
   getChunks,
 } from "@codemirror/merge";
 
-import { gitShowRef } from "../../lib/api";
+import { gitShowRef, getReadSnapshot } from "../../lib/api";
 import { readoAppearance } from "../../lib/codemirror";
 import { useProject, useSettings, useEditorActions } from "../../lib/store";
+import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
 
 import { ChevronIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
@@ -35,18 +36,31 @@ export function DiffView({ relPath, text }: Props) {
   const { codeFont, readingWidth } = useSettings();
   const { t } = useTranslation();
   const [head, setHead] = useState<string | null | undefined>(undefined);
+  // Delta mode: diff against the last-read snapshot rather than a git ref.
+  const isDelta = base === LAST_READ_BASE;
 
   // Fetch the base version whenever the file or chosen base changes.
   useEffect(() => {
     let cancelled = false;
     setHead(undefined);
-    gitShowRef(root, relPath, base)
+    const fetchBase = isDelta
+      ? getReadSnapshot(root, relPath)
+      : gitShowRef(root, relPath, base);
+    fetchBase
       .then((h) => !cancelled && setHead(h))
       .catch(() => !cancelled && setHead(null));
     return () => {
       cancelled = true;
     };
-  }, [root, relPath, base]);
+  }, [root, relPath, base, isDelta]);
+
+  // "Mark reviewed": re-snapshot the current content as read and leave the delta.
+  const markReviewed = () => {
+    useReadProgress.getState().mark(root, relPath, true, text);
+    useReadProgress.getState().clearChanged(relPath);
+    useEditorActions.getState().setDiffBase("HEAD");
+    useEditorActions.getState().setDiffing(false);
+  };
 
   if (head === undefined) {
     return <div className="grid h-full place-items-center text-muted">{t("common.loading")}</div>;
@@ -54,26 +68,47 @@ export function DiffView({ relPath, text }: Props) {
   if (head === null) {
     return (
       <div className="grid h-full place-items-center p-8 text-center text-sm text-muted">
-        {t("diff.noBase")}
+        {isDelta ? t("delta.noBase") : t("diff.noBase")}
       </div>
     );
   }
   if (head === text) {
     return (
-      <div className="grid h-full place-items-center p-8 text-center text-sm text-muted">
-        {t("diff.noChanges")}
+      <div className="grid h-full place-items-center gap-3 p-8 text-center text-sm text-muted">
+        {isDelta ? t("delta.noChanges") : t("diff.noChanges")}
+        {isDelta && (
+          <button
+            type="button"
+            onClick={markReviewed}
+            className="rounded-md border border-line bg-surface px-3 py-1 text-xs text-ink hover:border-accent/40"
+          >
+            {t("delta.markReviewed")}
+          </button>
+        )}
       </div>
     );
   }
   return (
-    <DiffEditor
-      key={`${relPath}@${base}`}
-      path={relPath}
-      original={head}
-      text={text}
-      codeFont={codeFont}
-      readingWidth={readingWidth}
-    />
+    <div className="relative h-full w-full">
+      <DiffEditor
+        key={`${relPath}@${base}`}
+        path={relPath}
+        original={head}
+        text={text}
+        codeFont={codeFont}
+        readingWidth={readingWidth}
+      />
+      {isDelta && (
+        <button
+          type="button"
+          onClick={markReviewed}
+          title={t("delta.markReviewed")}
+          className="absolute top-3 left-4 z-10 rounded-md border border-line bg-overlay px-2.5 py-1 text-xs text-muted shadow-[var(--shadow)] hover:text-ink"
+        >
+          {t("delta.markReviewed")}
+        </button>
+      )}
+    </div>
   );
 }
 

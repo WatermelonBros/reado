@@ -219,9 +219,15 @@ export const listSymbols = (root: string) =>
 /** Project-relative paths the user has marked read. */
 export const listRead = (root: string) => invoke<string[]>("list_read", { root });
 
-/** Mark a project-relative path read or unread (persisted in `.reado/`). */
-export const setReadState = (root: string, path: string, read: boolean) =>
-  invoke<void>("set_read", { root, path, read });
+/** Mark a project-relative path read or unread (persisted in `.reado/`). When
+ *  marking read, `content` is snapshotted so a later change can be reviewed as a
+ *  delta (oversized content is skipped on the backend). */
+export const setReadState = (root: string, path: string, read: boolean, content?: string) =>
+  invoke<void>("set_read", { root, path, read, content: content ?? null });
+
+/** The content snapshotted when a path was last marked read, if any. */
+export const getReadSnapshot = (root: string, path: string) =>
+  invoke<string | null>("get_read_snapshot", { root, path });
 
 export interface Bookmark {
   /** Project-relative, forward-slashed path. */

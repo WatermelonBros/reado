@@ -111,6 +111,7 @@ pub fn run() {
             index::rebuild_index,
             progress::list_read,
             progress::set_read,
+            progress::get_read_snapshot,
             bookmarks::get_bookmarks,
             bookmarks::set_bookmarks,
             watcher::start_watching,

@@ -14,9 +14,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listDir, listFiles, movePath, importPaths, type DirEntry } from "../../lib/api";
-import { useProject } from "../../lib/store";
+import { useProject, useEditorActions } from "../../lib/store";
 import { useTextView } from "../../lib/textView";
-import { useReadProgress } from "../../lib/readProgress";
+import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
 import { useDiagnostics } from "../../lib/diagnostics";
 import { toRelative } from "../../lib/comments";
 
@@ -365,6 +365,8 @@ function TreeNode({
   // Error count from the language server — a quiet trailing count, not a loud
   // red filename (and honest: its absence means "none found", not "clean").
   const errorCount = useDiagnostics((s) => (entry.isDir ? 0 : (s.errors[entry.path] ?? 0)));
+  // A read file that changed externally has a delta to review.
+  const hasDelta = useReadProgress((s) => !entry.isDir && s.changed.has(relPath));
 
   const onClick = useCallback(() => {
     if (entry.isDir) setExpanded((e) => !e);
@@ -436,6 +438,22 @@ function TreeNode({
             className="flex-none pl-1 text-[10px] font-medium text-danger tabular-nums"
           >
             {errorCount}
+          </span>
+        )}
+        {hasDelta && (
+          <span
+            role="button"
+            tabIndex={0}
+            title={t("delta.review")}
+            onClick={(e) => {
+              e.stopPropagation();
+              open(entry.path);
+              useEditorActions.getState().setDiffBase(LAST_READ_BASE);
+              useEditorActions.getState().setDiffing(true);
+            }}
+            className="flex-none cursor-pointer pl-1 text-[11px] font-semibold text-accent hover:underline"
+          >
+            Δ
           </span>
         )}
       </button>

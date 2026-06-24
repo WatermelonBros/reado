@@ -120,6 +120,12 @@
     "nextChange": "Next change (Alt+Down)",
     "changes": "{count} changes"
   },
+  "delta": {
+    "review": "Review changes since you last read this",
+    "noBase": "No last-read snapshot to compare against.",
+    "noChanges": "No changes since you last read this.",
+    "markReviewed": "Mark reviewed"
+  },
   "blame": {
     "toggle": "Toggle blame"
   },
