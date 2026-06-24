@@ -110,9 +110,17 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
         <div className="pointer-events-none absolute inset-x-0 flex justify-center">{pill}</div>
       ) : (
         // Win/Linux: menu bar (left) · pill (center) · window controls (right).
+        // The center area is the drag handle — the menu bar and controls fill the
+        // sides, so without this there's nowhere to grab to move the window. The
+        // pill (a button) stays clickable since drag only fires on the bare region.
         <>
           <MenuBar />
-          <div className="flex min-w-0 flex-1 justify-center px-3">{pill}</div>
+          <div
+            data-tauri-drag-region
+            className="flex min-w-0 flex-1 justify-center px-3"
+          >
+            {pill}
+          </div>
           <WindowControls />
         </>
       )}

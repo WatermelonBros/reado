@@ -2,10 +2,11 @@
 
 - [x] 1.1 macOS: `titleBarStyle: "Overlay"` in `tauri.conf.json` (transparent bar,
       native traffic lights, content underneath). New windows pass the same option.
-- [x] 1.2 Windows/Linux: native decorations dropped via `setDecorations(false)` at
-      runtime in `TitleBar` (config keeps decorations so the window is always
-      usable if the call ever fails). New windows pass `decorations: false`.
-      Moving this to a platform config override is a later polish.
+- [x] 1.2 Windows/Linux: native decorations dropped from window creation via
+      platform config overrides (`tauri.windows.conf.json` / `tauri.linux.conf.json`,
+      `decorations: false`) — a borderless window from the start, which makes the
+      drag region reliable on Windows. `setDecorations(false)` stays as a runtime
+      fallback; new windows pass `decorations: false`.
 - [x] 1.3 Capability: minimize / maximize / unmaximize / toggle-maximize / close /
       start-dragging / is-maximized / set-decorations added to `default.json`.
 
@@ -16,8 +17,9 @@
 - [x] 2.2 Platform-aware left inset: traffic-light gap on macOS; app glyph + menu
       affordance on Win/Linux.
 - [x] 2.3 Window controls (Win/Linux): minimize, maximize/restore (live state via
-      `onResized`), close. (Double-click-to-maximize deferred — the strip is a drag
-      region; the maximize button covers the action.)
+      `onResized`), close. Double-click on the center drag region toggles maximize
+      (Tauri's drag handler). The center container is the drag handle so the window
+      is movable even though the menu bar + controls fill the sides.
 - [x] 2.4 Mounted above the app layout in `App.tsx` (flex column); content sits in
       a `flex-1` region so nothing hides under the strip.
 
