@@ -95,6 +95,11 @@
     "noFile": "Open a file to see its history.",
     "empty": "No history for this file."
   },
+  "onboarding": {
+    "title": "Understand this repo",
+    "open": "Understand this repo (AI overview)",
+    "generating": "Generating… the agent is writing the overview in the terminal."
+  },
   "synopsis": {
     "title": "Synopsis",
     "open": "AI synopsis of this file",

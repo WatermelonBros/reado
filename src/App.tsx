@@ -20,6 +20,7 @@ import { EditMenu } from "./components/molecules/EditMenu";
 import { ShortcutsDialog } from "./components/organisms/ShortcutsDialog";
 import { PromptDialog } from "./components/organisms/PromptDialog";
 import { SynopsisModal } from "./components/organisms/SynopsisModal";
+import { OnboardingModal } from "./components/organisms/OnboardingModal";
 import { TitleBar } from "./components/organisms/TitleBar";
 
 export default function App() {
@@ -66,6 +67,7 @@ export default function App() {
       <ShortcutsDialog />
       <PromptDialog />
       <SynopsisModal />
+      <OnboardingModal />
     </div>
   );
 }

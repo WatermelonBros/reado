@@ -47,6 +47,7 @@ import { lspDocumentSymbols } from "../../lib/lsp";
 import { useReadProgress } from "../../lib/readProgress";
 import { useBookmarks } from "../../lib/bookmarks";
 import { exportSettings, importSettings } from "../../lib/settingsSync";
+import { useOnboarding } from "../../lib/onboarding";
 import { toRelative } from "../../lib/comments";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
@@ -403,6 +404,13 @@ function commandRows(
     { label: t("peek.def"), run: requestPeek },
     { label: t("editor.goToBracket"), run: goToBracket },
     { label: t("editor.lastEdit"), run: gotoLastEdit },
+    {
+      label: t("onboarding.open"),
+      run: () => {
+        useOnboarding.getState().show();
+        close();
+      },
+    },
     {
       label: t("hier.showCall"),
       run: () => {

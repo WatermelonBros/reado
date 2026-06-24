@@ -95,6 +95,11 @@
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file."
   },
+  "onboarding": {
+    "title": "Capisci questo repo",
+    "open": "Capisci questo repo (panoramica AI)",
+    "generating": "Generazione… l'agente sta scrivendo la panoramica nel terminale."
+  },
   "synopsis": {
     "title": "Sintesi",
     "open": "Sintesi AI di questo file",
