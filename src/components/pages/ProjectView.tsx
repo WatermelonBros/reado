@@ -34,9 +34,11 @@ import { BookmarksPanel } from "../organisms/BookmarksPanel";
 import { HierarchyPanel } from "../organisms/HierarchyPanel";
 import { TimelinePanel } from "../organisms/TimelinePanel";
 import { ActivityPanel } from "../organisms/ActivityPanel";
+import { QaPanel } from "../organisms/QaPanel";
 import { useSpecs } from "../../lib/specs";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useActivity } from "../../lib/activity";
+import { useQa } from "../../lib/qa";
 import { Tabs } from "../organisms/Tabs";
 import { Breadcrumb } from "../molecules/Breadcrumb";
 import { Editor } from "../organisms/Editor";
@@ -88,6 +90,7 @@ export function ProjectView({ root }: { root: string }) {
     useSpecs.getState().load(root);
     useReadProgress.getState().load(root);
     useBookmarks.getState().load(root);
+    useQa.getState().load(root);
     listFiles(root)
       .then((f) => setTotalFiles(f.length))
       .catch(() => setTotalFiles(0));
@@ -272,6 +275,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "hierarchy" && <HierarchyPanel />}
             {tool === "timeline" && <TimelinePanel />}
             {tool === "activity" && <ActivityPanel />}
+            {tool === "qa" && <QaPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>

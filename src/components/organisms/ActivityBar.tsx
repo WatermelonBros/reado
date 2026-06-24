@@ -13,6 +13,7 @@ import { useDiagnostics } from "../../lib/diagnostics";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useHierarchy } from "../../lib/hierarchy";
 import { useActivity } from "../../lib/activity";
+import { useQa } from "../../lib/qa";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
 import {
@@ -32,6 +33,7 @@ import {
   HierarchyIcon,
   TimelineIcon,
   ActivityIcon,
+  SparkleIcon,
 } from "../atoms/icons";
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
@@ -60,6 +62,7 @@ export function ActivityBar() {
   const bookmarkCount = useBookmarks((s) => s.bookmarks.length);
   const hasHierarchy = useHierarchy((s) => s.root !== null || s.loading || s.unsupported);
   const activityCount = useActivity((s) => s.entries.length);
+  const qaCount = useQa((s) => s.notes.length);
   const { t } = useTranslation();
 
   // Source Control appears in git repos; Orphans only when there's something to
@@ -89,6 +92,9 @@ export function ActivityBar() {
       : []),
     ...(activityCount > 0
       ? [{ id: "activity" as Tool, labelKey: "activity.panel" as MessageKey, Icon: ActivityIcon }]
+      : []),
+    ...(qaCount > 0
+      ? [{ id: "qa" as Tool, labelKey: "qa.panel" as MessageKey, Icon: SparkleIcon }]
       : []),
   ];
   const badgeFor = (id: Tool) =>

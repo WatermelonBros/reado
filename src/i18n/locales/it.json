@@ -99,7 +99,10 @@
     "title": "Chiedi sulla selezione",
     "ask": "Chiedi all'AI sulla selezione",
     "placeholder": "Cosa vuoi sapere su questo codice?",
-    "generating": "Generazione… l'agente sta rispondendo nel terminale."
+    "generating": "Generazione… l'agente sta rispondendo nel terminale.",
+    "panel": "Q&A",
+    "empty": "Nessuna Q&A ancorata. Seleziona del codice e usa “Chiedi all'AI sulla selezione”.",
+    "remove": "Rimuovi nota"
   },
   "onboarding": {
     "title": "Capisci questo repo",

@@ -183,6 +183,7 @@ export type Tool =
   | "hierarchy"
   | "timeline"
   | "activity"
+  | "qa"
   | "extensions";
 
 interface WorkspaceState {

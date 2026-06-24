@@ -99,7 +99,10 @@
     "title": "Ask about selection",
     "ask": "Ask AI about selection",
     "placeholder": "What do you want to know about this code?",
-    "generating": "Generating… the agent is answering in the terminal."
+    "generating": "Generating… the agent is answering in the terminal.",
+    "panel": "Q&A",
+    "empty": "No anchored Q&A yet. Select code and use “Ask AI about selection”.",
+    "remove": "Remove note"
   },
   "onboarding": {
     "title": "Understand this repo",

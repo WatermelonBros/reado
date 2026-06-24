@@ -1,5 +1,6 @@
 > Generation runs through the **terminal agent**: the prompt asks it to write a
-> Q&A note to `.reado/qa/<file>__L<line>.md`; Reado polls + renders it in a modal.
+> Q&A note to `.reado/qa/<id>.md`; Reado polls + renders it. A frontend index
+> (`.reado/qa.json`) records each note for the browse/revisit panel.
 
 ## 1. Ask flow + prompt
 
@@ -11,15 +12,17 @@
 ## 2. Persistence + anchoring
 
 - [x] 2.1 The answer is a durable Markdown note anchored to the file + start line
-      (`.reado/qa/<file>__L<line>.md`), written by the agent and read back.
-- [~] 2.2 Distinct from one-off "Explain selection": durable, anchored, question-
-      driven. (A QA list panel / gutter marker for browsing prior notes is
-      DEFERRED — the notes persist on disk and re-asking a line reopens it.)
+      (`.reado/qa/<id>.md`), written by the agent and read back.
+- [x] 2.2 A frontend index (`.reado/qa.json`) records each note (file, line,
+      question, time), upserted by anchor (re-asking a line updates in place);
+      loaded on project open. Distinct from one-off "Explain selection".
 
 ## 3. Revisit + UI
 
 - [x] 3.1 `QaModal` renders the Q&A Markdown, with loading/error states.
-- [ ] 3.2 Dedicated revisit panel / gutter affordance — DEFERRED (see 2.2).
+- [x] 3.2 `qa` Tool + `QaPanel`: notes grouped by file, click revisits (opens the
+      file at the line and shows the answer), with a per-note remove. ActivityBar
+      entry appears when notes exist.
 
 ## 4. Verify
 
