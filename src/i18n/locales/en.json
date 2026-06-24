@@ -95,6 +95,13 @@
     "noFile": "Open a file to see its history.",
     "empty": "No history for this file."
   },
+  "synopsis": {
+    "title": "Synopsis",
+    "open": "AI synopsis of this file",
+    "regenerate": "Regenerate",
+    "generating": "Generating… the agent is writing the synopsis in the terminal.",
+    "error": "No synopsis yet. Make sure an agent is running in the terminal, then try Regenerate."
+  },
   "activity": {
     "panel": "Activity",
     "recent": "Recent changes",

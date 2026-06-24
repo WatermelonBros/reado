@@ -95,6 +95,13 @@
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file."
   },
+  "synopsis": {
+    "title": "Sintesi",
+    "open": "Sintesi AI di questo file",
+    "regenerate": "Rigenera",
+    "generating": "Generazione… l'agente sta scrivendo la sintesi nel terminale.",
+    "error": "Nessuna sintesi. Assicurati che un agente sia attivo nel terminale, poi prova Rigenera."
+  },
   "activity": {
     "panel": "Attività",
     "recent": "Modifiche recenti",

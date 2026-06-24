@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { gitRefs, type GitRefs } from "../../lib/api";
 import { useProject, useEditorActions } from "../../lib/store";
 
-import { ChevronIcon, DiffIcon, BlameIcon } from "../atoms/icons";
+import { ChevronIcon, DiffIcon, BlameIcon, SparkleIcon } from "../atoms/icons";
 import { Select } from "../atoms/Select";
+import { useSynopsis } from "../../lib/synopsis";
 import { useTranslation } from "react-i18next";
 
 export function Breadcrumb() {
@@ -97,6 +98,17 @@ export function Breadcrumb() {
             onChange={setDiffBase}
             options={baseOptions}
           />
+        )}
+        {!diffing && (
+          <button
+            type="button"
+            onClick={() => useSynopsis.getState().show(rel)}
+            title={t("synopsis.open")}
+            aria-label={t("synopsis.open")}
+            className="grid h-6 w-6 place-items-center rounded-md text-faint transition-colors hover:bg-surface hover:text-ink"
+          >
+            <SparkleIcon className="h-3.5 w-3.5" />
+          </button>
         )}
         {isRepo && !diffing && (
           <button
