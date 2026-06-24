@@ -96,6 +96,7 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .text("sel:duplicate", "Duplicate Selection")
         .separator()
         .text("sel:explain", "Explain Selection with AI")
+        .text("sel:ask", "Ask AI about Selection…")
         .separator()
         .text("sel:copyUp", "Copy Line Up")
         .text("sel:copyDown", "Copy Line Down")

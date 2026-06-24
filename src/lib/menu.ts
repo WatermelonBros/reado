@@ -48,6 +48,7 @@ import {
   revertFile,
   newFile,
   saveAs,
+  askAboutSelection,
 } from "./docInfo";
 import { checkForUpdates } from "./updater";
 import { launchAgent, runInTerminal, clearTerminal, restartTerminal } from "./agents";
@@ -180,6 +181,9 @@ export function runMenuCommand(id: string): void {
         break;
       case "sel:explain":
         useEditorActions.getState().requestExplain();
+        break;
+      case "sel:ask":
+        void askAboutSelection();
         break;
       case "sel:copyUp":
         copyLineUpCmd();

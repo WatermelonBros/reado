@@ -95,6 +95,12 @@
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file."
   },
+  "qa": {
+    "title": "Chiedi sulla selezione",
+    "ask": "Chiedi all'AI sulla selezione",
+    "placeholder": "Cosa vuoi sapere su questo codice?",
+    "generating": "Generazione… l'agente sta rispondendo nel terminale."
+  },
   "onboarding": {
     "title": "Capisci questo repo",
     "open": "Capisci questo repo (panoramica AI)",

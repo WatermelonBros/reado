@@ -95,6 +95,12 @@
     "noFile": "Open a file to see its history.",
     "empty": "No history for this file."
   },
+  "qa": {
+    "title": "Ask about selection",
+    "ask": "Ask AI about selection",
+    "placeholder": "What do you want to know about this code?",
+    "generating": "Generating… the agent is answering in the terminal."
+  },
   "onboarding": {
     "title": "Understand this repo",
     "open": "Understand this repo (AI overview)",

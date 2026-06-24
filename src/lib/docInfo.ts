@@ -37,6 +37,7 @@ import {
   lspTypes,
 } from "./lsp";
 import { useHierarchy, type HierDir } from "./hierarchy";
+import { useQa } from "./qa";
 import { expandSelection, shrinkSelection } from "./syntaxSelection";
 import { useBookmarks } from "./bookmarks";
 import { prompt } from "./prompt";
@@ -272,6 +273,24 @@ function showHierarchy(mode: "call" | "type") {
 
 export const showCallHierarchy = () => showHierarchy("call");
 export const showTypeHierarchy = () => showHierarchy("type");
+
+/** Ask the AI a question about the current selection; the answer is saved as a
+ *  durable anchored note (generated via the terminal agent). */
+export async function askAboutSelection() {
+  const { view } = useDocInfo.getState();
+  const { root, active } = useProject.getState();
+  if (!view || !active) return;
+  const sel = view.state.selection.main;
+  const doc = view.state.doc;
+  const from = doc.lineAt(sel.from).number;
+  const to = doc.lineAt(sel.to).number;
+  const question = await prompt({
+    title: t("qa.title"),
+    placeholder: t("qa.placeholder"),
+    confirmLabel: t("qa.ask"),
+  });
+  if (question) useQa.getState().ask(toRelative(root, active), from, to, question);
+}
 
 /** Toggle a reading bookmark on the cursor's line. */
 export const toggleBookmarkAtCursor = () =>

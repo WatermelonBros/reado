@@ -39,6 +39,7 @@ import {
   toggleBookmarkAtCursor,
   showCallHierarchy,
   showTypeHierarchy,
+  askAboutSelection,
   useDocInfo,
 } from "../../lib/docInfo";
 import { clearTerminal, restartTerminal } from "../../lib/agents";
@@ -401,6 +402,13 @@ function commandRows(
   const rows: Row[] = [
     { label: t("comment.new"), hint: `${mod}⇧M`, run: requestCompose },
     { label: t("editor.explain"), run: requestExplain },
+    {
+      label: t("qa.ask"),
+      run: () => {
+        void askAboutSelection();
+        close();
+      },
+    },
     { label: t("peek.def"), run: requestPeek },
     { label: t("editor.goToBracket"), run: goToBracket },
     { label: t("editor.lastEdit"), run: gotoLastEdit },

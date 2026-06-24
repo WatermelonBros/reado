@@ -21,6 +21,7 @@ import { ShortcutsDialog } from "./components/organisms/ShortcutsDialog";
 import { PromptDialog } from "./components/organisms/PromptDialog";
 import { SynopsisModal } from "./components/organisms/SynopsisModal";
 import { OnboardingModal } from "./components/organisms/OnboardingModal";
+import { QaModal } from "./components/organisms/QaModal";
 import { TitleBar } from "./components/organisms/TitleBar";
 
 export default function App() {
@@ -68,6 +69,7 @@ export default function App() {
       <PromptDialog />
       <SynopsisModal />
       <OnboardingModal />
+      <QaModal />
     </div>
   );
 }
