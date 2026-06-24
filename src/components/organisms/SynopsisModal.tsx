@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 const baseName = (p: string | null) => (p ? (p.split(/[\\/]/).pop() ?? p) : "");
 
 export function SynopsisModal() {
-  const { open, relPath, status, text } = useSynopsis();
+  const { open, relPath, status, text, stale } = useSynopsis();
   const { t } = useTranslation();
 
   return (
@@ -38,6 +38,11 @@ export function SynopsisModal() {
         </button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {status === "ready" && stale && (
+          <p className="mb-3 rounded-md border border-line bg-surface px-3 py-1.5 text-xs text-muted">
+            {t("synopsis.stale")}
+          </p>
+        )}
         {status === "loading" && (
           <p className="text-sm text-muted">{t("synopsis.generating")}</p>
         )}

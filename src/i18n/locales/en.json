@@ -88,7 +88,10 @@
   "sync": {
     "export": "Export settings (copy to clipboard)",
     "import": "Import settings (paste bundle)",
-    "importTitle": "Paste a settings bundle"
+    "importTitle": "Paste a settings bundle",
+    "apply": "Apply",
+    "invalid": "That doesn't look like a valid Reado settings bundle (or it's from a newer version).",
+    "summary": "Import {settings} settings and {disabled} disabled extension(s)? This replaces matching preferences on this machine."
   },
   "timeline": {
     "panel": "Timeline",
@@ -107,14 +110,16 @@
   "onboarding": {
     "title": "Understand this repo",
     "open": "Understand this repo (AI overview)",
-    "generating": "Generating… the agent is writing the overview in the terminal."
+    "generating": "Generating… the agent is writing the overview in the terminal.",
+    "stale": "The repository moved since this overview was generated — Regenerate to refresh."
   },
   "synopsis": {
     "title": "Synopsis",
     "open": "AI synopsis of this file",
     "regenerate": "Regenerate",
     "generating": "Generating… the agent is writing the synopsis in the terminal.",
-    "error": "No synopsis yet. Make sure an agent is running in the terminal, then try Regenerate."
+    "error": "No synopsis yet. Make sure an agent is running in the terminal, then try Regenerate.",
+    "stale": "The file changed since this synopsis was generated — Regenerate to refresh."
   },
   "activity": {
     "panel": "Activity",

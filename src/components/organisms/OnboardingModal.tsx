@@ -13,7 +13,7 @@ import { SparkleIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
 
 export function OnboardingModal() {
-  const { open, status, text } = useOnboarding();
+  const { open, status, text, stale } = useOnboarding();
   const root = useProject((s) => s.root);
   const openFile = useProject((s) => s.open);
   const { t } = useTranslation();
@@ -51,6 +51,11 @@ export function OnboardingModal() {
         </button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {status === "ready" && stale && (
+          <p className="mb-3 rounded-md border border-line bg-surface px-3 py-1.5 text-xs text-muted">
+            {t("onboarding.stale")}
+          </p>
+        )}
         {status === "loading" && (
           <p className="text-sm text-muted">{t("onboarding.generating")}</p>
         )}

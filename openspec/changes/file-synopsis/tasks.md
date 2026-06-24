@@ -6,8 +6,9 @@
 
 - [x] 1.1 Synopsis cached on disk at `.reado/synopsis/<sanitized-path>.md`; a cache
       hit (file present + non-empty) shows immediately. Regenerate re-dispatches.
-- [~] 1.2 Content-fingerprint staleness — DEFERRED: cache is path-keyed; the user
-      regenerates explicitly. (A source-mtime vs synopsis-mtime check is a later add.)
+- [x] 1.2 Content-fingerprint staleness: a `.hash` sidecar records the source's
+      content hash when the synopsis is generated; on open, a changed source shows
+      a "stale — Regenerate" banner.
 
 ## 2. Generation (via the agent)
 

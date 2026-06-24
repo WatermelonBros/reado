@@ -16,8 +16,9 @@
 
 ## 3. Staleness
 
-- [~] 3.1 Explicit Regenerate; automatic staleness vs HEAD/commit DEFERRED (the
-      overview is cached until regenerated).
+- [x] 3.1 A `.reado/onboarding.head` sidecar records HEAD at generation (new
+      `git_head` command); on open, a moved HEAD shows a "stale — Regenerate"
+      banner.
 
 ## 4. i18n + verify
 

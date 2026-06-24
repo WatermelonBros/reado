@@ -556,6 +556,13 @@ pub fn git_refs(root: String) -> GitRefs {
     GitRefs { branches, commits }
 }
 
+/// The current HEAD commit hash (short), or None outside a repo. Used for cheap
+/// "has the repo moved since X" freshness checks (e.g. repo onboarding).
+#[tauri::command]
+pub fn git_head(root: String) -> Option<String> {
+    run_git(Path::new(&root), &["rev-parse", "--short", "HEAD"]).filter(|h| !h.is_empty())
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileCommit {

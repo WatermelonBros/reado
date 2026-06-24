@@ -88,7 +88,10 @@
   "sync": {
     "export": "Esporta impostazioni (copia negli appunti)",
     "import": "Importa impostazioni (incolla bundle)",
-    "importTitle": "Incolla un bundle di impostazioni"
+    "importTitle": "Incolla un bundle di impostazioni",
+    "apply": "Applica",
+    "invalid": "Non sembra un bundle di impostazioni Reado valido (o è di una versione più recente).",
+    "summary": "Importare {settings} impostazioni e {disabled} estensioni disabilitate? Sostituisce le preferenze corrispondenti su questa macchina."
   },
   "timeline": {
     "panel": "Cronologia",
@@ -107,14 +110,16 @@
   "onboarding": {
     "title": "Capisci questo repo",
     "open": "Capisci questo repo (panoramica AI)",
-    "generating": "Generazione… l'agente sta scrivendo la panoramica nel terminale."
+    "generating": "Generazione… l'agente sta scrivendo la panoramica nel terminale.",
+    "stale": "Il repository è cambiato dopo la generazione di questa panoramica — usa Rigenera per aggiornarla."
   },
   "synopsis": {
     "title": "Sintesi",
     "open": "Sintesi AI di questo file",
     "regenerate": "Rigenera",
     "generating": "Generazione… l'agente sta scrivendo la sintesi nel terminale.",
-    "error": "Nessuna sintesi. Assicurati che un agente sia attivo nel terminale, poi prova Rigenera."
+    "error": "Nessuna sintesi. Assicurati che un agente sia attivo nel terminale, poi prova Rigenera.",
+    "stale": "Il file è cambiato dopo la generazione di questa sintesi — usa Rigenera per aggiornarla."
   },
   "activity": {
     "panel": "Attività",

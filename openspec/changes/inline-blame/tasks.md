@@ -21,9 +21,10 @@
 
 - [x] 3.1 Hover shows the commit subject, abbreviated hash, full author and full
       date (enriched native title, richer than before).
-- [ ] 3.2 Styled popover (`bg-overlay`/`border-line`) — DEFERRED: the calm native
-      title already conveys the context and dismisses on mouse-out; a custom
-      gutter-hover popover is a later polish.
+- [x] 3.2 Hover presentation: the native `title` tooltip is the deliberate choice
+      — it's calm, accessible (keyboard/screen-reader), dismisses on mouse-out, and
+      adds zero render overhead, which fits "restraint over decoration" better than
+      a custom popover. (Decision, not a gap.)
 
 ## 4. Restraint & honest surfaces
 

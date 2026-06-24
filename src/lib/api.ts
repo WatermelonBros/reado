@@ -183,6 +183,9 @@ export interface FileCommit {
 export const gitFileHistory = (root: string, file: string) =>
   invoke<FileCommit[]>("git_file_history", { root, file });
 
+/** The current HEAD commit (short hash), or null outside a repo. */
+export const gitHead = (root: string) => invoke<string | null>("git_head", { root });
+
 export interface BlameLine {
   line: number;
   hash: string;

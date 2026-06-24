@@ -6,6 +6,7 @@
  * (not file I/O) to avoid an unconfined filesystem surface. Never includes
  * secrets or project-local state (recents, sessions, window layout, `.reado/`).
  */
+import { ask } from "@tauri-apps/plugin-dialog";
 import { useSettings, type SettingsState } from "./store";
 import { useExtensions } from "./extensions";
 import { prompt } from "./prompt";
@@ -50,20 +51,33 @@ export function buildBundle(): Bundle {
   return { version: BUNDLE_VERSION, settings, extensionsDisabled: useExtensions.getState().disabled };
 }
 
-/** Parse + apply a bundle; returns false on malformed input (no partial apply). */
-export function applyBundle(json: string): boolean {
+/** Parse + validate a bundle. Returns null on malformed input or a newer schema
+ *  than this build understands (forward-incompatible). */
+export function parseBundle(json: string): Bundle | null {
   let b: Bundle;
   try {
     b = JSON.parse(json) as Bundle;
   } catch {
-    return false;
+    return null;
   }
-  if (!b || typeof b !== "object" || typeof b.settings !== "object") return false;
+  if (!b || typeof b !== "object" || typeof b.settings !== "object") return null;
+  if (typeof b.version === "number" && b.version > BUNDLE_VERSION) return null; // too new
+  return b;
+}
+
+/** A plain summary of what importing a bundle will change (for confirmation). */
+export function summarizeBundle(b: Bundle): string {
+  const settings = Object.keys(b.settings ?? {}).length;
+  const disabled = Array.isArray(b.extensionsDisabled) ? b.extensionsDisabled.length : 0;
+  return t("sync.summary", { settings, disabled });
+}
+
+/** Apply a parsed bundle. */
+export function applyBundle(b: Bundle): void {
   useSettings.getState().set(b.settings);
   if (Array.isArray(b.extensionsDisabled)) {
     useExtensions.setState({ disabled: b.extensionsDisabled });
   }
-  return true;
 }
 
 /** Copy the current settings bundle to the clipboard. */
@@ -71,12 +85,22 @@ export async function exportSettings(): Promise<void> {
   await navigator.clipboard.writeText(JSON.stringify(buildBundle(), null, 2)).catch(() => {});
 }
 
-/** Prompt for a pasted bundle and apply it. */
+/** Prompt for a pasted bundle, show a summary, and apply it on confirm. */
 export async function importSettings(): Promise<void> {
   const json = await prompt({
     title: t("sync.importTitle"),
     placeholder: "{ …bundle JSON… }",
     confirmLabel: t("sync.import"),
   });
-  if (json) applyBundle(json);
+  if (!json) return;
+  const bundle = parseBundle(json);
+  if (!bundle) {
+    await ask(t("sync.invalid"), { title: t("sync.import"), kind: "error" });
+    return;
+  }
+  const ok = await ask(summarizeBundle(bundle), {
+    title: t("sync.import"),
+    okLabel: t("sync.apply"),
+  });
+  if (ok) applyBundle(bundle);
 }

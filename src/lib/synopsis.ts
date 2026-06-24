@@ -6,7 +6,7 @@
  * disk; "Regenerate" re-dispatches.
  */
 import { create } from "zustand";
-import { readFile } from "./api";
+import { readFile, createFile, writeFile } from "./api";
 import { runInTerminal } from "./agents";
 import { useProject } from "./store";
 
@@ -17,6 +17,8 @@ interface SynopsisState {
   relPath: string | null;
   status: Status;
   text: string;
+  /** True when the source changed since the synopsis was generated. */
+  stale: boolean;
   show: (relPath: string) => void;
   regenerate: () => void;
   close: () => void;
@@ -25,6 +27,34 @@ interface SynopsisState {
 /** Flat, sanitized cache path under `.reado/` for a file's synopsis. */
 const synopsisPath = (relPath: string) =>
   `.reado/synopsis/${relPath.replace(/[\\/]/g, "__")}.md`;
+/** Sidecar storing a hash of the source when the synopsis was made (freshness). */
+const freshPath = (relPath: string) =>
+  `.reado/synopsis/${relPath.replace(/[\\/]/g, "__")}.hash`;
+
+/** Small, fast non-crypto content hash (freshness only, not security). */
+function contentHash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16);
+}
+
+/** Record the current source hash so future opens can detect staleness. */
+async function recordFreshness(root: string, relPath: string) {
+  const src = await readFile(root, relPath).catch(() => null);
+  if (!src || src.kind !== "text") return;
+  await createFile(root, freshPath(relPath)).catch(() => {});
+  await writeFile(root, freshPath(relPath), contentHash(src.text)).catch(() => {});
+}
+
+/** Whether the source changed since the synopsis was generated. */
+async function checkStale(root: string, relPath: string): Promise<boolean> {
+  const [side, src] = await Promise.all([
+    readFile(root, freshPath(relPath)).catch(() => null),
+    readFile(root, relPath).catch(() => null),
+  ]);
+  if (!side || side.kind !== "text" || !src || src.kind !== "text") return false;
+  return side.text.trim() !== contentHash(src.text);
+}
 
 const prompt = (relPath: string, outPath: string) =>
   `Write a concise reading synopsis of \`${relPath}\` — its purpose, key exports/` +
@@ -43,7 +73,8 @@ async function poll(root: string, relPath: string, mine: number) {
     if (token !== mine) return; // superseded / closed
     const c = await readFile(root, path).catch(() => null);
     if (c && c.kind === "text" && c.text.trim()) {
-      useSynopsis.setState({ status: "ready", text: c.text });
+      useSynopsis.setState({ status: "ready", text: c.text, stale: false });
+      void recordFreshness(root, relPath); // mark this source as the fresh baseline
       return;
     }
   }
@@ -55,16 +86,18 @@ export const useSynopsis = create<SynopsisState>((set) => ({
   relPath: null,
   status: "loading",
   text: "",
+  stale: false,
   show: (relPath) => {
     const mine = ++token;
-    set({ open: true, relPath, status: "loading", text: "" });
+    set({ open: true, relPath, status: "loading", text: "", stale: false });
     const root = useProject.getState().root;
-    // Cache hit → show immediately; else dispatch the agent and poll.
+    // Cache hit → show immediately (flagging staleness); else dispatch + poll.
     readFile(root, synopsisPath(relPath))
-      .then((c) => {
+      .then(async (c) => {
         if (token !== mine) return;
         if (c.kind === "text" && c.text.trim()) {
-          set({ status: "ready", text: c.text });
+          const stale = await checkStale(root, relPath);
+          if (token === mine) set({ status: "ready", text: c.text, stale });
         } else {
           throw new Error("empty");
         }
@@ -79,7 +112,7 @@ export const useSynopsis = create<SynopsisState>((set) => ({
     const relPath = useSynopsis.getState().relPath;
     if (!relPath) return;
     const mine = ++token;
-    set({ status: "loading", text: "" });
+    set({ status: "loading", text: "", stale: false });
     const root = useProject.getState().root;
     runInTerminal(prompt(relPath, synopsisPath(relPath)));
     void poll(root, relPath, mine);
