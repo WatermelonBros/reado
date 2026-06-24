@@ -35,6 +35,7 @@ pub fn run() {
         })
         .manage(pty::PtyState::default())
         .manage(lsp::LspState::default())
+        .manage(git::BlameCache::default())
         .manage(menu::LastFocused::default())
         .on_window_event(|window, event| {
             use tauri::Manager;

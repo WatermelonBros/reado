@@ -5,10 +5,14 @@
 //! the MVP needs: whether a folder is a repository, and its current branch.
 //! Git-dependent features degrade gracefully when `git` is absent.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 use serde::Serialize;
+use tauri::State;
 
 /// Git status for an opened project.
 #[derive(Debug, Serialize)]
@@ -367,7 +371,7 @@ pub fn git_stash_drop(root: String, index: u32) -> Result<(), String> {
 }
 
 /// Blame attribution for one line of a file.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct BlameLine {
     /// 1-based final line number.
@@ -381,10 +385,39 @@ pub struct BlameLine {
     pub summary: String,
 }
 
+/// A cached blame result, valid while the file's HEAD and mtime are unchanged.
+struct CachedBlame {
+    head: String,
+    mtime: Option<SystemTime>,
+    lines: Vec<BlameLine>,
+}
+
+/// Per-(root, file) blame cache so toggling blame on/off or re-opening a file
+/// doesn't re-run `git blame`; an entry is invalidated when HEAD or the file's
+/// mtime changes.
+#[derive(Default)]
+pub struct BlameCache(Mutex<HashMap<String, CachedBlame>>);
+
 /// Per-line blame for a tracked file (`git blame --line-porcelain`). Returns an
-/// empty list when git is unavailable or the file is untracked.
+/// empty list when git is unavailable or the file is untracked. Lazy: only the
+/// frontend (blame mode on) calls it, and results are cached per (file, HEAD).
 #[tauri::command]
-pub fn git_blame(root: String, file: String) -> Vec<BlameLine> {
+pub fn git_blame(cache: State<BlameCache>, root: String, file: String) -> Vec<BlameLine> {
+    let key = format!("{root}\u{0}{file}");
+    let head = run_git(Path::new(&root), &["rev-parse", "HEAD"]).unwrap_or_default();
+    let mtime = std::fs::metadata(Path::new(&root).join(&file))
+        .and_then(|m| m.modified())
+        .ok();
+
+    // Cache hit: same HEAD and same file mtime → reuse.
+    if let Ok(map) = cache.0.lock() {
+        if let Some(hit) = map.get(&key) {
+            if hit.head == head && hit.mtime == mtime {
+                return hit.lines.clone();
+            }
+        }
+    }
+
     let Some(out) = run_git_raw(
         Path::new(&root),
         &["blame", "--line-porcelain", "--", &file],
@@ -424,6 +457,17 @@ pub fn git_blame(root: String, file: String) -> Vec<BlameLine> {
                 }
             }
         }
+    }
+
+    if let Ok(mut map) = cache.0.lock() {
+        map.insert(
+            key,
+            CachedBlame {
+                head,
+                mtime,
+                lines: lines.clone(),
+            },
+        );
     }
     lines
 }

@@ -34,6 +34,15 @@ function relativeAge(seconds: number): string {
 
 const isUncommitted = (hash: string) => /^0+$/.test(hash);
 
+/** Full, human date for the hover (e.g. "12 Mar 2026"). */
+function fullDate(seconds: number): string {
+  return new Date(seconds * 1000).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 /** Build the blame gutter extension for a file's blame lines. */
 export function blameGutter(lines: BlameLine[]) {
   const byLine = new Map<number, BlameLine>();
@@ -48,9 +57,10 @@ export function blameGutter(lines: BlameLine[]) {
       const uncommitted = isUncommitted(b.hash);
       const author = uncommitted ? "You" : b.author.split(" ")[0] || b.author;
       const when = uncommitted ? "uncommitted" : relativeAge(b.time);
+      // Richer hover: subject, then abbreviated hash · full author · full date.
       const title = uncommitted
         ? "Not committed yet"
-        : `${b.hash}  ${b.author}\n${b.summary}`;
+        : `${b.summary}\n${b.hash} · ${b.author} · ${fullDate(b.time)}`;
       return new BlameMarker(`${author} · ${when}`, title, uncommitted);
     },
     // The marker set only changes when we rebuild the gutter (new blame data).
