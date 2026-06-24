@@ -12,6 +12,7 @@ import { useSpecs } from "../../lib/specs";
 import { useDiagnostics } from "../../lib/diagnostics";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useHierarchy } from "../../lib/hierarchy";
+import { useActivity } from "../../lib/activity";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
 import {
@@ -30,6 +31,7 @@ import {
   BookmarkIcon,
   HierarchyIcon,
   TimelineIcon,
+  ActivityIcon,
 } from "../atoms/icons";
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
@@ -57,6 +59,7 @@ export function ActivityBar() {
   );
   const bookmarkCount = useBookmarks((s) => s.bookmarks.length);
   const hasHierarchy = useHierarchy((s) => s.root !== null || s.loading || s.unsupported);
+  const activityCount = useActivity((s) => s.entries.length);
   const { t } = useTranslation();
 
   // Source Control appears in git repos; Orphans only when there's something to
@@ -83,6 +86,9 @@ export function ActivityBar() {
       : []),
     ...(isRepo
       ? [{ id: "timeline" as Tool, labelKey: "timeline.panel" as MessageKey, Icon: TimelineIcon }]
+      : []),
+    ...(activityCount > 0
+      ? [{ id: "activity" as Tool, labelKey: "activity.panel" as MessageKey, Icon: ActivityIcon }]
       : []),
   ];
   const badgeFor = (id: Tool) =>

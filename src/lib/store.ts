@@ -182,6 +182,7 @@ export type Tool =
   | "bookmarks"
   | "hierarchy"
   | "timeline"
+  | "activity"
   | "extensions";
 
 interface WorkspaceState {

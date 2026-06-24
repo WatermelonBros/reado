@@ -95,6 +95,14 @@
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file."
   },
+  "activity": {
+    "panel": "Attività",
+    "recent": "Modifiche recenti",
+    "clear": "Pulisci",
+    "empty": "Nessuna modifica ai file in questa sessione.",
+    "comments_one": "{count} commento",
+    "comments_other": "{count} commenti"
+  },
   "hier": {
     "panel": "Gerarchia",
     "showCall": "Mostra gerarchia chiamate",

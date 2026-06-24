@@ -33,8 +33,10 @@ import { ProblemsPanel } from "../organisms/ProblemsPanel";
 import { BookmarksPanel } from "../organisms/BookmarksPanel";
 import { HierarchyPanel } from "../organisms/HierarchyPanel";
 import { TimelinePanel } from "../organisms/TimelinePanel";
+import { ActivityPanel } from "../organisms/ActivityPanel";
 import { useSpecs } from "../../lib/specs";
 import { useBookmarks } from "../../lib/bookmarks";
+import { useActivity } from "../../lib/activity";
 import { Tabs } from "../organisms/Tabs";
 import { Breadcrumb } from "../molecules/Breadcrumb";
 import { Editor } from "../organisms/Editor";
@@ -115,14 +117,19 @@ export function ProjectView({ root }: { root: string }) {
     const offs = [
       listen<{ file: string }>("file-changed", (event) => {
         const { file } = event.payload;
-        // An external change (e.g. an agent's edit) to a file marked read means
-        // there's new content to look at — flip it back to unread. Our own saves
-        // are suppressed via wasSelfWrite.
-        if (!wasSelfWrite(file) && useReadProgress.getState().read.has(file)) {
-          // Flag the delta *before* unmarking (mark(read=false) doesn't touch the
-          // snapshot), so "review changes" can diff current vs the last-read state.
-          useReadProgress.getState().markChanged(file);
-          useReadProgress.getState().mark(root, file, false);
+        // An external change (e.g. an agent's edit) — our own saves are suppressed
+        // via wasSelfWrite (consumed once here, reused below).
+        const external = !wasSelfWrite(file);
+        if (external) {
+          // Honest agent-activity feed: record what changed under the session.
+          useActivity.getState().record(file, Date.now());
+          // A change to a file marked read means there's new content to look at —
+          // flag the delta *before* unmarking (mark(read=false) keeps the
+          // snapshot), then flip it to unread.
+          if (useReadProgress.getState().read.has(file)) {
+            useReadProgress.getState().markChanged(file);
+            useReadProgress.getState().mark(root, file, false);
+          }
         }
         reanchorFile(root, file)
           .then((list) => useComments.getState().replaceForFile(file, list))
@@ -264,6 +271,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "bookmarks" && <BookmarksPanel />}
             {tool === "hierarchy" && <HierarchyPanel />}
             {tool === "timeline" && <TimelinePanel />}
+            {tool === "activity" && <ActivityPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>

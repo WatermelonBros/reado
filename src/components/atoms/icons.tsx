@@ -237,6 +237,12 @@ export const MinusIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const ActivityIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M3 12h4l2 6 4-14 2 8h6" />
+  </svg>
+);
+
 export const TimelineIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <circle cx="12" cy="12" r="9" />
