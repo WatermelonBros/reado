@@ -99,6 +99,13 @@
     "noFile": "Open a file to see its history.",
     "empty": "No history for this file."
   },
+  "semantic": {
+    "title": "Semantic search",
+    "search": "Semantic search (natural language)",
+    "placeholder": "Describe what you're looking for…",
+    "generating": "Searching… the agent is finding matches in the terminal.",
+    "error": "No matches yet. Make sure an agent is running in the terminal, then try again."
+  },
   "mcp": {
     "title": "Reado MCP",
     "enable": "Enable Reado MCP for the agent",

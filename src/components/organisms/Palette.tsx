@@ -51,6 +51,8 @@ import { exportSettings, importSettings } from "../../lib/settingsSync";
 import { useOnboarding } from "../../lib/onboarding";
 import { usePreReview } from "../../lib/preReview";
 import { enableMcp } from "../../lib/mcp";
+import { useSemanticSearch } from "../../lib/semanticSearch";
+import { prompt as promptDialog } from "../../lib/prompt";
 import { toRelative } from "../../lib/comments";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
@@ -496,6 +498,15 @@ function commandRows(
     { label: t("kb.title"), run: openDocs },
     { label: t("finder.placeholder"), hint: `${mod}P`, run: () => open("files") },
     { label: t("search.placeholder"), hint: `${mod}⇧F`, run: () => open("search") },
+    {
+      label: t("semantic.search"),
+      run: () => {
+        close();
+        void promptDialog({ title: t("semantic.title"), placeholder: t("semantic.placeholder") }).then(
+          (q) => q && useSemanticSearch.getState().run(q),
+        );
+      },
+    },
     {
       label: `${t("editor.wrap")}: ${settings.wrap ? "on" : "off"}`,
       run: () => settings.set({ wrap: !settings.wrap }),

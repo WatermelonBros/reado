@@ -99,6 +99,13 @@
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file."
   },
+  "semantic": {
+    "title": "Ricerca semantica",
+    "search": "Ricerca semantica (linguaggio naturale)",
+    "placeholder": "Descrivi cosa stai cercando…",
+    "generating": "Ricerca… l'agente sta trovando le corrispondenze nel terminale.",
+    "error": "Nessuna corrispondenza. Assicurati che un agente sia attivo nel terminale, poi riprova."
+  },
   "mcp": {
     "title": "Reado MCP",
     "enable": "Abilita Reado MCP per l'agente",
