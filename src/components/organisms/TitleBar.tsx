@@ -2,11 +2,11 @@
  * Custom title bar (window chrome).
  *
  * Replaces the OS title bar so the strip follows Reado's theme on every platform
- * and can host a Command Center. On macOS the window keeps its native traffic
- * lights (`titleBarStyle: Overlay`); on Windows/Linux we drop the native
- * decorations and draw our own minimize / maximize / close controls plus a menu
- * affordance (the native menu strip is gone there). The whole strip is a drag
- * region except for the interactive zones.
+ * and hosts a Command Center. On macOS the window keeps its native traffic lights
+ * (`titleBarStyle: Overlay`) and its system menu bar; on Windows/Linux we drop
+ * the native decorations and draw our own menu bar (left), window controls
+ * (right), and min/max/close. The whole strip is a drag region except for the
+ * interactive zones.
  */
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -14,18 +14,11 @@ import { usePalette } from "../../lib/store";
 import { currentOS } from "../../lib/extensions";
 import { mod } from "../../lib/shortcuts";
 import { SearchIcon, MinusIcon, CloseIcon } from "../atoms/icons";
+import { MenuBar } from "../molecules/MenuBar";
 import { useTranslation } from "react-i18next";
 
 const os = currentOS();
 const isMac = os === "mac";
-
-/** Hamburger — reads as "menu" (the Win/Linux menu affordance, since dropping
- *  native decorations removes the system menu strip). */
-const MenuGlyph = () => (
-  <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" aria-hidden>
-    <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" strokeWidth="1.25" strokeLinecap="round" />
-  </svg>
-);
 
 /** Overlapping-squares glyph for "restore"; a single square for "maximize". */
 const MaximizeGlyph = ({ maximized }: { maximized: boolean }) =>
@@ -54,7 +47,7 @@ function WindowControls() {
   const btn =
     "grid h-full w-11 place-items-center text-muted transition-colors hover:bg-surface hover:text-ink";
   return (
-    <div className="flex h-full items-stretch">
+    <div className="flex h-full flex-none items-stretch">
       <button type="button" className={btn} title={t("window.minimize")} onClick={() => void win.minimize()}>
         <MinusIcon className="h-3 w-3" />
       </button>
@@ -89,47 +82,40 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
 
   const openPalette = () => usePalette.getState().open("commands");
 
+  // The Command Center pill (centered): project name + ⌘K, opens the palette.
+  const pill = projectName ? (
+    <button
+      type="button"
+      onClick={openPalette}
+      title={t("titlebar.search")}
+      className="pointer-events-auto flex h-6 min-w-[200px] max-w-[44vw] items-center gap-2 rounded-md border border-line bg-surface/70 px-2.5 text-xs text-muted transition-colors hover:border-accent/40 hover:bg-surface hover:text-ink"
+    >
+      <SearchIcon className="h-3 w-3 flex-none opacity-70" />
+      <span className="truncate">{projectName}</span>
+      <kbd className="ml-auto flex-none font-sans text-[10px] tracking-wide text-faint">{mod}K</kbd>
+    </button>
+  ) : (
+    <span className="pointer-events-none text-xs font-medium tracking-wide text-faint">Reado</span>
+  );
+
   return (
     <div
       data-tauri-drag-region
       className={`relative z-30 flex h-9 flex-none items-center border-b border-line bg-canvas select-none ${
-        isMac ? "pl-[72px]" : "pl-2"
+        isMac ? "pl-[72px] pr-2" : "pl-1"
       }`}
     >
-      {/* Win/Linux: menu affordance (no native menu strip there). */}
-      {!isMac && (
-        <button
-          type="button"
-          onClick={openPalette}
-          title={t("titlebar.menu")}
-          className="grid h-7 w-7 flex-none place-items-center rounded-md text-muted transition-colors hover:bg-surface hover:text-ink"
-        >
-          <MenuGlyph />
-        </button>
+      {isMac ? (
+        // macOS: traffic lights sit top-left; the pill floats centered on the window.
+        <div className="pointer-events-none absolute inset-x-0 flex justify-center">{pill}</div>
+      ) : (
+        // Win/Linux: menu bar (left) · pill (center) · window controls (right).
+        <>
+          <MenuBar />
+          <div className="flex min-w-0 flex-1 justify-center px-3">{pill}</div>
+          <WindowControls />
+        </>
       )}
-
-      {/* Center: the Command Center pill. Interactive only inside a project. */}
-      <div className="pointer-events-none absolute inset-x-0 flex justify-center">
-        {projectName ? (
-          <button
-            type="button"
-            onClick={openPalette}
-            title={t("titlebar.search")}
-            className="pointer-events-auto flex h-6 min-w-[200px] max-w-[44vw] items-center gap-2 rounded-md border border-line bg-surface/70 px-2.5 text-xs text-muted transition-colors hover:border-accent/40 hover:bg-surface hover:text-ink"
-          >
-            <SearchIcon className="h-3 w-3 flex-none opacity-70" />
-            <span className="truncate">{projectName}</span>
-            <kbd className="ml-auto flex-none font-sans text-[10px] tracking-wide text-faint">
-              {mod}K
-            </kbd>
-          </button>
-        ) : (
-          <span className="text-xs font-medium tracking-wide text-faint">Reado</span>
-        )}
-      </div>
-
-      {/* Right: window controls (Win/Linux only; macOS lights are top-left). */}
-      <div className="ml-auto flex h-full items-stretch">{!isMac && <WindowControls />}</div>
     </div>
   );
 }

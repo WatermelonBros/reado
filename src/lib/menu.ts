@@ -63,9 +63,9 @@ const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.roun
 const nudgeZoom = (delta: number) =>
   useSettings.getState().set({ zoom: clampZoom(useSettings.getState().zoom + delta) });
 
-/** Start handling native-menu events; returns an unlisten function. */
-export function listenForMenu(): Promise<() => void> {
-  return listen<string>("menu", ({ payload: id }) => {
+/** Run an app-menu command by id — shared by the native menu (forwarded as a
+ *  `menu` event) and the rendered Win/Linux menu bar in the title bar. */
+export function runMenuCommand(id: string): void {
     const palette = usePalette.getState();
     const project = useProject.getState();
     const workspace = useWorkspace.getState();
@@ -355,5 +355,9 @@ export function listenForMenu(): Promise<() => void> {
         void openUrl(RELEASES);
         break;
     }
-  });
+}
+
+/** Start handling native-menu events; returns an unlisten function. */
+export function listenForMenu(): Promise<() => void> {
+  return listen<string>("menu", ({ payload: id }) => runMenuCommand(id));
 }
