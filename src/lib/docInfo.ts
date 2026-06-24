@@ -29,7 +29,14 @@ import { writeFile, formatFile, findDefinition, readFile, createFile } from "./a
 import { useProject, useEditorActions, useWorkspace } from "./store";
 import { toRelative } from "./comments";
 import { noteSelfWrite } from "./readProgress";
-import { lspLocate } from "./lsp";
+import {
+  lspLocate,
+  lspPrepareCallHierarchy,
+  lspPrepareTypeHierarchy,
+  lspCalls,
+  lspTypes,
+} from "./lsp";
+import { useHierarchy, type HierDir } from "./hierarchy";
 import { expandSelection, shrinkSelection } from "./syntaxSelection";
 import { useBookmarks } from "./bookmarks";
 import { prompt } from "./prompt";
@@ -212,6 +219,59 @@ export const goToBracket = () => runOnView(cursorMatchingBracket);
 /** Expand / shrink the selection along the syntax tree. */
 export const expandSelectionCmd = () => runOnView(expandSelection);
 export const shrinkSelectionCmd = () => runOnView(shrinkSelection);
+
+/** Fetch the current direction's children for the hierarchy root and store them. */
+function loadHierarchyChildren(direction: HierDir) {
+  const { view } = useDocInfo.getState();
+  const { root, mode } = useHierarchy.getState();
+  if (!view || !root) return;
+  useHierarchy.getState().set({ direction, loading: true });
+  const p =
+    mode === "call"
+      ? lspCalls(view, root.item, direction === "outgoing" ? "outgoing" : "incoming")
+      : lspTypes(view, root.item, direction === "sub" ? "sub" : "super");
+  (p ?? Promise.resolve([])).then((res) =>
+    useHierarchy.getState().set({ results: res ?? [], loading: false }),
+  );
+}
+
+/** Re-fetch the hierarchy in a new direction (panel toggle). */
+export const setHierarchyDirection = (direction: HierDir) => loadHierarchyChildren(direction);
+
+/** Show the call or type hierarchy for the symbol at the cursor (server-backed). */
+function showHierarchy(mode: "call" | "type") {
+  const { view } = useDocInfo.getState();
+  if (!view) return;
+  const pos = view.state.selection.main.head;
+  const prep = mode === "call" ? lspPrepareCallHierarchy(view, pos) : lspPrepareTypeHierarchy(view, pos);
+  const dir: HierDir = mode === "call" ? "incoming" : "sub";
+  useHierarchy.getState().set({
+    mode,
+    direction: dir,
+    root: null,
+    results: [],
+    loading: true,
+    unsupported: false,
+  });
+  // Force-open the panel so the user sees progress / the result.
+  useWorkspace.setState({ tool: "hierarchy", lastTool: "hierarchy" });
+  if (!prep) {
+    useHierarchy.getState().set({ loading: false, unsupported: true });
+    return;
+  }
+  void prep.then((items) => {
+    const root = items?.[0] ?? null;
+    if (!root) {
+      useHierarchy.getState().set({ loading: false, unsupported: true });
+      return;
+    }
+    useHierarchy.getState().set({ root });
+    loadHierarchyChildren(dir);
+  });
+}
+
+export const showCallHierarchy = () => showHierarchy("call");
+export const showTypeHierarchy = () => showHierarchy("type");
 
 /** Toggle a reading bookmark on the cursor's line. */
 export const toggleBookmarkAtCursor = () =>

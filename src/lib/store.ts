@@ -180,6 +180,7 @@ export type Tool =
   | "specs"
   | "problems"
   | "bookmarks"
+  | "hierarchy"
   | "extensions";
 
 interface WorkspaceState {

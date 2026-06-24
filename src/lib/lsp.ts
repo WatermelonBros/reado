@@ -517,6 +517,102 @@ export function lspDocumentSymbols(
     .catch(() => null);
 }
 
+// ---- Call & type hierarchy --------------------------------------------------
+
+/** An LSP CallHierarchyItem / TypeHierarchyItem (the fields we use). */
+export interface HierItem {
+  name: string;
+  detail?: string;
+  kind?: number;
+  uri: string;
+  range?: { start: { line: number } };
+  selectionRange?: { start: { line: number } };
+}
+
+/** A resolved hierarchy node for the UI (navigable). */
+export interface HierNode {
+  name: string;
+  detail?: string;
+  path: string;
+  line: number;
+  /** The original item, so the caller can re-root the hierarchy on it. */
+  item: HierItem;
+}
+
+const toHierNode = (i: HierItem): HierNode => ({
+  name: i.name,
+  detail: i.detail,
+  path: fromUri(i.uri),
+  line: ((i.selectionRange ?? i.range)?.start.line ?? 0) + 1,
+  item: i,
+});
+
+/** Prepare a call/type hierarchy at `pos`. Returns null when no server is
+ *  attached or the server lacks the capability (caller can fall back). */
+function prepareHierarchy(
+  view: EditorView,
+  pos: number,
+  kind: "callHierarchy" | "typeHierarchy",
+): Promise<HierNode[] | null> | null {
+  const plugin = LSPPlugin.get(view);
+  if (!plugin) return null;
+  plugin.client.sync();
+  const method =
+    kind === "callHierarchy"
+      ? "textDocument/prepareCallHierarchy"
+      : "textDocument/prepareTypeHierarchy";
+  return plugin.client
+    .request<unknown, HierItem[] | null>(method, {
+      textDocument: { uri: plugin.uri },
+      position: plugin.toPosition(pos),
+    })
+    .then((res) => (res && res.length ? res.map(toHierNode) : null))
+    .catch(() => null);
+}
+
+export const lspPrepareCallHierarchy = (view: EditorView, pos: number) =>
+  prepareHierarchy(view, pos, "callHierarchy");
+export const lspPrepareTypeHierarchy = (view: EditorView, pos: number) =>
+  prepareHierarchy(view, pos, "typeHierarchy");
+
+interface CallEdge {
+  from?: HierItem;
+  to?: HierItem;
+}
+
+/** Incoming (callers) or outgoing (callees) for a call-hierarchy item. */
+export function lspCalls(
+  view: EditorView,
+  item: HierItem,
+  direction: "incoming" | "outgoing",
+): Promise<HierNode[] | null> | null {
+  const plugin = LSPPlugin.get(view);
+  if (!plugin) return null;
+  const method =
+    direction === "incoming" ? "callHierarchy/incomingCalls" : "callHierarchy/outgoingCalls";
+  return plugin.client
+    .request<unknown, CallEdge[] | null>(method, { item })
+    .then((res) =>
+      res ? res.map((e) => toHierNode((direction === "incoming" ? e.from : e.to) as HierItem)) : null,
+    )
+    .catch(() => null);
+}
+
+/** Supertypes (bases) or subtypes (implementers) for a type-hierarchy item. */
+export function lspTypes(
+  view: EditorView,
+  item: HierItem,
+  direction: "super" | "sub",
+): Promise<HierNode[] | null> | null {
+  const plugin = LSPPlugin.get(view);
+  if (!plugin) return null;
+  const method = direction === "super" ? "typeHierarchy/supertypes" : "typeHierarchy/subtypes";
+  return plugin.client
+    .request<unknown, HierItem[] | null>(method, { item })
+    .then((res) => (res ? res.map(toHierNode) : null))
+    .catch(() => null);
+}
+
 interface Conn {
   client: LSPClient;
   unlisten: Promise<UnlistenFn>;

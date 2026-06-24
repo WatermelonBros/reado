@@ -90,6 +90,18 @@
     "import": "Importa impostazioni (incolla bundle)",
     "importTitle": "Incolla un bundle di impostazioni"
   },
+  "hier": {
+    "panel": "Gerarchia",
+    "showCall": "Mostra gerarchia chiamate",
+    "showType": "Mostra gerarchia tipi",
+    "incoming": "Chiamanti",
+    "outgoing": "Chiamati",
+    "sub": "Sottotipi",
+    "super": "Supertipi",
+    "empty": "Esegui “Mostra gerarchia chiamate” su un simbolo.",
+    "none": "Niente in questa direzione.",
+    "unsupported": "Nessun language server, o non supporta le gerarchie qui."
+  },
   "nav": {
     "back": "Indietro (⌥←)",
     "forward": "Avanti (⌥→)"

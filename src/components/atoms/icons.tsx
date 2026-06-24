@@ -237,6 +237,15 @@ export const MinusIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const HierarchyIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <rect x="9" y="3" width="6" height="4" rx="1" />
+    <rect x="3" y="17" width="6" height="4" rx="1" />
+    <rect x="15" y="17" width="6" height="4" rx="1" />
+    <path d="M12 7v4M6 17v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2" />
+  </svg>
+);
+
 export const BookmarkIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v17l-6-4-6 4V4Z" />

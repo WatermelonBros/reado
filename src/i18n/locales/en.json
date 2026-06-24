@@ -90,6 +90,18 @@
     "import": "Import settings (paste bundle)",
     "importTitle": "Paste a settings bundle"
   },
+  "hier": {
+    "panel": "Hierarchy",
+    "showCall": "Show Call Hierarchy",
+    "showType": "Show Type Hierarchy",
+    "incoming": "Callers",
+    "outgoing": "Callees",
+    "sub": "Subtypes",
+    "super": "Supertypes",
+    "empty": "Run “Show Call Hierarchy” on a symbol.",
+    "none": "Nothing in this direction.",
+    "unsupported": "No language server, or it doesn’t support hierarchies here."
+  },
   "nav": {
     "back": "Go back (⌥←)",
     "forward": "Go forward (⌥→)"

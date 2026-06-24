@@ -118,6 +118,8 @@ pub fn init(app: &App) -> tauri::Result<()> {
         .text("go:typedef", "Go to Type Definition")
         .text("go:impl", "Go to Implementation")
         .text("go:references", "Find References")
+        .text("go:callHierarchy", "Show Call Hierarchy")
+        .text("go:typeHierarchy", "Show Type Hierarchy")
         .text("gotoLine", "Go to Line…")
         .text("go:bracket", "Go to Bracket")
         .text("go:lastEdit", "Go to Last Edit Location")

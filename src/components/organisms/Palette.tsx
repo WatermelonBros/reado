@@ -37,6 +37,8 @@ import {
   gotoLastEdit,
   addCursorsToLineEnds,
   toggleBookmarkAtCursor,
+  showCallHierarchy,
+  showTypeHierarchy,
   useDocInfo,
 } from "../../lib/docInfo";
 import { clearTerminal, restartTerminal } from "../../lib/agents";
@@ -401,6 +403,20 @@ function commandRows(
     { label: t("peek.def"), run: requestPeek },
     { label: t("editor.goToBracket"), run: goToBracket },
     { label: t("editor.lastEdit"), run: gotoLastEdit },
+    {
+      label: t("hier.showCall"),
+      run: () => {
+        showCallHierarchy();
+        close();
+      },
+    },
+    {
+      label: t("hier.showType"),
+      run: () => {
+        showTypeHierarchy();
+        close();
+      },
+    },
     { label: t("editor.cursorsLineEnds"), run: addCursorsToLineEnds },
     {
       label: t("bookmarks.toggle"),

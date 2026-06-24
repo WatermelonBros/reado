@@ -32,6 +32,8 @@ import {
   shrinkSelectionCmd,
   goToBracket,
   gotoLastEdit,
+  showCallHierarchy,
+  showTypeHierarchy,
   copyLineUpCmd,
   copyLineDownCmd,
   moveLineUpCmd,
@@ -222,6 +224,12 @@ export function runMenuCommand(id: string): void {
         break;
       case "go:references":
         findReferencesAtCursor();
+        break;
+      case "go:callHierarchy":
+        showCallHierarchy();
+        break;
+      case "go:typeHierarchy":
+        showTypeHierarchy();
         break;
       case "go:bracket":
         goToBracket();
