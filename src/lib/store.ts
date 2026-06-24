@@ -178,6 +178,7 @@ export type Tool =
   | "git"
   | "orphans"
   | "specs"
+  | "problems"
   | "extensions";
 
 interface WorkspaceState {

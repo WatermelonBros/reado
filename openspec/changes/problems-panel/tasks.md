@@ -1,30 +1,43 @@
 ## 1. Diagnostics store
 
-- [ ] 1.1 Extend `src/lib/diagnostics.ts` to store full diagnostics per file: an `entry` shape `{ message, severity, line, col, endLine?, endCol? }`, keyed by absolute path, alongside (or deriving) the existing error count.
-- [ ] 1.2 Add a `setFile(path, entries)` action that replaces the whole-file list on each publish and clears the key when the list is empty; keep `setErrors`/the tree badge working (derive the error count from the entries).
-- [ ] 1.3 Add a selector/helper for aggregate counts by severity across the project.
+- [x] 1.1 Extend `src/lib/diagnostics.ts` to store full diagnostics per file
+      (`DiagItem { line, character, severity, message }`) keyed by absolute path,
+      alongside the existing error count.
+- [x] 1.2 `setFileDiagnostics(path, items)` replaces the whole-file list on each
+      publish and clears the key when empty; the tree badge (`errors`) is derived
+      from the entries.
+- [x] 1.3 Aggregate counts by severity are computed in the panel + activity bar
+      from `byFile`.
 
 ## 2. LSP wiring
 
-- [ ] 2.1 Widen `tapDiagnostics` in `src/lib/lsp.ts` to map every published diagnostic (all severities) to the store entry shape and call `setFile`, instead of only counting severity-1 errors.
-- [ ] 2.2 Confirm `reset()` is still called on workspace/project teardown so stale problems don't linger.
+- [x] 2.1 `tapDiagnostics` in `src/lib/lsp.ts` maps every published diagnostic
+      (all severities, with range start + message) and calls `setFileDiagnostics`.
+- [x] 2.2 `reset()` still clears diagnostics on teardown.
 
 ## 3. Side-panel tool
 
-- [ ] 3.1 Add `"problems"` to the `Tool` union in `src/lib/store.ts`.
-- [ ] 3.2 Add the activity-bar entry (icon + i18n label) and route it to `ProblemsPanel` wherever the other tools (outline/comments/git) are wired.
+- [x] 3.1 Added `"problems"` to the `Tool` union in `src/lib/store.ts`.
+- [x] 3.2 Activity-bar entry (ProblemsIcon + i18n label), shown when there are
+      diagnostics, routed to `ProblemsPanel` in `ProjectView`; badge = count.
 
 ## 4. Problems panel
 
-- [ ] 4.1 Create `src/components/organisms/ProblemsPanel.tsx`: subscribe to the diagnostics store, group entries by file, render collapsible per-file groups with per-file counts.
-- [ ] 4.2 Each row: severity icon (using `--diag-error`/`--diag-warn`/`--diag-info` tokens), message, and `line:col`; clicking calls `useProject.open(path, line)` to jump.
-- [ ] 4.3 Header: severity filter toggles (errors/warnings/info) with live aggregate counts; filtering hides non-matching rows and empties groups accordingly.
-- [ ] 4.4 Calm empty state ("No problems") when there are no diagnostics (or none match the active filters); keep the panel keyboard-navigable and WCAG AA.
+- [x] 4.1 `src/components/organisms/ProblemsPanel.tsx` subscribes to the store and
+      groups diagnostics by file, sorted, with per-file headers.
+- [x] 4.2 Each row: severity dot (`--diag-error/warn/info`), message, and line;
+      clicking calls `open(path, line)` to jump.
+- [x] 4.3 Header severity filter chips (errors/warnings/info) with live counts;
+      filtering hides non-matching rows and empties groups.
+- [x] 4.4 Calm empty state; rows are buttons (keyboard-navigable).
 
 ## 5. i18n
 
-- [ ] 5.1 Add EN + IT strings (title, filter labels, count phrasing, empty state) to `src/i18n/locales/en.json` and `it.json`.
+- [x] 5.1 EN + IT strings (`problems.*`) added.
 
 ## 6. Verify
 
-- [ ] 6.1 typecheck + cargo check + build green.
+- [x] 6.1 typecheck + build green (cargo unaffected).
+
+> Scope note: diagnostics reflect what the language servers publish — workspace-
+> wide for servers like rust-analyzer, open-file-only for others. Honest by design.

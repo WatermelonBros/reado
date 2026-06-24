@@ -71,6 +71,13 @@
     "empty": "Nessun simbolo in questo file.",
     "noFile": "Apri un file per vederne la struttura."
   },
+  "problems": {
+    "panel": "Problemi",
+    "empty": "Nessun problema rilevato.",
+    "error": "errori",
+    "warn": "avvisi",
+    "info": "info"
+  },
   "nav": {
     "back": "Indietro (⌥←)",
     "forward": "Avanti (⌥→)"

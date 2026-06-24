@@ -150,15 +150,30 @@ const fromUri = (uri: string) => decodeURIComponent(uri.replace(/^file:\/\//, ""
  * (red filenames in the tree). The CodeMirror client still renders them; this
  * just mirrors the error count into a store. */
 function tapDiagnostics(payload: string) {
-  let msg: { method?: string; params?: { uri: string; diagnostics: { severity?: number }[] } };
+  let msg: {
+    method?: string;
+    params?: {
+      uri: string;
+      diagnostics: {
+        severity?: number;
+        message?: string;
+        range?: { start?: { line?: number; character?: number } };
+      }[];
+    };
+  };
   try {
     msg = JSON.parse(payload);
   } catch {
     return;
   }
   if (msg.method !== "textDocument/publishDiagnostics" || !msg.params) return;
-  const errors = msg.params.diagnostics.filter((d) => (d.severity ?? 1) === 1).length;
-  useDiagnostics.getState().setErrors(fromUri(msg.params.uri), errors);
+  const items = msg.params.diagnostics.map((d) => ({
+    line: (d.range?.start?.line ?? 0) + 1,
+    character: d.range?.start?.character ?? 0,
+    severity: d.severity ?? 1,
+    message: d.message ?? "",
+  }));
+  useDiagnostics.getState().setFileDiagnostics(fromUri(msg.params.uri), items);
 }
 
 // ---- Diagnostics + sync (replacing the library's bundled `serverDiagnostics`,

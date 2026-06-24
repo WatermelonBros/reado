@@ -71,6 +71,13 @@
     "empty": "No symbols in this file.",
     "noFile": "Open a file to see its outline."
   },
+  "problems": {
+    "panel": "Problems",
+    "empty": "No problems detected.",
+    "error": "errors",
+    "warn": "warnings",
+    "info": "info"
+  },
   "nav": {
     "back": "Go back (⌥←)",
     "forward": "Go forward (⌥→)"

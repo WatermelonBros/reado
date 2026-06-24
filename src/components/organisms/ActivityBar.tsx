@@ -9,6 +9,7 @@
 import { useWorkspace, usePalette, useProject, type Tool } from "../../lib/store";
 import { useComments, openCount } from "../../lib/comments";
 import { useSpecs } from "../../lib/specs";
+import { useDiagnostics } from "../../lib/diagnostics";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
 import {
@@ -23,6 +24,7 @@ import {
   SpecsIcon,
   OutlineIcon,
   ExtensionsIcon,
+  ProblemsIcon,
 } from "../atoms/icons";
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
@@ -45,6 +47,9 @@ export function ActivityBar() {
   const openComments = useComments((s) => openCount(s.comments));
   const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length);
   const hasSpecs = useSpecs((s) => s.groups.length > 0);
+  const problemCount = useDiagnostics((s) =>
+    Object.values(s.byFile).reduce((n, items) => n + items.length, 0),
+  );
   const { t } = useTranslation();
 
   // Source Control appears in git repos; Orphans only when there's something to
@@ -60,9 +65,18 @@ export function ActivityBar() {
     ...(orphanCount > 0
       ? [{ id: "orphans" as Tool, labelKey: "orphans.panel" as MessageKey, Icon: UnlinkIcon }]
       : []),
+    ...(problemCount > 0
+      ? [{ id: "problems" as Tool, labelKey: "problems.panel" as MessageKey, Icon: ProblemsIcon }]
+      : []),
   ];
   const badgeFor = (id: Tool) =>
-    id === "comments" ? openComments : id === "orphans" ? orphanCount : 0;
+    id === "comments"
+      ? openComments
+      : id === "orphans"
+        ? orphanCount
+        : id === "problems"
+          ? problemCount
+          : 0;
 
   // One shared accent bar that slides to the active tool (button pitch = 44px:
   // h-10 (40px) + gap-1 (4px)).

@@ -29,6 +29,7 @@ import { OrphansPanel } from "../organisms/OrphansPanel";
 import { SpecsPanel } from "../organisms/SpecsPanel";
 import { ExtensionsPanel } from "../organisms/ExtensionsPanel";
 import { OutlinePanel } from "../organisms/OutlinePanel";
+import { ProblemsPanel } from "../organisms/ProblemsPanel";
 import { useSpecs } from "../../lib/specs";
 import { Tabs } from "../organisms/Tabs";
 import { Breadcrumb } from "../molecules/Breadcrumb";
@@ -251,6 +252,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "git" && <GitPanel />}
             {tool === "specs" && <SpecsPanel />}
             {tool === "orphans" && <OrphansPanel />}
+            {tool === "problems" && <ProblemsPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>
