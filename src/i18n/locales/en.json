@@ -85,6 +85,11 @@
     "toggle": "Toggle bookmark",
     "goto": "Go to bookmark…"
   },
+  "sync": {
+    "export": "Export settings (copy to clipboard)",
+    "import": "Import settings (paste bundle)",
+    "importTitle": "Paste a settings bundle"
+  },
   "nav": {
     "back": "Go back (⌥←)",
     "forward": "Go forward (⌥→)"

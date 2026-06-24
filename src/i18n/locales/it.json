@@ -85,6 +85,11 @@
     "toggle": "Attiva/disattiva segnalibro",
     "goto": "Vai al segnalibro…"
   },
+  "sync": {
+    "export": "Esporta impostazioni (copia negli appunti)",
+    "import": "Importa impostazioni (incolla bundle)",
+    "importTitle": "Incolla un bundle di impostazioni"
+  },
   "nav": {
     "back": "Indietro (⌥←)",
     "forward": "Avanti (⌥→)"

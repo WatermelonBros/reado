@@ -44,6 +44,7 @@ import { extractSymbols, type OutlineSymbol } from "../../lib/outline";
 import { lspDocumentSymbols } from "../../lib/lsp";
 import { useReadProgress } from "../../lib/readProgress";
 import { useBookmarks } from "../../lib/bookmarks";
+import { exportSettings, importSettings } from "../../lib/settingsSync";
 import { toRelative } from "../../lib/comments";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
@@ -409,6 +410,20 @@ function commandRows(
       },
     },
     { label: t("bookmarks.goto"), run: () => usePalette.getState().open("bookmarks") },
+    {
+      label: t("sync.export"),
+      run: () => {
+        void exportSettings();
+        close();
+      },
+    },
+    {
+      label: t("sync.import"),
+      run: () => {
+        void importSettings();
+        close();
+      },
+    },
     { label: t("editor.format"), hint: "⇧⌥F", run: () => void formatDocument() },
     { label: t("terminal.clear"), run: clearTerminal },
     { label: t("terminal.restart"), run: restartTerminal },
