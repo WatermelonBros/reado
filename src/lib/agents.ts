@@ -31,6 +31,14 @@ export function runInTerminal(text: string): void {
   submitToTerminal(id, text, id === term.activeId ? 0 : 400);
 }
 
+/** Neutralize free-text the user types into an AI prompt before it's sent to the
+ *  terminal. Reado's model is that an agent reads the prompt, but if a bare shell
+ *  is focused instead, backticks / `$` / backslashes would trigger command
+ *  substitution even inside quotes — strip them (and collapse newlines, cap length)
+ *  so user input can never become a shell command. */
+export const sanitizePromptText = (s: string): string =>
+  s.replace(/[`$\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 500);
+
 /** Clear the active terminal (Ctrl+L; the shell redraws its prompt). */
 // ponytail: Ctrl+L clears the visible screen, not xterm's scrollback. Wire a
 // per-pane xterm.clear() if a full wipe is ever needed.
