@@ -98,6 +98,14 @@
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file."
   },
+  "prereview": {
+    "panel": "Revisione AI",
+    "run": "Pre-revisione AI delle modifiche",
+    "generating": "Revisione…",
+    "empty": "Nessun suggerimento. Avvia la pre-revisione AI sulle modifiche correnti.",
+    "approve": "Approva",
+    "discard": "Scarta"
+  },
   "tours": {
     "panel": "Tour",
     "open": "Tour di lettura",

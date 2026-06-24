@@ -15,6 +15,7 @@ import { useHierarchy } from "../../lib/hierarchy";
 import { useActivity } from "../../lib/activity";
 import { useQa } from "../../lib/qa";
 import { useTours } from "../../lib/tours";
+import { usePreReview } from "../../lib/preReview";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
 import {
@@ -66,6 +67,7 @@ export function ActivityBar() {
   const activityCount = useActivity((s) => s.entries.length);
   const qaCount = useQa((s) => s.notes.length);
   const tourCount = useTours((s) => s.tours.length);
+  const preReviewCount = usePreReview((s) => s.drafts.length);
   const { t } = useTranslation();
 
   // Source Control appears in git repos; Orphans only when there's something to
@@ -102,6 +104,9 @@ export function ActivityBar() {
     ...(tourCount > 0
       ? [{ id: "tours" as Tool, labelKey: "tours.panel" as MessageKey, Icon: TourIcon }]
       : []),
+    ...(preReviewCount > 0
+      ? [{ id: "prereview" as Tool, labelKey: "prereview.panel" as MessageKey, Icon: SparkleIcon }]
+      : []),
   ];
   const badgeFor = (id: Tool) =>
     id === "comments"
@@ -110,7 +115,9 @@ export function ActivityBar() {
         ? orphanCount
         : id === "problems"
           ? problemCount
-          : 0;
+          : id === "prereview"
+            ? preReviewCount
+            : 0;
 
   // One shared accent bar that slides to the active tool (button pitch = 44px:
   // h-10 (40px) + gap-1 (4px)).

@@ -49,6 +49,7 @@ import { useReadProgress } from "../../lib/readProgress";
 import { useBookmarks } from "../../lib/bookmarks";
 import { exportSettings, importSettings } from "../../lib/settingsSync";
 import { useOnboarding } from "../../lib/onboarding";
+import { usePreReview } from "../../lib/preReview";
 import { toRelative } from "../../lib/comments";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
@@ -423,6 +424,14 @@ function commandRows(
       label: t("tours.open"),
       run: () => {
         useWorkspace.getState().selectTool("tours");
+        close();
+      },
+    },
+    {
+      label: t("prereview.run"),
+      run: () => {
+        usePreReview.getState().generate(project.root);
+        useWorkspace.getState().selectTool("prereview");
         close();
       },
     },

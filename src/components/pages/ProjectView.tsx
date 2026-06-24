@@ -36,8 +36,10 @@ import { TimelinePanel } from "../organisms/TimelinePanel";
 import { ActivityPanel } from "../organisms/ActivityPanel";
 import { QaPanel } from "../organisms/QaPanel";
 import { ToursPanel, TourBar } from "../organisms/ToursPanel";
+import { PreReviewPanel } from "../organisms/PreReviewPanel";
 import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
+import { usePreReview } from "../../lib/preReview";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useActivity } from "../../lib/activity";
 import { useQa } from "../../lib/qa";
@@ -94,6 +96,7 @@ export function ProjectView({ root }: { root: string }) {
     useBookmarks.getState().load(root);
     useQa.getState().load(root);
     useTours.getState().load(root);
+    usePreReview.getState().load(root);
     listFiles(root)
       .then((f) => setTotalFiles(f.length))
       .catch(() => setTotalFiles(0));
@@ -280,6 +283,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "activity" && <ActivityPanel />}
             {tool === "qa" && <QaPanel />}
             {tool === "tours" && <ToursPanel />}
+            {tool === "prereview" && <PreReviewPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>

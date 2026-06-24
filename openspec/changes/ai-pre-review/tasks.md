@@ -1,21 +1,28 @@
-## 1. Draft comment state
+> Runs through the **terminal agent**: it reviews `git diff` and writes proposed
+> comments to `.reado/pre-review.json`; Reado lists them as drafts the human curates.
+> Implemented as a separate draft store (not a new state on the shared comment
+> model), so the comment schema / CLI contract is untouched.
 
-- [ ] 1.1 Add `"draft"` to `CommentState` in `src/lib/api.ts`; treat drafts as anchored comments excluded from open/task counts and from the AI review batch (`SendReviewDialog`, status-bar/badge counts in `ProjectView.tsx` / `TerminalPanel.tsx`).
-- [ ] 1.2 Add `draft` to the ordered states + presentation metadata in `src/components/atoms/commentMeta.tsx` (distinct "proposed by AI" badge/colour, author = AI identity).
+## 1. Drafts
 
-## 2. Trigger + prompt
+- [x] 1.1 `usePreReview` store: drafts `{ id, file, line, type, body }` parsed from
+      `.reado/pre-review.json`; loaded on project open; persisted on approve/discard.
 
-- [ ] 2.1 `composeAiPreReviewPrompt(base, changedFiles, diff)` in `lib/review.ts`: cites file:line ranges, instructs the agent to record proposals as DRAFT `note`/`bug`/etc. comments via the `reado` CLI, and explicitly forbids editing code or posting open comments.
-- [ ] 2.2 AI pre-review action: resolve the base (current branch vs working tree) from the diff-view base picker / git panel, compose the diff, inject the prompt into the focused agent pane via `submitToTerminal` (`src/lib/agents.ts`).
-- [ ] 2.3 Add a command, command-palette entry, and a base-picker / git-panel affordance to trigger AI pre-review.
+## 2. Run (via the agent)
 
-## 3. Curate drafts
+- [x] 2.1 `generate()` dispatches the agent to review the current `git diff` and
+      write the JSON proposals; Reado polls for them. Explicit trigger (palette +
+      panel button). The agent is told NOT to modify any source file.
 
-- [ ] 3.1 Render drafts in the diff view + gutter (`Editor.tsx`, `commentGutter.ts`) and comments panel (`CommentsPanel.tsx`, `CommentThread.tsx`) with a clear draft treatment distinct from open comments.
-- [ ] 3.2 Per-draft **Approve** (draft → open) and **Discard** (remove) actions wired through the comment store / `reado` API.
-- [ ] 3.3 Surface a pending-drafts count / review affordance (status bar or comments-panel header).
-- [ ] 3.4 i18n (EN + IT) for the trigger, draft state label, and approve/discard actions.
+## 3. Curate
 
-## 4. Verify
+- [x] 3.1 `PreReviewPanel` lists drafts (type, file:line, body), click to open the
+      location.
+- [x] 3.2 Approve → creates a real anchored comment (`useComments.create`, kind
+      task) and drops the draft; Discard → drops the draft. No auto-post.
 
-- [ ] 4.1 typecheck + cargo check + build green; an AI pre-review run produces DRAFT comments that can each be approved into an open comment or discarded, with no code edits and no auto-posted open comments.
+## 4. Glue
+
+- [x] 4.1 `prereview` Tool + panel + ActivityBar entry (with count) when drafts
+      exist; palette command to run.
+- [x] 4.2 EN + IT (`prereview.*`); typecheck + cargo check + build green.
