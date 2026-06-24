@@ -49,7 +49,7 @@ export function MenuBar() {
             {menu.label}
           </button>
           {open === i && (
-            <div className="absolute top-full left-0 z-50 min-w-[224px] rounded-md border border-line bg-overlay py-1 shadow-lg">
+            <div className="absolute top-full left-0 z-50 min-w-[224px] rounded-md border border-line bg-overlay py-1 shadow-[var(--shadow)]">
               {menu.items.map((it, j) =>
                 "sep" in it ? (
                   <div key={j} className="my-1 h-px bg-line" />
