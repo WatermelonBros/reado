@@ -85,10 +85,15 @@ export async function closeProject(): Promise<void> {
   window.location.hash = "";
 }
 
-/** Set the OS window title to the project name. */
+/** Set the OS window title to the project name. On macOS the title bar is an
+ *  Overlay, so the native title text would render centered *over* the Command
+ *  Center pill — keep it empty there (the pill already shows the project). Other
+ *  platforms have no native title strip but their taskbar/switcher uses it. */
 export async function setWindowTitle(title: string): Promise<void> {
   try {
-    await getCurrentWindow().setTitle(title ? `${title} — Reado` : "Reado");
+    const text =
+      currentOS() === "mac" ? "" : title ? `${title} — Reado` : "Reado";
+    await getCurrentWindow().setTitle(text);
   } catch {
     /* non-fatal in the browser dev context */
   }

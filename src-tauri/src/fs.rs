@@ -69,6 +69,32 @@ pub fn list_dir(root: String, dir: String, show_hidden: bool) -> Result<Vec<DirE
         })
         .collect();
 
+    // Always surface `.env*` files even when hidden/ignored are filtered out:
+    // they're never committed, but the reader still needs to see and open them.
+    // (Overrides in the `ignore` crate don't bypass its `hidden` dotfile filter,
+    // so merge them in directly.)
+    if !show_hidden {
+        let have: std::collections::HashSet<String> =
+            entries.iter().map(|e| e.path.clone()).collect();
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if !name.starts_with(".env") {
+                    continue;
+                }
+                let path = e.path();
+                let p = path.to_string_lossy().into_owned();
+                if !have.contains(&p) {
+                    entries.push(DirEntry {
+                        name,
+                        is_dir: path.is_dir(),
+                        path: p,
+                    });
+                }
+            }
+        }
+    }
+
     entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
         (true, false) => std::cmp::Ordering::Less,
         (false, true) => std::cmp::Ordering::Greater,
