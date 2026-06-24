@@ -23,7 +23,6 @@ export function RecentProjects() {
 
   return (
     <div
-      data-tauri-drag-region
       className="grid h-full place-items-center overflow-y-auto bg-[radial-gradient(120%_80%_at_50%_0%,var(--bg-elevated),var(--bg)_60%)] p-8"
     >
       <div className="flex w-[min(560px,100%)] flex-col gap-8">
