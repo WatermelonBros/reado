@@ -179,6 +179,7 @@ export type Tool =
   | "orphans"
   | "specs"
   | "problems"
+  | "bookmarks"
   | "extensions";
 
 interface WorkspaceState {
@@ -242,6 +243,7 @@ export type PaletteMode =
   | "symbols"
   | "wsymbols"
   | "recents"
+  | "bookmarks"
   | null;
 
 interface PaletteState {

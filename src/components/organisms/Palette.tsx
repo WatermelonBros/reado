@@ -36,12 +36,14 @@ import {
   goToBracket,
   gotoLastEdit,
   addCursorsToLineEnds,
+  toggleBookmarkAtCursor,
   useDocInfo,
 } from "../../lib/docInfo";
 import { clearTerminal, restartTerminal } from "../../lib/agents";
 import { extractSymbols, type OutlineSymbol } from "../../lib/outline";
 import { lspDocumentSymbols } from "../../lib/lsp";
 import { useReadProgress } from "../../lib/readProgress";
+import { useBookmarks } from "../../lib/bookmarks";
 import { toRelative } from "../../lib/comments";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
@@ -236,6 +238,20 @@ export function Palette() {
         },
       }));
     }
+    if (mode === "bookmarks") {
+      const marks = useBookmarks.getState().bookmarks;
+      const filtered = query
+        ? fuzzysort.go(query, marks, { limit: 200, key: (b) => `${b.path} ${b.snippet}` }).map((r) => r.obj)
+        : marks;
+      return filtered.map((b) => ({
+        label: b.snippet || `${b.path}:${b.line}`,
+        detail: `${b.path}:${b.line}`,
+        run: () => {
+          useProject.getState().open(`${project.root}/${b.path}`, b.line);
+          close();
+        },
+      }));
+    }
     return [];
   }, [mode, query, files, matches, wsymbols, fsymbols, project, settings, t, open, toggleSettings, close]);
 
@@ -255,7 +271,9 @@ export function Palette() {
           ? "symbols.placeholder"
           : mode === "recents"
             ? "recents.title"
-            : "search.placeholder";
+            : mode === "bookmarks"
+              ? "bookmarks.panel"
+              : "search.placeholder";
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -383,6 +401,14 @@ function commandRows(
     { label: t("editor.goToBracket"), run: goToBracket },
     { label: t("editor.lastEdit"), run: gotoLastEdit },
     { label: t("editor.cursorsLineEnds"), run: addCursorsToLineEnds },
+    {
+      label: t("bookmarks.toggle"),
+      run: () => {
+        toggleBookmarkAtCursor();
+        close();
+      },
+    },
+    { label: t("bookmarks.goto"), run: () => usePalette.getState().open("bookmarks") },
     { label: t("editor.format"), hint: "⇧⌥F", run: () => void formatDocument() },
     { label: t("terminal.clear"), run: clearTerminal },
     { label: t("terminal.restart"), run: restartTerminal },

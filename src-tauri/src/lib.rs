@@ -6,6 +6,7 @@
 //! in the frontend via `tauri-plugin-store`.
 
 mod annotations;
+mod bookmarks;
 mod cli;
 mod error;
 mod format;
@@ -110,6 +111,8 @@ pub fn run() {
             index::rebuild_index,
             progress::list_read,
             progress::set_read,
+            bookmarks::get_bookmarks,
+            bookmarks::set_bookmarks,
             watcher::start_watching,
             pty::pty_spawn,
             pty::pty_default_shell,

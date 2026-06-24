@@ -78,6 +78,13 @@
     "warn": "avvisi",
     "info": "info"
   },
+  "bookmarks": {
+    "panel": "Segnalibri",
+    "empty": "Nessun segnalibro. Clicca la barra laterale o usa “Attiva segnalibro”.",
+    "remove": "Rimuovi segnalibro",
+    "toggle": "Attiva/disattiva segnalibro",
+    "goto": "Vai al segnalibro…"
+  },
   "nav": {
     "back": "Indietro (⌥←)",
     "forward": "Avanti (⌥→)"

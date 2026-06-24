@@ -31,6 +31,7 @@ import { toRelative } from "./comments";
 import { noteSelfWrite } from "./readProgress";
 import { lspLocate } from "./lsp";
 import { expandSelection, shrinkSelection } from "./syntaxSelection";
+import { useBookmarks } from "./bookmarks";
 import { prompt } from "./prompt";
 import { t } from "../i18n";
 
@@ -211,6 +212,17 @@ export const goToBracket = () => runOnView(cursorMatchingBracket);
 /** Expand / shrink the selection along the syntax tree. */
 export const expandSelectionCmd = () => runOnView(expandSelection);
 export const shrinkSelectionCmd = () => runOnView(shrinkSelection);
+
+/** Toggle a reading bookmark on the cursor's line. */
+export const toggleBookmarkAtCursor = () =>
+  runOnView((view) => {
+    const { root, active } = useProject.getState();
+    if (!active) return false;
+    const line = view.state.doc.lineAt(view.state.selection.main.head).number;
+    const snippet = view.state.doc.line(line).text.trim().slice(0, 120);
+    useBookmarks.getState().toggle(root, { path: toRelative(root, active), line, snippet });
+    return true;
+  });
 
 /** Replace each multi-line selection with a cursor at the end of every spanned
  *  line (VS Code's "Add Cursors to Line Ends"). */

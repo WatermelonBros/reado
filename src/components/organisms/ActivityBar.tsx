@@ -10,6 +10,7 @@ import { useWorkspace, usePalette, useProject, type Tool } from "../../lib/store
 import { useComments, openCount } from "../../lib/comments";
 import { useSpecs } from "../../lib/specs";
 import { useDiagnostics } from "../../lib/diagnostics";
+import { useBookmarks } from "../../lib/bookmarks";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
 import {
@@ -25,6 +26,7 @@ import {
   OutlineIcon,
   ExtensionsIcon,
   ProblemsIcon,
+  BookmarkIcon,
 } from "../atoms/icons";
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
@@ -50,6 +52,7 @@ export function ActivityBar() {
   const problemCount = useDiagnostics((s) =>
     Object.values(s.byFile).reduce((n, items) => n + items.length, 0),
   );
+  const bookmarkCount = useBookmarks((s) => s.bookmarks.length);
   const { t } = useTranslation();
 
   // Source Control appears in git repos; Orphans only when there's something to
@@ -67,6 +70,9 @@ export function ActivityBar() {
       : []),
     ...(problemCount > 0
       ? [{ id: "problems" as Tool, labelKey: "problems.panel" as MessageKey, Icon: ProblemsIcon }]
+      : []),
+    ...(bookmarkCount > 0
+      ? [{ id: "bookmarks" as Tool, labelKey: "bookmarks.panel" as MessageKey, Icon: BookmarkIcon }]
       : []),
   ];
   const badgeFor = (id: Tool) =>

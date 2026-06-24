@@ -30,7 +30,9 @@ import { SpecsPanel } from "../organisms/SpecsPanel";
 import { ExtensionsPanel } from "../organisms/ExtensionsPanel";
 import { OutlinePanel } from "../organisms/OutlinePanel";
 import { ProblemsPanel } from "../organisms/ProblemsPanel";
+import { BookmarksPanel } from "../organisms/BookmarksPanel";
 import { useSpecs } from "../../lib/specs";
+import { useBookmarks } from "../../lib/bookmarks";
 import { Tabs } from "../organisms/Tabs";
 import { Breadcrumb } from "../molecules/Breadcrumb";
 import { Editor } from "../organisms/Editor";
@@ -81,6 +83,7 @@ export function ProjectView({ root }: { root: string }) {
     useComments.getState().load(root);
     useSpecs.getState().load(root);
     useReadProgress.getState().load(root);
+    useBookmarks.getState().load(root);
     listFiles(root)
       .then((f) => setTotalFiles(f.length))
       .catch(() => setTotalFiles(0));
@@ -253,6 +256,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "specs" && <SpecsPanel />}
             {tool === "orphans" && <OrphansPanel />}
             {tool === "problems" && <ProblemsPanel />}
+            {tool === "bookmarks" && <BookmarksPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>

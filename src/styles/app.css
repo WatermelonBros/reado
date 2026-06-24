@@ -251,6 +251,25 @@
     opacity: 0.7;
   }
 
+  /* Reading bookmarks: a quiet accent pin, distinct from the comment dot. The
+     whole gutter column is clickable to toggle, so give it a hover affordance. */
+  .reado-bookmark-gutter {
+    width: 10px;
+    cursor: pointer;
+  }
+  .reado-bookmark-marker {
+    display: inline-block;
+    width: 100%;
+    color: var(--accent);
+    text-align: center;
+    line-height: var(--code-line-height);
+  }
+  .reado-bookmark-gutter:hover .cm-gutterElement:not(:has(.reado-bookmark-marker))::before {
+    content: "▍";
+    color: var(--text-faint);
+    opacity: 0.4;
+  }
+
   /* The anchored block, highlighted while its comment thread is open. */
   .cm-comment-block {
     background: color-mix(in oklch, var(--marker) 7%, transparent);

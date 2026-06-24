@@ -1,28 +1,37 @@
 ## 1. Storage
 
-- [ ] 1.1 New `src-tauri/src/bookmarks.rs`: persist bookmarks per project as JSON under `.reado/bookmarks.json` (gitignored), each entry `{ path, line, end_line?, snippet }`; Rust commands `get_bookmarks` and `set_bookmarks(bookmarks)`.
-- [ ] 1.2 Register the new commands in the Tauri handler and ensure `.reado/bookmarks.json` is excluded from the file watcher / tree (it already lives under the ignored `.reado/`).
+- [x] 1.1 `src-tauri/src/bookmarks.rs`: persists bookmarks per project as JSON
+      under `.reado/bookmarks.json`, each `{ path, line, endLine?, snippet }`;
+      commands `get_bookmarks` and `set_bookmarks(bookmarks)` (with a round-trip test).
+- [x] 1.2 Commands registered in the Tauri handler; `.reado/` is already ignored.
 
 ## 2. State
 
-- [ ] 2.1 New `src/lib/bookmarks.ts`: store loading the project's bookmarks on open; `addBookmark`, `removeBookmark`, `toggleBookmark(path, line, endLine?)`, and a selector for a file's bookmarked lines; persist via the Rust commands.
-- [ ] 2.2 Capture a one-line snippet for each bookmark at creation time for display in the list.
+- [x] 2.1 `src/lib/bookmarks.ts`: store loads on project open; `toggle`/`remove`
+      persist via the Rust commands; a file's bookmarked lines are derived in the
+      editor.
+- [x] 2.2 A one-line snippet is captured at creation (trimmed line text) for the list.
 
 ## 3. Editor + gutter
 
-- [ ] 3.1 New `src/lib/bookmarkGutter.ts` CodeMirror gutter (modeled on `src/lib/commentGutter.ts`) rendering a quiet pin marker on bookmarked lines, visually distinct from the comment marker (no badge, muted/accent dot).
-- [ ] 3.2 Toggle a bookmark at the active line or selected region from the editor: gutter click and a command, with a clear add/remove toggle.
+- [x] 3.1 `src/lib/bookmarkGutter.ts` renders a quiet accent pin on bookmarked
+      lines, visually distinct from the comment marker (own gutter column).
+- [x] 3.2 Toggle from the gutter (click any line) and via the "Toggle bookmark"
+      command (cursor line) in the palette.
 
 ## 4. List + jump
 
-- [ ] 4.1 Add `"bookmarks"` to `Tool` in `src/lib/store.ts` and a side panel listing this project's bookmarks (file, line, snippet) grouped by file, with a quiet empty state.
-- [ ] 4.2 Clicking a bookmark opens the file and scrolls/places the cursor at the bookmarked line; provide a per-item remove action.
-- [ ] 4.3 Command Center / command-palette mode to jump to a bookmark without opening the panel.
+- [x] 4.1 `"bookmarks"` added to `Tool`; `BookmarksPanel` lists this project's
+      bookmarks grouped by file (snippet + line), with a quiet empty state.
+- [x] 4.2 Clicking a bookmark opens the file at the line; per-item remove action.
+- [x] 4.3 Command-palette "bookmarks" mode to jump without opening the panel.
 
 ## 5. i18n
 
-- [ ] 5.1 Add EN + IT copy for the panel title, add/remove actions, palette mode, and empty state in `src/i18n/locales/en.json` and `it.json`.
+- [x] 5.1 EN + IT copy (`bookmarks.*`).
 
 ## 6. Verify
 
-- [ ] 6.1 typecheck + cargo check + build green; bookmarks survive a restart and never appear in the comments panel or get sent to an agent.
+- [x] 6.1 typecheck + cargo check + build green; bookmarks persist (Rust test) and
+      are never shown in the comments panel or sent to an agent (separate store,
+      separate gutter, no agent dispatch).

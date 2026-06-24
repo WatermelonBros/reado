@@ -78,6 +78,13 @@
     "warn": "warnings",
     "info": "info"
   },
+  "bookmarks": {
+    "panel": "Bookmarks",
+    "empty": "No bookmarks yet. Click the gutter or use “Toggle bookmark”.",
+    "remove": "Remove bookmark",
+    "toggle": "Toggle bookmark",
+    "goto": "Go to bookmark…"
+  },
   "nav": {
     "back": "Go back (⌥←)",
     "forward": "Go forward (⌥→)"

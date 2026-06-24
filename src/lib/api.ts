@@ -223,6 +223,24 @@ export const listRead = (root: string) => invoke<string[]>("list_read", { root }
 export const setReadState = (root: string, path: string, read: boolean) =>
   invoke<void>("set_read", { root, path, read });
 
+export interface Bookmark {
+  /** Project-relative, forward-slashed path. */
+  path: string;
+  /** 1-based line. */
+  line: number;
+  /** 1-based end line for a region. */
+  endLine?: number;
+  /** One-line snippet captured at creation, for the list. */
+  snippet: string;
+}
+
+/** This project's reading bookmarks (persisted in `.reado/bookmarks.json`). */
+export const getBookmarks = (root: string) => invoke<Bookmark[]>("get_bookmarks", { root });
+
+/** Replace the whole bookmark set. */
+export const setBookmarks = (root: string, bookmarks: Bookmark[]) =>
+  invoke<void>("set_bookmarks", { root, bookmarks });
+
 /** Format text with the project's formatter for this file type. Throws on failure. */
 export const formatFile = (root: string, path: string, content: string) =>
   invoke<string>("format_file", { root, path, content });

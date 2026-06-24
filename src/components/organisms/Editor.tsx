@@ -57,6 +57,8 @@ import {
 import { readoAppearance } from "../../lib/codemirror";
 import { commentGutter, type LineComments } from "../../lib/commentGutter";
 import { blameGutter } from "../../lib/blameGutter";
+import { bookmarkGutter } from "../../lib/bookmarkGutter";
+import { useBookmarks } from "../../lib/bookmarks";
 import { useDocInfo, detectEol, detectIndent, formatDocument, setLastEdit } from "../../lib/docInfo";
 import { useComments, commentsForFile, toRelative } from "../../lib/comments";
 import { useTextView } from "../../lib/textView";
@@ -491,6 +493,7 @@ function CodeView({
   const focusComp = useMemo(() => new Compartment(), []);
   const gutterComp = useMemo(() => new Compartment(), []);
   const blameComp = useMemo(() => new Compartment(), []);
+  const bookmarkComp = useMemo(() => new Compartment(), []);
   const tabSizeComp = useMemo(() => new Compartment(), []);
   const lspComp = useMemo(() => new Compartment(), []);
   const blame = useEditorActions((s) => s.blame);
@@ -556,6 +559,26 @@ function CodeView({
     }
     return map;
   }, [comments]);
+
+  // Reading bookmarks for this file → quiet gutter pins; clicking the gutter
+  // toggles a bookmark (distinct from comments — no annotation, never sent to AI).
+  const bookmarks = useBookmarks((s) => s.bookmarks);
+  const bookmarkLines = useMemo(() => {
+    const set = new Set<number>();
+    for (const b of bookmarks) if (b.path === relPath) set.add(b.line);
+    return set;
+  }, [bookmarks, relPath]);
+  const toggleBookmarkLine = useMemo(
+    () => (line: number) => {
+      const view = viewRef.current;
+      if (!view) return;
+      const snippet = view.state.doc.line(line).text.trim().slice(0, 120);
+      useBookmarks
+        .getState()
+        .toggle(useProject.getState().root, { path: relPath, line, snippet });
+    },
+    [relPath],
+  );
 
   // Open the thread for the topmost comment on a clicked gutter line.
   const openThreadAtLine = (_line: number, ids: string[]) => {
@@ -796,6 +819,7 @@ function CodeView({
         // Alt+F12 — peek the definition inline.
         keymap.of([{ key: "Alt-F12", run: () => peekDefinition() }]),
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
+        bookmarkComp.of(bookmarkGutter(bookmarkLines, toggleBookmarkLine)),
         blameComp.of([]),
         lspComp.of([]),
         tabSizeComp.of(EditorState.tabSize.of(useDocInfo.getState().indentSize)),
@@ -950,6 +974,13 @@ function CodeView({
     // openThreadAtLine is stable enough (only setters); rebuild on data change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineComments, gutterComp]);
+
+  // Rebuild the bookmark gutter when this file's bookmarks change.
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: bookmarkComp.reconfigure(bookmarkGutter(bookmarkLines, toggleBookmarkLine)),
+    });
+  }, [bookmarkLines, toggleBookmarkLine, bookmarkComp]);
 
   // Fetch and show the blame gutter when blame mode is on; clear it when off.
   useEffect(() => {

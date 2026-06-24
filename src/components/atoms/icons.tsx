@@ -237,6 +237,12 @@ export const MinusIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const BookmarkIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v17l-6-4-6 4V4Z" />
+  </svg>
+);
+
 export const ProblemsIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M10.3 3.2 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0Z" />
