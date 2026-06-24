@@ -90,6 +90,11 @@
     "import": "Importa impostazioni (incolla bundle)",
     "importTitle": "Incolla un bundle di impostazioni"
   },
+  "timeline": {
+    "panel": "Cronologia",
+    "noFile": "Apri un file per vederne la cronologia.",
+    "empty": "Nessuna cronologia per questo file."
+  },
   "hier": {
     "panel": "Gerarchia",
     "showCall": "Mostra gerarchia chiamate",

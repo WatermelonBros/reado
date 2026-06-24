@@ -173,6 +173,16 @@ export const gitRefs = (root: string) => invoke<GitRefs>("git_refs", { root });
 export const gitShowRef = (root: string, file: string, base: string) =>
   invoke<string | null>("git_show_ref", { root, file, base });
 
+export interface FileCommit {
+  hash: string;
+  author: string;
+  time: number;
+  subject: string;
+}
+/** Commits that touched a file (most recent first), for the Timeline panel. */
+export const gitFileHistory = (root: string, file: string) =>
+  invoke<FileCommit[]>("git_file_history", { root, file });
+
 export interface BlameLine {
   line: number;
   hash: string;

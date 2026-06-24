@@ -29,6 +29,7 @@ import {
   ProblemsIcon,
   BookmarkIcon,
   HierarchyIcon,
+  TimelineIcon,
 } from "../atoms/icons";
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
@@ -79,6 +80,9 @@ export function ActivityBar() {
       : []),
     ...(hasHierarchy
       ? [{ id: "hierarchy" as Tool, labelKey: "hier.panel" as MessageKey, Icon: HierarchyIcon }]
+      : []),
+    ...(isRepo
+      ? [{ id: "timeline" as Tool, labelKey: "timeline.panel" as MessageKey, Icon: TimelineIcon }]
       : []),
   ];
   const badgeFor = (id: Tool) =>

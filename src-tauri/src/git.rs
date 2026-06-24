@@ -556,6 +556,45 @@ pub fn git_refs(root: String) -> GitRefs {
     GitRefs { branches, commits }
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileCommit {
+    pub hash: String,
+    pub author: String,
+    /// Commit (author) time as a Unix timestamp (seconds).
+    pub time: i64,
+    pub subject: String,
+}
+
+/// The commits that touched a file (most recent first), following renames, for
+/// the Timeline panel. Empty when git is unavailable or the file is untracked.
+#[tauri::command]
+pub fn git_file_history(root: String, file: String) -> Vec<FileCommit> {
+    // Unit-separator-delimited fields, one commit per line.
+    let fmt = "--format=%H%x1f%an%x1f%at%x1f%s";
+    let Some(out) = run_git_raw(
+        Path::new(&root),
+        &["log", "--follow", fmt, "--", &file],
+    ) else {
+        return Vec::new();
+    };
+    out.lines()
+        .filter_map(|l| {
+            let mut it = l.split('\u{1f}');
+            let hash = it.next()?;
+            let author = it.next().unwrap_or("");
+            let time = it.next().and_then(|t| t.parse().ok()).unwrap_or(0);
+            let subject = it.next().unwrap_or("");
+            Some(FileCommit {
+                hash: hash.chars().take(8).collect(),
+                author: author.to_string(),
+                time,
+                subject: subject.to_string(),
+            })
+        })
+        .collect()
+}
+
 /// The contents of a tracked file at a given ref (a branch, commit, or `HEAD`),
 /// for the on-demand diff view. Returns `None` when the file is absent there or
 /// git is unavailable. Output is verbatim (no trimming) so the diff is exact.

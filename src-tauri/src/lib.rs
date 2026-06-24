@@ -72,6 +72,7 @@ pub fn run() {
             git::git_status,
             git::git_refs,
             git::git_show_ref,
+            git::git_file_history,
             git::git_stage,
             git::git_unstage,
             git::git_stage_all,

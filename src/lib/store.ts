@@ -181,6 +181,7 @@ export type Tool =
   | "problems"
   | "bookmarks"
   | "hierarchy"
+  | "timeline"
   | "extensions";
 
 interface WorkspaceState {

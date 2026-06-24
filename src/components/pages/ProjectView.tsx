@@ -32,6 +32,7 @@ import { OutlinePanel } from "../organisms/OutlinePanel";
 import { ProblemsPanel } from "../organisms/ProblemsPanel";
 import { BookmarksPanel } from "../organisms/BookmarksPanel";
 import { HierarchyPanel } from "../organisms/HierarchyPanel";
+import { TimelinePanel } from "../organisms/TimelinePanel";
 import { useSpecs } from "../../lib/specs";
 import { useBookmarks } from "../../lib/bookmarks";
 import { Tabs } from "../organisms/Tabs";
@@ -262,6 +263,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "problems" && <ProblemsPanel />}
             {tool === "bookmarks" && <BookmarksPanel />}
             {tool === "hierarchy" && <HierarchyPanel />}
+            {tool === "timeline" && <TimelinePanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>
