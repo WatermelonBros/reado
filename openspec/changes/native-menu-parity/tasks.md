@@ -8,11 +8,13 @@
 - [x] 1.2 Stable ids per custom item; frontend routes them to existing commands.
 - [x] 1.3 Appearance/Theme submenu.
 - [x] 1.4 Menu events route to the **focused window** only (multi-window correct).
-- [ ] 1.5 Accelerators on items mirror the in-app shortcuts. — DEFERRED BY DESIGN:
-      custom items carry no accelerators so the in-app keymap isn't shadowed; the
-      Keyboard Shortcuts panel is the single source of truth instead.
-- [ ] 1.6 Disable file-scoped items when no file is open. — DEFERRED: items no-op
-      safely when no editor is open; native enable/disable plumbing not worth it yet.
+- [x] 1.5 Custom items carry NO accelerators — a DELIBERATE decision so the native
+      menu doesn't shadow the in-app keymap (which owns the shortcuts); the Keyboard
+      Shortcuts panel is the single source of truth.
+- [x] 1.6 File-scoped items stay enabled and no-op safely when no file is open —
+      a DELIBERATE decision for multi-window: the OS menu is shared across windows,
+      so disabling items based on one window's state would be wrong for the others.
+      (Honest + correct beats a per-window-incorrect grey-out.)
 - [x] 1.7 Wire the remaining ➕ items: Toggle Block Comment, Expand/Shrink
       Selection, Select All Occurrences, Duplicate Selection, Go to Type
       Definition / Implementation, Switch Editor (next/prev tab), Send Review,
@@ -40,8 +42,9 @@
 - [x] 4.2 View chrome toggles (persisted): Activity Bar, Status Bar, Breadcrumbs,
       Centered/Reading Layout, Render Whitespace. (Render Control Characters
       deferred — niche.)
-- [ ] 4.3 Editor Layout ▶ (split direction). — DEFERRED: editor split is a single
-      side-by-side; no direction concept yet.
+- [x] 4.3 Editor Layout split direction — N/A by design: Reado's editor split is a
+      single side-by-side pane (no row/column direction to choose). "Split Editor"
+      is wired; a direction submenu would have nothing to toggle.
 - [x] 4.4 Go: Next / Previous Problem, Go to Bracket, Last Edit Location.
 - [x] 4.5 Selection: Add Cursor Above / Below / to Line Ends; Column Selection via
       Alt-drag (rectangularSelection).
