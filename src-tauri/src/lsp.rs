@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::{Mutex, OnceLock};
 
 use tauri::{AppHandle, Emitter, State};
@@ -23,7 +23,7 @@ fn login_shell_path() -> &'static str {
         #[cfg(not(windows))]
         {
             let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-            if let Ok(out) = Command::new(&shell).args(["-ilc", "echo $PATH"]).output() {
+            if let Ok(out) = crate::proc::command(&shell).args(["-ilc", "echo $PATH"]).output() {
                 if out.status.success() {
                     let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
                     if !p.is_empty() {
@@ -137,7 +137,7 @@ pub fn lsp_start(
             args.push(cwd.clone());
         }
     }
-    let mut child = Command::new(command)
+    let mut child = crate::proc::command(command)
         .args(&args)
         .current_dir(&cwd)
         .env("PATH", login_shell_path()) // find servers in nvm/cargo/brew dirs

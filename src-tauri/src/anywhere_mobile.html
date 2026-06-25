@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#1b1f28" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="stylesheet" href="/vendor/xterm.css" />
+<title>Reado Anywhere</title>
+<style>
+  :root {
+    --bg: oklch(0.2 0.018 250);
+    --elevated: oklch(0.24 0.02 250);
+    --overlay: oklch(0.27 0.022 250);
+    --border: oklch(0.32 0.02 250);
+    --border-strong: oklch(0.42 0.02 250);
+    --ink: oklch(0.8 0.012 250);
+    --bright: oklch(0.95 0.008 250);
+    --muted: oklch(0.62 0.012 250);
+    --faint: oklch(0.5 0.012 250);
+    --accent: oklch(0.74 0.11 260);
+    --on-accent: oklch(0.98 0.01 260);
+    --marker: oklch(0.72 0.16 35);
+    --add: oklch(0.76 0.11 150);
+    --del: oklch(0.72 0.16 35);
+    --kw: oklch(0.74 0.11 260); --str: oklch(0.76 0.11 150);
+    --num: oklch(0.76 0.12 55); --com: oklch(0.55 0.02 250);
+    /* Semantic comment-type colours — identical to the desktop's TYPE_COLOR. */
+    --syn-keyword: oklch(0.74 0.11 260); --syn-number: oklch(0.76 0.12 55);
+    --syn-control: oklch(0.74 0.12 330);
+    --selection: oklch(0.74 0.11 260 / 0.28);
+    --tabbar: 56px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 16px; line-height: 1.5;
+    display: flex; flex-direction: column; height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+  }
+  ::selection { background: var(--selection); }
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+  header {
+    display: flex; align-items: center; gap: 8px; flex: none;
+    padding: 10px 14px; min-height: 28px;
+    border-bottom: 1px solid var(--border); background: var(--bg);
+  }
+  header .back { font-size: 24px; line-height: 1; color: var(--muted); padding: 2px 6px; margin-left: -6px; }
+  header h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.02em; flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header .proj { color: var(--bright); }
+  header .hact { color: var(--accent); font-weight: 600; font-size: 14px; padding: 6px 8px; }
+  header .iconbtn { color: var(--muted); padding: 5px 6px; display: flex; } header .iconbtn svg { display: block; }
+  header .iconbtn:active { color: var(--ink); }
+
+  main { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  main.noscroll { overflow: hidden; }
+
+  nav.tabs {
+    flex: none; display: flex; border-top: 1px solid var(--border); background: var(--bg);
+    padding-bottom: env(safe-area-inset-bottom); height: calc(var(--tabbar) + env(safe-area-inset-bottom));
+  }
+  nav.tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; color: var(--faint); font-size: 10px; letter-spacing: 0.02em; }
+  nav.tabs button .ti { font-size: 19px; line-height: 1; }
+  nav.tabs button.on { color: var(--accent); }
+
+  .pad { padding: 16px; } .muted { color: var(--muted); } .faint { color: var(--faint); }
+  .center { display: grid; place-items: center; height: 100%; text-align: center; padding: 24px; }
+  .center p { max-width: 30ch; color: var(--muted); }
+  .sech { padding: 16px 16px 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+
+  .row { display: flex; align-items: center; gap: 11px; width: 100%; padding: 11px 16px; text-align: left; }
+  .row:active { background: var(--elevated); }
+  /* git status, desktop-faithful: a single coloured letter, not a word. */
+  .gitletter { flex: none; width: 1.1em; text-align: center; font-family: ui-monospace, Menlo, monospace;
+    font-weight: 700; font-size: 13px; }
+  .fname { flex: none; max-width: 56%; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fdir { flex: 1; min-width: 0; color: var(--faint); font-size: 12px; font-family: ui-monospace, Menlo, monospace;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .grow { flex: 1; min-width: 0; }
+  .row .title { color: var(--bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .sub { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: ui-monospace, Menlo, monospace; }
+  .row .chev { color: var(--faint); display: flex; } .row .chev svg { display: block; }
+  .ico { display: flex; align-items: center; justify-content: center; color: var(--muted); flex: none; }
+  .ico.accent { color: var(--accent); } .ico svg { display: block; }
+  .crumb { padding: 9px 16px; font-size: 13px; color: var(--faint); font-family: ui-monospace, Menlo, monospace;
+    overflow-x: auto; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  .filehint { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 7px;
+    padding: 8px 16px; font-size: 12px; color: var(--faint);
+    background: color-mix(in oklch, var(--bg) 90%, transparent); backdrop-filter: blur(8px);
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
+  .filehint svg { color: var(--accent); }
+
+  pre.code, pre.diff { margin: 0; padding: 10px 12px calc(48px + env(safe-area-inset-bottom)); overflow-x: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; line-height: 1.6; }
+  .ln { display: inline-block; min-width: 3ch; margin-right: 14px; color: var(--faint); text-align: right; user-select: none; }
+  .line:active { background: var(--elevated); }
+  .tok-kw { color: var(--kw); } .tok-ctrl { color: var(--syn-control); } .tok-str { color: var(--str); }
+  .tok-num { color: var(--num); } .tok-com { color: var(--com); font-style: italic; }
+  /* Diff lines: real syntax highlight + a subtle add/del tint and marker. */
+  .dl { display: block; } .dl .dm { display: inline-block; width: 1.5ch; color: var(--faint); user-select: none; }
+  .dl.add { background: color-mix(in oklch, var(--add) 13%, transparent); }
+  .dl.del { background: color-mix(in oklch, var(--del) 13%, transparent); }
+  .dl.add .dm { color: var(--add); } .dl.del .dm { color: var(--del); }
+  .d-hunk { color: var(--faint); margin: 10px 0 2px; padding-top: 6px;
+    border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
+  .statelbl { flex: none; font-size: 12px; font-weight: 600; }
+  .badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-strong);
+    color: var(--muted); font-family: ui-monospace, Menlo, monospace; flex: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .mini { flex: none; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+  .mini:active { background: var(--elevated); } .mini.totask { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 40%, var(--border)); }
+
+  /* Terminal */
+  #termwrap { display: flex; flex-direction: column; height: 100%; }
+  #termhost { flex: 1; min-height: 0; background: var(--bg); padding: 6px 8px; }
+  .keys { flex: none; display: flex; gap: 6px; padding: 8px; overflow-x: auto; border-top: 1px solid var(--border); }
+  .keys button { flex: none; padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px;
+    color: var(--muted); font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
+  .keys button:active { background: var(--elevated); }
+
+  /* Sheet */
+  .scrim { position: fixed; inset: 0; background: oklch(0.12 0.02 250 / 0.6); z-index: 40; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; background: var(--overlay);
+    border-top: 1px solid var(--border-strong); border-radius: 16px 16px 0 0;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); box-shadow: 0 -12px 32px oklch(0.12 0.02 250 / 0.5); }
+  .sheet h3 { margin: 4px 0 12px; font-size: 14px; font-weight: 650; }
+  .types { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .types button { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+  .types button.on { border-color: var(--accent); color: var(--accent); }
+  .typechip { display: inline-flex; align-items: center; gap: 7px; }
+  .typechip.on { border-color: var(--tc); color: var(--bright); }
+  textarea { width: 100%; min-height: 84px; resize: vertical; padding: 10px 12px; background: var(--bg); color: var(--ink);
+    border: 1px solid var(--border); border-radius: 10px; font: inherit; outline: none; }
+  textarea:focus { border-color: var(--border-strong); }
+  .sheet-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .btn { padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: 14px; }
+  .btn.ghost { color: var(--muted); } .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn.primary:disabled { opacity: 0.5; }
+  .toast { position: fixed; left: 50%; bottom: calc(var(--tabbar) + 18px + env(safe-area-inset-bottom));
+    transform: translateX(-50%); background: var(--overlay); border: 1px solid var(--border-strong);
+    color: var(--ink); padding: 8px 14px; border-radius: 999px; font-size: 13px; z-index: 60; }
+</style>
+</head>
+<body>
+<header>
+  <button class="back" id="back" hidden aria-label="Back">‹</button>
+  <h1 id="title">Reado</h1>
+  <button class="iconbtn" id="refresh" hidden aria-label="Refresh"></button>
+  <button class="hact" id="hact" hidden></button>
+</header>
+<main id="main"></main>
+<nav class="tabs" id="tabs" hidden></nav>
+
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
+<script>
+(() => {
+  "use strict";
+  const KEY = "reado_anywhere_token";
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("token")) { localStorage.setItem(KEY, h.get("token")); history.replaceState(null, "", location.pathname + "#"); }
+  const token = () => localStorage.getItem(KEY);
+
+  const api = async (path, opts = {}) => {
+    const res = await fetch(path, { ...opts, headers: {
+      Authorization: "Bearer " + token(), "Content-Type": "application/json", ...(opts.headers || {}) } });
+    if (res.status === 401) { localStorage.removeItem(KEY); location.hash = ""; throw new Error("unauthorized"); }
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const ct = res.headers.get("content-type") || "";
+    return ct.includes("application/json") ? res.json() : res.text();
+  };
+
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const enc = encodeURIComponent;
+
+  // Reado's own icon set (paths lifted from the desktop's icons.tsx) so the
+  // mobile chrome matches — no placeholder glyphs.
+  const PATHS = {
+    files: '<path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.4.6L11.6 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    diff: '<path d="M5 3v14M5 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 6H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H12M12 4v4M12 14v4"/>',
+    terminal: '<path d="M4 17l6-5-6-5M12 19h8"/>',
+    notes: '<path d="M21 11.5a8.38 8.38 0 0 1-9 8.3 8.5 8.5 0 0 1-3.8-.9L3 20l1.1-3.3A8.38 8.38 0 0 1 12 3.5a8.38 8.38 0 0 1 9 8z"/>',
+    chevron: '<path d="M9 6l6 6-6 6"/>',
+    back: '<path d="M15 6l-6 6 6 6"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.4.6L11.6 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  };
+  const ic = (name, size) => '<svg width="' + (size || 20) + '" height="' + (size || 20) +
+    '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" ' +
+    'stroke-linejoin="round" style="display:block">' + PATHS[name] + "</svg>";
+
+  // Resolve a CSS token to a concrete rgb() (xterm can't parse oklch) — same
+  // technique as the desktop's xtermTheme(), so the terminal matches exactly.
+  const resolveColor = (v) => { const p = document.createElement("span"); p.style.color = "var(" + v + ")";
+    p.style.display = "none"; document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c || "#000"; };
+  function xtermTheme() {
+    const r = resolveColor;
+    return { background: r("--bg"), foreground: r("--ink"), cursor: r("--accent"), cursorAccent: r("--bg"),
+      selectionBackground: r("--selection"), black: r("--elevated"), red: r("--marker"), green: r("--str"),
+      yellow: r("--num"), blue: r("--kw"), magenta: r("--syn-control"), cyan: r("--accent"), white: r("--muted"),
+      brightBlack: r("--faint"), brightRed: r("--marker"), brightGreen: r("--str"), brightYellow: r("--num"),
+      brightBlue: r("--kw"), brightMagenta: r("--syn-control"), brightCyan: r("--accent"), brightWhite: r("--bright") };
+  }
+  const fail = (e) => '<div class="center"><p>Couldn\'t load this.<br>' +
+    '<span class="faint" style="font-size:12px">' + esc(String((e && e.message) || e)) + "</span></p></div>";
+  // Control-flow is the most salient role in Reado (magenta); other keywords blue.
+  const CTRL = new Set(("if else for while do switch case break continue return match try catch finally throw await yield").split(" "));
+  const KWSET = new Set(("const let var function class extends new this import export from default async typeof instanceof " +
+    "in of fn pub use mod impl struct enum trait where self crate type def lambda None True False null true false void int " +
+    "float bool string public private static interface package").split(" "));
+  // Single-pass tokenizer: scan the RAW line once, escape each piece as we emit
+  // it. Never run regexes over already-inserted markup (that corrupts the HTML).
+  const TOK = /(\/\/[^\n]*)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_.]*\b)|([A-Za-z_$][\w$]*)/g;
+  function highlight(line) {
+    let out = "", last = 0, m;
+    TOK.lastIndex = 0;
+    while ((m = TOK.exec(line))) {
+      out += esc(line.slice(last, m.index));
+      if (m[1]) out += '<span class="tok-com">' + esc(m[1]) + "</span>";
+      else if (m[2]) out += '<span class="tok-str">' + esc(m[2]) + "</span>";
+      else if (m[3]) out += '<span class="tok-num">' + esc(m[3]) + "</span>";
+      else if (CTRL.has(m[4])) out += '<span class="tok-ctrl">' + esc(m[4]) + "</span>";
+      else out += KWSET.has(m[4]) ? '<span class="tok-kw">' + esc(m[4]) + "</span>" : esc(m[4]);
+      last = m.index + m[0].length;
+    }
+    out += esc(line.slice(last));
+    return out;
+  }
+
+  const els = { back: document.getElementById("back"), title: document.getElementById("title"),
+    hact: document.getElementById("hact"), refresh: document.getElementById("refresh"),
+    main: document.getElementById("main"), tabs: document.getElementById("tabs") };
+  els.refresh.innerHTML = ic("refresh", 18);
+  els.refresh.onclick = () => render();
+  let projects = [];
+  const nameOf = (id) => (projects.find((p) => p.id === id) || {}).name || "Reado";
+
+  const toast = (m) => { const t = document.createElement("div"); t.className = "toast"; t.textContent = m;
+    document.body.appendChild(t); setTimeout(() => t.remove(), 1800); };
+
+  // ---- Routing via the URL hash ----
+  const go = (params) => { location.hash = new URLSearchParams(params).toString(); };
+  const route = () => Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+  window.addEventListener("hashchange", render);
+
+  els.back.innerHTML = ic("back", 24);
+  function setChrome({ title, proj, back, hact }) {
+    els.title.textContent = title; els.title.className = proj ? "proj" : "";
+    els.title.onclick = proj ? () => go({ proj }) : null;
+    els.back.hidden = !back; els.back.onclick = back || null;
+    els.refresh.hidden = false; // shown on every view; gate() hides it
+    els.hact.hidden = !hact; if (hact) { els.hact.textContent = hact.label; els.hact.onclick = hact.fn; }
+  }
+  function showTabs(proj, active) {
+    els.tabs.hidden = false;
+    const defs = [["files", "Files", "files"], ["changes", "Changes", "diff"], ["terminal", "Terminal", "terminal"], ["notes", "Notes", "notes"]];
+    els.tabs.innerHTML = defs.map(([t, label, icon]) =>
+      '<button data-t="' + t + '" class="' + (t === active ? "on" : "") + '">' +
+      '<span class="ti">' + ic(icon, 21) + "</span>" + label + "</button>").join("");
+    els.tabs.querySelectorAll("button").forEach((b) => b.onclick = () => go({ proj, tab: b.dataset.t }));
+  }
+
+  async function render() {
+    detachTerm();
+    els.main.className = "";
+    if (!token()) return gate();
+    const r = route();
+    // Remember where we are so a reload/reconnect lands back here.
+    if (r.proj) localStorage.setItem("reado_anywhere_route", location.hash.slice(1));
+    if (!r.proj) return renderProjects();
+    if (r.file) return renderFile(r.proj, r.file);
+    if (r.diff) return renderDiff(r.proj, r.diff);
+    const tab = r.tab || "files";
+    if (tab === "changes") return renderChanges(r.proj);
+    if (tab === "terminal") return renderTerminal(r.proj);
+    if (tab === "notes") return renderNotes(r.proj);
+    return renderFiles(r.proj, r.dir || "");
+  }
+
+  function gate() {
+    els.tabs.hidden = true;
+    setChrome({ title: "Reado" });
+    els.refresh.hidden = true;
+    els.main.innerHTML = '<div class="center"><div><h2 style="color:var(--bright)">Reado Anywhere</h2>' +
+      '<p>Open this by scanning the QR from Reado on your desktop.</p></div></div>';
+  }
+
+  async function renderProjects() {
+    els.tabs.hidden = true;
+    setChrome({ title: "Reado" });
+    els.main.innerHTML = '<div class="pad faint">Loading…</div>';
+    try {
+      const [open, recents] = await Promise.all([api("/api/projects"), api("/api/recents").catch(() => [])]);
+      projects = open;
+      let html = "";
+      if (open.length) { html += '<div class="sech">Open on desktop</div>';
+        html += open.map((p) => '<button class="row open" data-id="' + p.id + '"><span class="ico accent">' + ic("folder", 18) + "</span>" +
+          '<span class="grow"><div class="title">' + esc(p.name) + '</div></span><span class="chev">' + ic("chevron", 16) + "</span></button>").join(""); }
+      const names = new Set(open.map((p) => p.name));
+      const rest = recents.filter((r) => !names.has(r.name));
+      if (rest.length) { html += '<div class="sech">' + (open.length ? "Recent — open on desktop" : "Open a project") + "</div>";
+        html += rest.map((r) => '<button class="row recent" data-path="' + esc(r.path) + '" data-name="' + esc(r.name) + '">' +
+          '<span class="ico">' + ic("folder", 18) + '</span><span class="grow"><div class="title">' + esc(r.name) + "</div>" +
+          '<div class="sub">' + esc(r.path) + '</div></span><span class="chev faint">open</span></button>').join(""); }
+      els.main.innerHTML = html || '<div class="center"><p>No projects yet.<br><span class="faint" style="font-size:13px">Open one in Reado on your desktop.</span></p></div>';
+      els.main.querySelectorAll(".row.open").forEach((b) => b.onclick = () => go({ proj: b.dataset.id, tab: "files" }));
+      els.main.querySelectorAll(".row.recent").forEach((b) => b.onclick = () => openOnDesktop(b.dataset.path, b.dataset.name));
+    } catch (e) { els.main.innerHTML = fail(e); }
+  }
+
+  async function openOnDesktop(path, name) {
+    toast("Opening on desktop…");
+    try { await api("/api/open", { method: "POST", body: JSON.stringify({ path }) }); }
+    catch (e) { return toast(e.message); }
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      try { const open = await api("/api/projects"); const f = open.find((p) => p.name === name);
+        if (f) { projects = open; go({ proj: f.id, tab: "files" }); return; } } catch (_) {}
+    }
+    toast("Opened — refresh"); renderProjects();
+  }
+
+  async function renderFiles(proj, dir) {
+    showTabs(proj, "files");
+    setChrome({ title: nameOf(proj), proj });
+    els.main.innerHTML = '<div class="crumb">/' + esc(dir) + '</div><div id="ph" class="pad faint">Loading…</div>';
+    try {
+      const items = await api("/api/dir?project=" + enc(proj) + "&path=" + enc(dir));
+      if (dir) items.unshift({ name: "..", path: dir.split("/").slice(0, -1).join("/"), dir: true, up: true });
+      document.getElementById("ph").outerHTML = '<div id="ph">' + items.map((it) =>
+        '<button class="row" data-path="' + esc(it.path) + '" data-dir="' + it.dir + '"><span class="ico ' +
+        (it.dir ? "accent" : "") + '">' + (it.up ? ic("back", 17) : it.dir ? ic("folder", 17) : ic("file", 16)) +
+        '</span><span class="grow"><div class="title">' + esc(it.name) + "</div></span>" +
+        (it.dir && !it.up ? '<span class="chev">' + ic("chevron", 16) + "</span>" : "") + "</button>").join("") + "</div>";
+      document.querySelectorAll("#ph .row").forEach((b) => b.onclick = () =>
+        b.dataset.dir === "true" ? go({ proj, tab: "files", dir: b.dataset.path }) : go({ proj, file: b.dataset.path }));
+    } catch (e) { document.getElementById("ph").innerHTML = fail(e); }
+  }
+
+  async function renderFile(proj, file) {
+    els.tabs.hidden = true;
+    setChrome({ title: file.split("/").pop(), back: () => history.back() });
+    els.main.innerHTML = '<div class="pad faint">Loading…</div>';
+    try {
+      const text = await api("/api/file?project=" + enc(proj) + "&path=" + enc(file));
+      const pre = document.createElement("pre"); pre.className = "code";
+      pre.innerHTML = text.split("\n").map((l, i) => '<div class="line" data-line="' + (i + 1) +
+        '"><span class="ln">' + (i + 1) + "</span>" + (highlight(l) || " ") + "</div>").join("");
+      els.main.innerHTML = "";
+      const hint = document.createElement("div"); hint.className = "filehint";
+      hint.innerHTML = ic("notes", 13) + "<span>Tap a line to add a note</span>";
+      els.main.appendChild(hint); els.main.appendChild(pre);
+      pre.querySelectorAll(".line").forEach((d) => d.onclick = () => openSheet(proj, file, +d.dataset.line));
+    } catch (e) { els.main.innerHTML = fail(e); }
+  }
+
+  // git porcelain status → desktop's single-letter badge + colour (identical map).
+  function statusOf(s) {
+    const x = (s || "").trim()[0] || "";
+    if (x === "?") return { letter: "U", color: "var(--faint)" };       // untracked
+    if (x === "A") return { letter: "A", color: "var(--str)" };         // added (green)
+    if (x === "D") return { letter: "D", color: "var(--marker)" };      // deleted (red)
+    if (x === "R") return { letter: "R", color: "var(--kw)" };          // renamed (blue)
+    if (x === "M" || x === "U") return { letter: "M", color: "var(--num)" }; // modified (amber)
+    return { letter: x || "•", color: "var(--muted)" };
+  }
+
+  async function renderChanges(proj) {
+    showTabs(proj, "changes");
+    setChrome({ title: nameOf(proj), proj });
+    els.main.innerHTML = '<div class="pad faint">Loading…</div>';
+    try {
+      const list = await api("/api/changed?project=" + enc(proj));
+      if (!list.length) { els.main.innerHTML = '<div class="center"><p>Nothing changed.<br><span class="faint" style="font-size:13px">No edits since the last commit.</span></p></div>'; return; }
+      els.main.innerHTML = '<div class="sech">' + list.length + " changed file" + (list.length > 1 ? "s" : "") + "</div>" +
+        list.map((c) => { const st = statusOf(c.status); const i = c.path.lastIndexOf("/"); const dir = i >= 0 ? c.path.slice(0, i) : "";
+        return '<button class="row" data-path="' + esc(c.path) + '">' +
+        '<span class="gitletter" style="color:' + st.color + '">' + st.letter + "</span>" +
+        '<span class="fname">' + esc(c.path.slice(i + 1)) + "</span>" +
+        '<span class="fdir">' + esc(dir) + "</span>" +
+        '<span class="chev">' + ic("chevron", 16) + "</span></button>"; }).join("");
+      els.main.querySelectorAll(".row").forEach((b) => b.onclick = () => go({ proj, diff: b.dataset.path }));
+    } catch (e) { els.main.innerHTML = fail(e); }
+  }
+
+  // Drop git's noisy header lines; turn @@ hunks into a quiet divider (keeping
+  // the trailing context, e.g. the enclosing function).
+  const DIFF_NOISE = /^(diff --git|index |--- |\+\+\+ |new file mode|deleted file mode|old mode|new mode|similarity index|rename from|rename to|\\ No newline)/;
+  const hunkLabel = (l) => { const m = l.match(/^@@.*@@ ?(.*)$/); return "⋯" + (m && m[1] ? "  " + m[1] : ""); };
+
+  async function renderDiff(proj, path) {
+    els.tabs.hidden = true;
+    setChrome({ title: path.split("/").pop(), back: () => history.back() });
+    els.main.innerHTML = '<div class="pad faint">Loading…</div>';
+    try {
+      const text = await api("/api/diff?project=" + enc(proj) + "&path=" + enc(path));
+      let rows;
+      if (!text.trim()) {
+        // New/untracked file: no diff vs HEAD — show its content as all-added.
+        const content = await api("/api/file?project=" + enc(proj) + "&path=" + enc(path)).catch(() => "");
+        if (!content) { els.main.innerHTML = '<div class="center"><p>Nothing to show for this file.</p></div>'; return; }
+        rows = content.split("\n").map((l) => ({ kind: "add", code: l }));
+      } else {
+        rows = [];
+        for (const l of text.split("\n")) {
+          if (DIFF_NOISE.test(l)) continue;
+          if (l.startsWith("@@")) { rows.push({ kind: "hunk", code: hunkLabel(l) }); continue; }
+          const kind = l[0] === "+" ? "add" : l[0] === "-" ? "del" : "ctx";
+          rows.push({ kind, code: l.slice(1) });
+        }
+      }
+      const pre = document.createElement("pre"); pre.className = "diff";
+      // Syntax-highlight each line, with a subtle add/del tint + marker — so you
+      // read real code, not a flat wall of green/red.
+      pre.innerHTML = rows.map((x) => {
+        if (x.kind === "hunk") return '<div class="d-hunk">' + esc(x.code) + "</div>";
+        const mark = x.kind === "add" ? "+" : x.kind === "del" ? "−" : " ";
+        return '<div class="dl ' + x.kind + '"><span class="dm">' + mark + "</span>" + (highlight(x.code) || " ") + "</div>";
+      }).join("");
+      els.main.innerHTML = ""; els.main.appendChild(pre);
+    } catch (e) { els.main.innerHTML = fail(e); }
+  }
+
+  // Identical to the desktop's TYPE_COLOR mapping.
+  const TYPE_COLOR = { bug: "var(--marker)", refactor: "var(--syn-keyword)", performance: "var(--syn-number)",
+    question: "var(--syn-control)", note: "var(--muted)" };
+  async function renderNotes(proj) {
+    showTabs(proj, "notes");
+    setChrome({ title: nameOf(proj), proj, hact: { label: "Run agent", fn: () => runAgent(proj) } });
+    els.main.innerHTML = '<div class="pad faint">Loading…</div>';
+    try {
+      const list = await api("/api/comments?project=" + enc(proj));
+      const open = list.filter((c) => c.state === "open" || c.state === "in-progress");
+      if (!open.length) { els.main.innerHTML = '<div class="center"><p>No open notes. Open a file and tap a line to add one.</p></div>'; return; }
+      els.main.innerHTML = open.map((c) => '<div class="row note" data-id="' + c.id + '" data-file="' + esc(c.anchor.file) +
+        '" data-line="' + c.anchor.startLine + '">' +
+        '<span class="dot" style="background:' + (TYPE_COLOR[c.type] || "var(--muted)") + '"></span>' +
+        '<span class="grow open"><div class="title">' + esc(c.messages[0] ? c.messages[0].body : "") + "</div>" +
+        '<div class="sub">' + esc(c.anchor.file) + ":" + c.anchor.startLine + "</div></span>" +
+        (c.kind === "task" ? '<span class="badge">task</span>' : '<button class="mini totask">→ task</button>') +
+        '<button class="mini done">✓</button></div>').join("");
+      els.main.querySelectorAll(".note").forEach((row) => {
+        const id = row.dataset.id;
+        row.querySelector(".open").onclick = () => go({ proj, file: row.dataset.file });
+        const t = row.querySelector(".totask");
+        if (t) t.onclick = async () => { await updateComment(proj, id, { kind: "task" }); renderNotes(proj); };
+        row.querySelector(".done").onclick = async () => { await updateComment(proj, id, { state: "done" }); renderNotes(proj); };
+      });
+    } catch (e) { els.main.innerHTML = fail(e); }
+  }
+
+  async function updateComment(proj, id, patch) {
+    try { await api("/api/comment-update", { method: "POST", body: JSON.stringify({ project: proj, id, ...patch }) }); }
+    catch (e) { toast(e.message); }
+  }
+
+  async function runAgent(proj) {
+    try { await api("/api/run-agent", { method: "POST", body: JSON.stringify({ project: proj }) });
+      toast("Agent started on the desktop"); } catch (e) { toast(e.message); }
+  }
+
+  // ---- Terminal (persists across tab switches) ----
+  let term = null, fit = null, ws = null, termEl = null, termProj = null, termClosing = false, reconnectT = null;
+  const enc8 = new TextEncoder();
+  function detachTerm() { if (termEl && termEl.parentNode) termEl.parentNode.removeChild(termEl); }
+  const sendSize = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ cols: term.cols, rows: term.rows })); };
+
+  // Open (or re-open) the terminal socket. iOS suspends background WebSockets and
+  // wifi blips happen, so we reconnect with backoff instead of dying. A reconnect
+  // starts a fresh shell on the desktop (the old PTY ended when the socket did).
+  function termConnect(proj, attempt) {
+    if (ws && ws.readyState <= 1) return; // already connecting/open
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(proto + "//" + location.host + "/api/term?project=" + enc(proj) + "&token=" + enc(token()));
+    ws.binaryType = "arraybuffer";
+    ws.onopen = () => { if (attempt) term.write("\r\n\x1b[2m[reconnected]\x1b[0m\r\n"); try { fit.fit(); } catch (_) {} sendSize(); };
+    ws.onmessage = (e) => term.write(new Uint8Array(e.data));
+    ws.onclose = () => {
+      if (termClosing) return;
+      const n = (attempt || 0) + 1;
+      term.write("\r\n\x1b[2m[disconnected — reconnecting…]\x1b[0m\r\n");
+      clearTimeout(reconnectT);
+      reconnectT = setTimeout(() => termConnect(proj, n), Math.min(1000 * n, 6000));
+    };
+  }
+
+  function renderTerminal(proj) {
+    showTabs(proj, "terminal");
+    setChrome({ title: nameOf(proj), proj });
+    els.main.className = "noscroll";
+    els.main.innerHTML = "";
+    // A new project → fresh terminal session.
+    if (term && termProj !== proj) { termClosing = true; clearTimeout(reconnectT); try { ws && ws.close(); term.dispose(); } catch (_) {} term = null; termEl = null; }
+    if (!term) {
+      termProj = proj; termClosing = false;
+      termEl = document.createElement("div"); termEl.id = "termwrap";
+      const host = document.createElement("div"); host.id = "termhost";
+      const keys = document.createElement("div"); keys.className = "keys";
+      termEl.appendChild(host); termEl.appendChild(keys);
+      els.main.appendChild(termEl);
+      term = new Terminal({ fontSize: 13, fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+        cursorBlink: true, theme: xtermTheme() });
+      fit = new FitAddon.FitAddon(); term.loadAddon(fit);
+      term.open(host); setTimeout(() => fit.fit(), 0);
+      term.onResize(sendSize);
+      term.onData((d) => { if (ws && ws.readyState === 1) ws.send(enc8.encode(d)); });
+      const send = (s) => { if (ws && ws.readyState === 1) ws.send(enc8.encode(s)); term.focus(); };
+      [["esc", "\x1b"], ["tab", "\t"], ["^C", "\x03"], ["^D", "\x04"], ["↑", "\x1b[A"], ["↓", "\x1b[B"],
+       ["←", "\x1b[D"], ["→", "\x1b[C"]].forEach(([label, seq]) => {
+        const b = document.createElement("button"); b.textContent = label; b.onclick = () => send(seq); keys.appendChild(b); });
+      termConnect(proj, 0);
+    } else {
+      els.main.appendChild(termEl);
+      if (!ws || ws.readyState > 1) termConnect(proj, 0); // socket died while away
+    }
+    setTimeout(() => { try { fit.fit(); if (ws && ws.readyState === 1) term.focus(); } catch (_) {} }, 30);
+  }
+  // Reconnect when returning to the foregrounded terminal tab if the socket dropped.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && term && termEl && termEl.parentNode && !termClosing && (!ws || ws.readyState > 1)) termConnect(termProj, 0);
+  });
+  window.addEventListener("resize", () => { if (termEl && termEl.parentNode && fit) try { fit.fit(); } catch (_) {} });
+
+  // ---- Add-note sheet ----
+  function openSheet(proj, file, line) {
+    let type = "note", kind = "task";
+    const scrim = document.createElement("div"); scrim.className = "scrim";
+    const el = document.createElement("div"); el.className = "sheet";
+    el.innerHTML = "<h3>Comment on " + esc(file.split("/").pop()) + ":" + line + "</h3>" +
+      "<div class='types' id='kinds'></div><div class='types' id='types'></div>" +
+      "<textarea id='cb' placeholder='Leave a comment…'></textarea><div class='sheet-actions'>" +
+      "<button class='btn ghost' id='cc'>Cancel</button><button class='btn primary' id='cs' disabled>Add</button></div>";
+    const kinds = el.querySelector("#kinds");
+    [["task", "Task"], ["note", "Note"]].forEach(([k, label]) => { const b = document.createElement("button");
+      b.textContent = label; if (k === "task") b.className = "on";
+      b.onclick = () => { kind = k; kinds.querySelectorAll("button").forEach((x) => x.className = ""); b.className = "on"; };
+      kinds.appendChild(b); });
+    const types = el.querySelector("#types");
+    ["note", "bug", "refactor", "performance", "question"].forEach((t) => { const b = document.createElement("button");
+      b.className = "typechip" + (t === "note" ? " on" : ""); b.style.setProperty("--tc", TYPE_COLOR[t]);
+      b.innerHTML = '<span class="dot" style="background:' + TYPE_COLOR[t] + '"></span>' + t;
+      b.onclick = () => { type = t; types.querySelectorAll("button").forEach((x) => x.className = "typechip"); b.className = "typechip on"; };
+      types.appendChild(b); });
+    const close = () => { scrim.remove(); el.remove(); };
+    scrim.onclick = close; el.querySelector("#cc").onclick = close;
+    const body = el.querySelector("#cb"), s = el.querySelector("#cs");
+    body.oninput = () => { s.disabled = !body.value.trim(); };
+    s.onclick = async () => { s.disabled = true;
+      try { await api("/api/comments", { method: "POST", body: JSON.stringify({ project: proj, file,
+        startLine: line, endLine: line, type, kind, body: body.value.trim() }) }); close(); toast(kind === "task" ? "Task added" : "Note added"); }
+      catch (e) { s.disabled = false; toast(e.message); } };
+    document.body.appendChild(scrim); document.body.appendChild(el); setTimeout(() => body.focus(), 50);
+  }
+
+  // On first load (after pairing), restore the last place we were.
+  const savedRoute = localStorage.getItem("reado_anywhere_route");
+  if (token() && savedRoute && !route().proj) location.hash = savedRoute;
+  render();
+})();
+</script>
+</body>
+</html>

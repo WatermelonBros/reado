@@ -172,6 +172,15 @@ fn terminate(session: &mut Session) {
             libc::killpg(pgrp, libc::SIGKILL);
         }
     }
+    // Windows has no process groups here: `child.kill()` only reaps the shell,
+    // leaving grandchildren (e.g. the `claude`/node it launched) alive — which
+    // hangs app close. Kill the whole tree by PID with taskkill.
+    #[cfg(windows)]
+    if let Some(pid) = session.child.process_id() {
+        let _ = crate::proc::command("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .output();
+    }
     let _ = session.child.kill();
 }
 

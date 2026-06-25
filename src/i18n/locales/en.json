@@ -112,6 +112,19 @@
     "enabled": "Added Reado's MCP server to .mcp.json. Restart the agent (Claude Code) so it picks up your comments, tasks, reading progress, and bookmarks as context.",
     "parseError": "Your .mcp.json is not valid JSON — fix it first, then try again."
   },
+  "anywhere": {
+    "title": "Reado Anywhere",
+    "open": "Reado Anywhere — review from your phone",
+    "tagline": "Review from your phone. Scan a QR to pair over your local network — read the diff, leave comments, run the agent.",
+    "privacyNote": "No account, no cloud. Works on the same network, or anywhere over a VPN.",
+    "enable": "Enable",
+    "enabling": "Starting…",
+    "stop": "Stop",
+    "scanHint": "Scan with your phone's camera on the same network (or VPN). You'll accept a certificate warning once.",
+    "copy": "Copy the address",
+    "copied": "Copied",
+    "fingerprint": "Fingerprint"
+  },
   "tests": {
     "panel": "Tests",
     "empty": "No test setup detected (package.json test script, Cargo, go.mod, or pytest).",
@@ -525,6 +538,7 @@
   },
   "common": {
     "cancel": "Cancel",
+    "close": "Close",
     "loading": "Loading…",
     "error": "Something went wrong."
   }

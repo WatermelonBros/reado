@@ -8,7 +8,8 @@
 
 use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use crate::proc::command;
+use std::process::Stdio;
 
 /// A formatter invocation: a program and its arguments (content arrives on stdin).
 struct Candidate {
@@ -85,7 +86,7 @@ fn candidates_for(root: &str, path: &str) -> Vec<Candidate> {
 /// not installed (so the caller can try the next one), `Ok(Some(text))` on a
 /// clean format, or `Err(stderr)` when the formatter ran but failed.
 fn run(root: &str, c: &Candidate, content: &str) -> Result<Option<String>, String> {
-    let mut child = match Command::new(&c.program)
+    let mut child = match command(&c.program)
         .args(&c.args)
         .current_dir(root)
         .stdin(Stdio::piped())

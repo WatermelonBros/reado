@@ -12,7 +12,12 @@ import {
   rebuildIndex,
   readFile,
   listFiles,
+  anywhereSetProject,
+  anywhereClearProject,
 } from "../../lib/api";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { dispatchToAgent } from "../../lib/agents";
+import { composeReviewPrompt } from "../../lib/review";
 import { useReadProgress, wasSelfWrite } from "../../lib/readProgress";
 import { useProject, useSessions, useWorkspace, useSettings } from "../../lib/store";
 import { useComments, toRelative } from "../../lib/comments";
@@ -48,7 +53,6 @@ import { Breadcrumb } from "../molecules/Breadcrumb";
 import { Editor } from "../organisms/Editor";
 import { StatusBar } from "../molecules/StatusBar";
 import { Palette } from "../organisms/Palette";
-import { Settings } from "../organisms/Settings";
 import { GitignorePrompt } from "../molecules/GitignorePrompt";
 import { KnowledgeGraph } from "../organisms/KnowledgeGraph";
 import { DocsView } from "../organisms/DocsView";
@@ -107,6 +111,30 @@ export function ProjectView({ root }: { root: string }) {
       .then(setGit)
       .catch(() => {});
   }, [root, init, setGit]);
+
+  // Reado Anywhere: expose this window's project to paired phones, and act on
+  // their requests (run the agent / pre-review) when they target this project.
+  useEffect(() => {
+    if (!root) return;
+    const id = getCurrentWindow().label;
+    anywhereSetProject(id, root, basename(root)).catch(() => {});
+    const subs = [
+      listen<string>("anywhere://run-agent", (e) => {
+        if (e.payload !== root) return;
+        const tasks = useComments
+          .getState()
+          .comments.filter((c) => c.kind === "task" && c.state === "open");
+        void dispatchToAgent(composeReviewPrompt(tasks.length));
+      }),
+      listen<string>("anywhere://prereview", (e) => {
+        if (e.payload === root) usePreReview.getState().generate(root);
+      }),
+    ];
+    return () => {
+      anywhereClearProject(id).catch(() => {});
+      subs.forEach((p) => void p.then((un) => un()));
+    };
+  }, [root]);
 
   // Persist the session whenever the open tabs or active file change.
   useEffect(() => {
@@ -330,7 +358,6 @@ export function ProjectView({ root }: { root: string }) {
         {terminalOpen && terminalPosition === "bottom" && <TerminalPanel />}
       </main>
       <Palette />
-      <Settings />
       <GitignorePrompt />
       {graphOpen && <KnowledgeGraph />}
       {docsOpen && <DocsView />}

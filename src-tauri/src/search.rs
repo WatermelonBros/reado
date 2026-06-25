@@ -5,7 +5,7 @@
 //! match rows the frontend renders directly.
 
 use std::path::Path;
-use std::process::Command;
+use crate::proc::command;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -39,7 +39,7 @@ pub fn search_text(root: String, query: String) -> Result<Vec<SearchMatch>> {
         return Ok(Vec::new());
     }
 
-    let output = match Command::new("rg")
+    let output = match command("rg")
         .arg("--json")
         .arg("--smart-case")
         .arg("--max-count")

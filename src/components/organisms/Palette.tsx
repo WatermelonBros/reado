@@ -467,6 +467,13 @@ function commandRows(
       },
     },
     {
+      label: t("anywhere.open"),
+      run: () => {
+        usePalette.getState().toggleAnywhere(true);
+        close();
+      },
+    },
+    {
       label: t("hier.showCall"),
       run: () => {
         showCallHierarchy();

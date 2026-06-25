@@ -441,3 +441,34 @@ export const linuxPackageManager = () =>
 
 /** Kill a terminal session. */
 export const ptyKill = (id: string) => invoke<void>("pty_kill", { id });
+
+// ---- Reado Anywhere: opt-in LAN server (phone review) ---------------------
+
+/** What the desktop shows for pairing: the HTTPS LAN address, the certificate
+ * fingerprint to verify, and a single-use pairing token. */
+export interface AnywhereInfo {
+  url: string;
+  fingerprint: string;
+  token: string;
+}
+
+/** Start the Reado Anywhere LAN server (idempotent); returns the pairing info. */
+export const anywhereEnable = () => invoke<AnywhereInfo>("anywhere_enable");
+
+/** Stop the Reado Anywhere server. */
+export const anywhereDisable = () => invoke<void>("anywhere_disable");
+
+/** The running server's info, or null when Reado Anywhere is off. */
+export const anywhereStatus = () => invoke<AnywhereInfo | null>("anywhere_status");
+
+/** Register this window's open project so a paired phone can pick it. */
+export const anywhereSetProject = (id: string, root: string, name: string) =>
+  invoke<void>("anywhere_set_project", { id, root, name });
+
+/** Drop this window's project from the phone-visible list (on close). */
+export const anywhereClearProject = (id: string) =>
+  invoke<void>("anywhere_clear_project", { id });
+
+/** Publish the recent-projects list so a phone can open one on the desktop. */
+export const anywhereSetRecents = (recents: { path: string; name: string }[]) =>
+  invoke<void>("anywhere_set_recents", { recents });

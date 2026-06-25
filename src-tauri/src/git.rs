@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
+use crate::proc::command;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
@@ -25,7 +25,7 @@ pub struct GitInfo {
 }
 
 fn run_git(root: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
+    let output = command("git")
         .arg("-C")
         .arg(root)
         .args(args)
@@ -191,7 +191,7 @@ pub fn git_status(root: String) -> Vec<GitChange> {
 
 /// Run git and return raw stdout (no trimming), or `None` on failure.
 fn run_git_raw(root: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
+    let output = command("git")
         .arg("-C")
         .arg(root)
         .args(args)
@@ -205,7 +205,7 @@ fn run_git_raw(root: &Path, args: &[&str]) -> Option<String> {
 
 /// Run a mutating git command, surfacing stderr on failure so the UI can show it.
 fn run_git_checked(root: &str, args: &[&str]) -> Result<(), String> {
-    let output = Command::new("git")
+    let output = command("git")
         .arg("-C")
         .arg(root)
         .args(args)
@@ -609,7 +609,7 @@ pub fn git_file_history(root: String, file: String) -> Vec<FileCommit> {
 pub fn git_show_ref(root: String, file: String, base: String) -> Option<String> {
     let reference = if base.is_empty() { "HEAD" } else { &base };
     // `git show <ref>:<path>` expects forward slashes, which is what we store.
-    let output = Command::new("git")
+    let output = command("git")
         .arg("-C")
         .arg(&root)
         .args(["show", &format!("{reference}:{file}")])

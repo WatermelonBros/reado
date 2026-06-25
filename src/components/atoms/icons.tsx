@@ -23,6 +23,13 @@ export const ChevronIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const DeviceIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <rect x="6" y="2.5" width="12" height="19" rx="2.5" />
+    <path d="M10.5 18.5h3" />
+  </svg>
+);
+
 export const CollapseAllIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M7 5l5 5 5-5M7 19l5-5 5 5" />

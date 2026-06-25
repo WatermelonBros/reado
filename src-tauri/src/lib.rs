@@ -6,6 +6,7 @@
 //! in the frontend via `tauri-plugin-store`.
 
 mod annotations;
+mod anywhere;
 mod bookmarks;
 mod cli;
 mod error;
@@ -15,6 +16,7 @@ mod git;
 mod index;
 mod lsp;
 mod menu;
+mod proc;
 mod progress;
 mod pty;
 mod search;
@@ -32,9 +34,11 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             menu::init(app)?;
+            anywhere::dev_autostart(app.handle());
             Ok(())
         })
         .manage(pty::PtyState::default())
+        .manage(anywhere::AnywhereState::default())
         .manage(lsp::LspState::default())
         .manage(git::BlameCache::default())
         .manage(menu::LastFocused::default())
@@ -127,6 +131,12 @@ pub fn run() {
             lsp::lsp_stop,
             lsp::lsp_installed,
             lsp::linux_package_manager,
+            anywhere::anywhere_enable,
+            anywhere::anywhere_disable,
+            anywhere::anywhere_status,
+            anywhere::anywhere_set_project,
+            anywhere::anywhere_clear_project,
+            anywhere::anywhere_set_recents,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")
@@ -137,6 +147,7 @@ pub fn run() {
                 use tauri::Manager;
                 pty::kill_all(&app.state::<pty::PtyState>());
                 lsp::kill_all(&app.state::<lsp::LspState>());
+                anywhere::shutdown(&app.state::<anywhere::AnywhereState>());
             }
         });
 }

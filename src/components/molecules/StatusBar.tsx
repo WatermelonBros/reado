@@ -5,8 +5,8 @@
  * the spirit of VS Code's status bar.
  */
 import { useEffect, useRef, useState } from "react";
-import { gitBranches, gitCheckout, gitInfo, type GitBranches } from "../../lib/api";
-import { useCursor, useProject } from "../../lib/store";
+import { gitBranches, gitCheckout, gitInfo, anywhereStatus, type GitBranches } from "../../lib/api";
+import { useCursor, useProject, usePalette } from "../../lib/store";
 import { useComments, openCount } from "../../lib/comments";
 import {
   useDocInfo,
@@ -17,7 +17,7 @@ import {
 } from "../../lib/docInfo";
 import { useTerminals } from "../../lib/terminals";
 
-import { GitBranchIcon, MessageIcon, TerminalIcon } from "../atoms/icons";
+import { GitBranchIcon, MessageIcon, TerminalIcon, DeviceIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
 
 /** Path relative to the project root, with forward slashes. */
@@ -93,6 +93,14 @@ export function StatusBar() {
   const openComments = useComments((s) => openCount(s.comments));
   const toggleTerminal = useTerminals((s) => s.toggle);
   const { t } = useTranslation();
+
+  // Reado Anywhere: a phone icon + a live dot (green when the LAN server is up),
+  // opening the pairing dialog. Re-checked whenever the dialog opens/closes.
+  const anywhereOpen = usePalette((s) => s.anywhereOpen);
+  const [anywhereOn, setAnywhereOn] = useState(false);
+  useEffect(() => {
+    anywhereStatus().then((s) => setAnywhereOn(!!s)).catch(() => setAnywhereOn(false));
+  }, [anywhereOpen]);
 
   const [menu, setMenu] = useState<"goto" | "eol" | "indent" | "language" | "branch" | null>(null);
   const [gotoValue, setGotoValue] = useState("");
@@ -336,6 +344,19 @@ export function StatusBar() {
           {t("status.comments", { count: openComments })}
         </span>
         <span className="px-1 text-faint">{t("status.agentIdle")}</span>
+        <button
+          type="button"
+          onClick={() => usePalette.getState().toggleAnywhere(true)}
+          title={t("anywhere.title")}
+          aria-label={t("anywhere.title")}
+          className="inline-flex items-center gap-[5px] rounded-sm px-1 text-faint transition-colors hover:text-ink"
+        >
+          <DeviceIcon className="h-[13px] w-[13px]" />
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ background: anywhereOn ? "var(--syn-string)" : "var(--border-strong)" }}
+          />
+        </button>
         <button
           type="button"
           onClick={() => toggleTerminal()}

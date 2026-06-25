@@ -49,6 +49,25 @@ thiserror = "2"
 # Rebuildable SQLite index of comments (a cache; the `.md` files stay the truth).
 rusqlite = { version = "0.32", features = ["bundled"] }
 
+# --- Reado Anywhere: opt-in LAN server (phone review over the local network) ---
+# HTTP/WebSocket server (axum) served over TLS (axum-server) so the mobile PWA
+# gets a secure context. tokio drives the async server (Tauri ships tokio too).
+axum = { version = "0.7", features = ["ws"] }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync"] }
+# Self-signed certificate generation + the rustls stack it's served with.
+rcgen = "0.13"
+rustls = { version = "0.23", features = ["ring"] }
+# Certificate fingerprint (SHA-256, hex) shown in the QR for verification.
+sha2 = "0.10"
+hex = "0.4"
+# Single-use pairing tokens.
+rand = "0.8"
+# Discover the machine's LAN IP to put in the QR.
+local-ip-address = "0.6"
+# Stream/Sink helpers for the WebSocket terminal bridge.
+futures-util = "0.3"
+
 # Signal the PTY's process group on close so dev servers don't orphan (Unix only).
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

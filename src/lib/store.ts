@@ -261,10 +261,13 @@ interface PaletteState {
   settingsOpen: boolean;
   /** True while the keyboard-shortcuts reference is shown. */
   shortcutsOpen: boolean;
+  /** True while the Reado Anywhere (phone pairing) dialog is shown. */
+  anywhereOpen: boolean;
   open: (mode: Exclude<PaletteMode, null>) => void;
   close: () => void;
   toggleSettings: (open?: boolean) => void;
   toggleShortcuts: (open?: boolean) => void;
+  toggleAnywhere: (open?: boolean) => void;
 }
 
 /** Drives the quick-open palette (commands / files / search) and settings. */
@@ -272,12 +275,15 @@ export const usePalette = create<PaletteState>((set) => ({
   mode: null,
   settingsOpen: false,
   shortcutsOpen: false,
+  anywhereOpen: false,
   open: (mode) => set({ mode }),
   close: () => set({ mode: null }),
   toggleSettings: (open) =>
     set((s) => ({ settingsOpen: open ?? !s.settingsOpen, mode: null })),
   toggleShortcuts: (open) =>
     set((s) => ({ shortcutsOpen: open ?? !s.shortcutsOpen, mode: null })),
+  toggleAnywhere: (open) =>
+    set((s) => ({ anywhereOpen: open ?? !s.anywhereOpen, mode: null })),
 }));
 
 interface EditorActionsState {
