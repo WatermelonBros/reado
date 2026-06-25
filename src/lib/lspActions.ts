@@ -11,3 +11,8 @@ export const taskFromDiagnostic = StateEffect.define<{
   to: number;
   message: string;
 }>();
+
+/** "Explain this with AI" from the hover tooltip: the editor catches it and asks
+ * the focused agent to explain the symbol at `pos`, using the server's hover
+ * docs as context. */
+export const explainSymbolAt = StateEffect.define<{ pos: number }>();

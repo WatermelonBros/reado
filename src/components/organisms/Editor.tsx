@@ -48,13 +48,13 @@ import {
   gitBlame,
   findDefinition,
   resolveImport,
-  submitToTerminal,
   type Comment,
   type CommentType,
   type Context,
   type FileContent,
 } from "../../lib/api";
 import { readoAppearance } from "../../lib/codemirror";
+import { diagnosticsRuler } from "../../lib/overviewRuler";
 import { commentGutter, type LineComments } from "../../lib/commentGutter";
 import { blameGutter } from "../../lib/blameGutter";
 import { bookmarkGutter } from "../../lib/bookmarkGutter";
@@ -66,10 +66,10 @@ import { useDocInfo, detectEol, detectIndent, formatDocument, setLastEdit } from
 import { useComments, commentsForFile, toRelative } from "../../lib/comments";
 import { useTextView } from "../../lib/textView";
 import { useReadProgress, noteSelfWrite } from "../../lib/readProgress";
-import { useTerminals } from "../../lib/terminals";
+import { dispatchToAgent } from "../../lib/agents";
 import { composeExplainPrompt, composeSymbolExplainPrompt } from "../../lib/review";
 import { lspSupport, hasServer, lspLocate, lspDefinition, lspHover } from "../../lib/lsp";
-import { taskFromDiagnostic } from "../../lib/lspActions";
+import { taskFromDiagnostic, explainSymbolAt } from "../../lib/lspActions";
 import {
   useCursor,
   useEditorActions,
@@ -830,6 +830,10 @@ function CodeView({
         EditorView.updateListener.of((u) => {
           for (const tr of u.transactions) {
             for (const eff of tr.effects) {
+              if (eff.is(explainSymbolAt)) {
+                explainSymbol(eff.value.pos);
+                continue;
+              }
               if (!eff.is(taskFromDiagnostic)) continue;
               const line = u.state.doc.lineAt(eff.value.from).number;
               openComposerFor(line, line, { body: eff.value.message, type: "bug" });
@@ -869,6 +873,8 @@ function CodeView({
         // view (no diff/AI overlay), not about being read-only.
         editableExtension(true),
         readoAppearance,
+        // Mark diagnostics along the scrollbar so problems are easy to find.
+        diagnosticsRuler,
         wrapComp.of(wrap ? EditorView.lineWrapping : []),
         whitespaceComp.of(renderWhitespace ? highlightWhitespace() : []),
         focusComp.of(focusExtension(focusMode)),
@@ -1227,9 +1233,7 @@ function CodeView({
       doc.lineAt(sel.to).number,
       asNote,
     );
-    const term = useTerminals.getState();
-    const id = term.activeId ?? term.add();
-    submitToTerminal(id, prompt, id === term.activeId ? 0 : 400);
+    void dispatchToAgent(prompt);
   };
 
   // Explain a single symbol using the language server's hover docs as context
@@ -1243,9 +1247,7 @@ function CodeView({
     const line = view.state.doc.lineAt(pos).number;
     lspHover(view, pos).then((docs) => {
       const prompt = composeSymbolExplainPrompt(relPath, line, symbol, docs ?? "");
-      const term = useTerminals.getState();
-      const tid = term.activeId ?? term.add();
-      submitToTerminal(tid, prompt, tid === term.activeId ? 0 : 400);
+      void dispatchToAgent(prompt);
     });
   };
 

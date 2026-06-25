@@ -489,4 +489,25 @@
   .cm-lintRange-hint {
     text-decoration-color: var(--diag-info);
   }
+
+  /* ---- Overview ruler: diff/diagnostic ticks along the scrollbar ---------- */
+  /* A slim column at the right edge marking where the changes/problems are, so a
+     long file reveals where to scroll. Sits under the native scrollbar thumb. */
+  .cm-overviewRuler {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 10px;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .cm-overviewRuler-tick {
+    position: absolute;
+    right: 1px;
+    width: 5px;
+    height: 3px;
+    border-radius: 1px;
+    opacity: 0.85;
+  }
 }

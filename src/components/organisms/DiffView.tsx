@@ -19,6 +19,7 @@ import {
 
 import { gitShowRef, getReadSnapshot } from "../../lib/api";
 import { readoAppearance } from "../../lib/codemirror";
+import { diffRuler } from "../../lib/overviewRuler";
 import { useProject, useSettings, useEditorActions } from "../../lib/store";
 import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
 
@@ -148,6 +149,8 @@ function DiffEditor({
           ]),
           // Show the current file with changes vs the committed base inline.
           unifiedMergeView({ original, mergeControls: false }),
+          // Mark each changed chunk along the scrollbar.
+          diffRuler,
           readoAppearance,
           langComp.of([]),
         ],

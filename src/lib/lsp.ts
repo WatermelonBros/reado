@@ -12,7 +12,6 @@ import {
   LSPClient,
   LSPPlugin,
   serverCompletion,
-  hoverTooltips,
   signatureHelp,
   formatKeymap,
   renameKeymap,
@@ -24,6 +23,8 @@ import {
   EditorView,
   Decoration,
   WidgetType,
+  hoverTooltip,
+  type Tooltip,
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
@@ -38,7 +39,7 @@ import { lspStart, lspSend, lspStop, resolvePath } from "./api";
 import type { OutlineSymbol } from "./outline";
 import { useExtensions } from "./extensions";
 import { useDiagnostics } from "./diagnostics";
-import { taskFromDiagnostic } from "./lspActions";
+import { taskFromDiagnostic, explainSymbolAt } from "./lspActions";
 import { t } from "../i18n";
 
 interface ServerDef {
@@ -393,13 +394,69 @@ const inlayFetcher = ViewPlugin.fromClass(
 
 const inlayHints = (): Extension => [inlayField, inlayFetcher];
 
+/** Render the server's hover markdown into a calm DOM. We don't run a full
+ * markdown parser (it would pull in a dep and risk HTML injection): fenced code
+ * blocks go to <pre>, everything else is plain text. */
+function renderHoverDoc(md: string): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "cm-tooltip-section";
+  // Split on ``` fences; odd indices are code blocks (drop the language line).
+  md.split("```").forEach((part, i) => {
+    if (i % 2 === 1) {
+      const pre = document.createElement("pre");
+      pre.textContent = part.replace(/^[^\n]*\n/, "").replace(/\s+$/, "");
+      section.appendChild(pre);
+    } else {
+      const text = part.trim();
+      if (!text) return;
+      const div = document.createElement("div");
+      div.textContent = text;
+      section.appendChild(div);
+    }
+  });
+  return section;
+}
+
+/** Our hover tooltip: the server's docs plus a "Spiegamelo con l'AI" chip that
+ * hands the symbol (with these very docs as context) to the focused agent.
+ * Replaces the library's `hoverTooltips()` so the action lives where the docs
+ * are, not only in the context menu. */
+function lspHoverTooltip() {
+  return hoverTooltip((view, pos): Promise<Tooltip | null> => {
+    if (!LSPPlugin.get(view)) return Promise.resolve(null);
+    const word = view.state.wordAt(pos);
+    if (!word) return Promise.resolve(null);
+    return lspHover(view, pos).then((docs) => {
+      if (!docs) return null;
+      return {
+        pos: word.from,
+        end: word.to,
+        create: () => {
+          const dom = document.createElement("div");
+          dom.appendChild(renderHoverDoc(docs));
+          const actions = document.createElement("div");
+          actions.className = "cm-tooltip-section";
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "cm-diagnosticAction";
+          chip.textContent = t("editor.explainSymbol");
+          chip.onclick = () => view.dispatch({ effects: explainSymbolAt.of({ pos }) });
+          actions.appendChild(chip);
+          dom.appendChild(actions);
+          return { dom };
+        },
+      };
+    });
+  });
+}
+
 /** The per-client LSP feature set: completion, hover, signature help, our
  * diagnostics, inlay hints, and the rename/format keymaps. Definition/references
  * navigation is handled by the editor's own gestures (which fall back to the
  * index), so the library's F12/Shift-F12 keymaps are intentionally left out. */
 const clientExtensions = () => [
   serverCompletion(),
-  hoverTooltips(),
+  lspHoverTooltip(),
   keymap.of([...formatKeymap, ...renameKeymap]),
   signatureHelp(),
   serverDiagnostics(),
