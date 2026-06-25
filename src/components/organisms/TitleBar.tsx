@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { usePalette } from "../../lib/store";
+import { usePalette, useSettings } from "../../lib/store";
 import { currentOS } from "../../lib/extensions";
 import { mod } from "../../lib/shortcuts";
 import { SearchIcon, MinusIcon, CloseIcon } from "../atoms/icons";
@@ -73,6 +73,9 @@ function WindowControls() {
 
 export function TitleBar({ projectName }: { projectName: string | null }) {
   const { t } = useTranslation();
+  // Interface zoom scales the whole webview; counter-scale the title bar so it
+  // stays fixed (and, on macOS, keeps aligned with the native traffic lights).
+  const zoom = useSettings((s) => s.zoom);
 
   // Win/Linux: shed the native decorations at runtime (the config keeps them so
   // the window is usable if this never runs); macOS uses Overlay from the config.
@@ -101,6 +104,7 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
   return (
     <div
       data-tauri-drag-region
+      style={{ zoom: 1 / zoom }}
       className={`relative z-30 flex h-9 flex-none items-center border-b border-line bg-canvas select-none ${
         isMac ? "pl-[72px] pr-2" : "pl-1"
       }`}

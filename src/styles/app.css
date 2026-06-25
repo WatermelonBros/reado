@@ -394,22 +394,25 @@
      native parts of the editor across all four themes. */
   .cm-tooltip {
     max-width: 480px;
-    border: 1px solid var(--border);
+    /* CodeMirror injects its tooltip theme UNLAYERED (light bg on a non-dark
+       theme), which beats our @layer rule — so the hover doc came out white.
+       !important forces our token-based, theme-aware surface back on top. */
+    border: 1px solid var(--border) !important;
     border-radius: 8px;
-    background: var(--bg-overlay);
-    color: var(--text);
+    background: var(--bg-overlay) !important;
+    color: var(--text) !important;
     box-shadow: var(--shadow);
     font-family: var(--font-ui);
     font-size: var(--text-sm);
     overflow: hidden;
   }
   .cm-tooltip.cm-tooltip-arrow::before {
-    border-top-color: var(--border);
-    border-bottom-color: var(--border);
+    border-top-color: var(--border) !important;
+    border-bottom-color: var(--border) !important;
   }
   .cm-tooltip.cm-tooltip-arrow::after {
-    border-top-color: var(--bg-overlay);
-    border-bottom-color: var(--bg-overlay);
+    border-top-color: var(--bg-overlay) !important;
+    border-bottom-color: var(--bg-overlay) !important;
   }
   .cm-tooltip-hover .cm-tooltip-section {
     padding: 6px 10px;
