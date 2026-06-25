@@ -8,7 +8,7 @@
  */
 import { create } from "zustand";
 import { readFile, createFile, writeFile } from "./api";
-import { runInTerminal, sanitizePromptText } from "./agents";
+import { dispatchToAgent, sanitizePromptText } from "./agents";
 import { useProject } from "./store";
 
 type Status = "loading" | "ready" | "error";
@@ -102,7 +102,7 @@ export const useQa = create<QaState>((set, get) => ({
     ];
     set({ notes });
     void saveIndex(root, notes);
-    runInTerminal(promptFor(relPath, from, to, sanitizePromptText(question), out));
+    void dispatchToAgent(promptFor(relPath, from, to, sanitizePromptText(question), out));
     void poll(root, out, mine);
   },
   view: (note) => {

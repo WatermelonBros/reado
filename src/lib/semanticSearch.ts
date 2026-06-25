@@ -7,7 +7,7 @@
  */
 import { create } from "zustand";
 import { readFile } from "./api";
-import { runInTerminal, sanitizePromptText } from "./agents";
+import { dispatchToAgent, sanitizePromptText } from "./agents";
 import { useProject } from "./store";
 
 const STORE = ".reado/semantic.json";
@@ -57,7 +57,7 @@ export const useSemanticSearch = create<SemanticState>((set) => ({
     const mine = ++token;
     set({ open: true, query, status: "loading", results: [] });
     const root = useProject.getState().root;
-    runInTerminal(
+    void dispatchToAgent(
       `Search THIS codebase for what best matches: "${sanitizePromptText(query)}". Return the most ` +
         `relevant locations as JSON, ranked best-first (max 20): ` +
         `[{"file": "rel/path", "line": N, "snippet": "one line"}]. Write it to ` +

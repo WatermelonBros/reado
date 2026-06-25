@@ -7,7 +7,7 @@
  */
 import { create } from "zustand";
 import { readFile, createFile, writeFile } from "./api";
-import { runInTerminal } from "./agents";
+import { dispatchToAgent } from "./agents";
 import { useProject } from "./store";
 import { useDocInfo } from "./docInfo";
 
@@ -122,7 +122,7 @@ export const useTours = create<ToursState>((set, get) => ({
   generate: (root) => {
     const mine = ++aiToken;
     set({ generating: true });
-    runInTerminal(
+    void dispatchToAgent(
       `Create a guided reading tour of THIS repository for someone new to it: an ` +
         `ordered list of steps, each pointing at a file + line with a one-sentence note ` +
         `on what to read there and why (start at the entry points, then key modules). ` +

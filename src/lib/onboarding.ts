@@ -6,7 +6,7 @@
  */
 import { create } from "zustand";
 import { readFile, createFile, writeFile, gitHead } from "./api";
-import { runInTerminal } from "./agents";
+import { dispatchToAgent } from "./agents";
 import { useProject } from "./store";
 
 type Status = "loading" | "ready" | "error";
@@ -85,14 +85,14 @@ export const useOnboarding = create<OnboardingState>((set) => ({
       })
       .catch(() => {
         if (token !== mine) return;
-        runInTerminal(PROMPT);
+        void dispatchToAgent(PROMPT);
         void poll(root, mine);
       });
   },
   regenerate: () => {
     const mine = ++token;
     set({ status: "loading", text: "", stale: false });
-    runInTerminal(PROMPT);
+    void dispatchToAgent(PROMPT);
     void poll(useProject.getState().root, mine);
   },
   close: () => {

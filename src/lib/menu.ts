@@ -51,7 +51,7 @@ import {
   askAboutSelection,
 } from "./docInfo";
 import { checkForUpdates } from "./updater";
-import { launchAgent, runInTerminal, clearTerminal, restartTerminal } from "./agents";
+import { launchAgent, dispatchToAgent, clearTerminal, restartTerminal } from "./agents";
 import { composeReviewPrompt } from "./review";
 import { useComments, openCount } from "./comments";
 import { closeProject, openInNewWindow, pickFolderAndOpen, openFileDialog } from "./window";
@@ -352,7 +352,7 @@ export function runMenuCommand(id: string): void {
         break;
       case "terminal:sendReview": {
         const count = openCount(useComments.getState().comments);
-        runInTerminal(composeReviewPrompt(count));
+        void dispatchToAgent(composeReviewPrompt(count));
         break;
       }
 

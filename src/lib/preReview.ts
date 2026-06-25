@@ -6,7 +6,7 @@
  */
 import { create } from "zustand";
 import { readFile, createFile, writeFile, type CommentType } from "./api";
-import { runInTerminal } from "./agents";
+import { dispatchToAgent } from "./agents";
 import { useComments } from "./comments";
 
 const STORE = ".reado/pre-review.json";
@@ -68,7 +68,7 @@ export const usePreReview = create<PreReviewState>((set, get) => ({
   generate: (root) => {
     const mine = ++token;
     set({ generating: true });
-    runInTerminal(
+    void dispatchToAgent(
       `Review the current uncommitted changes in this repo (run \`git diff\`). For each ` +
         `risky or notable change, propose a short review comment. Write JSON to ` +
         `\`${STORE}\`: an array of {"file": "rel/path", "line": N, "type": ` +

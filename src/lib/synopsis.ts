@@ -7,7 +7,7 @@
  */
 import { create } from "zustand";
 import { readFile, createFile, writeFile } from "./api";
-import { runInTerminal } from "./agents";
+import { dispatchToAgent } from "./agents";
 import { useProject } from "./store";
 
 type Status = "loading" | "ready" | "error";
@@ -104,7 +104,7 @@ export const useSynopsis = create<SynopsisState>((set) => ({
       })
       .catch(() => {
         if (token !== mine) return;
-        runInTerminal(prompt(relPath, synopsisPath(relPath)));
+        void dispatchToAgent(prompt(relPath, synopsisPath(relPath)));
         void poll(root, relPath, mine);
       });
   },
@@ -114,7 +114,7 @@ export const useSynopsis = create<SynopsisState>((set) => ({
     const mine = ++token;
     set({ status: "loading", text: "", stale: false });
     const root = useProject.getState().root;
-    runInTerminal(prompt(relPath, synopsisPath(relPath)));
+    void dispatchToAgent(prompt(relPath, synopsisPath(relPath)));
     void poll(root, relPath, mine);
   },
   close: () => {

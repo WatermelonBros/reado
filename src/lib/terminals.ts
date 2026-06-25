@@ -68,6 +68,13 @@ interface TerminalsState {
   /** Restart a pane in place: swap its id so its <Terminal> remounts (kills the
    *  old PTY, spawns a fresh shell) while keeping its slot in the layout. */
   restart: (id: string) => void;
+  /** Pane ids where Reado launched an AI agent (so prompts go to the agent, not a
+   *  bare shell). */
+  agentTerminals: string[];
+  /** The last agent the user launched (the default for new prompts), persisted. */
+  lastAgent: string | null;
+  /** Mark a pane as running `agent` and remember it as the last used. */
+  markAgent: (id: string, agent: string) => void;
   /** Remove a whole group (tab) and all its panes. */
   removeGroup: (groupId: string) => void;
   /** Focus a pane (and select its group). */
@@ -90,6 +97,8 @@ export const useTerminals = create<TerminalsState>()(
   activeId: null,
   groups: [],
   activeGroupId: null,
+  agentTerminals: [],
+  lastAgent: null,
   open: false,
   height: 280,
   // Clamp so the panel can't swallow the whole window or vanish.
@@ -140,7 +149,12 @@ export const useTerminals = create<TerminalsState>()(
           return { ...g, paneIds, sizes: even(paneIds.length) };
         })
         .filter((g) => g.paneIds.length > 0);
-      return { sessions, groups, ...resolveActive(s, groups, id) };
+      return {
+        sessions,
+        groups,
+        agentTerminals: s.agentTerminals.filter((t) => t !== id),
+        ...resolveActive(s, groups, id),
+      };
     }),
 
   restart: (id) =>
@@ -155,8 +169,18 @@ export const useTerminals = create<TerminalsState>()(
             : g,
         ),
         activeId: s.activeId === id ? nid : s.activeId,
+        // The fresh shell has no agent.
+        agentTerminals: s.agentTerminals.filter((t) => t !== id),
       };
     }),
+
+  markAgent: (id, agent) =>
+    set((s) => ({
+      agentTerminals: s.agentTerminals.includes(id)
+        ? s.agentTerminals
+        : [...s.agentTerminals, id],
+      lastAgent: agent,
+    })),
 
   removeGroup: (groupId) =>
     set((s) => {
@@ -165,7 +189,12 @@ export const useTerminals = create<TerminalsState>()(
       const gone = new Set(group.paneIds);
       const sessions = s.sessions.filter((t) => !gone.has(t.id));
       const groups = s.groups.filter((g) => g.id !== groupId);
-      return { sessions, groups, ...resolveActive(s, groups, s.activeId ?? "") };
+      return {
+        sessions,
+        groups,
+        agentTerminals: s.agentTerminals.filter((t) => !gone.has(t)),
+        ...resolveActive(s, groups, s.activeId ?? ""),
+      };
     }),
 
   setActive: (id) =>
@@ -220,7 +249,12 @@ export const useTerminals = create<TerminalsState>()(
       // Persist only the layout preferences — sessions/groups reference live PTYs
       // that don't survive a restart.
       name: "reado.terminal-layout",
-      partialize: (s) => ({ position: s.position, height: s.height, width: s.width }),
+      partialize: (s) => ({
+        position: s.position,
+        height: s.height,
+        width: s.width,
+        lastAgent: s.lastAgent,
+      }),
     },
   ),
 );

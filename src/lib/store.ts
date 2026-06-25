@@ -185,7 +185,6 @@ export type Tool =
   | "bookmarks"
   | "hierarchy"
   | "timeline"
-  | "activity"
   | "qa"
   | "tours"
   | "prereview"
