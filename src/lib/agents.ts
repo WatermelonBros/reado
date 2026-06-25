@@ -73,10 +73,13 @@ export async function launchAgent(agent: Agent, bin: string): Promise<void> {
   useTerminals.getState().markAgent(id, agent);
 }
 
+/** Default agent when the user has never launched one. */
+const DEFAULT_AGENT: Agent = "claude-code";
+
 /** Send an AI prompt to the agent. If the active terminal already has an agent,
- *  send it there; otherwise launch the last-used agent first (the default), then
- *  send the prompt once it has booted. With no agent ever used, fall back to
- *  writing the prompt to the terminal directly (today's behaviour). */
+ *  send it there; otherwise launch one first — the last-used agent, or Claude
+ *  Code by default — and send the prompt once it has booted. We never write an
+ *  AI prompt to a bare shell: it would just be run as a (broken) command. */
 export async function dispatchToAgent(prompt: string): Promise<void> {
   const term = useTerminals.getState();
   const id = term.activeId ?? term.add();
@@ -84,14 +87,9 @@ export async function dispatchToAgent(prompt: string): Promise<void> {
     submitToTerminal(id, prompt, id === useTerminals.getState().activeId ? 0 : 400);
     return;
   }
-  const agent = term.lastAgent as Agent | null;
-  if (agent && AGENT_BIN[agent]) {
-    const shell = await ptyDefaultShell().catch(() => null);
-    submitToTerminal(id, agentLaunchCommand(shellFamily(shell), agent, AGENT_BIN[agent]), 0);
-    useTerminals.getState().markAgent(id, agent);
-    submitToTerminal(id, prompt, AGENT_BOOT_MS); // wait for the agent to boot
-    return;
-  }
-  // No agent known → write directly (the user can start one and re-run).
-  submitToTerminal(id, prompt, 0);
+  const agent = (term.lastAgent as Agent | null) ?? DEFAULT_AGENT;
+  const shell = await ptyDefaultShell().catch(() => null);
+  submitToTerminal(id, agentLaunchCommand(shellFamily(shell), agent, AGENT_BIN[agent]), 0);
+  useTerminals.getState().markAgent(id, agent);
+  submitToTerminal(id, prompt, AGENT_BOOT_MS); // wait for the agent to boot
 }
