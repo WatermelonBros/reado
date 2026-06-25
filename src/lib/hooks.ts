@@ -224,4 +224,29 @@ export function useGlobalShortcuts(): void {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, toggleSettings]);
+
+  // Mouse back/forward buttons (X1/X2) should walk Reado's read-history, not the
+  // webview's page history (which would jump to the launcher). preventDefault on
+  // mousedown stops the navigation; we act on mouseup so it fires once.
+  useEffect(() => {
+    const isNav = (b: number) => b === 3 || b === 4;
+    const block = (e: MouseEvent) => {
+      if (isNav(e.button)) e.preventDefault();
+    };
+    const onUp = (e: MouseEvent) => {
+      if (!isNav(e.button)) return;
+      e.preventDefault();
+      const p = useProject.getState();
+      if (e.button === 3) p.goBack();
+      else p.goForward();
+    };
+    window.addEventListener("mousedown", block);
+    window.addEventListener("auxclick", block);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousedown", block);
+      window.removeEventListener("auxclick", block);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 }
