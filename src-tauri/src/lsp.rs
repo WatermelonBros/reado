@@ -23,7 +23,10 @@ fn login_shell_path() -> &'static str {
         #[cfg(not(windows))]
         {
             let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-            if let Ok(out) = crate::proc::command(&shell).args(["-ilc", "echo $PATH"]).output() {
+            if let Ok(out) = crate::proc::command(&shell)
+                .args(["-ilc", "echo $PATH"])
+                .output()
+            {
                 if out.status.success() {
                     let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
                     if !p.is_empty() {

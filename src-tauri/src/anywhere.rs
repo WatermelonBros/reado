@@ -11,10 +11,10 @@
 //! which revokes every phone. Stable, persisted device credentials are a later
 //! refinement.
 
+use crate::proc::command;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use crate::proc::command;
 use std::sync::{Arc, Mutex, Once};
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -149,13 +149,11 @@ fn mint_token() -> String {
     hex::encode(bytes)
 }
 
-/// Join a project-relative path to its root, rejecting traversal (`..`).
+/// Join a project-relative path to its root, rejecting traversal (`..`). An
+/// empty `rel` is allowed (it means the root itself).
 fn safe_join(root: &str, rel: &str) -> Option<PathBuf> {
-    if rel.split(['/', '\\']).any(|c| c == ".." || c == "") && !rel.is_empty() {
-        // allow empty rel (the root itself), reject any `..` or empty segment
-        if rel.split(['/', '\\']).any(|c| c == "..") {
-            return None;
-        }
+    if rel.split(['/', '\\']).any(|c| c == "..") {
+        return None;
     }
     Some(Path::new(root).join(rel))
 }
@@ -256,7 +254,10 @@ async fn start_server(
         .route(
             "/manifest.webmanifest",
             get(|| async {
-                ([(header::CONTENT_TYPE, "application/manifest+json")], MANIFEST)
+                (
+                    [(header::CONTENT_TYPE, "application/manifest+json")],
+                    MANIFEST,
+                )
             }),
         )
         .route("/vendor/xterm.js", js(XTERM_JS, "text/javascript"))
@@ -325,12 +326,22 @@ pub fn dev_autostart(app: &AppHandle) {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "project".into());
         if let Ok(mut p) = projects.lock() {
-            p.insert("dev".into(), ProjectMeta { id: "dev".into(), name, root });
+            p.insert(
+                "dev".into(),
+                ProjectMeta {
+                    id: "dev".into(),
+                    name,
+                    root,
+                },
+            );
         }
     }
     match tauri::async_runtime::block_on(start_server(app.clone(), projects, recents, terminals)) {
         Ok((handle, info)) => {
-            println!("\n[reado-anywhere] open on your phone:\n[reado-anywhere] {}\n", pairing_url(&info));
+            println!(
+                "\n[reado-anywhere] open on your phone:\n[reado-anywhere] {}\n",
+                pairing_url(&info)
+            );
             if let Ok(mut g) = state.running.lock() {
                 *g = Some(Running { handle, info });
             }
@@ -372,7 +383,9 @@ pub fn shutdown(state: &AnywhereState) {
 
 /// The current server info, or `None` when Reado Anywhere is off.
 #[tauri::command]
-pub fn anywhere_status(state: TauriState<'_, AnywhereState>) -> Result<Option<AnywhereInfo>, String> {
+pub fn anywhere_status(
+    state: TauriState<'_, AnywhereState>,
+) -> Result<Option<AnywhereInfo>, String> {
     Ok(state
         .running
         .lock()
@@ -413,7 +426,11 @@ pub fn anywhere_clear_project(
     state: TauriState<'_, AnywhereState>,
     id: String,
 ) -> Result<(), String> {
-    state.projects.lock().map_err(|e| e.to_string())?.remove(&id);
+    state
+        .projects
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove(&id);
     Ok(())
 }
 
@@ -485,11 +502,17 @@ struct DirEntry {
     dir: bool,
 }
 
-async fn dir(State(api): State<Api>, Query(q): Query<DirQuery>) -> Result<Json<Vec<DirEntry>>, StatusCode> {
+async fn dir(
+    State(api): State<Api>,
+    Query(q): Query<DirQuery>,
+) -> Result<Json<Vec<DirEntry>>, StatusCode> {
     let root = api.root(&q.project).ok_or(StatusCode::NOT_FOUND)?;
     let base = safe_join(&root, &q.path).ok_or(StatusCode::BAD_REQUEST)?;
     let mut out = Vec::new();
-    for entry in std::fs::read_dir(&base).map_err(|_| StatusCode::NOT_FOUND)?.flatten() {
+    for entry in std::fs::read_dir(&base)
+        .map_err(|_| StatusCode::NOT_FOUND)?
+        .flatten()
+    {
         let name = entry.file_name().to_string_lossy().to_string();
         if name == ".git" {
             continue;
@@ -500,7 +523,11 @@ async fn dir(State(api): State<Api>, Query(q): Query<DirQuery>) -> Result<Json<V
         } else {
             format!("{}/{}", q.path.trim_end_matches('/'), name)
         };
-        out.push(DirEntry { name, path: rel, dir: is_dir });
+        out.push(DirEntry {
+            name,
+            path: rel,
+            dir: is_dir,
+        });
     }
     // Directories first, then files; each alphabetical (case-insensitive).
     out.sort_by(|a, b| {
@@ -548,7 +575,13 @@ async fn changed(
     let out = command("git")
         // `--untracked-files=all` expands untracked directories into individual
         // files, so the list is only files — never a folder entry like `dir/`.
-        .args(["-C", &root, "status", "--porcelain", "--untracked-files=all"])
+        .args([
+            "-C",
+            &root,
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+        ])
         .output()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let files = String::from_utf8_lossy(&out.stdout)
@@ -559,7 +592,12 @@ async fn changed(
             }
             let status = l[..2].trim().to_string();
             // Handle "old -> new" for renames by taking the new path.
-            let path = l[3..].split(" -> ").last().unwrap_or(&l[3..]).trim().to_string();
+            let path = l[3..]
+                .split(" -> ")
+                .last()
+                .unwrap_or(&l[3..])
+                .trim()
+                .to_string();
             Some(ChangedFile { path, status })
         })
         .collect();
@@ -630,7 +668,12 @@ fn get_or_create_term(terminals: &Terminals, key: &str, root: &str) -> Option<Ar
 
     let pty = native_pty_system();
     let pair = pty
-        .openpty(PtySize { rows: 30, cols: 100, pixel_width: 0, pixel_height: 0 })
+        .openpty(PtySize {
+            rows: 30,
+            cols: 100,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
         .ok()?;
     let (sh, args) = shell();
     let mut cmd = CommandBuilder::new(sh);
@@ -711,7 +754,11 @@ async fn term_session(socket: WebSocket, session: Arc<TermSession>) {
     // (re)connect is a clean mirror — no duplication whether the client is fresh
     // (page reload) or retained (background/blip).
     {
-        let sb = session.scrollback.lock().map(|s| s.clone()).unwrap_or_default();
+        let sb = session
+            .scrollback
+            .lock()
+            .map(|s| s.clone())
+            .unwrap_or_default();
         let mut data = b"\x1bc".to_vec();
         data.extend_from_slice(&sb);
         let _ = ws_tx.send(Message::Binary(data)).await;
@@ -794,7 +841,11 @@ async fn comments_post(
         file: b.file,
         scope: Scope::Range,
         start_line: b.start_line,
-        end_line: if b.end_line == 0 { b.start_line } else { b.end_line },
+        end_line: if b.end_line == 0 {
+            b.start_line
+        } else {
+            b.end_line
+        },
         comment_type: b.comment_type.unwrap_or(CommentType::Note),
         kind: b.kind.unwrap_or(CommentKind::Task),
         body: b.body,
@@ -823,11 +874,15 @@ async fn comment_update(
 ) -> Result<StatusCode, StatusCode> {
     let root = api.root(&b.project).ok_or(StatusCode::NOT_FOUND)?;
     if let Some(kind) = b.kind {
-        let patch = core::CommentPatch { kind: Some(kind), ..Default::default() };
+        let patch = core::CommentPatch {
+            kind: Some(kind),
+            ..Default::default()
+        };
         core::update_comment(&root, &b.id, patch).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     if let Some(state) = b.state {
-        core::set_comment_state(&root, &b.id, state).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        core::set_comment_state(&root, &b.id, state)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     Ok(StatusCode::OK)
 }
@@ -860,9 +915,9 @@ mod tests {
     fn fingerprint_is_colon_hex() {
         let fp = fingerprint(&[0x00, 0xab, 0xff]);
         assert_eq!(fp.split(':').count(), 32); // SHA-256 → 32 bytes
-        assert!(fp
-            .split(':')
-            .all(|p| p.len() == 2 && p.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_lowercase())));
+        assert!(fp.split(':').all(|p| p.len() == 2
+            && p.chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_lowercase())));
     }
 
     #[test]

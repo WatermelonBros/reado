@@ -6,9 +6,9 @@
 //! and the formatted text is returned for the editor to apply. The file on disk
 //! is never touched here; saving stays the user's choice.
 
+use crate::proc::command;
 use std::io::Write;
 use std::path::Path;
-use crate::proc::command;
 use std::process::Stdio;
 
 /// A formatter invocation: a program and its arguments (content arrives on stdin).

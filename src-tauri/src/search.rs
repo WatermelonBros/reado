@@ -4,8 +4,8 @@
 //! fast on large repositories. The structured JSON stream is parsed into flat
 //! match rows the frontend renders directly.
 
-use std::path::Path;
 use crate::proc::command;
+use std::path::Path;
 
 use serde::Serialize;
 use serde_json::Value;

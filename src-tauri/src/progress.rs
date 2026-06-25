@@ -106,16 +106,28 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().to_str().unwrap().to_string();
         set_read(root.clone(), "a.ts".into(), true, Some("v1".into())).unwrap();
-        assert_eq!(get_read_snapshot(root.clone(), "a.ts".into()).unwrap(), Some("v1".into()));
+        assert_eq!(
+            get_read_snapshot(root.clone(), "a.ts".into()).unwrap(),
+            Some("v1".into())
+        );
         // Oversized content is skipped (no snapshot stored).
         let big = "x".repeat(MAX_SNAPSHOT_BYTES + 1);
         set_read(root.clone(), "b.ts".into(), true, Some(big)).unwrap();
-        assert_eq!(get_read_snapshot(root.clone(), "b.ts".into()).unwrap(), None);
+        assert_eq!(
+            get_read_snapshot(root.clone(), "b.ts".into()).unwrap(),
+            None
+        );
         // Unmark KEEPS the snapshot (the delta baseline survives an external change).
         set_read(root.clone(), "a.ts".into(), false, None).unwrap();
-        assert_eq!(get_read_snapshot(root.clone(), "a.ts".into()).unwrap(), Some("v1".into()));
+        assert_eq!(
+            get_read_snapshot(root.clone(), "a.ts".into()).unwrap(),
+            Some("v1".into())
+        );
         // A new read overwrites it.
         set_read(root.clone(), "a.ts".into(), true, Some("v2".into())).unwrap();
-        assert_eq!(get_read_snapshot(root, "a.ts".into()).unwrap(), Some("v2".into()));
+        assert_eq!(
+            get_read_snapshot(root, "a.ts".into()).unwrap(),
+            Some("v2".into())
+        );
     }
 }

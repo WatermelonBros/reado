@@ -5,9 +5,9 @@
 //! the MVP needs: whether a folder is a repository, and its current branch.
 //! Git-dependent features degrade gracefully when `git` is absent.
 
+use crate::proc::command;
 use std::collections::HashMap;
 use std::path::Path;
-use crate::proc::command;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
@@ -579,10 +579,7 @@ pub struct FileCommit {
 pub fn git_file_history(root: String, file: String) -> Vec<FileCommit> {
     // Unit-separator-delimited fields, one commit per line.
     let fmt = "--format=%H%x1f%an%x1f%at%x1f%s";
-    let Some(out) = run_git_raw(
-        Path::new(&root),
-        &["log", "--follow", fmt, "--", &file],
-    ) else {
+    let Some(out) = run_git_raw(Path::new(&root), &["log", "--follow", fmt, "--", &file]) else {
         return Vec::new();
     };
     out.lines()
