@@ -136,14 +136,40 @@ export function Terminal({ id, cwd, active }: Props) {
       );
       term.attachCustomKeyEventHandler((e) => {
         if (e.type !== "keydown") return true;
+        const key = e.key.toLowerCase();
+        // Copy: Cmd+C (mac), Ctrl+Shift+C, or Ctrl+C while text is selected
+        // (Windows/Linux). Bare Ctrl+C with no selection stays SIGINT.
+        if (
+          key === "c" &&
+          (e.metaKey || (e.ctrlKey && e.shiftKey) || (e.ctrlKey && term.hasSelection()))
+        ) {
+          const sel = term.getSelection();
+          if (sel) {
+            e.preventDefault();
+            void navigator.clipboard.writeText(sel).catch(() => {});
+            return false;
+          }
+        }
+        // Paste: Cmd+V (mac) or Ctrl+Shift+V (Windows/Linux). term.paste keeps
+        // bracketed-paste mode intact so TUIs receive it as a paste, not typing.
+        if (key === "v" && (e.metaKey || (e.ctrlKey && e.shiftKey))) {
+          e.preventDefault();
+          void navigator.clipboard.readText().then((t) => t && term.paste(t)).catch(() => {});
+          return false;
+        }
         // Cmd+F (or Ctrl+Shift+F) opens search — Ctrl+F alone stays readline's.
         if (e.key.toLowerCase() === "f" && (e.metaKey || (e.ctrlKey && e.shiftKey))) {
+          e.preventDefault();
           setQuery((q) => (q === null ? "" : q));
           return false;
         }
         // Shift+Enter inserts a newline instead of submitting: ESC+CR is the
         // sequence TUI agents (Claude/Codex) and readline read as "newline".
+        // preventDefault is essential: returning false stops xterm processing
+        // but not the browser default, so without it the hidden textarea also
+        // emits a plain Enter (\r) and the agent submits anyway.
         if (e.key === "Enter" && e.shiftKey) {
+          e.preventDefault();
           void ptyWrite(id, "\x1b\r");
           return false;
         }
