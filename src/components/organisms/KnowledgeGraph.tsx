@@ -268,7 +268,7 @@ export function KnowledgeGraph() {
           </h2>
           <button
             type="button"
-            aria-label={t("settings.close")}
+            title={t("settings.close")} aria-label={t("settings.close")}
             onClick={() => close(false)}
             className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink"
           >

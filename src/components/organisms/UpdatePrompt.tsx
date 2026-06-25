@@ -39,7 +39,7 @@ export function UpdatePrompt() {
           <h2 className="m-0 text-sm font-semibold text-ink">{t("update.title")}</h2>
           <button
             type="button"
-            aria-label={t("update.later")}
+            title={t("update.later")} aria-label={t("update.later")}
             onClick={dismiss}
             disabled={installing}
             className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink disabled:opacity-40"

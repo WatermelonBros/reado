@@ -132,7 +132,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
         )}
         <button
           type="button"
-          aria-label={t("settings.close")}
+          title={t("settings.close")} aria-label={t("settings.close")}
           onClick={onClose}
           className="grid h-6 w-6 place-items-center rounded-sm text-muted hover:bg-surface hover:text-ink"
         >

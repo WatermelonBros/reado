@@ -1424,7 +1424,7 @@ function CodeView({
             )}
             <button
               type="button"
-              aria-label={t("common.cancel")}
+              title={t("common.cancel")} aria-label={t("common.cancel")}
               onClick={() => setPeek(null)}
               className="grid h-5 w-5 flex-none place-items-center rounded-md text-faint hover:text-ink"
             >

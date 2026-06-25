@@ -69,7 +69,7 @@ export function RecentProjects() {
                   </button>
                   <button
                     type="button"
-                    aria-label={t("recents.remove")}
+                    title={t("recents.remove")} aria-label={t("recents.remove")}
                     onClick={() => remove(p.path)}
                     className="grid w-[34px] place-items-center text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
                   >

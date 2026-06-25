@@ -225,7 +225,7 @@ export function TerminalPanel() {
               )}
               <button
                 type="button"
-                aria-label={t("terminal.close")}
+                title={t("terminal.close")} aria-label={t("terminal.close")}
                 onClick={(e) => {
                   e.stopPropagation();
                   removeGroup(g.id);

@@ -6,7 +6,7 @@
  * set with a message. Selecting a file opens it with the diff view on so you can
  * see what changed (including the agent's edits).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   gitStatus,
   gitStage,
@@ -77,6 +77,10 @@ export function GitPanel() {
   const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
   // Repo-level "more actions" dropdown + its data.
   const [menuOpen, setMenuOpen] = useState(false);
+  // The "more" menu is positioned with fixed coords (to the right of the dots) so
+  // it escapes the sidebar's overflow clipping entirely.
+  const dotsRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [stashes, setStashes] = useState<StashEntry[]>([]);
   const [branchName, setBranchName] = useState<string | null>(null); // null = input hidden
   const [confirmDiscardAll, setConfirmDiscardAll] = useState(false);
@@ -296,20 +300,31 @@ export function GitPanel() {
         <ToolButton onClick={() => runRepo(gitFetch(root))} label={t("git.fetch")} Icon={FetchIcon} />
         <ToolButton onClick={() => runRepo(gitPull(root))} label={t("git.pull")} Icon={PullIcon} />
         <ToolButton onClick={() => runRepo(gitPush(root))} label={t("git.push")} Icon={PushIcon} />
-        <div className="relative ml-auto">
+        <div ref={dotsRef} className="ml-auto">
           <ToolButton
             onClick={() => {
               const next = !menuOpen;
+              if (next) {
+                const r = dotsRef.current?.getBoundingClientRect();
+                if (r) setMenuPos({ top: r.top, left: r.right + 6 });
+                refreshStashes();
+              }
               setMenuOpen(next);
-              if (next) refreshStashes();
             }}
             label={t("git.more")}
             Icon={MoreIcon}
           />
-          {menuOpen && (
+          {menuOpen && menuPos && (
             <>
               <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 z-30 mt-1 max-h-[60vh] w-60 overflow-y-auto rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]">
+              <div
+                className="fixed z-30 w-60 overflow-y-auto rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]"
+                style={{
+                  top: menuPos.top,
+                  left: menuPos.left,
+                  maxHeight: `calc(100vh - ${menuPos.top}px - 8px)`,
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => {

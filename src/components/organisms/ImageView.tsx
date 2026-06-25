@@ -59,7 +59,7 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
           <button
             type="button"
             onClick={() => stepZoom(-1)}
-            aria-label="Zoom out"
+            title="Zoom out" aria-label="Zoom out"
             className="grid h-6 w-6 place-items-center rounded hover:bg-surface hover:text-ink"
           >
             −
@@ -74,7 +74,7 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
           <button
             type="button"
             onClick={() => stepZoom(1)}
-            aria-label="Zoom in"
+            title="Zoom in" aria-label="Zoom in"
             className="grid h-6 w-6 place-items-center rounded hover:bg-surface hover:text-ink"
           >
             +

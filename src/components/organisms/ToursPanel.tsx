@@ -101,7 +101,7 @@ export function ToursPanel() {
                       <button
                         type="button"
                         onClick={() => useTours.getState().removeStep(root, tour.id, i)}
-                        aria-label={t("tours.removeStep")}
+                        title={t("tours.removeStep")} aria-label={t("tours.removeStep")}
                         className="grid h-5 w-5 flex-none place-items-center text-faint opacity-0 transition-opacity group-hover/s:opacity-100 hover:text-ink"
                       >
                         <CloseIcon className="h-2.5 w-2.5" />
