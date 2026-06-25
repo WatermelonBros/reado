@@ -176,10 +176,19 @@ export function KnowledgeGraph() {
   const dragMoved = useRef(false);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [, setTick] = useState(0);
+  // Restarts the cooled-down simulation (called when a node is grabbed). Set by
+  // the simulation effect; a ref so handlers always call the live one.
+  const reheatRef = useRef<() => void>(() => {});
 
-  // Force simulation.
+  // Force simulation with cooldown: it runs until the layout settles (low kinetic
+  // energy) or a frame cap, then STOPS — so it doesn't re-render the whole SVG
+  // forever (which made a large graph stutter and its nodes impossible to click
+  // or drag). Grabbing a node reheats it.
   useEffect(() => {
     let raf = 0;
+    let frames = 0;
+    let running = false;
+    const MAX_FRAMES = 600;
     const byId = (id: string) => nodesRef.current.find((n) => n.id === id);
     const step = () => {
       const ns = nodesRef.current;
@@ -213,6 +222,7 @@ export function KnowledgeGraph() {
         b.vx -= (dx / d) * f;
         b.vy -= (dy / d) * f;
       }
+      let energy = 0;
       for (const n of ns) {
         if (n.id === dragId.current) {
           n.vx = 0;
@@ -225,12 +235,33 @@ export function KnowledgeGraph() {
         n.vy *= 0.86;
         n.x = Math.max(24, Math.min(size.w - 24, n.x + n.vx));
         n.y = Math.max(24, Math.min(size.h - 24, n.y + n.vy));
+        energy += n.vx * n.vx + n.vy * n.vy;
       }
+      frames++;
       setTick((x) => x + 1);
+      // Keep going while there's meaningful motion (or a node is being dragged),
+      // up to a hard cap; otherwise settle and stop re-rendering. The threshold
+      // scales with node count so large graphs also reach a stop.
+      if ((energy > 0.03 * ns.length || dragId.current) && frames < MAX_FRAMES) {
+        raf = requestAnimationFrame(step);
+      } else {
+        running = false;
+      }
+    };
+    const start = () => {
+      if (running) return;
+      running = true;
       raf = requestAnimationFrame(step);
     };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
+    reheatRef.current = () => {
+      frames = 0;
+      start();
+    };
+    start();
+    return () => {
+      cancelAnimationFrame(raf);
+      running = false;
+    };
   }, [edges]);
 
   const navigate = (n: Node) => {
@@ -321,9 +352,11 @@ export function KnowledgeGraph() {
                   transform={`translate(${n.x},${n.y})`}
                   className="cursor-pointer"
                   onPointerDown={(e) => {
-                    (e.target as Element).setPointerCapture?.(e.pointerId);
+                    e.stopPropagation();
+                    svgRef.current?.setPointerCapture(e.pointerId);
                     dragId.current = n.id;
                     dragMoved.current = false;
+                    reheatRef.current(); // resume the layout so neighbours adjust
                   }}
                   onPointerEnter={() => setHoverId(n.id)}
                   onPointerLeave={() => setHoverId((h) => (h === n.id ? null : h))}
