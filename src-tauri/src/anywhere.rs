@@ -163,11 +163,12 @@ fn safe_join(root: &str, rel: &str) -> Option<PathBuf> {
 const MOBILE_HTML: &str = include_str!("anywhere_mobile.html");
 const MANIFEST: &str = r##"{"name":"Reado Anywhere","short_name":"Reado","display":"standalone","background_color":"#1b1f28","theme_color":"#1b1f28","icons":[]}"##;
 
-// xterm.js (+ fit addon + css), bundled from node_modules so the phone gets a
-// real terminal emulator over the LAN with no internet.
-const XTERM_JS: &str = include_str!("../../node_modules/@xterm/xterm/lib/xterm.js");
-const XTERM_CSS: &str = include_str!("../../node_modules/@xterm/xterm/css/xterm.css");
-const XTERM_FIT: &str = include_str!("../../node_modules/@xterm/addon-fit/lib/addon-fit.js");
+// xterm.js (+ fit addon + css), vendored into the repo so the phone gets a real
+// terminal emulator over the LAN with no internet — and so the build doesn't
+// depend on node_modules being present (the Rust CI job doesn't install it).
+const XTERM_JS: &str = include_str!("vendor/xterm.js");
+const XTERM_CSS: &str = include_str!("vendor/xterm.css");
+const XTERM_FIT: &str = include_str!("vendor/addon-fit.js");
 
 /// The login+interactive shell to spawn for a phone terminal, per platform.
 fn shell() -> (String, Vec<String>) {
