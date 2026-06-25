@@ -4,8 +4,9 @@
  */
 import type { MessageKey } from "../i18n";
 
-/** Platform modifier glyph (⌘ on macOS, Ctrl elsewhere). */
-export const mod = /mac|iphone|ipad/i.test(navigator.platform) ? "⌘" : "Ctrl";
+/** Platform modifier glyph (⌘ on macOS, Ctrl elsewhere). `navigator.platform`
+ * is deprecated, so sniff the user agent instead. */
+export const mod = /mac|iphone|ipad/i.test(navigator.userAgent) ? "⌘" : "Ctrl";
 
 export interface Shortcut {
   labelKey: MessageKey;
