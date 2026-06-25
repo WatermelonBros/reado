@@ -70,6 +70,15 @@ interface Row {
 
 const basename = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
+/** The active editor's selected text, trimmed to a single line, or "". */
+function selectionText(): string {
+  const view = useDocInfo.getState().view;
+  if (!view) return "";
+  const { from, to } = view.state.selection.main;
+  if (from === to) return "";
+  return view.state.sliceDoc(from, to).split("\n")[0].trim();
+}
+
 export function Palette() {
   const mode = usePalette((s) => s.mode);
   const close = usePalette((s) => s.close);
@@ -89,12 +98,17 @@ export function Palette() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset transient state whenever the palette opens or changes mode.
+  // Entering search with an active editor selection seeds it as the query.
   useEffect(() => {
-    setQuery("");
+    setQuery(mode === "search" ? selectionText() : "");
     setSelected(0);
     setMatches([]);
     setSearchError(null);
-    if (mode) inputRef.current?.focus();
+    if (mode) {
+      const el = inputRef.current;
+      el?.focus();
+      el?.select();
+    }
   }, [mode]);
 
   // Load the file index lazily when entering file mode.
