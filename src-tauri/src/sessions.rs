@@ -39,6 +39,11 @@ pub fn session_set_file_state(
 }
 
 #[tauri::command]
+pub fn session_set_position(root: String, id: String, index: usize) -> Result<Session> {
+    Ok(core::set_position(&root, &id, index)?)
+}
+
+#[tauri::command]
 pub fn session_accept_proposal(
     root: String,
     id: String,

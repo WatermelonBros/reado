@@ -509,6 +509,10 @@ export const sessionSetFileState = (
   state: FileState,
 ) => invoke<Session>("session_set_file_state", { root, id, file, state });
 
+/** Move the route cursor to a file index (the focused/current file). */
+export const sessionSetPosition = (root: string, id: string, index: number) =>
+  invoke<Session>("session_set_position", { root, id, index });
+
 export const sessionAcceptProposal = (
   root: string,
   id: string,

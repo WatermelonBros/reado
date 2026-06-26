@@ -180,10 +180,13 @@
     "related": "Related",
     "action": {
       "review": "Review this file",
+      "reviewHint": "Ask the agent to review this file and propose comments",
       "challenge": "Second opinion",
+      "challengeHint": "Ask a second agent to challenge the findings on this file",
       "reviewed": "Mark reviewed",
       "skip": "Skip"
     },
+    "openFile": "Show {file}",
     "proposals": "Proposals",
     "noProposals": "No open proposals. Review a file to gather some.",
     "approve": "Approve",

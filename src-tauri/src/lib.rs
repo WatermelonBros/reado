@@ -120,6 +120,7 @@ pub fn run() {
             sessions::session_list,
             sessions::session_get,
             sessions::session_set_file_state,
+            sessions::session_set_position,
             sessions::session_accept_proposal,
             sessions::session_set_proposal_state,
             sessions::session_add_decision,

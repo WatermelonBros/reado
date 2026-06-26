@@ -351,6 +351,17 @@ pub fn set_route(root: &str, id: &str, route: Vec<RouteEntry>) -> Result<Session
     })
 }
 
+/// Move the cursor to a specific route index (clamped). Used when the human
+/// picks a file to focus, so `position` stays the single source of truth shared
+/// with the agent's `reado review next`.
+pub fn set_position(root: &str, id: &str, index: usize) -> Result<Session> {
+    mutate(root, id, |s| {
+        if !s.route.is_empty() {
+            s.position = index.min(s.route.len() - 1);
+        }
+    })
+}
+
 /// Set a file's review state, creating its entry if missing.
 pub fn set_file_state(root: &str, id: &str, file: &str, state: FileState) -> Result<Session> {
     mutate(root, id, |s| {

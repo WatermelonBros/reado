@@ -180,10 +180,13 @@
     "related": "Collegati",
     "action": {
       "review": "Revisiona questo file",
+      "reviewHint": "Chiedi all'agente di revisionare questo file e proporre commenti",
       "challenge": "Secondo parere",
+      "challengeHint": "Chiedi a un secondo agente di sfidare i risultati su questo file",
       "reviewed": "Segna revisionato",
       "skip": "Salta"
     },
+    "openFile": "Mostra {file}",
     "proposals": "Proposte",
     "noProposals": "Nessuna proposta aperta. Revisiona un file per generarne.",
     "approve": "Approva",

@@ -263,6 +263,9 @@ function SessionView({ root, session }: { root: string; session: Session }) {
   const memory = (session.proposals ?? []).filter(
     (p) => p.state === "discarded" || p.state === "resolved_as_false_positive",
   );
+  // The current file already has findings → a "second opinion" makes sense (it
+  // challenges those, which is what distinguishes it from the first review).
+  const reviewedCurrent = !!entry && (session.proposals ?? []).some((p) => p.file === entry.file);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -284,17 +287,18 @@ function SessionView({ root, session }: { root: string; session: Session }) {
         </div>
       </div>
 
-      {/* Current file + actions */}
+      {/* Current file + actions. Keyed by file so it re-animates when the
+          current file changes — a clear cue that the focus moved. */}
       {entry && (
-        <section className="flex-none px-3 pt-3">
+        <section key={entry.file} className="animate-rise flex-none border-b border-line/60 px-3 pb-2.5 pt-3">
           <p className="text-[10px] uppercase tracking-wide text-faint">{t("guided.current")}</p>
           <button
             type="button"
-            onClick={() => useProject.getState().open(`${root}/${entry.file}`, 1)}
-            className="mt-0.5 block w-full truncate text-left text-xs font-medium text-ink hover:text-accent"
+            onClick={() => void store().focusFile(root, session.id, entry.file)}
+            className="mt-0.5 block w-full truncate text-left text-sm font-medium text-ink hover:text-accent"
             title={entry.file}
           >
-            {entry.file}
+            {entry.file.split("/").pop()}
           </button>
           {entry.reason && (
             <p className="mt-0.5 text-[11px] leading-snug text-muted">{entry.reason}</p>
@@ -304,23 +308,30 @@ function SessionView({ root, session }: { root: string; session: Session }) {
               {t("guided.related")}: {entry.relatedFiles.join(", ")}
             </p>
           )}
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <Action onClick={() => void store().reviewFile(root, session.id, entry.file)} primary>
+          {/* Primary: run the AI review. Then navigate (reviewed/skip advance to
+              the next file). Second opinion only appears once findings exist. */}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Action
+              primary
+              title={t("guided.action.reviewHint")}
+              onClick={() => void store().reviewFile(root, session.id, entry.file)}
+            >
               {t("guided.action.review")}
             </Action>
-            <Action onClick={() => void store().challenge(root, session.id, entry.file)}>
-              {t("guided.action.challenge")}
-            </Action>
-            <Action
-              onClick={() => void store().setFileState(root, session.id, entry.file, "reviewed")}
-            >
+            <Action onClick={() => void store().finishFile(root, session.id, entry.file, "reviewed")}>
               {t("guided.action.reviewed")}
             </Action>
-            <Action
-              onClick={() => void store().setFileState(root, session.id, entry.file, "skipped")}
-            >
+            <Action onClick={() => void store().finishFile(root, session.id, entry.file, "skipped")}>
               {t("guided.action.skip")}
             </Action>
+            {reviewedCurrent && (
+              <Action
+                title={t("guided.action.challengeHint")}
+                onClick={() => void store().challenge(root, session.id, entry.file)}
+              >
+                {t("guided.action.challenge")}
+              </Action>
+            )}
           </div>
         </section>
       )}
@@ -363,11 +374,11 @@ function SessionView({ root, session }: { root: string; session: Session }) {
                 <li key={e.file}>
                   <button
                     type="button"
-                    onClick={() => void store().reviewFile(root, session.id, e.file)}
+                    onClick={() => void store().focusFile(root, session.id, e.file)}
                     className={`flex w-full items-center gap-2 px-3 py-1 text-left text-[11px] hover:bg-surface ${
-                      isCurrent ? "bg-surface" : ""
+                      isCurrent ? "bg-surface text-ink" : ""
                     }`}
-                    title={e.reason}
+                    title={t("guided.openFile", { file: e.file })}
                   >
                     <span className="min-w-0 flex-1 truncate text-muted">{e.file}</span>
                     <span className={`flex-none text-[9px] ${fileStateTone(fs)}`}>
@@ -603,15 +614,18 @@ function Action({
   children,
   onClick,
   primary,
+  title,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   primary?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={title}
       className={`rounded-md px-2 py-0.5 text-[11px] ${
         primary
           ? "bg-surface text-accent hover:text-ink"

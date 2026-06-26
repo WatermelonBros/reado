@@ -19,6 +19,7 @@ import {
   sessionList,
   sessionSetFileState,
   sessionSetFileSummary,
+  sessionSetPosition,
   sessionSetProposalState,
   sessionSetSummary,
   type FileState,
@@ -31,6 +32,7 @@ import {
 } from "./api";
 import { dispatchToAgent } from "./agents";
 import { useComments } from "./comments";
+import { useProject } from "./store";
 import { useResolveLoop } from "./resolveLoop";
 import {
   composeGuidedChallengePrompt,
@@ -66,6 +68,11 @@ function scopeDesc(scope: ReviewScope): string {
   return SCOPE_LABEL[scope.kind];
 }
 
+/** Open a project-relative file in the editor (the code is the hero). */
+function openInEditor(root: string, file: string) {
+  useProject.getState().open(`${root}/${file}`, 1);
+}
+
 /** The route entry the session's cursor currently points at. */
 export function currentEntry(s: Session | null): RouteEntry | null {
   if (!s || !s.route?.length) return null;
@@ -98,8 +105,12 @@ interface GuidedReviewState {
   refresh: (root: string, id: string) => Promise<void>;
   select: (id: string | null) => void;
   start: (root: string, scope: ReviewScope, objective?: Objective) => Promise<Session | null>;
+  /** Make a file the current one and open it in the editor — no AI. */
+  focusFile: (root: string, id: string, file: string) => Promise<void>;
   reviewFile: (root: string, id: string, file: string) => Promise<void>;
   challenge: (root: string, id: string, file: string) => Promise<void>;
+  /** Set a file's state then advance to the next unfinished file and open it. */
+  finishFile: (root: string, id: string, file: string, state: FileState) => Promise<void>;
   accept: (root: string, id: string, proposalId: string, asNote?: boolean) => Promise<void>;
   edit: (root: string, id: string, proposalId: string, body: string) => Promise<void>;
   discard: (root: string, id: string, proposalId: string) => Promise<void>;
@@ -160,10 +171,24 @@ export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
     return s;
   },
 
+  focusFile: async (root, id, file) => {
+    // Just show it: open in the editor and make it current — no agent.
+    openInEditor(root, file);
+    const idx = (get().sessions.find((x) => x.id === id)?.route ?? []).findIndex(
+      (e) => e.file === file,
+    );
+    if (idx >= 0) {
+      const updated = await sessionSetPosition(root, id, idx).catch(() => null);
+      if (updated) set((st) => ({ sessions: replace(st.sessions, norm(updated)) }));
+    }
+  },
+
   reviewFile: async (root, id, file) => {
     const s = get().sessions.find((x) => x.id === id) ?? null;
     const entry = (s?.route ?? []).find((e) => e.file === file);
     const objective = s?.objective?.replace(/_/g, " ");
+    // Show the file, mark it in-review, then ask the agent to review it.
+    await get().focusFile(root, id, file);
     await get().setFileState(root, id, file, "in_review");
     set({ busy: true });
     void dispatchToAgent(
@@ -176,6 +201,25 @@ export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
     void dispatchToAgent(composeGuidedChallengePrompt(id, file)).finally(() =>
       set({ busy: false }),
     );
+  },
+
+  finishFile: async (root, id, file, state) => {
+    const res = await sessionSetFileState(root, id, file, state).catch(() => null);
+    if (!res) return;
+    const s = norm(res);
+    set((st) => ({ sessions: replace(st.sessions, s) }));
+    // Advance to the next file that still needs attention and open it.
+    const isDone = (f: string) => {
+      const st = s.files?.find((x) => x.file === f)?.state;
+      return st === "reviewed" || st === "skipped" || st === "out_of_scope";
+    };
+    const route = s.route ?? [];
+    const nextIdx = route.findIndex((e) => !isDone(e.file));
+    if (nextIdx >= 0) {
+      openInEditor(root, route[nextIdx].file);
+      const updated = await sessionSetPosition(root, id, nextIdx).catch(() => null);
+      if (updated) set((st) => ({ sessions: replace(st.sessions, norm(updated)) }));
+    }
   },
 
   accept: async (root, id, proposalId, asNote) => {
