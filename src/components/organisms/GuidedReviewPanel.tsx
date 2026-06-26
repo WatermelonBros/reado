@@ -26,6 +26,7 @@ import type {
 } from "../../lib/api";
 import { TYPE_COLOR } from "../atoms/commentMeta";
 import { RouteIcon, SparkleIcon } from "../atoms/icons";
+import { Select } from "../atoms/Select";
 import { ResolveLoopBar } from "../molecules/ResolveLoopBar";
 import { type MessageKey } from "../../i18n";
 
@@ -98,17 +99,16 @@ function Header({
     <div className="flex flex-none items-center gap-2 border-b border-line px-2 py-1.5">
       <RouteIcon className="h-3.5 w-3.5 flex-none text-faint" />
       {sessions.length > 1 ? (
-        <select
-          value={session?.id ?? ""}
-          onChange={(e) => select(e.target.value || null)}
-          className="min-w-0 flex-1 truncate bg-transparent text-[11px] text-muted outline-none"
-        >
-          {sessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.title}
-            </option>
-          ))}
-        </select>
+        <div className="min-w-0 flex-1">
+          <Select
+            value={session?.id ?? sessions[0].id}
+            options={sessions.map((s) => ({ value: s.id, label: s.title }))}
+            onChange={(id) => select(id)}
+            variant="ghost"
+            ariaLabel={t("guided.panel")}
+            className="w-full"
+          />
+        </div>
       ) : (
         <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted">
           {session?.title ?? t("guided.panel")}
@@ -136,20 +136,18 @@ function EmptyState({ root }: { root: string }) {
         <h3 className="text-xs font-semibold text-ink">{t("guided.empty.title")}</h3>
         <p className="mt-1 text-[11px] leading-relaxed text-faint">{t("guided.empty.body")}</p>
       </div>
-      <label className="flex flex-col gap-1 text-[11px] text-faint">
+      <div className="flex flex-col gap-1 text-[11px] text-faint">
         {t("guided.objective.label")}
-        <select
+        <Select
           value={objective}
-          onChange={(e) => setObjective(e.target.value as Objective)}
-          className="rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink outline-none focus:border-accent"
-        >
-          {OBJECTIVES.map((o) => (
-            <option key={o} value={o}>
-              {t(`guided.obj.${o}` as MessageKey)}
-            </option>
-          ))}
-        </select>
-      </label>
+          options={OBJECTIVES.map((o) => ({
+            value: o,
+            label: t(`guided.obj.${o}` as MessageKey),
+          }))}
+          onChange={(o) => setObjective(o)}
+          ariaLabel={t("guided.objective.label")}
+        />
+      </div>
       <div className="flex flex-col gap-1.5">
         <button
           type="button"
@@ -246,6 +244,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
   const entry = currentEntry(session);
   const { reviewed, total } = progress(session);
   const open = openProposals(session);
+  const hasRoute = (session.route ?? []).length > 0;
   const { t } = useTranslation();
   const store = useGuidedReview.getState;
 
@@ -326,19 +325,28 @@ function SessionView({ root, session }: { root: string; session: Session }) {
         </section>
       )}
 
+      {/* While the agent is still planning the route there's nothing to act on. */}
+      {!hasRoute && (
+        <p className="px-3 py-4 text-[11px] leading-relaxed text-faint">
+          {session.status === "planning" ? t("guided.planning") : t("guided.noRoute")}
+        </p>
+      )}
+
       {/* Open proposals — the human disposes of each */}
-      <section className="mt-3 flex-none">
-        <SectionLabel>{t("guided.proposals")}</SectionLabel>
-        {ordered.length === 0 ? (
-          <p className="px-3 py-2 text-[11px] text-faint">{t("guided.noProposals")}</p>
-        ) : (
-          <ul className="m-0 list-none p-0">
-            {ordered.map((p) => (
-              <ProposalRow key={p.id} root={root} sessionId={session.id} p={p} />
-            ))}
-          </ul>
-        )}
-      </section>
+      {hasRoute && (
+        <section className="mt-3 flex-none">
+          <SectionLabel>{t("guided.proposals")}</SectionLabel>
+          {ordered.length === 0 ? (
+            <p className="px-3 py-2 text-[11px] text-faint">{t("guided.noProposals")}</p>
+          ) : (
+            <ul className="m-0 list-none p-0">
+              {ordered.map((p) => (
+                <ProposalRow key={p.id} root={root} sessionId={session.id} p={p} />
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       {/* Route queue */}
       {!!session.route?.length && (

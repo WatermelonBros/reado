@@ -56,7 +56,13 @@ pub fn git_changed_files(root: String, base: Option<String>) -> Vec<String> {
             }
         }
     };
-    match base.as_deref().filter(|b| !b.is_empty()) {
+    match base
+        .as_deref()
+        .map(str::trim)
+        // Reject a base that would be read as a git option (`-`/`--…`) rather
+        // than a revision — defence against argument injection.
+        .filter(|b| !b.is_empty() && !b.starts_with('-'))
+    {
         Some(base) => {
             // Branch scope: what this branch changed relative to its base.
             let range = format!("{base}...HEAD");

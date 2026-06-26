@@ -28,7 +28,7 @@ export function ResolveLoopBar() {
       : "text-muted";
 
   return (
-    <div className="flex-none border-b border-line bg-surface/60 px-3 py-2">
+    <div className="flex-none border-b border-line bg-surface px-3 py-2">
       <div className="flex items-center gap-2">
         <SparkleIcon
           className={`h-3 w-3 flex-none ${tone} ${active.status === "running" ? "animate-pulse" : ""}`}

@@ -168,6 +168,8 @@
       "branch": "Review this branch vs main"
     },
     "progress": "{{reviewed}}/{{total}} reviewed",
+    "planning": "Planning the route — the agent is reading the change…",
+    "noRoute": "No route yet. Review a file or restart the planning pass.",
     "current": "Current file",
     "related": "Related",
     "action": {

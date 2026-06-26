@@ -253,6 +253,12 @@ fn sessions_dir(root: &str) -> PathBuf {
     Path::new(root).join(".reado").join("sessions")
 }
 
+/// A session id is safe to use as a filename: non-empty and free of path
+/// separators or traversal, so a caller-supplied id can't escape `sessions/`.
+fn valid_id(id: &str) -> bool {
+    !id.is_empty() && !id.contains('/') && !id.contains('\\') && !id.contains("..")
+}
+
 fn session_path(root: &str, id: &str) -> PathBuf {
     sessions_dir(root).join(format!("{id}.json"))
 }
@@ -305,8 +311,12 @@ pub fn list_sessions(root: &str) -> Vec<Session> {
     sessions
 }
 
-/// Fetch a session by id.
+/// Fetch a session by id. Rejects ids that aren't safe filenames so a
+/// caller-supplied id can't read outside `.reado/sessions/`.
 pub fn get_session(root: &str, id: &str) -> Result<Session> {
+    if !valid_id(id) {
+        return Err(Error::NotFound(id.to_string()));
+    }
     let text = std::fs::read_to_string(session_path(root, id))
         .map_err(|_| Error::NotFound(id.to_string()))?;
     serde_json::from_str(&text).map_err(|e| Error::Yaml(e.to_string()))
@@ -721,6 +731,15 @@ mod tests {
         assert_eq!(decision.state, ArtifactState::Accepted);
         let file = updated.files.iter().find(|f| f.file == "a.rs").unwrap();
         assert_eq!(file.summary.as_deref(), Some("checked error paths"));
+    }
+
+    #[test]
+    fn rejects_traversal_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        assert!(get_session(root, "../../etc/passwd").is_err());
+        assert!(get_session(root, "a/b").is_err());
+        assert!(get_session(root, "").is_err());
     }
 
     #[test]

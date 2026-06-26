@@ -168,6 +168,8 @@
       "branch": "Revisiona questo branch vs main"
     },
     "progress": "{{reviewed}}/{{total}} revisionati",
+    "planning": "Pianificazione del percorso — l'agente sta leggendo le modifiche…",
+    "noRoute": "Nessun percorso. Revisiona un file o rilancia la pianificazione.",
     "current": "File corrente",
     "related": "Collegati",
     "action": {
