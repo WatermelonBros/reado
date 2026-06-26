@@ -60,6 +60,6 @@
 
 - [x] 8.1 Rust unit tests: redaction (tokens/contents/paths), JSONL single-line framing, level clamping (`log.rs` tests, all green)
 - [x] 8.2 VERIFIED live: file created at `~/.local/share/com.reado.app/logs/reado.log`; backend (`app`) + frontend (`ui:updater`) records interleave; home-path redaction applied. (Size roll/retention covered by code + reasoning, not exercised at 5 MB.)
-- [~] 8.3 MANUAL (un-triggered): disabled session writes nothing; `debug` persists across restart. Gate logic verified by unit reasoning + the live level-gate (debug IPC suppressed at `info`); not exercised via the GUI toggle.
-- [~] 8.4 PARTIAL: app-lifecycle curated records verified live (startup, `update check`, `window close requested`, `exit: tearing down subsystems` all written). The project-activity checkpoints (`watcher`/`index`/`git`/`fs`) were not triggered (no project opened during the run) but use the identical proven `crate::log::*` write path.
+- [x] 8.3 VERIFIED live: `debug` level persisted across restart (debug records flowed after relaunch); toggling logging Off then interacting (window focus + open file) produced ZERO new lines.
+- [x] 8.4 VERIFIED live: opened a project at `debug` and saw the curated checkpoints fire — `lsp` "server binary not installed"+"server start failed" (the exact not-installed scenario), `annotations` reanchored, IPC traces (`list_dir`/`read_file`/`reanchor_file`/`set_read`) with arg keys only + durations, and error paths (`read_file failed`, `client connect failed`) at `error`. Redaction confirmed: args show keys not values, paths are project-relative.
 - [x] 8.5 `pnpm typecheck` ✓, `pnpm test` ✓ (14), `cargo build` ✓, `cargo clippy` ✓ (no issues), `cargo fmt --check` ✓, `cargo test` ✓ (22)
