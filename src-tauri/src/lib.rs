@@ -37,23 +37,29 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Bring up the logging engine before anything else so the rest of
-            // setup is captured. Falls back to a temp dir if the OS log dir
-            // can't be resolved; logging never blocks startup.
+            // setup is captured. Resolve a *per-user private* log dir: the OS
+            // app-log dir, or a home-relative fallback. We deliberately avoid a
+            // shared temp dir (multi-user exposure); if neither resolves we skip
+            // logging rather than write somewhere world-readable. Logging never
+            // blocks startup.
             use tauri::Manager;
+            let home = app.path().home_dir().ok();
             let log_dir = app
                 .path()
                 .app_log_dir()
-                .unwrap_or_else(|_| std::env::temp_dir().join("reado").join("logs"));
-            let home = app.path().home_dir().ok();
-            let log_path = log::init(log_dir, home);
-            log::info(
-                "app",
-                "startup",
-                serde_json::json!({
-                    "version": app.package_info().version.to_string(),
-                    "logPath": log_path.to_string_lossy(),
-                }),
-            );
+                .ok()
+                .or_else(|| home.as_ref().map(|h| h.join(".reado").join("logs")));
+            if let Some(log_dir) = log_dir {
+                let log_path = log::init(log_dir, home);
+                log::info(
+                    "app",
+                    "startup",
+                    serde_json::json!({
+                        "version": app.package_info().version.to_string(),
+                        "logPath": log_path.to_string_lossy(),
+                    }),
+                );
+            }
             menu::init(app)?;
             anywhere::dev_autostart(app.handle());
             Ok(())

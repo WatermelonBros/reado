@@ -106,10 +106,21 @@ export async function tracedInvoke<T>(
     emit("error", "ipc", `${cmd} failed`, {
       ms: Math.round(performance.now() - start),
       args: args ? Object.keys(args) : [],
-      error: String(e),
+      error: safeError(e),
     });
     throw e;
   }
+}
+
+/**
+ * Normalise an exception into a bounded, log-safe string. Backend command
+ * errors and transport failures can carry URLs, paths or payloads, so we keep
+ * only the error name + a length-capped message rather than serialising the raw
+ * value. (Home paths that slip through are still shortened by the backend sink.)
+ */
+export function safeError(e: unknown, max = 200): string {
+  const raw = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  return raw.length > max ? `${raw.slice(0, max)}…` : raw;
 }
 
 /** Absolute path of the active log file (for "copy path" / settings display). */

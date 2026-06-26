@@ -254,11 +254,15 @@ fn run_git_checked(root: &str, args: &[&str]) -> Result<(), String> {
         .args(args)
         .output()
         .map_err(|e| e.to_string())?;
+    // Log only the git subcommand, never the full argv — callers pass free-form
+    // values here (commit messages, branch/stash names) that must not be
+    // persisted (the redactor keys on field names, not argv position).
+    let op = args.first().copied().unwrap_or("");
     if output.status.success() {
         crate::log::info(
             "git",
             "git command ok",
-            serde_json::json!({ "root": root, "args": args }),
+            serde_json::json!({ "root": root, "op": op }),
         );
         Ok(())
     } else {
@@ -266,7 +270,7 @@ fn run_git_checked(root: &str, args: &[&str]) -> Result<(), String> {
         crate::log::error(
             "git",
             "git command failed",
-            serde_json::json!({ "root": root, "args": args, "stderr": stderr }),
+            serde_json::json!({ "root": root, "op": op, "stderr": stderr }),
         );
         Err(stderr)
     }

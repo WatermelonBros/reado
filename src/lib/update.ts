@@ -9,7 +9,7 @@
 import { create } from "zustand";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { createLogger } from "./logger";
+import { createLogger, safeError } from "./logger";
 
 const log = createLogger("updater");
 
@@ -56,10 +56,19 @@ export const useUpdate = create<UpdateState>((set, get) => ({
     log.info("download + install", { version: u.version });
     try {
       await u.downloadAndInstall();
-      log.info("installed; relaunching", { version: u.version });
+    } catch (e) {
+      // The update itself failed — nothing was installed.
+      log.error("install failed", { version: u.version, error: safeError(e) });
+      set({ installing: false, open: false, toast: { kind: "error", text: String(e) } });
+      return;
+    }
+    log.info("installed; relaunching", { version: u.version });
+    try {
       await relaunch();
     } catch (e) {
-      log.error("install failed", { version: u.version, error: String(e) });
+      // Installed fine, but the restart failed — don't report it as an install
+      // failure.
+      log.error("relaunch failed", { version: u.version, error: safeError(e) });
       set({ installing: false, open: false, toast: { kind: "error", text: String(e) } });
     }
   },

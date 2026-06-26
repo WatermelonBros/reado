@@ -371,14 +371,18 @@ export function runMenuCommand(id: string): void {
         void openUrl(RELEASES);
         break;
       case "help:revealLog":
-        void logPath().then((p) => {
-          if (p) void revealItemInDir(p).catch(() => {});
-        });
+        void logPath()
+          .then((p) => {
+            if (p) return revealItemInDir(p);
+          })
+          .catch(() => {});
         break;
       case "help:copyLogPath":
-        void logPath().then((p) => {
-          if (p) void navigator.clipboard.writeText(p).catch(() => {});
-        });
+        void logPath()
+          .then((p) => {
+            if (p) return navigator.clipboard.writeText(p);
+          })
+          .catch(() => {});
         break;
     }
 }

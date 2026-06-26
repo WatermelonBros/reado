@@ -284,10 +284,13 @@ async fn start_server(
     let handle = Handle::new();
     let serve_handle = handle.clone();
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    // Note: the cert fingerprint is intentionally not logged — the `fingerprint`
+    // field name is on the redaction denylist, so it would only ever write
+    // `<redacted>`. The address is enough to confirm the listener came up.
     crate::log::info(
         "anywhere",
         "server starting",
-        serde_json::json!({ "addr": addr.to_string(), "fingerprint": info.fingerprint }),
+        serde_json::json!({ "addr": addr.to_string() }),
     );
     tauri::async_runtime::spawn(async move {
         let _ = axum_server::bind_rustls(addr, config)

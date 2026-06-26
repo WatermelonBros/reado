@@ -8,7 +8,7 @@
  */
 import { check } from "@tauri-apps/plugin-updater";
 import { useUpdate } from "./update";
-import { createLogger } from "./logger";
+import { createLogger, safeError } from "./logger";
 
 const log = createLogger("updater");
 
@@ -36,7 +36,7 @@ export async function checkForUpdates(interactive: boolean): Promise<void> {
     }
     st.setAvailable(update);
   } catch (error) {
-    log.error("update check failed", { error: String(error) });
+    log.error("update check failed", { error: safeError(error) });
     if (interactive) {
       useUpdate
         .getState()

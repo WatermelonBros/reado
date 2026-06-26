@@ -103,11 +103,16 @@ pub fn init(log_dir: PathBuf, home: Option<PathBuf>) -> PathBuf {
         }
     }
     let _ = fs::create_dir_all(&log_dir);
+    restrict_dir(&log_dir);
     let path = log_dir.join(ACTIVE_FILE);
     let file = open_append(&path).ok();
+    // Read the persisted preference up front so a user who turned logging off
+    // (or down) in a previous session is honoured *before* the first startup
+    // write — the frontend re-pushes the same value later via `log_set_config`.
+    let (enabled, threshold) = read_persisted_config(&log_dir);
     let logger = Logger {
-        threshold: AtomicU8::new(LEVEL_INFO),
-        enabled: AtomicBool::new(true),
+        threshold: AtomicU8::new(threshold),
+        enabled: AtomicBool::new(enabled),
         sink: Mutex::new(Sink {
             dir: log_dir,
             path: path.clone(),
@@ -121,6 +126,56 @@ pub fn init(log_dir: PathBuf, home: Option<PathBuf>) -> PathBuf {
         .get()
         .and_then(|l| l.sink.lock().ok().map(|s| s.path.clone()))
         .unwrap_or(path)
+}
+
+/// Name of the tiny backend-readable config mirror (sits next to the logs).
+const CONFIG_FILE: &str = "log-config.json";
+
+/// On Unix, make the log directory private (0700) so a fallback location can't
+/// expose one user's diagnostics to other local users. No-op elsewhere.
+fn restrict_dir(dir: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o700));
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = dir;
+    }
+}
+
+/// Read `{enabled, level}` persisted beside the logs. Defaults to enabled/`info`
+/// when the file is missing or unreadable.
+fn read_persisted_config(dir: &Path) -> (bool, u8) {
+    let default = (true, LEVEL_INFO);
+    let Ok(text) = fs::read_to_string(dir.join(CONFIG_FILE)) else {
+        return default;
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else {
+        return default;
+    };
+    let enabled = v.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+    let level = v
+        .get("level")
+        .and_then(Value::as_str)
+        .map(level_from_str)
+        .unwrap_or(LEVEL_INFO);
+    (enabled, level)
+}
+
+/// Persist `{enabled, level}` beside the logs so the next launch can honour it
+/// before the frontend has a chance to push the setting.
+fn write_persisted_config(enabled: bool, level: u8) {
+    if let Some(dir) = LOGGER
+        .get()
+        .and_then(|l| l.sink.lock().ok().map(|s| s.dir.clone()))
+    {
+        let body = json!({ "enabled": enabled, "level": level_name(level) });
+        if let Ok(text) = serde_json::to_string(&body) {
+            let _ = fs::write(dir.join(CONFIG_FILE), text);
+        }
+    }
 }
 
 /// Resolved absolute path of the active log file, if the engine is initialised.
@@ -293,12 +348,21 @@ fn summarise_len(value: &Value) -> Value {
     }
 }
 
-/// If `s` is an absolute path under the user's home, rewrite the prefix as `~`.
+/// If `s` is an absolute path *inside* the user's home, rewrite the prefix as
+/// `~`. Requires a separator boundary after the prefix so a sibling like
+/// `/home/alice2/...` isn't mangled into `~2/...` (the home dir itself maps to
+/// `~`).
 fn shorten_path(s: &str, home: Option<&Path>) -> String {
     if let Some(home) = home {
         let home = home.to_string_lossy();
         if !home.is_empty() && s.starts_with(home.as_ref()) {
-            return format!("~{}", &s[home.len()..]);
+            let rest = &s[home.len()..];
+            if rest.is_empty() {
+                return "~".to_string();
+            }
+            if rest.starts_with(['/', '\\']) {
+                return format!("~{rest}");
+            }
         }
     }
     s.to_string()
@@ -348,8 +412,12 @@ pub fn log_path() -> Option<String> {
 /// boot and whenever the setting changes).
 #[tauri::command]
 pub fn log_set_config(enabled: bool, level: String) {
+    let lvl = level_from_str(&level);
     set_enabled(enabled);
-    set_level(level_from_str(&level));
+    set_level(lvl);
+    // Mirror to disk so the next launch honours this choice before the frontend
+    // re-pushes it (see `read_persisted_config`).
+    write_persisted_config(enabled, lvl);
 }
 
 #[cfg(test)]
@@ -377,6 +445,17 @@ mod tests {
         let home = PathBuf::from("/home/alice");
         let out = redact(json!({ "path": "/home/alice/project/x.rs" }), Some(&home));
         assert_eq!(out["path"], json!("~/project/x.rs"));
+    }
+
+    #[test]
+    fn sibling_of_home_is_not_shortened() {
+        let home = PathBuf::from("/home/alice");
+        // A textual-prefix sibling must be left intact (boundary check).
+        let out = redact(json!({ "path": "/home/alice2/x.rs" }), Some(&home));
+        assert_eq!(out["path"], json!("/home/alice2/x.rs"));
+        // The home dir itself maps to "~".
+        let out = redact(json!({ "path": "/home/alice" }), Some(&home));
+        assert_eq!(out["path"], json!("~"));
     }
 
     #[test]
