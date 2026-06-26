@@ -140,6 +140,78 @@
     "approve": "Approve",
     "discard": "Discard"
   },
+  "guided": {
+    "panel": "Guided Review",
+    "busy": "Agent working…",
+    "empty": {
+      "title": "Guided Pair Review",
+      "body": "The agent proposes a route, reviews file by file and drafts comments; you decide. Pick a focus and start — nothing is final until you approve it."
+    },
+    "objective": { "label": "Objective" },
+    "obj": {
+      "bug_risk": "Bug risk",
+      "design": "Design & API",
+      "maintainability": "Maintainability",
+      "security": "Security",
+      "performance": "Performance",
+      "test_coverage": "Test coverage",
+      "ai_sanity": "AI-code sanity",
+      "onboarding": "Onboarding",
+      "general": "Senior review"
+    },
+    "start": {
+      "diff": "Review current changes",
+      "branch": "Review this branch vs main"
+    },
+    "progress": "{{reviewed}}/{{total}} reviewed",
+    "current": "Current file",
+    "related": "Related",
+    "action": {
+      "review": "Review this file",
+      "challenge": "Second opinion",
+      "reviewed": "Mark reviewed",
+      "skip": "Skip"
+    },
+    "proposals": "Proposals",
+    "noProposals": "No open proposals. Review a file to gather some.",
+    "approve": "Approve",
+    "approveNote": "As note",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "discard": "Discard",
+    "falsePositive": "False positive",
+    "fpNote": "Checked — not an issue.",
+    "route": "Route",
+    "fileSummary": "File summary",
+    "decisions": "Decisions",
+    "summary": "Session summary",
+    "memory": "{{count}} kept as memory",
+    "sendTasks": "Send {{count}} confirmed tasks",
+    "close": "Close session",
+    "fs": {
+      "not_started": "—",
+      "queued": "queued",
+      "in_review": "reviewing",
+      "reviewed": "done",
+      "needs_followup": "follow-up",
+      "skipped": "skipped",
+      "blocked": "blocked",
+      "out_of_scope": "out of scope"
+    },
+    "at": {
+      "comment": "comment",
+      "task": "task",
+      "note": "note",
+      "question": "question",
+      "decision": "decision",
+      "follow_up": "follow-up",
+      "needs_context": "needs context",
+      "false_positive": "false positive",
+      "file_summary": "summary",
+      "session_summary": "summary"
+    }
+  },
   "tours": {
     "panel": "Tours",
     "open": "Reading tours",

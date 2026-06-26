@@ -100,6 +100,58 @@ export function composeExplainPrompt(
   return p;
 }
 
+// ---- Guided Pair Review --------------------------------------------------
+//
+// The agent drives the session through the `reado session`/`reado review` CLI:
+// it plans a route, reviews file by file and **proposes** artifacts the human
+// disposes of. Reado never calls an LLM directly — these single-line prompts
+// (TUI submit) hand the session id to the agent and tell it which verb to run.
+
+/** Kick off the planning pass: read the scope and emit a ranked route. */
+export function composeGuidedPlanPrompt(sessionId: string, scopeDesc: string): string {
+  return (
+    `READO GUIDED REVIEW — planning pass for session ${sessionId} (scope: ${scopeDesc}). ` +
+    `Run \`reado session show ${sessionId} --json\` for context, inspect the changed files ` +
+    "(git diff, the tree, symbols, existing comments), then propose an ordered review route. " +
+    `Emit it with \`reado review plan ${sessionId} --route '<json>'\` where <json> is an array of ` +
+    '{"file","priority","reason","suggestedReviewMode":"quick|normal|deep","relatedFiles":[...]} ' +
+    "ranked by risk (diff size, role, dependents, files with comments). Do NOT review deeply yet " +
+    "and do NOT change any code — just plan the route."
+  );
+}
+
+/** Review one file: ask targeted questions and propose anchored comments. */
+export function composeGuidedFilePrompt(
+  sessionId: string,
+  file: string,
+  mode: string,
+  objective?: string,
+): string {
+  const focus = objective ? ` Objective: ${objective}.` : "";
+  return (
+    `READO GUIDED REVIEW — review \`${file}\` for session ${sessionId} (${mode} pass).${focus} ` +
+    `Run \`reado review context ${sessionId} --file ${file} --json\` first. Read the file and ` +
+    "raise concrete, grounded observations — never broad generic remarks. For each, PROPOSE a " +
+    `comment: \`reado review propose-comment ${sessionId} --file ${file} --line <n> [--end <m>] ` +
+    '--type <bug|refactor|performance|question|note> "<body>"\`. ' +
+    `Open questions → \`reado review propose ${sessionId} --kind question --file ${file} --line <n> "<q>"\`; ` +
+    "if you can't judge without more context, use `--kind needs-context` instead of guessing. " +
+    `When done, capture a mini-summary: \`reado review summarize-file ${sessionId} --file ${file} "<what you checked / risks / next>"\`. ` +
+    "Do NOT change any code and do NOT accept anything — the human disposes of every proposal."
+  );
+}
+
+/** Ask a second agent to challenge the current review (a contrarian pass). */
+export function composeGuidedChallengePrompt(sessionId: string, file: string): string {
+  return (
+    `READO GUIDED REVIEW — second opinion for session ${sessionId} on \`${file}\`. ` +
+    `Run \`reado review context ${sessionId} --file ${file} --json\` to see the existing findings, ` +
+    "then challenge them: which are false positives, what was missed, what's over-stated? " +
+    `Record your challenges as proposals (\`reado review propose-comment\` / \`reado review propose ${sessionId} --kind question\`). ` +
+    "Do NOT change any code; surface disagreements as proposals the human decides on."
+  );
+}
+
 /** Prompt for resolving a single specific task ("send just this now"). */
 export function composeSingleTaskPrompt(id: string): string {
   return (

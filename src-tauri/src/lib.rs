@@ -20,6 +20,7 @@ mod proc;
 mod progress;
 mod pty;
 mod search;
+mod sessions;
 mod symbols;
 mod watcher;
 
@@ -114,6 +115,17 @@ pub fn run() {
             annotations::write_project_config,
             annotations::reanchor_file,
             annotations::set_anchor,
+            sessions::session_create,
+            sessions::session_list,
+            sessions::session_get,
+            sessions::session_set_file_state,
+            sessions::session_accept_proposal,
+            sessions::session_set_proposal_state,
+            sessions::session_add_decision,
+            sessions::session_set_file_summary,
+            sessions::session_set_summary,
+            sessions::session_close,
+            git::git_changed_files,
             index::rebuild_index,
             progress::list_read,
             progress::set_read,

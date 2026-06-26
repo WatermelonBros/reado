@@ -41,10 +41,12 @@ import { TimelinePanel } from "../organisms/TimelinePanel";
 import { QaPanel } from "../organisms/QaPanel";
 import { ToursPanel, TourBar } from "../organisms/ToursPanel";
 import { PreReviewPanel } from "../organisms/PreReviewPanel";
+import { GuidedReviewPanel } from "../organisms/GuidedReviewPanel";
 import { TestsPanel } from "../organisms/TestsPanel";
 import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
+import { useGuidedReview } from "../../lib/guidedReview";
 import { useTests } from "../../lib/tests";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useQa } from "../../lib/qa";
@@ -101,6 +103,7 @@ export function ProjectView({ root }: { root: string }) {
     useQa.getState().load(root);
     useTours.getState().load(root);
     usePreReview.getState().load(root);
+    useGuidedReview.getState().load(root);
     void useTests.getState().detect(root);
     listFiles(root)
       .then((f) => setTotalFiles(f.length))
@@ -183,6 +186,11 @@ export function ProjectView({ root }: { root: string }) {
       listen("comments-changed", () => {
         useComments.getState().load(root);
         rebuildIndex(root).catch(() => {});
+      }),
+      // A guided review advanced (the agent planned a route or proposed an
+      // artifact via the CLI) — reload sessions so the Review Guide stays live.
+      listen("sessions-changed", () => {
+        useGuidedReview.getState().load(root);
       }),
       // The branch changed on disk (e.g. `git checkout` in the terminal) — refresh
       // git state so the status bar shows the real branch.
@@ -308,6 +316,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "qa" && <QaPanel />}
             {tool === "tours" && <ToursPanel />}
             {tool === "prereview" && <PreReviewPanel />}
+            {tool === "guidedreview" && <GuidedReviewPanel />}
             {tool === "tests" && <TestsPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>

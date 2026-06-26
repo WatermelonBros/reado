@@ -140,6 +140,78 @@
     "approve": "Approva",
     "discard": "Scarta"
   },
+  "guided": {
+    "panel": "Revisione guidata",
+    "busy": "L'agente sta lavorando…",
+    "empty": {
+      "title": "Revisione guidata in coppia",
+      "body": "L'agente propone un percorso, revisiona file per file e bozza i commenti; tu decidi. Scegli un focus e inizia — niente è definitivo finché non approvi."
+    },
+    "objective": { "label": "Obiettivo" },
+    "obj": {
+      "bug_risk": "Rischio bug",
+      "design": "Design e API",
+      "maintainability": "Manutenibilità",
+      "security": "Sicurezza",
+      "performance": "Performance",
+      "test_coverage": "Copertura test",
+      "ai_sanity": "Controllo codice AI",
+      "onboarding": "Onboarding",
+      "general": "Revisione senior"
+    },
+    "start": {
+      "diff": "Revisiona le modifiche correnti",
+      "branch": "Revisiona questo branch vs main"
+    },
+    "progress": "{{reviewed}}/{{total}} revisionati",
+    "current": "File corrente",
+    "related": "Collegati",
+    "action": {
+      "review": "Revisiona questo file",
+      "challenge": "Secondo parere",
+      "reviewed": "Segna revisionato",
+      "skip": "Salta"
+    },
+    "proposals": "Proposte",
+    "noProposals": "Nessuna proposta aperta. Revisiona un file per generarne.",
+    "approve": "Approva",
+    "approveNote": "Come nota",
+    "edit": "Modifica",
+    "save": "Salva",
+    "cancel": "Annulla",
+    "discard": "Scarta",
+    "falsePositive": "Falso positivo",
+    "fpNote": "Verificato — non è un problema.",
+    "route": "Percorso",
+    "fileSummary": "Riepilogo file",
+    "decisions": "Decisioni",
+    "summary": "Riepilogo sessione",
+    "memory": "{{count}} tenuti in memoria",
+    "sendTasks": "Invia {{count}} task confermati",
+    "close": "Chiudi sessione",
+    "fs": {
+      "not_started": "—",
+      "queued": "in coda",
+      "in_review": "in revisione",
+      "reviewed": "fatto",
+      "needs_followup": "da rivedere",
+      "skipped": "saltato",
+      "blocked": "bloccato",
+      "out_of_scope": "fuori scope"
+    },
+    "at": {
+      "comment": "commento",
+      "task": "task",
+      "note": "nota",
+      "question": "domanda",
+      "decision": "decisione",
+      "follow_up": "follow-up",
+      "needs_context": "serve contesto",
+      "false_positive": "falso positivo",
+      "file_summary": "riepilogo",
+      "session_summary": "riepilogo"
+    }
+  },
   "tours": {
     "panel": "Tour",
     "open": "Tour di lettura",

@@ -367,6 +367,178 @@ export const readProjectConfig = (root: string) =>
 export const writeProjectConfig = (root: string, json: string) =>
   invoke<void>("write_project_config", { root, json });
 
+// ---- Guided Pair Review sessions -----------------------------------------
+
+export type ScopeKind =
+  | "diff"
+  | "branch"
+  | "folder"
+  | "files"
+  | "comments"
+  | "project"
+  | "pr";
+
+export type Objective =
+  | "bug_risk"
+  | "design"
+  | "maintainability"
+  | "security"
+  | "performance"
+  | "test_coverage"
+  | "ai_sanity"
+  | "onboarding"
+  | "general";
+
+export type ReviewMode = "quick" | "normal" | "deep";
+
+export type FileState =
+  | "not_started"
+  | "queued"
+  | "in_review"
+  | "reviewed"
+  | "needs_followup"
+  | "skipped"
+  | "blocked"
+  | "out_of_scope";
+
+export type SessionStatus = "planning" | "in_review" | "done";
+
+export type ArtifactType =
+  | "comment"
+  | "task"
+  | "note"
+  | "question"
+  | "decision"
+  | "follow_up"
+  | "needs_context"
+  | "false_positive"
+  | "file_summary"
+  | "session_summary";
+
+export type ArtifactState =
+  | "proposed"
+  | "accepted"
+  | "edited"
+  | "discarded"
+  | "converted_to_task"
+  | "converted_to_note"
+  | "resolved_as_false_positive";
+
+export interface ReviewScope {
+  kind: ScopeKind;
+  base?: string;
+  paths?: string[];
+  pr?: string;
+}
+
+export interface RouteEntry {
+  file: string;
+  priority: number;
+  reason: string;
+  suggestedReviewMode: ReviewMode;
+  relatedFiles?: string[];
+}
+
+export interface FileEntry {
+  file: string;
+  state: FileState;
+  summary?: string;
+}
+
+export interface Proposal {
+  id: string;
+  artifactType: ArtifactType;
+  state: ArtifactState;
+  file: string;
+  startLine: number;
+  endLine: number;
+  type?: CommentType;
+  body: string;
+  author: string;
+  agent?: string;
+  commentId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface Session {
+  id: string;
+  title: string;
+  scope: ReviewScope;
+  objective?: Objective;
+  status: SessionStatus;
+  position: number;
+  route?: RouteEntry[];
+  files?: FileEntry[];
+  proposals?: Proposal[];
+  summary?: string;
+  agent?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface NewSession {
+  title: string;
+  scope: ReviewScope;
+  objective?: Objective;
+}
+
+/** Project-relative files changed for a scope (working tree, or `base...HEAD`). */
+export const gitChangedFiles = (root: string, base?: string) =>
+  invoke<string[]>("git_changed_files", { root, base });
+
+export const sessionCreate = (root: string, input: NewSession) =>
+  invoke<Session>("session_create", { root, input });
+
+export const sessionList = (root: string) =>
+  invoke<Session[]>("session_list", { root });
+
+export const sessionGet = (root: string, id: string) =>
+  invoke<Session>("session_get", { root, id });
+
+export const sessionSetFileState = (
+  root: string,
+  id: string,
+  file: string,
+  state: FileState,
+) => invoke<Session>("session_set_file_state", { root, id, file, state });
+
+export const sessionAcceptProposal = (
+  root: string,
+  id: string,
+  proposal: string,
+  kind: CommentKind,
+) => invoke<Session>("session_accept_proposal", { root, id, proposal, kind });
+
+export const sessionSetProposalState = (
+  root: string,
+  id: string,
+  proposal: string,
+  state: ArtifactState,
+  body?: string,
+) =>
+  invoke<Session>("session_set_proposal_state", { root, id, proposal, state, body });
+
+export const sessionAddDecision = (
+  root: string,
+  id: string,
+  text: string,
+  file: string,
+) => invoke<Proposal>("session_add_decision", { root, id, text, file });
+
+export const sessionSetFileSummary = (
+  root: string,
+  id: string,
+  file: string,
+  text: string,
+) => invoke<Session>("session_set_file_summary", { root, id, file, text });
+
+export const sessionSetSummary = (root: string, id: string, text: string) =>
+  invoke<Session>("session_set_summary", { root, id, text });
+
+export const sessionClose = (root: string, id: string) =>
+  invoke<Session>("session_close", { root, id });
+
 /** Recompute the anchors of `file`'s comments against its current content. */
 export const reanchorFile = (root: string, file: string) =>
   invoke<Comment[]>("reanchor_file", { root, file });

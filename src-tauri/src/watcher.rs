@@ -54,6 +54,13 @@ fn is_comment_store(path: &Path) -> bool {
     s.contains("/.reado/comments/") || s.contains("/.reado/archive/")
 }
 
+/// True if `path` is a guided-review session under `.reado/sessions`. Changes
+/// here mean the agent (via the `reado` CLI) advanced a session.
+fn is_session_store(path: &Path) -> bool {
+    let s = path.to_string_lossy().replace('\\', "/");
+    s.contains("/.reado/sessions/")
+}
+
 /// True if `path` is the repo's `.git/HEAD` (rewritten when the branch changes).
 fn is_git_head(path: &Path) -> bool {
     let s = path.to_string_lossy().replace('\\', "/");
@@ -155,6 +162,7 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                 Ok(Err(_)) => {} // a watch error; ignore and keep going
                 Err(RecvTimeoutError::Timeout) => {
                     let mut comments_dirty = false;
+                    let mut sessions_dirty = false;
 
                     // Reunite a delete+create into a rename: if exactly one removed
                     // file carried comments and exactly one file was created in this
@@ -195,6 +203,13 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                             comments_dirty = true;
                             continue;
                         }
+                        // Changes under .reado/sessions mean a guided review
+                        // advanced (the agent planned a route or proposed an
+                        // artifact); tell the UI to reload the session.
+                        if is_session_store(&path) {
+                            sessions_dirty = true;
+                            continue;
+                        }
                         // `.git/HEAD` is rewritten on `git checkout`, so a change
                         // there means the branch switched (even from the terminal);
                         // tell the UI to refresh git state. `.git/` is otherwise
@@ -212,6 +227,9 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                     }
                     if comments_dirty {
                         let _ = app.emit("comments-changed", ());
+                    }
+                    if sessions_dirty {
+                        let _ = app.emit("sessions-changed", ());
                     }
                 }
                 Err(RecvTimeoutError::Disconnected) => break,
