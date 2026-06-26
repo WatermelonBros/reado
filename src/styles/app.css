@@ -117,10 +117,13 @@
       opacity: 0;
     }
   }
-  /* Shared overlay scrim — one consistent dim+blur for every centred overlay. */
+  /* Shared overlay scrim — one consistent dim for every centred overlay.
+     Intentionally NO backdrop-filter: a full-screen blurred backdrop hangs the
+     WebKitGTK compositor on Linux (the whole window stops responding until the
+     app is restarted), and the blur is driver-dependent so a Linux-only opt-out
+     can't be relied on. A slightly stronger dim reads just as clearly. */
   .reado-scrim {
-    background: color-mix(in oklch, var(--bg) 60%, transparent);
-    backdrop-filter: blur(2px);
+    background: color-mix(in oklch, var(--bg) 72%, transparent);
   }
 
   .animate-fade {
