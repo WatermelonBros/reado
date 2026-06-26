@@ -317,7 +317,9 @@ function SessionView({ root, session }: { root: string; session: Session }) {
               {entry.file.split("/").pop()}
             </button>
             {entry.reason && (
-              <p className="mt-1 text-xs leading-relaxed text-muted">{entry.reason}</p>
+              <p className="mt-1 text-xs leading-relaxed break-words [overflow-wrap:anywhere] text-muted">
+                {entry.reason}
+              </p>
             )}
             {!!entry.relatedFiles?.length && (
               <p className="mt-1 truncate text-[10px] text-faint" title={entry.relatedFiles.join(", ")}>
@@ -417,7 +419,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
         session.files?.find((f) => f.file === entry.file)?.summary && (
           <section className="mt-3 flex-none px-3">
             <SectionLabel inline>{t("guided.fileSummary")}</SectionLabel>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted">
+            <p className="mt-1 text-[11px] leading-relaxed break-words [overflow-wrap:anywhere] text-muted">
               {session.files.find((f) => f.file === entry.file)?.summary}
             </p>
           </section>
@@ -429,7 +431,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
           <SectionLabel inline>{t("guided.decisions")}</SectionLabel>
           <ul className="m-0 mt-1 list-none space-y-1 p-0">
             {decisions.map((d) => (
-              <li key={d.id} className="text-[11px] leading-snug text-muted">
+              <li key={d.id} className="text-[11px] leading-snug break-words [overflow-wrap:anywhere] text-muted">
                 · {d.body}
               </li>
             ))}
@@ -441,7 +443,9 @@ function SessionView({ root, session }: { root: string; session: Session }) {
       {session.summary && (
         <section className="mt-3 flex-none px-3">
           <SectionLabel inline>{t("guided.summary")}</SectionLabel>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted">{session.summary}</p>
+          <p className="mt-1 text-[11px] leading-relaxed break-words [overflow-wrap:anywhere] text-muted">
+            {session.summary}
+          </p>
         </section>
       )}
 
@@ -609,7 +613,9 @@ function ProposalRow({
           className="mt-1 w-full resize-none rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink outline-none focus:border-accent"
         />
       ) : (
-        <p className="mt-1 text-xs leading-snug text-ink">{p.body}</p>
+        <p className="mt-1 text-xs leading-snug break-words [overflow-wrap:anywhere] text-ink">
+          {p.body}
+        </p>
       )}
 
       <div className="mt-1.5 flex flex-wrap gap-1.5">
