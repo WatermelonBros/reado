@@ -241,7 +241,9 @@ export function ProjectView({ root }: { root: string }) {
     <div
       className="grid min-h-0 flex-1 overflow-hidden"
       style={{
-        gridTemplateColumns: tool ? `48px ${sidebarWidth}px 1fr` : "48px 1fr",
+        // `auto` (not a literal 48px) ties the activity-bar column to the bar's
+        // own width, so it tracks it under interface zoom — no gap to the sidebar.
+        gridTemplateColumns: tool ? `auto ${sidebarWidth}px 1fr` : "auto 1fr",
       }}
     >
       {showActivityBar && <ActivityBar />}

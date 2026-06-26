@@ -84,8 +84,22 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <TitleBar projectName={projectName} />
-      <div className="min-h-0 flex-1">
-        {projectPath ? <ProjectView key={projectPath} root={projectPath} /> : <RecentProjects />}
+      {/* Interface zoom: scale the content uniformly via transform (the title bar
+          above stays fixed). The inner layer is sized at 1/zoom so that, scaled
+          up, it fills the container — content reflows at the larger scale in place.
+          transform (unlike CSS `zoom`) scales every descendant uniformly and is
+          honoured by CodeMirror's coordinate mapping. */}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <div
+          className="origin-top-left"
+          style={{
+            transform: "scale(var(--app-zoom, 1))",
+            width: "calc(100% / var(--app-zoom, 1))",
+            height: "calc(100% / var(--app-zoom, 1))",
+          }}
+        >
+          {projectPath ? <ProjectView key={projectPath} root={projectPath} /> : <RecentProjects />}
+        </div>
       </div>
       <UpdatePrompt />
       <EditMenu />
