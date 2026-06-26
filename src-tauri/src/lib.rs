@@ -126,6 +126,7 @@ pub fn run() {
             sessions::session_set_file_summary,
             sessions::session_set_summary,
             sessions::session_close,
+            sessions::session_delete,
             git::git_changed_files,
             forge::detect_forge,
             forge::forge_cli_present,

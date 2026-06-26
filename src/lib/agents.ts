@@ -41,6 +41,24 @@ export function runInTerminal(text: string): void {
   submitToTerminal(id, text, id === term.activeId ? 0 : 400);
 }
 
+/** Run `text` in a plain **shell** pane — never an agent pane — so commands like
+ *  `cargo test` are executed by a shell, not typed into Claude's prompt. Reuses a
+ *  non-agent pane (preferring the focused one) or opens a fresh one. */
+export function runInShell(text: string): void {
+  const term = useTerminals.getState();
+  const agents = new Set(term.agentTerminals);
+  // The focused pane if it's a shell; otherwise any other shell pane.
+  const wasActive = term.activeId && !agents.has(term.activeId) ? term.activeId : null;
+  let id = wasActive ?? term.sessions.map((s) => s.id).find((sid) => !agents.has(sid)) ?? null;
+  if (!id) {
+    id = term.add(); // all panes are agents (or none exist) → open a shell
+  } else if (id !== term.activeId) {
+    term.setActive(id);
+  }
+  term.toggle(true);
+  submitToTerminal(id, text, id === wasActive ? 0 : 400);
+}
+
 /** Neutralize free-text the user types into an AI prompt before it's sent to the
  *  terminal. Reado's model is that an agent reads the prompt, but if a bare shell
  *  is focused instead, backticks / `$` / backslashes would trigger command

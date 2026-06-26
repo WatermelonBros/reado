@@ -195,6 +195,7 @@
     "memory": "{count} kept as memory",
     "sendTasks": "Send {count} confirmed tasks",
     "close": "Close session",
+    "reset": "Discard review",
     "fs": {
       "not_started": "—",
       "queued": "queued",

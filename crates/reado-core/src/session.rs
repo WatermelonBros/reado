@@ -545,6 +545,16 @@ pub fn close_session(root: &str, id: &str) -> Result<Session> {
     mutate(root, id, |s| s.status = SessionStatus::Done)
 }
 
+/// Delete a session entirely (a reset/discard — the record is removed). Its
+/// accepted artifacts already live in the comment store and are untouched.
+pub fn delete_session(root: &str, id: &str) -> Result<()> {
+    if !valid_id(id) {
+        return Err(Error::NotFound(id.to_string()));
+    }
+    std::fs::remove_file(session_path(root, id)).map_err(|_| Error::NotFound(id.to_string()))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -545,6 +545,10 @@ export const sessionSetSummary = (root: string, id: string, text: string) =>
 export const sessionClose = (root: string, id: string) =>
   invoke<Session>("session_close", { root, id });
 
+/** Delete a session entirely (reset/discard). Accepted comments are untouched. */
+export const sessionDelete = (root: string, id: string) =>
+  invoke<void>("session_delete", { root, id });
+
 /** Publish (or clear with null) the resolve-loop state for paired phones. */
 export const anywherePublishLoop = (json: string | null) =>
   invoke<void>("anywhere_publish_loop", { json });

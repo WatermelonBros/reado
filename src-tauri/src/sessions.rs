@@ -90,3 +90,8 @@ pub fn session_set_summary(root: String, id: String, text: String) -> Result<Ses
 pub fn session_close(root: String, id: String) -> Result<Session> {
     Ok(core::close_session(&root, &id)?)
 }
+
+#[tauri::command]
+pub fn session_delete(root: String, id: String) -> Result<()> {
+    Ok(core::delete_session(&root, &id)?)
+}

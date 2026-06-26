@@ -14,6 +14,7 @@ import {
   sessionAddDecision,
   sessionClose,
   sessionCreate,
+  sessionDelete,
   sessionGet,
   sessionList,
   sessionSetFileState,
@@ -109,6 +110,8 @@ interface GuidedReviewState {
   setSummary: (root: string, id: string, text: string) => Promise<void>;
   sendTasks: (root: string, id: string) => Promise<void>;
   close: (root: string, id: string) => Promise<void>;
+  /** Delete a session and return to a clean state (reset/start over). */
+  discardSession: (root: string, id: string) => Promise<void>;
 }
 
 function replace(list: Session[], s: Session): Session[] {
@@ -240,6 +243,18 @@ export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
   close: async (root, id) => {
     const s = await sessionClose(root, id).catch(() => null);
     if (s) set((st) => ({ sessions: replace(st.sessions, norm(s)) }));
+  },
+
+  discardSession: async (root, id) => {
+    await sessionDelete(root, id).catch(() => {});
+    set((st) => {
+      const sessions = st.sessions.filter((s) => s.id !== id);
+      const currentId =
+        st.currentId === id
+          ? (sessions.find((s) => s.status !== "done")?.id ?? sessions[0]?.id ?? null)
+          : st.currentId;
+      return { sessions, currentId };
+    });
   },
 }));
 

@@ -1123,7 +1123,15 @@ mod tests {
 
         // First pull: an open GitHub thread → one active comment with a badge.
         let c = upsert_host_comment(
-            root, "github", "TH_1", "42", "src/a.rs", 10, "octocat", "nit here".into(), false,
+            root,
+            "github",
+            "TH_1",
+            "42",
+            "src/a.rs",
+            10,
+            "octocat",
+            "nit here".into(),
+            false,
         )
         .unwrap();
         assert_eq!(c.meta.origin.as_deref(), Some("github"));
@@ -1132,7 +1140,15 @@ mod tests {
 
         // Re-pull the same thread, now resolved → still ONE comment, archived.
         let c2 = upsert_host_comment(
-            root, "github", "TH_1", "42", "src/a.rs", 12, "octocat", "nit here".into(), true,
+            root,
+            "github",
+            "TH_1",
+            "42",
+            "src/a.rs",
+            12,
+            "octocat",
+            "nit here".into(),
+            true,
         )
         .unwrap();
         assert_eq!(c2.meta.id, c.meta.id); // same comment, not a duplicate
@@ -1143,7 +1159,15 @@ mod tests {
 
         // Reopen on the host → restored to active.
         let c3 = upsert_host_comment(
-            root, "github", "TH_1", "42", "src/a.rs", 12, "octocat", "nit here".into(), false,
+            root,
+            "github",
+            "TH_1",
+            "42",
+            "src/a.rs",
+            12,
+            "octocat",
+            "nit here".into(),
+            false,
         )
         .unwrap();
         assert!(!c3.archived);

@@ -195,6 +195,7 @@
     "memory": "{count} tenuti in memoria",
     "sendTasks": "Invia {count} task confermati",
     "close": "Chiudi sessione",
+    "reset": "Scarta revisione",
     "fs": {
       "not_started": "—",
       "queued": "in coda",

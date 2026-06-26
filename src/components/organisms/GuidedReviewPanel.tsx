@@ -431,15 +431,26 @@ function SessionView({ root, session }: { root: string; session: Session }) {
             {t("guided.sendTasks", { count: acceptedTasks.length })}
           </button>
         )}
-        {session.status !== "done" && (
+        <div className="flex items-center justify-between">
+          {session.status !== "done" ? (
+            <button
+              type="button"
+              onClick={() => void store().close(root, session.id)}
+              className="rounded-md px-2 py-1 text-[11px] text-faint hover:text-ink"
+            >
+              {t("guided.close")}
+            </button>
+          ) : (
+            <span />
+          )}
           <button
             type="button"
-            onClick={() => void store().close(root, session.id)}
-            className="rounded-md px-3 py-1 text-[11px] text-faint hover:text-ink"
+            onClick={() => void store().discardSession(root, session.id)}
+            className="rounded-md px-2 py-1 text-[11px] text-faint hover:text-marker"
           >
-            {t("guided.close")}
+            {t("guided.reset")}
           </button>
-        )}
+        </div>
       </div>
     </div>
   );
