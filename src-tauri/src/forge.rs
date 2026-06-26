@@ -482,11 +482,29 @@ pub struct HostThread {
     pub resolved: bool,
 }
 
-/// The GraphQL query for a PR's review threads (path, line, resolution, comments).
-const GH_THREADS_QUERY: &str = "query($owner:String!,$repo:String!,$number:Int!){\
+/// The GraphQL query for a page of a PR's review threads (path, line, resolution,
+/// comments). `$cursor` is null on the first page; pageInfo drives pagination.
+const GH_THREADS_QUERY: &str = "query($owner:String!,$repo:String!,$number:Int!,$cursor:String){\
 repository(owner:$owner,name:$repo){pullRequest(number:$number){\
-reviewThreads(first:100){nodes{id isResolved path line \
-comments(first:50){nodes{author{login} body}}}}}}}";
+reviewThreads(first:100,after:$cursor){pageInfo{hasNextPage endCursor} nodes{id isResolved path line \
+comments(first:100){nodes{author{login} body}}}}}}}";
+
+/// pageInfo (hasNextPage, endCursor) from a reviewThreads response page.
+fn gh_page_info(json: &str) -> (bool, Option<String>) {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
+        return (false, None);
+    };
+    let pi = v.pointer("/data/repository/pullRequest/reviewThreads/pageInfo");
+    let has = pi
+        .and_then(|p| p.get("hasNextPage"))
+        .and_then(|b| b.as_bool())
+        .unwrap_or(false);
+    let end = pi
+        .and_then(|p| p.get("endCursor"))
+        .and_then(|c| c.as_str())
+        .map(String::from);
+    (has, end)
+}
 
 /// Map GitHub's `reviewThreads` GraphQL response to normalised threads.
 /// Pure (no I/O) so it's unit-testable against captured payloads.
@@ -624,84 +642,128 @@ fn gh_name_with_owner(root: &Path) -> Option<(String, String)> {
     Some((owner.to_string(), repo.to_string()))
 }
 
-/// Pull a PR/MR's existing review threads into Reado's comment inbox as anchored
-/// comments carrying a host origin badge, keyed by thread id so re-pulls are
-/// idempotent and reflect the host's resolved state. Empty on any failure.
-/// Async (network) so it never blocks the main thread.
-#[tauri::command]
-pub async fn forge_pull_threads(root: String, number: u64) -> Vec<Comment> {
-    tauri::async_runtime::spawn_blocking(move || pull_threads_blocking(root, number))
-        .await
-        .unwrap_or_default()
+/// Safety cap on pages, so a malformed pageInfo can never loop forever.
+const MAX_PAGES: usize = 50;
+
+/// All review threads for a GitHub PR, following reviewThreads pagination so
+/// large PRs don't silently lose threads past the first page.
+fn gh_all_threads(root: &Path, number: u64) -> Vec<HostThread> {
+    let Some((owner, repo)) = gh_name_with_owner(root) else {
+        return Vec::new();
+    };
+    let mut all = Vec::new();
+    let mut cursor: Option<String> = None;
+    for _ in 0..MAX_PAGES {
+        let mut args: Vec<String> = vec![
+            "api".into(),
+            "graphql".into(),
+            "-f".into(),
+            format!("query={GH_THREADS_QUERY}"),
+            "-F".into(),
+            format!("owner={owner}"),
+            "-F".into(),
+            format!("repo={repo}"),
+            "-F".into(),
+            format!("number={number}"),
+        ];
+        // A nullable GraphQL var left unset defaults to null (the first page).
+        if let Some(c) = &cursor {
+            args.push("-F".into());
+            args.push(format!("cursor={c}"));
+        }
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let Some(json) = cli_out(root, "gh", &refs) else {
+            break;
+        };
+        all.extend(map_gh_threads(&json));
+        match gh_page_info(&json) {
+            (true, Some(end)) => cursor = Some(end),
+            _ => break,
+        }
+    }
+    all
 }
 
-fn pull_threads_blocking(root: String, number: u64) -> Vec<Comment> {
+/// All diff discussions for a GitLab MR, paging until a short page (REST has no
+/// cursor; we walk `?per_page=100&page=N`).
+fn glab_all_threads(root: &Path, number: u64) -> Vec<HostThread> {
+    let mut all = Vec::new();
+    for page in 1..=MAX_PAGES {
+        let path =
+            format!("projects/:id/merge_requests/{number}/discussions?per_page=100&page={page}");
+        let Some(json) = cli_out(root, "glab", &["api", &path]) else {
+            break;
+        };
+        // Page by the RAW discussion count (map filters out non-diff ones).
+        let raw = serde_json::from_str::<serde_json::Value>(&json)
+            .ok()
+            .and_then(|v| v.as_array().map(|a| a.len()))
+            .unwrap_or(0);
+        all.extend(map_glab_discussions(&json));
+        if raw < 100 {
+            break;
+        }
+    }
+    all
+}
+
+/// The outcome of a thread pull: the mirrored comments plus how many host threads
+/// failed to import — so a partial sync isn't silently shown as complete.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullResult {
+    pub comments: Vec<Comment>,
+    pub dropped: usize,
+}
+
+/// Pull a PR/MR's existing review threads into Reado's comment inbox as anchored
+/// comments carrying a host origin badge, keyed by thread id so re-pulls are
+/// idempotent and reflect the host's resolved state. Paginated; reports how many
+/// threads failed to import. Async (network) so it never blocks the main thread.
+#[tauri::command]
+pub async fn forge_pull_threads(root: String, number: u64) -> PullResult {
+    tauri::async_runtime::spawn_blocking(move || pull_threads_blocking(root, number))
+        .await
+        .unwrap_or(PullResult {
+            comments: Vec::new(),
+            dropped: 0,
+        })
+}
+
+fn pull_threads_blocking(root: String, number: u64) -> PullResult {
     let forge = detect_forge(root.clone());
+    let mut result = PullResult {
+        comments: Vec::new(),
+        dropped: 0,
+    };
     let Some(cli) = forge.cli.as_deref() else {
-        return Vec::new();
+        return result;
     };
     let root_path = Path::new(&root);
     let (origin, threads) = match cli {
-        "gh" => {
-            let Some((owner, repo)) = gh_name_with_owner(root_path) else {
-                return Vec::new();
-            };
-            let json = cli_out(
-                root_path,
-                "gh",
-                &[
-                    "api",
-                    "graphql",
-                    "-f",
-                    &format!("query={GH_THREADS_QUERY}"),
-                    "-F",
-                    &format!("owner={owner}"),
-                    "-F",
-                    &format!("repo={repo}"),
-                    "-F",
-                    &format!("number={number}"),
-                ],
-            );
-            (
-                "github",
-                json.map(|j| map_gh_threads(&j)).unwrap_or_default(),
-            )
-        }
-        "glab" => {
-            let json = cli_out(
-                root_path,
-                "glab",
-                &[
-                    "api",
-                    &format!("projects/:id/merge_requests/{number}/discussions"),
-                ],
-            );
-            (
-                "gitlab",
-                json.map(|j| map_glab_discussions(&j)).unwrap_or_default(),
-            )
-        }
-        _ => return Vec::new(),
+        "gh" => ("github", gh_all_threads(root_path, number)),
+        "glab" => ("gitlab", glab_all_threads(root_path, number)),
+        _ => return result,
     };
 
-    threads
-        .into_iter()
-        .filter(|t| !t.file.is_empty())
-        .filter_map(|t| {
-            core::upsert_host_comment(
-                &root,
-                origin,
-                &t.external_id,
-                &number.to_string(),
-                &t.file,
-                t.line,
-                &t.author,
-                t.body,
-                t.resolved,
-            )
-            .ok()
-        })
-        .collect()
+    for t in threads.into_iter().filter(|t| !t.file.is_empty()) {
+        match core::upsert_host_comment(
+            &root,
+            origin,
+            &t.external_id,
+            &number.to_string(),
+            &t.file,
+            t.line,
+            &t.author,
+            t.body,
+            t.resolved,
+        ) {
+            Ok(c) => result.comments.push(c),
+            // Don't drop silently: count it so the UI can warn about a partial sync.
+            Err(_) => result.dropped += 1,
+        }
+    }
+    result
 }
 
 /// Resolve (or reopen) a host thread to sync a resolution made in Reado. The

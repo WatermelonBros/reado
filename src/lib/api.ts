@@ -606,9 +606,15 @@ export const forgeSubmitReview = (
   body: string,
 ) => invoke<void>("forge_submit_review", { root, number, verdict, body });
 
+export interface PullResult {
+  comments: Comment[];
+  /** Host threads that failed to import (a partial sync, surfaced not hidden). */
+  dropped: number;
+}
+
 /** Pull a PR/MR's existing review threads into the comment inbox (idempotent). */
 export const forgePullThreads = (root: string, number: number) =>
-  invoke<Comment[]>("forge_pull_threads", { root, number });
+  invoke<PullResult>("forge_pull_threads", { root, number });
 
 /** Resolve (or reopen) a host thread to mirror a resolution made in Reado. */
 export const forgeResolveThread = (

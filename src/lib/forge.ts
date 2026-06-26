@@ -103,7 +103,11 @@ export const useForge = create<ForgeState>((set, get) => ({
   },
 
   pullThreads: async (root, number) => {
-    await forgePullThreads(root, number).catch(() => []);
+    const res = await forgePullThreads(root, number).catch(() => ({ comments: [], dropped: 0 }));
+    // A partial sync is reported, not hidden (the rest still import).
+    if (res.dropped > 0) {
+      console.warn(`Reado: ${res.dropped} host review thread(s) failed to import`);
+    }
     // The threads were upserted as comments on disk; reload the inbox.
     await useComments.getState().load(root);
   },
