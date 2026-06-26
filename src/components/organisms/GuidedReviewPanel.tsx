@@ -7,7 +7,7 @@
  * summary and progress. Every LLM artifact is a proposal the human accepts,
  * edits, converts, defers or discards — never auto-final.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useProject } from "../../lib/store";
 import {
@@ -16,11 +16,13 @@ import {
   progress,
   useGuidedReview,
 } from "../../lib/guidedReview";
+import { useForge } from "../../lib/forge";
 import type {
   FileState,
   Objective,
   Proposal,
   Session,
+  Verdict,
 } from "../../lib/api";
 import { TYPE_COLOR } from "../atoms/commentMeta";
 import { RouteIcon, SparkleIcon } from "../atoms/icons";
@@ -166,6 +168,76 @@ function EmptyState({ root }: { root: string }) {
           </button>
         )}
       </div>
+      <PrSection root={root} objective={objective} />
+    </div>
+  );
+}
+
+/** The hosted-PR entry point: detect the forge, offer the matching CLI if
+ *  missing, list requests, and start a guided review over the chosen one. */
+function PrSection({ root, objective }: { root: string; objective: Objective }) {
+  const forge = useForge((s) => s.forge);
+  const cliPresent = useForge((s) => s.cliPresent);
+  const prs = useForge((s) => s.prs);
+  const loadingPrs = useForge((s) => s.loadingPrs);
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    void useForge.getState().detect(root);
+  }, [root]);
+
+  if (!forge || forge.provider === "unknown") return null;
+
+  // A recognised forge without a CLI adapter: reviewable locally only.
+  if (!forge.hasAdapter) {
+    return (
+      <p className="border-t border-line pt-3 text-[11px] leading-relaxed text-faint">
+        {t("forge.noAdapter", { provider: forge.provider })}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+      <p className="text-[10px] uppercase tracking-wide text-faint">{forge.term}</p>
+      {cliPresent === false ? (
+        <>
+          <p className="text-[11px] leading-relaxed text-faint">
+            {t("forge.installHint", { cli: forge.cli })}
+          </p>
+          <button
+            type="button"
+            onClick={() => useForge.getState().installCli()}
+            className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
+          >
+            {t("forge.install", { cli: forge.cli })}
+          </button>
+        </>
+      ) : prs.length === 0 ? (
+        <button
+          type="button"
+          disabled={loadingPrs}
+          onClick={() => void useForge.getState().listPrs(root)}
+          className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink disabled:opacity-50"
+        >
+          {loadingPrs ? t("forge.loading") : t("forge.list", { term: forge.term })}
+        </button>
+      ) : (
+        <ul className="m-0 list-none p-0">
+          {prs.map((pr) => (
+            <li key={pr.number}>
+              <button
+                type="button"
+                onClick={() => void useForge.getState().openPr(root, pr, objective)}
+                className="flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left hover:bg-surface"
+              >
+                <span className="flex-none text-[10px] tabular-nums text-faint">#{pr.number}</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-ink">{pr.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -339,14 +411,18 @@ function SessionView({ root, session }: { root: string; session: Session }) {
         {memory.length > 0 && (
           <p className="text-[10px] text-faint">{t("guided.memory", { count: memory.length })}</p>
         )}
-        <button
-          type="button"
-          disabled={acceptedTasks.length === 0}
-          onClick={() => void store().sendTasks(root, session.id)}
-          className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-40"
-        >
-          {t("guided.sendTasks", { count: acceptedTasks.length })}
-        </button>
+        {session.scope.kind === "pr" ? (
+          <PrSubmit root={root} session={session} />
+        ) : (
+          <button
+            type="button"
+            disabled={acceptedTasks.length === 0}
+            onClick={() => void store().sendTasks(root, session.id)}
+            className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-40"
+          >
+            {t("guided.sendTasks", { count: acceptedTasks.length })}
+          </button>
+        )}
         {session.status !== "done" && (
           <button
             type="button"
@@ -357,6 +433,61 @@ function SessionView({ root, session }: { root: string; session: Session }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Submit a PR/MR session to the host as one batched review with a verdict. */
+function PrSubmit({ root, session }: { root: string; session: Session }) {
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
+  const number = Number((session.scope.pr ?? "").replace(/[^0-9]/g, "")) || 0;
+
+  // Assemble the review body from the accepted comments + the session summary.
+  const body = useMemo(() => {
+    const lines = (session.proposals ?? [])
+      .filter((p) => p.state === "converted_to_task" || p.state === "converted_to_note")
+      .map((p) => `- ${p.file}${p.startLine ? `:${p.startLine}` : ""} — ${p.body}`);
+    return [session.summary, ...lines].filter(Boolean).join("\n");
+  }, [session]);
+
+  const submit = async (verdict: Verdict) => {
+    setError(null);
+    const err = await useForge.getState().submit(root, number, verdict, body || "Reviewed.");
+    if (err) setError(err);
+    else setSent(true);
+  };
+
+  if (sent) return <p className="text-[11px] text-accent">{t("forge.submitted")}</p>;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[10px] uppercase tracking-wide text-faint">{t("forge.submit")}</p>
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={() => void submit("approve")}
+          className="rounded-md bg-surface px-2 py-1 text-[11px] text-accent hover:text-ink"
+        >
+          {t("forge.approve")}
+        </button>
+        <button
+          type="button"
+          onClick={() => void submit("request_changes")}
+          className="rounded-md bg-surface px-2 py-1 text-[11px] text-marker hover:text-ink"
+        >
+          {t("forge.requestChanges")}
+        </button>
+        <button
+          type="button"
+          onClick={() => void submit("comment")}
+          className="rounded-md px-2 py-1 text-[11px] text-faint hover:text-ink"
+        >
+          {t("forge.comment")}
+        </button>
+      </div>
+      {error && <p className="text-[10px] leading-snug text-marker">{error}</p>}
     </div>
   );
 }

@@ -10,6 +10,7 @@ mod anywhere;
 mod bookmarks;
 mod cli;
 mod error;
+mod forge;
 mod format;
 mod fs;
 mod git;
@@ -126,6 +127,11 @@ pub fn run() {
             sessions::session_set_summary,
             sessions::session_close,
             git::git_changed_files,
+            forge::detect_forge,
+            forge::forge_cli_present,
+            forge::forge_list_prs,
+            forge::forge_checkout_pr,
+            forge::forge_submit_review,
             index::rebuild_index,
             progress::list_read,
             progress::set_read,

@@ -226,6 +226,18 @@
     "hint": "L'agente si è fermato — controlla il terminale e rispondigli.",
     "cmd": { "start": "Risolvi i task aperti" }
   },
+  "forge": {
+    "noAdapter": "Il round-trip con l'host non è ancora disponibile per {{provider}} — revisiona in locale.",
+    "installHint": "{{cli}} non è installato — serve per aprire le richieste da questo host.",
+    "install": "Installa {{cli}}",
+    "list": "Apri una {{term}}",
+    "loading": "Caricamento…",
+    "submit": "Invia revisione",
+    "submitted": "Revisione inviata.",
+    "approve": "Approva",
+    "requestChanges": "Richiedi modifiche",
+    "comment": "Commenta"
+  },
   "tours": {
     "panel": "Tour",
     "open": "Tour di lettura",

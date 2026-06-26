@@ -543,6 +543,55 @@ export const sessionClose = (root: string, id: string) =>
 export const anywherePublishLoop = (json: string | null) =>
   invoke<void>("anywhere_publish_loop", { json });
 
+// ---- Forge adapter (pull-request-review) ---------------------------------
+
+export type ForgeProvider =
+  | "github"
+  | "gitlab"
+  | "bitbucket"
+  | "gitea"
+  | "azuredevops"
+  | "unknown";
+
+export interface Forge {
+  provider: ForgeProvider;
+  host: string;
+  cli?: string;
+  term: string;
+  hasAdapter: boolean;
+}
+
+export interface Pr {
+  number: number;
+  title: string;
+  author: string;
+  branch: string;
+}
+
+export type Verdict = "approve" | "request_changes" | "comment";
+
+/** Detect the hosting forge from the project's origin remote. */
+export const detectForge = (root: string) => invoke<Forge>("detect_forge", { root });
+
+/** Whether a forge CLI (gh/glab) is on PATH. */
+export const forgeCliPresent = (cli: string) =>
+  invoke<boolean>("forge_cli_present", { cli });
+
+/** Open PRs/MRs via the detected CLI (empty when none/unavailable). */
+export const forgeListPrs = (root: string) => invoke<Pr[]>("forge_list_prs", { root });
+
+/** Fetch + check out a PR/MR branch so a guided review can read it. */
+export const forgeCheckoutPr = (root: string, number: number) =>
+  invoke<void>("forge_checkout_pr", { root, number });
+
+/** Submit the session as one batched review with a verdict. */
+export const forgeSubmitReview = (
+  root: string,
+  number: number,
+  verdict: Verdict,
+  body: string,
+) => invoke<void>("forge_submit_review", { root, number, verdict, body });
+
 /** Recompute the anchors of `file`'s comments against its current content. */
 export const reanchorFile = (root: string, file: string) =>
   invoke<Comment[]>("reanchor_file", { root, file });
