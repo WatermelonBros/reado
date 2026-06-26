@@ -16,6 +16,14 @@
 //!   choice via [`log_set_config`] on boot and on change.
 //! - Every public entry point swallows its own errors: logging must never crash
 //!   the app or surface across the command boundary.
+//!
+//! TODO(dev-phase): the instrumentation is deliberately verbose right now —
+//! during active development we want a rich trail to debug from, so most
+//! subsystems log at `info`/`debug` and the frontend traces every IPC call.
+//! This is more than a shipped product should write by default. Before a stable
+//! release, revisit: lower the default level (e.g. `warn`), demote chatty
+//! events (IPC tracing, watcher file-changed, search) to `trace`, and consider
+//! sampling/rate-limiting high-frequency targets. Kept loud on purpose for now.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;

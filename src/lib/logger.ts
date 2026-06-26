@@ -10,6 +10,12 @@
  * every IPC call through, so the command name, duration and outcome are logged
  * at the boundary without changing any call site.
  *
+ * TODO(dev-phase): tracing *every* IPC call is intentionally verbose — it's the
+ * richest signal while we're actively developing, so it stays on for now. It is
+ * more than a shipped product should emit by default; before a stable release,
+ * demote IPC tracing to `trace` (or sample it) so the default `info` log stays
+ * readable. Kept loud on purpose for now.
+ *
  * Logging is best-effort: a failed forward is swallowed so callers are never
  * affected, and a local enabled/level mirror short-circuits work (and the IPC
  * round-trip) when logging is off or below the threshold.
