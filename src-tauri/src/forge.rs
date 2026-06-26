@@ -207,8 +207,17 @@ pub struct Pr {
 
 /// List open PRs/MRs via the detected forge's CLI. Empty on any failure (no
 /// adapter, CLI missing, not authenticated) — the caller falls back to local.
+///
+/// Async + `spawn_blocking`: the CLI does **network** I/O, so it must not run on
+/// the main thread (a slow/hanging `gh`/`glab` would otherwise freeze the UI).
 #[tauri::command]
-pub fn forge_list_prs(root: String) -> Vec<Pr> {
+pub async fn forge_list_prs(root: String) -> Vec<Pr> {
+    tauri::async_runtime::spawn_blocking(move || list_prs_blocking(root))
+        .await
+        .unwrap_or_default()
+}
+
+fn list_prs_blocking(root: String) -> Vec<Pr> {
     let forge = detect_forge(root.clone());
     let Some(cli) = forge.cli.as_deref() else {
         return Vec::new();
@@ -231,6 +240,18 @@ fn cli_out(root: &Path, program: &str, args: &[&str]) -> Option<String> {
         Some(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
         None
+    }
+}
+
+/// Run a blocking, fallible CLI op off the main thread (so network I/O in
+/// `gh`/`glab` can't freeze the UI), flattening the join error.
+async fn spawn_blocking_result<F>(f: F) -> Result<(), String>
+where
+    F: FnOnce() -> Result<(), String> + Send + 'static,
+{
+    match tauri::async_runtime::spawn_blocking(f).await {
+        Ok(r) => r,
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -305,8 +326,13 @@ fn glab_list(root: &Path) -> Vec<Pr> {
 
 /// Fetch and check out a PR/MR's branch so a guided review reads it with the full
 /// read-first experience. Errors surface to the UI (e.g. CLI missing / auth).
+/// Async (network: fetch + checkout) so it never blocks the main thread.
 #[tauri::command]
-pub fn forge_checkout_pr(root: String, number: u64) -> Result<(), String> {
+pub async fn forge_checkout_pr(root: String, number: u64) -> Result<(), String> {
+    spawn_blocking_result(move || checkout_pr_blocking(root, number)).await
+}
+
+fn checkout_pr_blocking(root: String, number: u64) -> Result<(), String> {
     let forge = detect_forge(root.clone());
     let cli = forge
         .cli
@@ -341,9 +367,19 @@ pub enum Verdict {
 }
 
 /// Submit the session's review to the host as one batched review with a verdict.
-/// `body` is the assembled review summary. Best-effort; errors surface to the UI.
+/// `body` is the assembled review summary. Async (network) so it never blocks the
+/// main thread; best-effort, errors surface to the UI.
 #[tauri::command]
-pub fn forge_submit_review(
+pub async fn forge_submit_review(
+    root: String,
+    number: u64,
+    verdict: Verdict,
+    body: String,
+) -> Result<(), String> {
+    spawn_blocking_result(move || submit_review_blocking(root, number, verdict, body)).await
+}
+
+fn submit_review_blocking(
     root: String,
     number: u64,
     verdict: Verdict,
@@ -551,8 +587,15 @@ fn gh_name_with_owner(root: &Path) -> Option<(String, String)> {
 /// Pull a PR/MR's existing review threads into Reado's comment inbox as anchored
 /// comments carrying a host origin badge, keyed by thread id so re-pulls are
 /// idempotent and reflect the host's resolved state. Empty on any failure.
+/// Async (network) so it never blocks the main thread.
 #[tauri::command]
-pub fn forge_pull_threads(root: String, number: u64) -> Vec<Comment> {
+pub async fn forge_pull_threads(root: String, number: u64) -> Vec<Comment> {
+    tauri::async_runtime::spawn_blocking(move || pull_threads_blocking(root, number))
+        .await
+        .unwrap_or_default()
+}
+
+fn pull_threads_blocking(root: String, number: u64) -> Vec<Comment> {
     let forge = detect_forge(root.clone());
     let Some(cli) = forge.cli.as_deref() else {
         return Vec::new();
@@ -623,8 +666,19 @@ pub fn forge_pull_threads(root: String, number: u64) -> Vec<Comment> {
 
 /// Resolve (or reopen) a host thread to sync a resolution made in Reado. The
 /// `external_id` is the host thread/discussion id from `forge_pull_threads`.
+/// Async (network) so it never blocks the main thread.
 #[tauri::command]
-pub fn forge_resolve_thread(
+pub async fn forge_resolve_thread(
+    root: String,
+    number: u64,
+    external_id: String,
+    resolved: bool,
+) -> Result<(), String> {
+    spawn_blocking_result(move || resolve_thread_blocking(root, number, external_id, resolved))
+        .await
+}
+
+fn resolve_thread_blocking(
     root: String,
     number: u64,
     external_id: String,
