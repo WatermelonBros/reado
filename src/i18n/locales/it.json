@@ -2,6 +2,12 @@
   "app": {
     "tagline": "Un posto tranquillo per leggere il codice."
   },
+  "error": {
+    "title": "Qualcosa è andato storto",
+    "body": "L'interfaccia ha incontrato un errore imprevisto. Puoi riprovare o ricaricare la finestra.",
+    "retry": "Riprova",
+    "reload": "Ricarica"
+  },
   "welcome": {
     "how": "Come funziona",
     "step1": "Leggi — apri i file e muoviti nel codice.",

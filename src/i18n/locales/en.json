@@ -2,6 +2,12 @@
   "app": {
     "tagline": "A calm place to read code."
   },
+  "error": {
+    "title": "Something went wrong",
+    "body": "The interface hit an unexpected error. You can retry, or reload the window.",
+    "retry": "Try again",
+    "reload": "Reload"
+  },
   "welcome": {
     "how": "How it works",
     "step1": "Read — open files and move through the code.",
