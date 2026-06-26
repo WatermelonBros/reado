@@ -1,45 +1,40 @@
-> Bring a whole branch or GitHub PR into the read-first reader: **fetch + check
-> out** so LSP/navigation/file reads work, comment with **two-way GitHub sync**
-> (pull existing threads, push a **batched review** with a verdict, resolve both
-> ways) via the user's **`gh` CLI** — which Reado **auto-installs** (confirmed) if
-> missing, reusing the extensions-marketplace install machinery.
+> The **GitHub adapter** for `guided-pair-review`: open a PR as a review *source*
+> (fetch + check out so the guided review reads it), and round-trip the results as
+> a *sink* (pull existing threads in, push a **batched review** with a verdict,
+> resolve both ways) via the user's **`gh` CLI** — which Reado **auto-installs**
+> (confirmed) if missing, reusing the extensions-marketplace install machinery.
+> The read-first walk/route/curation/session are `guided-pair-review`, not here.
 
-## 1. Branch review
+## 1. GitHub PR as a review source (via `gh`)
 
-- [ ] 1.1 "Review a branch / PR" entry (palette + git panel): pick a local branch + base.
-- [ ] 1.2 Check out the branch; compose the diff vs the base and present it for review.
-- [ ] 1.3 Local-branch comments stay in `.reado/` (no push when no PR is attached).
+- [ ] 1.1 List PRs and open one through `gh`.
+- [ ] 1.2 Fetch + checkout the PR branch so a guided review reads it (LSP/navigation/files).
 
-## 2. GitHub PR (via `gh`)
+## 2. Required-CLI provisioning
 
-- [ ] 2.1 List PRs and open one through `gh`.
-- [ ] 2.2 Fetch + checkout the PR branch so LSP/navigation/file-read all apply.
-
-## 3. Required-CLI provisioning
-
-- [ ] 3.1 Detect whether `gh` is installed; if missing, prompt to install (never silent).
-- [ ] 3.2 On confirm, run the OS-appropriate install command (reuse
+- [ ] 2.1 Detect whether `gh` is installed; if missing, prompt to install (never silent).
+- [ ] 2.2 On confirm, run the OS-appropriate install command (reuse
       `src/lib/extensions.ts` install machinery) and verify `gh` works.
-- [ ] 3.3 Keep the provisioning generic so `glab` (GitLab) can slot in later.
+- [ ] 2.3 Keep the provisioning generic so `glab` (GitLab) can slot in later.
 
-## 4. Unified comments + pull
+## 3. Unified comments + pull
 
-- [ ] 4.1 Pull the PR's existing review threads via `gh`.
-- [ ] 4.2 Render pulled threads as anchored comments with author + a "GitHub"
-      origin badge, in the same panel as local comments.
+- [ ] 3.1 Pull the PR's existing review threads via `gh`.
+- [ ] 3.2 Render pulled threads in the guided review's inbox as anchored comments
+      with author + a "GitHub" origin badge, alongside local comments.
 
-## 5. Batched review + verdict
+## 4. Batched review + verdict
 
-- [ ] 5.1 Accumulate PR comments into a pending review (nothing posted yet).
-- [ ] 5.2 Submit as one GitHub review with a verdict (Approve / Request changes / Comment).
+- [ ] 4.1 Accumulate the session's PR comments into a pending review (nothing posted yet).
+- [ ] 4.2 Submit as one GitHub review with a verdict (Approve / Request changes / Comment).
 
-## 6. Resolution sync (bidirectional)
+## 5. Resolution sync (bidirectional)
 
-- [ ] 6.1 Resolve/reopen in Reado → resolve/reopen the GitHub conversation.
-- [ ] 6.2 Pull GitHub resolved state → reflect it in Reado on refresh.
+- [ ] 5.1 Resolve/reopen in Reado → resolve/reopen the GitHub conversation.
+- [ ] 5.2 Pull GitHub resolved state → reflect it in Reado on refresh.
 
-## 7. Glue
+## 6. Glue
 
-- [ ] 7.1 i18n strings (EN + IT): entry, verdict actions, sync state, install prompt.
-- [ ] 7.2 Tests: branch diff/checkout; `gh` detection + install verify; thread
-      pull/badge mapping; batched submit; resolution round-trip.
+- [ ] 6.1 i18n strings (EN + IT): PR picker, verdict actions, sync state, install prompt.
+- [ ] 6.2 Tests: `gh` detection + install verify; thread pull/badge mapping;
+      batched submit; resolution round-trip.

@@ -20,10 +20,11 @@ and taste."
 ## What Changes
 
 - Add a **Guided Pair Review** session mode. The user starts it from a scope
-  (current diff, branch vs main, local/remote PR, folder, selected files, open
-  tasks/comments, or the whole project sampled progressively) and an optional
-  objective (bug risk, design/API, maintainability, security, performance, test
-  coverage, AI-generated-code sanity, onboarding, general senior review).
+  (current diff, branch vs main, a folder, selected files, open tasks/comments, or
+  the whole project sampled progressively — the **GitHub PR** scope is provided by
+  the `pull-request-review` adapter) and an optional objective (bug risk,
+  design/API, maintainability, security, performance, test coverage,
+  AI-generated-code sanity, onboarding, general senior review).
 - Add a **planning pass**: the LLM reads metadata/diff/tree/symbols/deps/existing
   comments and proposes an **ordered review route** (grouping related files, with a
   one-line reason each); the user can accept, edit, or skip it.
@@ -45,8 +46,22 @@ and taste."
 - Every LLM review artifact carries a **state** (proposed / accepted / edited /
   discarded / converted_to_task / converted_to_note / resolved_as_false_positive)
   — a discarded suggestion stays useful session memory.
-- **Integrate with the existing AI-resolve loop**: at any point send only the
-  confirmed tasks to the agent; guided review sits *before and around* that loop.
+- **Integrate with the resolve loop** (`async-review-loop`): at any point send
+  only the confirmed tasks to the agent; guided review sits *before and around*
+  that loop, which queues them, tracks progress and notifies when done.
+
+## Composition
+
+This is the umbrella review capability. Two adapters plug into it, each owning one
+concern so nothing is duplicated:
+
+- **`pull-request-review`** — the GitHub adapter. It provides "GitHub PR" as a
+  *scope/source* for a guided review (open + fetch & check out) and the *sink*
+  (pull existing threads in, submit the session as a batched review with a verdict,
+  sync resolution). The read-first walk, route, curation and session are owned here.
+- **`async-review-loop`** — the resolve back. When the session sends confirmed
+  tasks, that capability runs the agent, tracks resolution and emits the
+  finished/needs-approval events (delivered to a phone by `reado-anywhere`).
 
 ## Capabilities
 

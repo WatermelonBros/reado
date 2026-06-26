@@ -3,9 +3,10 @@
 ### Requirement: Start A Guided Review From A Scope
 
 Reado SHALL let the user start a Guided Pair Review from a chosen scope — current
-diff, branch vs main, a local/remote PR, a folder, selected files, open
-tasks/comments, or the whole project (sampled progressively) — and an optional
-objective. Starting it SHALL create a persistent session.
+diff, branch vs main, a folder, selected files, open tasks/comments, or the whole
+project (sampled progressively) — and an optional objective. The GitHub PR scope is
+supplied by the `pull-request-review` adapter. Starting a review SHALL create a
+persistent session.
 
 #### Scenario: Start from a scope
 
@@ -153,12 +154,12 @@ propose-route-change, summarize-file).
 - **WHEN** a session is created, advanced, and closed via the CLI
 - **THEN** the persisted session reflects each change
 
-### Requirement: Integrate With The Existing Resolve Loop
+### Requirement: Integrate With The Resolve Loop
 
-A Guided Pair Review SHALL feed the existing AI-resolve loop: at any point the user
-SHALL be able to send only the confirmed tasks to the agent, keep reviewing before
-sending, and resume the session after the agent's fixes. The existing loop SHALL
-remain intact; guided review sits before and around it.
+A Guided Pair Review SHALL feed the resolve loop (`async-review-loop`): at any point
+the user SHALL be able to send only the confirmed tasks to the agent, keep reviewing
+before sending, and resume the session after the agent's fixes. The resolve loop
+SHALL remain a separate capability; guided review sits before and around it.
 
 #### Scenario: Send confirmed tasks only
 

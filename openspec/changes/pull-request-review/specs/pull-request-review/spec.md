@@ -1,36 +1,22 @@
 ## ADDED Requirements
 
-### Requirement: Review A Local Branch
-
-Reado SHALL let the user review a local branch by choosing it and a base; Reado
-SHALL compose the diff against that base and present the change for read-first
-review. The branch SHALL be checked out so the working tree reflects it.
-
-#### Scenario: Pick a branch and base
-
-- **WHEN** the user starts a branch review choosing a branch and a base
-- **THEN** Reado checks out the branch and presents the diff against the base for review
-
-#### Scenario: Local branch comments stay local
-
-- **WHEN** the user comments during a local-branch review with no PR attached
-- **THEN** the comments are stored in the project's `.reado/` overlay and not pushed anywhere
-
-### Requirement: Review A GitHub Pull Request
+### Requirement: Open A GitHub PR As A Review Source
 
 Reado SHALL let the user list and open a GitHub pull request through the `gh` CLI,
-then **fetch and check out** the PR's branch so the full read-first experience —
-LSP, navigation, and file reading — applies over the change.
+then **fetch and check out** the PR's branch so a guided review reads it with the
+full read-first experience (LSP, navigation, real files). The read-first walk,
+route, and curation are provided by `guided-pair-review`; this requirement only
+makes the PR available to it.
 
 #### Scenario: Open a PR
 
 - **WHEN** the user opens a GitHub PR from the list
-- **THEN** Reado fetches and checks out the PR branch and presents its diff for review
+- **THEN** Reado fetches and checks out the PR branch and a guided review can be started over it
 
 #### Scenario: Read-first parity on the PR
 
-- **WHEN** the user opens a file from a checked-out PR
-- **THEN** language-server features and navigation work as they do for any opened project file
+- **WHEN** a file from a checked-out PR is opened
+- **THEN** language-server features and navigation work as for any opened project file
 
 ### Requirement: Provision The Required CLI
 
@@ -42,7 +28,7 @@ Reado SHALL NOT install anything without confirmation.
 #### Scenario: Offer install when missing
 
 - **WHEN** the user starts a GitHub review and `gh` is not installed
-- **THEN** Reado offers to install `gh` and waits for the user's confirmation
+- **THEN** Reado offers to install `gh` and waits for confirmation
 
 #### Scenario: Install and verify
 
@@ -56,9 +42,9 @@ Reado SHALL NOT install anything without confirmation.
 
 ### Requirement: Pull Existing PR Threads
 
-When reviewing a GitHub PR, Reado SHALL pull the PR's existing review threads and
-present each as a normal anchored comment in the comments panel, showing its author
-and a "GitHub" origin badge that distinguishes it from local comments.
+When reviewing a GitHub PR, Reado SHALL pull the PR's existing review threads into
+the guided review's comment inbox, each shown as a normal anchored comment with its
+author and a "GitHub" origin badge that distinguishes it from local comments.
 
 #### Scenario: Existing threads appear
 
@@ -68,18 +54,18 @@ and a "GitHub" origin badge that distinguishes it from local comments.
 #### Scenario: Unified inbox
 
 - **WHEN** a PR has both pulled GitHub threads and the user's new local comments
-- **THEN** both appear in the same comments panel, distinguished only by the origin badge
+- **THEN** both appear in the same comments inbox, distinguished only by the origin badge
 
-### Requirement: Submit A Batched Review With A Verdict
+### Requirement: Submit The Session As A Batched Review With A Verdict
 
-Reado SHALL accumulate the user's PR comments into a pending review and submit them
-as a single GitHub review with a verdict — **Approve**, **Request changes**, or
-**Comment**. Comments SHALL NOT be posted individually before submission.
+Reado SHALL submit the guided review session's PR comments as a single GitHub
+review with a verdict — **Approve**, **Request changes**, or **Comment**. Comments
+SHALL NOT be posted individually before submission.
 
 #### Scenario: Submit the review
 
-- **WHEN** the user submits the pending review with a chosen verdict
-- **THEN** all pending comments are posted as one GitHub review carrying that verdict
+- **WHEN** the user submits the session with a chosen verdict
+- **THEN** all of the session's PR comments are posted as one GitHub review carrying that verdict
 
 #### Scenario: Pending until submitted
 

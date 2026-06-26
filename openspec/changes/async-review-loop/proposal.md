@@ -12,6 +12,11 @@ owns the **loop**: queue → track → notify → review. And these are precisel
 events Reado Anywhere delivers to a paired phone, so you can fire a batch from your
 desk and get pinged (and answer a blocked prompt) from the couch.
 
+This is the **resolve stage** of the review system: a Guided Pair Review
+(`guided-pair-review`) feeds it the confirmed tasks to run, and the events it emits
+are delivered to a phone by `reado-anywhere`. It also stands alone — any open
+batch of task comments can be queued, with or without a guided review.
+
 ## What Changes
 
 - Add a **review-loop queue**: by default all open task comments (each
