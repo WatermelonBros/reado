@@ -4,9 +4,9 @@
 
 Reado SHALL let the user start a Guided Pair Review from a chosen scope — current
 diff, branch vs main, a folder, selected files, open tasks/comments, or the whole
-project (sampled progressively) — and an optional objective. The GitHub PR scope is
-supplied by the `pull-request-review` adapter. Starting a review SHALL create a
-persistent session.
+project (sampled progressively) — and an optional objective. A hosted PR/MR scope is
+supplied by the `pull-request-review` adapter (which detects GitHub/GitLab/… from
+the remote). Starting a review SHALL create a persistent session.
 
 #### Scenario: Start from a scope
 

@@ -21,8 +21,9 @@ and taste."
 
 - Add a **Guided Pair Review** session mode. The user starts it from a scope
   (current diff, branch vs main, a folder, selected files, open tasks/comments, or
-  the whole project sampled progressively — the **GitHub PR** scope is provided by
-  the `pull-request-review` adapter) and an optional objective (bug risk,
+  the whole project sampled progressively — a hosted **PR/MR** scope is provided by
+  the `pull-request-review` adapter, which detects GitHub/GitLab/… from the remote)
+  and an optional objective (bug risk,
   design/API, maintainability, security, performance, test coverage,
   AI-generated-code sanity, onboarding, general senior review).
 - Add a **planning pass**: the LLM reads metadata/diff/tree/symbols/deps/existing
@@ -55,7 +56,8 @@ and taste."
 This is the umbrella review capability. Two adapters plug into it, each owning one
 concern so nothing is duplicated:
 
-- **`pull-request-review`** — the GitHub adapter. It provides "GitHub PR" as a
+- **`pull-request-review`** — the provider-aware forge adapter (GitHub/GitLab/…).
+  It detects the host from the remote and provides a hosted **PR/MR** as a
   *scope/source* for a guided review (open + fetch & check out) and the *sink*
   (pull existing threads in, submit the session as a batched review with a verdict,
   sync resolution). The read-first walk, route, curation and session are owned here.
