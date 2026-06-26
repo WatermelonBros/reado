@@ -187,6 +187,7 @@
     diff: '<path d="M5 3v14M5 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 6H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H12M12 4v4M12 14v4"/>',
     terminal: '<path d="M4 17l6-5-6-5M12 19h8"/>',
     notes: '<path d="M21 11.5a8.38 8.38 0 0 1-9 8.3 8.5 8.5 0 0 1-3.8-.9L3 20l1.1-3.3A8.38 8.38 0 0 1 12 3.5a8.38 8.38 0 0 1 9 8z"/>',
+    review: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8H10a4 4 0 0 1 0-8h6"/>',
     chevron: '<path d="M9 6l6 6-6 6"/>',
     back: '<path d="M15 6l-6 6 6 6"/>',
     refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/>',
@@ -261,7 +262,7 @@
   }
   function showTabs(proj, active) {
     els.tabs.hidden = false;
-    const defs = [["files", "Files", "files"], ["changes", "Changes", "diff"], ["terminal", "Terminal", "terminal"], ["notes", "Notes", "notes"]];
+    const defs = [["files", "Files", "files"], ["changes", "Changes", "diff"], ["review", "Review", "review"], ["terminal", "Terminal", "terminal"], ["notes", "Notes", "notes"]];
     els.tabs.innerHTML = defs.map(([t, label, icon]) =>
       '<button data-t="' + t + '" class="' + (t === active ? "on" : "") + '">' +
       '<span class="ti">' + ic(icon, 21) + "</span>" + label + "</button>").join("");
@@ -270,6 +271,7 @@
 
   async function render() {
     detachTerm();
+    clearReviewPoll();
     els.main.className = "";
     if (!token()) return gate();
     const r = route();
@@ -280,6 +282,7 @@
     if (r.diff) return renderDiff(r.proj, r.diff);
     const tab = r.tab || "files";
     if (tab === "changes") return renderChanges(r.proj);
+    if (tab === "review") return renderReview(r.proj);
     if (tab === "terminal") return renderTerminal(r.proj);
     if (tab === "notes") return renderNotes(r.proj);
     return renderFiles(r.proj, r.dir || "");
@@ -466,6 +469,108 @@
     try { await api("/api/run-agent", { method: "POST", body: JSON.stringify({ project: proj }) });
       toast("Agent started on the desktop"); } catch (e) { toast(e.message); }
   }
+
+  // ---- Guided Pair Review tab ----
+  let reviewTimer = null, reviewStamp = "";
+  function clearReviewPoll() { if (reviewTimer) { clearInterval(reviewTimer); reviewTimer = null; } reviewStamp = ""; }
+
+  async function renderReview(proj) {
+    clearReviewPoll();
+    showTabs(proj, "review");
+    setChrome({ title: nameOf(proj), proj });
+    els.main.innerHTML = '<div class="pad faint">Loading…</div>';
+    try {
+      const ss = await api("/api/sessions?project=" + enc(proj));
+      drawReview(proj, ss.find((x) => x.status !== "done") || ss[0]);
+      // Poll so the agent's route/proposals appear live as it works on the desktop.
+      reviewTimer = setInterval(async () => {
+        const r = route(); if (r.tab !== "review" || r.file || r.diff) return;
+        try {
+          const s2 = await api("/api/sessions?project=" + enc(proj));
+          const cur = s2.find((x) => x.status !== "done") || s2[0];
+          if ((cur ? cur.id + ":" + cur.updatedAt : "none") !== reviewStamp) drawReview(proj, cur);
+        } catch (e) {}
+      }, 2500);
+    } catch (e) { els.main.innerHTML = fail(e); }
+  }
+
+  function drawReview(proj, s) {
+    reviewStamp = s ? s.id + ":" + s.updatedAt : "none";
+    if (!s) {
+      els.main.innerHTML = '<div class="center"><div style="max-width:320px">' +
+        '<h2 style="color:var(--bright);margin:0 0 8px">Guided Pair Review</h2>' +
+        '<p class="muted">Start a review of the current changes. The agent proposes; you approve or discard — right here.</p>' +
+        '<button id="startrev" class="btn primary" style="margin-top:14px">Review current changes</button></div></div>';
+      els.main.querySelector("#startrev").onclick = async () => {
+        await reviewAction(proj, { action: "start", objective: "bug_risk" });
+        toast("Planning the review on your desktop…");
+      };
+      return;
+    }
+    const r0 = s.route || [], files = s.files || [], props = s.proposals || [];
+    const open = props.filter((p) => p.state === "proposed" || p.state === "edited");
+    const tasks = props.filter((p) => p.state === "converted_to_task" && p.commentId);
+    const entry = r0[Math.min(s.position || 0, Math.max(0, r0.length - 1))];
+    const fst = (f) => (files.find((x) => x.file === f) || {}).state;
+    const reviewedOnce = entry && ["in_review", "reviewed", "needs_followup"].includes(fst(entry.file));
+    const done = r0.filter((e) => ["reviewed", "skipped", "out_of_scope"].includes(fst(e.file))).length;
+
+    let h = '<div class="pad" style="display:flex;flex-direction:column;gap:14px">';
+    h += '<div><div class="sub" style="margin-bottom:6px">' + done + "/" + r0.length + ' reviewed</div>' +
+      '<div style="height:5px;border-radius:99px;background:var(--elevated);overflow:hidden">' +
+      '<div style="height:100%;width:' + (r0.length ? (done / r0.length) * 100 : 0) + '%;background:var(--accent)"></div></div></div>';
+    if (entry) {
+      h += '<div style="border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--elevated)">' +
+        '<div class="sub" style="text-transform:uppercase;letter-spacing:.06em">Current file</div>' +
+        '<div class="title" style="margin-top:3px;font-weight:600">' + esc(entry.file) + "</div>" +
+        (entry.reason ? '<div class="muted" style="margin-top:4px;font-size:13px">' + esc(entry.reason) + "</div>" : "") +
+        '<button class="btn primary act-review" style="margin-top:12px;width:100%">' + (reviewedOnce ? "Second opinion" : "Review this file") + "</button>" +
+        '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">' +
+        '<button class="mini act-reviewed">Mark reviewed</button><button class="mini act-skip">Skip</button>' +
+        '<button class="mini act-respond">Respond to comments</button></div></div>';
+    }
+    if (open.length) {
+      h += '<div><div class="sub" style="text-transform:uppercase;margin-bottom:4px">Proposals</div>' +
+        open.map((p) => '<div class="prop" data-p="' + p.id + '" style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">' +
+          '<div style="display:flex;align-items:center;gap:6px;font-size:10px">' +
+          '<span class="dot" style="background:' + (TYPE_COLOR[p.type] || "var(--muted)") + '"></span>' +
+          '<span style="text-transform:uppercase;color:' + (TYPE_COLOR[p.type] || "var(--muted)") + '">' + (p.type || "note") + "</span>" +
+          (p.who === "second" ? '<span class="badge">2nd</span>' : "") +
+          '<span class="faint" style="margin-left:auto">' + esc(p.file) + (p.startLine ? ":" + p.startLine : "") + "</span></div>" +
+          '<div style="margin-top:5px;font-size:13px;color:var(--bright)">' + esc(p.body) + "</div>" +
+          '<div style="display:flex;gap:8px;margin-top:8px"><button class="mini totask act-approve">Approve</button>' +
+          '<button class="mini act-asnote">As note</button><button class="mini act-discard">Discard</button></div></div>').join("") + "</div>";
+    } else if (s.status === "planning" || !r0.length) {
+      h += '<div class="faint" style="font-size:13px">Planning the route — the agent is reading the change…</div>';
+    } else {
+      h += '<div class="faint" style="font-size:13px">No open proposals. Review a file to gather some.</div>';
+    }
+    if (r0.length) {
+      h += '<div><div class="sub" style="text-transform:uppercase;margin-bottom:4px">Route</div>' +
+        r0.map((e) => { const st = fst(e.file) || "queued"; const cur = entry && e.file === entry.file;
+          return '<div style="display:flex;gap:8px;padding:6px 0 6px 8px;border-left:2px solid ' + (cur ? "var(--accent)" : "transparent") + '">' +
+            '<span class="grow" style="font-size:13px;color:' + (cur ? "var(--bright)" : "var(--muted)") + '">' + esc(e.file) + "</span>" +
+            '<span class="faint" style="font-size:11px">' + (st === "reviewed" ? "done" : st === "in_review" ? "reviewing" : st) + "</span></div>"; }).join("") + "</div>";
+    }
+    h += '<button class="btn primary act-send"' + (tasks.length ? "" : " disabled") + ' style="width:100%">Send ' + tasks.length + " confirmed tasks</button></div>";
+    els.main.innerHTML = h;
+
+    const sid = s.id, file = entry ? entry.file : "", q = (sel) => els.main.querySelector(sel);
+    if (q(".act-review")) q(".act-review").onclick = async () => { await reviewAction(proj, { id: sid, file, action: reviewedOnce ? "challenge" : "file" }); toast("Working on the desktop…"); };
+    if (q(".act-reviewed")) q(".act-reviewed").onclick = async () => { await sessAct(proj, "/api/session-set-file", { id: sid, file, state: "reviewed" }); renderReview(proj); };
+    if (q(".act-skip")) q(".act-skip").onclick = async () => { await sessAct(proj, "/api/session-set-file", { id: sid, file, state: "skipped" }); renderReview(proj); };
+    if (q(".act-respond")) q(".act-respond").onclick = async () => { await reviewAction(proj, { id: sid, file, action: "respond" }); toast("Replying to comments on the desktop…"); };
+    if (q(".act-send")) q(".act-send").onclick = async () => { await reviewAction(proj, { id: sid, action: "send" }); toast("Sent to the agent."); };
+    els.main.querySelectorAll(".prop").forEach((row) => {
+      const pid = row.dataset.p;
+      row.querySelector(".act-approve").onclick = async () => { await sessAct(proj, "/api/session-accept", { id: sid, proposal: pid }); renderReview(proj); };
+      row.querySelector(".act-asnote").onclick = async () => { await sessAct(proj, "/api/session-accept", { id: sid, proposal: pid, note: true }); renderReview(proj); };
+      row.querySelector(".act-discard").onclick = async () => { await sessAct(proj, "/api/session-discard", { id: sid, proposal: pid }); renderReview(proj); };
+    });
+  }
+
+  async function reviewAction(proj, body) { try { await api("/api/review-action", { method: "POST", body: JSON.stringify({ project: proj, ...body }) }); } catch (e) { toast(e.message); } }
+  async function sessAct(proj, path, body) { try { await api(path, { method: "POST", body: JSON.stringify({ project: proj, ...body }) }); } catch (e) { toast(e.message); } }
 
   // ---- Terminal (persists across tab switches) ----
   let term = null, fit = null, ws = null, termEl = null, termProj = null, termClosing = false, reconnectT = null;

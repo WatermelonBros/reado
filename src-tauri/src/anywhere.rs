@@ -32,7 +32,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, State as TauriState};
 
-use reado_core::{self as core, CommentKind, CommentType, NewComment, Scope};
+use reado_core::{
+    self as core, ArtifactState, CommentKind, CommentType, FileState, NewComment, Scope,
+};
 
 /// A project window currently open on the desktop, as the phone sees it.
 #[derive(Clone, Serialize)]
@@ -255,6 +257,13 @@ async fn start_server(
         .route("/api/run-agent", post(run_agent))
         .route("/api/prereview", post(prereview))
         .route("/api/loop", get(loop_get))
+        .route("/api/sessions", get(sessions_get))
+        .route("/api/session", get(session_get))
+        .route("/api/session-accept", post(session_accept))
+        .route("/api/session-edit", post(session_edit))
+        .route("/api/session-discard", post(session_discard))
+        .route("/api/session-set-file", post(session_set_file))
+        .route("/api/review-action", post(review_action))
         .layer(middleware::from_fn_with_state(api.clone(), auth));
 
     let js = |body: &'static str, ct: &'static str| {
@@ -933,6 +942,136 @@ async fn prereview(State(api): State<Api>, Json(q): Json<ProjectQuery>) -> Statu
         Some(root) => signal(&api, "anywhere://prereview", root),
         None => StatusCode::NOT_FOUND,
     }
+}
+
+// ---- Guided Pair Review, from the phone -----------------------------------
+//
+// Reads + disposals (accept/edit/discard/set-file) hit `.reado/sessions/` on disk
+// directly via reado-core — no desktop needed; the desktop's watcher reflects
+// them. Agent actions (start/review/respond/second-opinion/send) are dispatched
+// to the hosting desktop via a `anywhere://review-action` event, since the agent
+// runs there.
+
+async fn sessions_get(
+    State(api): State<Api>,
+    Query(q): Query<ProjectQuery>,
+) -> Result<Json<Vec<core::Session>>, StatusCode> {
+    let root = api.root(&q.project).ok_or(StatusCode::NOT_FOUND)?;
+    Ok(Json(core::list_sessions(&root)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionQuery {
+    project: String,
+    id: String,
+}
+
+async fn session_get(
+    State(api): State<Api>,
+    Query(q): Query<SessionQuery>,
+) -> Result<Json<core::Session>, StatusCode> {
+    let root = api.root(&q.project).ok_or(StatusCode::NOT_FOUND)?;
+    core::get_session(&root, &q.id)
+        .map(Json)
+        .map_err(|_| StatusCode::NOT_FOUND)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProposalBody {
+    project: String,
+    id: String,
+    proposal: String,
+    #[serde(default)]
+    note: bool,
+    #[serde(default)]
+    body: Option<String>,
+}
+
+async fn session_accept(
+    State(api): State<Api>,
+    Json(b): Json<ProposalBody>,
+) -> Result<Json<core::Session>, StatusCode> {
+    let root = api.root(&b.project).ok_or(StatusCode::NOT_FOUND)?;
+    let kind = if b.note {
+        CommentKind::Note
+    } else {
+        CommentKind::Task
+    };
+    core::accept_proposal(&root, &b.id, &b.proposal, kind)
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn session_edit(
+    State(api): State<Api>,
+    Json(b): Json<ProposalBody>,
+) -> Result<Json<core::Session>, StatusCode> {
+    let root = api.root(&b.project).ok_or(StatusCode::NOT_FOUND)?;
+    core::set_proposal_state(&root, &b.id, &b.proposal, ArtifactState::Edited, b.body)
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn session_discard(
+    State(api): State<Api>,
+    Json(b): Json<ProposalBody>,
+) -> Result<Json<core::Session>, StatusCode> {
+    let root = api.root(&b.project).ok_or(StatusCode::NOT_FOUND)?;
+    core::set_proposal_state(&root, &b.id, &b.proposal, ArtifactState::Discarded, None)
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FileStateBody {
+    project: String,
+    id: String,
+    file: String,
+    state: FileState,
+}
+
+async fn session_set_file(
+    State(api): State<Api>,
+    Json(b): Json<FileStateBody>,
+) -> Result<Json<core::Session>, StatusCode> {
+    let root = api.root(&b.project).ok_or(StatusCode::NOT_FOUND)?;
+    core::set_file_state(&root, &b.id, &b.file, b.state)
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[derive(Deserialize, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReviewActionBody {
+    project: String,
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    file: String,
+    /// One of: start | file | respond | challenge | send.
+    action: String,
+    #[serde(default)]
+    objective: Option<String>,
+}
+
+/// Dispatch an agent action to the hosting desktop (the agent runs there). The
+/// desktop window for this project performs it via its guided-review store.
+async fn review_action(State(api): State<Api>, Json(b): Json<ReviewActionBody>) -> StatusCode {
+    let Some(root) = api.root(&b.project) else {
+        return StatusCode::NOT_FOUND;
+    };
+    let payload = serde_json::json!({
+        "root": root,
+        "id": b.id,
+        "file": b.file,
+        "action": b.action,
+        "objective": b.objective,
+    });
+    let _ = api.app.emit("anywhere://review-action", payload);
+    StatusCode::OK
 }
 
 /// The current resolve-loop state for a paired phone to poll. `{}` when no loop

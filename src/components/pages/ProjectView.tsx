@@ -14,6 +14,7 @@ import {
   listFiles,
   anywhereSetProject,
   anywhereClearProject,
+  type Objective,
 } from "../../lib/api";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { dispatchToAgent } from "../../lib/agents";
@@ -133,6 +134,36 @@ export function ProjectView({ root }: { root: string }) {
       }),
       listen<string>("anywhere://prereview", (e) => {
         if (e.payload === root) usePreReview.getState().generate(root);
+      }),
+      // A paired phone triggered a guided-review agent action — run it here (the
+      // agent lives on this desktop). Disposals the phone does hit disk directly.
+      listen<{
+        root: string;
+        id: string;
+        file: string;
+        action: string;
+        objective: string | null;
+      }>("anywhere://review-action", (e) => {
+        const a = e.payload;
+        if (a.root !== root) return;
+        const g = useGuidedReview.getState();
+        switch (a.action) {
+          case "start":
+            void g.start(root, { kind: "diff" }, (a.objective as Objective) ?? "bug_risk");
+            break;
+          case "file":
+            void g.reviewFile(root, a.id, a.file);
+            break;
+          case "respond":
+            void g.respond(root, a.id, a.file);
+            break;
+          case "challenge":
+            void g.challenge(root, a.id, a.file);
+            break;
+          case "send":
+            void g.sendTasks(root, a.id);
+            break;
+        }
       }),
     ];
     return () => {
