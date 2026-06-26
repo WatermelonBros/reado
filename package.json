@@ -11,6 +11,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:dev": "bash scripts/bundle-cli.sh && tauri dev",
     "tauri:build": "bash scripts/bundle-cli.sh && tauri build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

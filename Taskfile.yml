@@ -1,0 +1,91 @@
+# Reado developer tasks — run with `task <name>` (https://taskfile.dev).
+#
+# Why this exists: Tauri declares the `reado` CLI as an external sidecar
+# (`externalBin` in src-tauri/tauri.conf.json), but `pnpm tauri dev` does NOT
+# build it. So a fresh clone fails on the first `tauri dev` until the sidecar is
+# compiled once. These tasks build it for you — `task setup` then `task dev`.
+version: "3"
+silent: true
+
+vars:
+  CORE: crates/reado-core/Cargo.toml
+  CLI: crates/reado-cli/Cargo.toml
+  APP: src-tauri/Cargo.toml
+
+tasks:
+  default:
+    desc: List the available tasks
+    cmds:
+      - task --list
+
+  setup:
+    desc: First-time setup — install JS deps and build the CLI sidecar
+    cmds:
+      - pnpm install
+      - task: cli
+
+  cli:
+    desc: Build the `reado` CLI sidecar Tauri needs (rebuilds only when it changes)
+    sources:
+      - crates/reado-cli/**/*.rs
+      - crates/reado-core/**/*.rs
+      - crates/reado-cli/Cargo.toml
+      - crates/reado-core/Cargo.toml
+    generates:
+      - src-tauri/binaries/reado-cli-*
+    cmds:
+      - bash scripts/bundle-cli.sh
+
+  dev:
+    desc: Run the desktop app in dev mode (builds the sidecar first if needed)
+    deps: [cli]
+    cmds:
+      - pnpm tauri dev
+
+  build:
+    desc: Build the production desktop bundle (signed artifacts in src-tauri/target)
+    deps: [cli]
+    cmds:
+      - pnpm tauri build
+
+  # ---- Checks (the same ones CI runs) -------------------------------------
+
+  typecheck:
+    desc: Type-check the frontend
+    cmds:
+      - pnpm typecheck
+
+  fmt:
+    desc: Format all Rust crates
+    cmds:
+      - cargo fmt --manifest-path {{.CORE}} --all
+      - cargo fmt --manifest-path {{.CLI}} --all
+      - cargo fmt --manifest-path {{.APP}} --all
+
+  lint:
+    desc: All static checks — frontend types, Rust fmt, Rust clippy (-D warnings)
+    cmds:
+      - pnpm typecheck
+      - cargo fmt --manifest-path {{.CORE}} --all --check
+      - cargo fmt --manifest-path {{.CLI}} --all --check
+      - cargo fmt --manifest-path {{.APP}} --all --check
+      - cargo clippy --manifest-path {{.CORE}} --all-targets -- -D warnings
+      - cargo clippy --manifest-path {{.CLI}} --all-targets -- -D warnings
+      - cargo clippy --manifest-path {{.APP}} --all-targets -- -D warnings
+
+  test:
+    desc: Run all tests — frontend (vitest) and every Rust crate
+    cmds:
+      - pnpm test
+      - cargo test --manifest-path {{.CORE}}
+      - cargo test --manifest-path {{.CLI}}
+      - cargo test --manifest-path {{.APP}}
+
+  check:
+    desc: Run the full pre-PR gate (lint + test) — matches CI
+    deps: [lint, test]
+
+  clean:
+    desc: Remove the built CLI sidecar (force a fresh `task cli`)
+    cmds:
+      - rm -f src-tauri/binaries/reado-cli-*

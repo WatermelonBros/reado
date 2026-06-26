@@ -19,24 +19,60 @@ and contributions of all kinds are welcome.
 
 ## Getting started
 
+The simplest path uses [Task](https://taskfile.dev) (a small task runner). Install
+it once — `brew install go-task`, `apt install go-task` (or its
+[other installers](https://taskfile.dev/installation/)) — then:
+
+```bash
+task setup   # install JS deps + build the reado CLI sidecar (first-time only)
+task dev     # run the desktop app in dev mode
+```
+
+Run `task` with no arguments to list every task (`setup`, `dev`, `build`,
+`lint`, `test`, `check`, `cli`, `clean`).
+
+> **Why `setup` builds a "sidecar".** The desktop app shells out to the `reado`
+> CLI (the agent's stable contract), which Tauri bundles as an **external binary**
+> (`externalBin` in `src-tauri/tauri.conf.json`). `tauri dev` does **not** compile
+> it, so a fresh clone fails on the first `tauri dev` with a missing-binary error
+> until the CLI is built once. `task setup`/`task dev` build it for you (via
+> `scripts/bundle-cli.sh`, which compiles `crates/reado-cli` into
+> `src-tauri/binaries/reado-cli-<target-triple>`).
+
+### Without Task
+
+The tasks are thin wrappers — you can run the same commands by hand. The one
+thing to remember is to build the CLI sidecar before the first dev run:
+
 ```bash
 pnpm install
+bash scripts/bundle-cli.sh   # build the reado CLI sidecar (first-time only)
 pnpm tauri dev
 ```
 
-See the [README](README.md#development) for prerequisites and the full list of
-checks.
+`pnpm tauri:dev` and `pnpm tauri:build` do the sidecar step for you.
+
+See the [README](README.md#development) for prerequisites.
 
 ## Before opening a pull request
 
-Run the checks locally — CI runs the same ones:
+Run the full gate locally — CI runs the same checks:
+
+```bash
+task check    # lint (types + rustfmt + clippy) and test, across all crates
+```
+
+Or by hand — the checks cover all three Rust crates (`reado-core`, `reado-cli`,
+`src-tauri`) and the frontend:
 
 ```bash
 pnpm typecheck
-pnpm build
-cargo fmt   --manifest-path src-tauri/Cargo.toml --all
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-cargo test  --manifest-path src-tauri/Cargo.toml
+pnpm test
+for c in crates/reado-core crates/reado-cli src-tauri; do
+  cargo fmt    --manifest-path "$c/Cargo.toml" --all --check
+  cargo clippy --manifest-path "$c/Cargo.toml" --all-targets -- -D warnings
+  cargo test   --manifest-path "$c/Cargo.toml"
+done
 ```
 
 ## Project layout
