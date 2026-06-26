@@ -181,8 +181,12 @@
     "action": {
       "review": "Revisiona questo file",
       "reviewHint": "Chiedi all'agente di revisionare questo file e proporre commenti",
+      "again": "Secondo parere",
+      "againHint": "Revisiona di nuovo — un secondo parere che sfida i risultati",
       "challenge": "Secondo parere",
       "challengeHint": "Chiedi a un secondo agente di sfidare i risultati su questo file",
+      "respond": "Rispondi ai commenti",
+      "respondHint": "Chiedi all'agente di rispondere ai commenti già presenti su questo file",
       "reviewed": "Segna revisionato",
       "skip": "Salta"
     },

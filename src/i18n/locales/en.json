@@ -181,8 +181,12 @@
     "action": {
       "review": "Review this file",
       "reviewHint": "Ask the agent to review this file and propose comments",
+      "again": "Second opinion",
+      "againHint": "Review again — a second-opinion pass that challenges the findings",
       "challenge": "Second opinion",
       "challengeHint": "Ask a second agent to challenge the findings on this file",
+      "respond": "Respond to comments",
+      "respondHint": "Ask the agent to reply to the comments already on this file",
       "reviewed": "Mark reviewed",
       "skip": "Skip"
     },

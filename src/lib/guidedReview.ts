@@ -38,6 +38,7 @@ import {
   composeGuidedChallengePrompt,
   composeGuidedFilePrompt,
   composeGuidedPlanPrompt,
+  composeGuidedRespondPrompt,
 } from "./review";
 
 /** Normalise a session so the optional (skip-when-empty) arrays are real arrays. */
@@ -93,7 +94,9 @@ export function progress(s: Session | null): { reviewed: number; total: number }
 
 /** Open (still-proposed) artifacts in a session — the ones awaiting a decision. */
 export function openProposals(s: Session | null): Proposal[] {
-  return (s?.proposals ?? []).filter((p) => p.state === "proposed");
+  // "edited" is still open — the human tweaked the text and hasn't disposed of it
+  // yet. (Filtering it out made an edited comment vanish, looking like a lost save.)
+  return (s?.proposals ?? []).filter((p) => p.state === "proposed" || p.state === "edited");
 }
 
 interface GuidedReviewState {
@@ -109,6 +112,8 @@ interface GuidedReviewState {
   focusFile: (root: string, id: string, file: string) => Promise<void>;
   reviewFile: (root: string, id: string, file: string) => Promise<void>;
   challenge: (root: string, id: string, file: string) => Promise<void>;
+  /** Reply to the comments already on a file (always available — not a new review). */
+  respond: (root: string, id: string, file: string) => Promise<void>;
   /** Set a file's state then advance to the next unfinished file and open it. */
   finishFile: (root: string, id: string, file: string, state: FileState) => Promise<void>;
   accept: (root: string, id: string, proposalId: string, asNote?: boolean) => Promise<void>;
@@ -201,6 +206,11 @@ export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
     void dispatchToAgent(composeGuidedChallengePrompt(id, file)).finally(() =>
       set({ busy: false }),
     );
+  },
+
+  respond: async (_root, id, file) => {
+    set({ busy: true });
+    void dispatchToAgent(composeGuidedRespondPrompt(id, file)).finally(() => set({ busy: false }));
   },
 
   finishFile: async (root, id, file, state) => {

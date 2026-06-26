@@ -152,6 +152,19 @@ export function composeGuidedChallengePrompt(sessionId: string, file: string): s
   );
 }
 
+/** Reply to the comments already written on a file (questions, suggestions) —
+ *  distinct from a review: it doesn't propose new findings, it answers existing ones. */
+export function composeGuidedRespondPrompt(sessionId: string, file: string): string {
+  return (
+    `READO GUIDED REVIEW — respond to the existing comments on \`${file}\` (session ${sessionId}). ` +
+    "Find the comments anchored to that file (run `reado task list` and `reado comment search` and look " +
+    `at anchors on \`${file}\`), read each in its code context, and reply with ` +
+    '`reado comment reply <id> "<your answer>"` — answer questions, confirm or push back on suggestions, ' +
+    "point to the relevant code. Do NOT change any code, do NOT resolve or close anything, and do NOT add " +
+    "new findings — only respond to what's already there."
+  );
+}
+
 /** Prompt for resolving a single specific task ("send just this now"). */
 export function composeSingleTaskPrompt(id: string): string {
   return (

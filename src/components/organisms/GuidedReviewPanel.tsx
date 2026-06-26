@@ -326,14 +326,17 @@ function SessionView({ root, session }: { root: string; session: Session }) {
                 {t("guided.related")}: {entry.relatedFiles.join(", ")}
               </p>
             )}
-            {/* Primary CTA: run the AI review. Secondary chips navigate
-                (reviewed/skip advance). Second opinion appears once findings exist. */}
+            {/* Primary CTA: first press reviews the file; once it has findings a
+                second press runs a second-opinion pass that challenges them. */}
             <div className="mt-3">
               <PrimaryButton
-                title={t("guided.action.reviewHint")}
-                onClick={() => void store().reviewFile(root, session.id, entry.file)}
+                title={reviewedCurrent ? t("guided.action.againHint") : t("guided.action.reviewHint")}
+                onClick={() => {
+                  if (reviewedCurrent) void store().challenge(root, session.id, entry.file);
+                  else void store().reviewFile(root, session.id, entry.file);
+                }}
               >
-                {t("guided.action.review")}
+                {reviewedCurrent ? t("guided.action.again") : t("guided.action.review")}
               </PrimaryButton>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -343,14 +346,13 @@ function SessionView({ root, session }: { root: string; session: Session }) {
               <Action onClick={() => void store().finishFile(root, session.id, entry.file, "skipped")}>
                 {t("guided.action.skip")}
               </Action>
-              {reviewedCurrent && (
-                <Action
-                  title={t("guided.action.challengeHint")}
-                  onClick={() => void store().challenge(root, session.id, entry.file)}
-                >
-                  {t("guided.action.challenge")}
-                </Action>
-              )}
+              {/* Always available — reply to the comments already on this file. */}
+              <Action
+                title={t("guided.action.respondHint")}
+                onClick={() => void store().respond(root, session.id, entry.file)}
+              >
+                {t("guided.action.respond")}
+              </Action>
             </div>
           </div>
         </section>
