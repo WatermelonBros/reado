@@ -40,7 +40,10 @@
 
 - [ ] 5.1 Artifact states: proposed / accepted / edited / discarded / converted_to_task
       / converted_to_note / resolved_as_false_positive — discarded stays as memory.
-- [ ] 5.2 Approve → real anchored Reado comment/task (reuse the comment model).
+- [ ] 5.2 Artifact types: anchored comment, task, note, question, session decision,
+      follow-up, "needs context" marker, resolved false positive, file-level summary,
+      session-level summary — each attributable to human or agent.
+- [ ] 5.3 Approve → real anchored Reado comment/task (reuse the comment model).
 
 ## 6. Dynamic routing (MVP 2)
 
