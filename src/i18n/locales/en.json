@@ -142,6 +142,10 @@
   },
   "guided": {
     "panel": "Guided Review",
+    "cmd": {
+      "start": "Start guided review (current changes)",
+      "open": "Open guided review"
+    },
     "busy": "Agent working…",
     "empty": {
       "title": "Guided Pair Review",
@@ -211,6 +215,16 @@
       "file_summary": "summary",
       "session_summary": "summary"
     }
+  },
+  "loop": {
+    "running": "Resolving…",
+    "needsApproval": "Agent needs your input",
+    "finished": "Resolved — review the changes",
+    "progress": "{{resolved}}/{{total}}",
+    "cancel": "Cancel",
+    "dismiss": "Dismiss",
+    "hint": "The agent has gone quiet — check the terminal and answer it.",
+    "cmd": { "start": "Resolve open tasks" }
   },
   "tours": {
     "panel": "Tours",

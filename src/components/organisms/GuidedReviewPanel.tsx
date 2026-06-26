@@ -24,6 +24,7 @@ import type {
 } from "../../lib/api";
 import { TYPE_COLOR } from "../atoms/commentMeta";
 import { RouteIcon, SparkleIcon } from "../atoms/icons";
+import { ResolveLoopBar } from "../molecules/ResolveLoopBar";
 import { type MessageKey } from "../../i18n";
 
 const OBJECTIVES: Objective[] = [
@@ -70,6 +71,7 @@ export function GuidedReviewPanel() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Header session={session} sessions={sessions} busy={busy} />
+      <ResolveLoopBar />
       {session ? (
         <SessionView key={session.id} root={root} session={session} />
       ) : (

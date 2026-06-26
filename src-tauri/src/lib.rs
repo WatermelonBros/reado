@@ -149,6 +149,7 @@ pub fn run() {
             anywhere::anywhere_set_project,
             anywhere::anywhere_clear_project,
             anywhere::anywhere_set_recents,
+            anywhere::anywhere_publish_loop,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")

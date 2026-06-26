@@ -30,11 +30,11 @@ import {
 } from "./api";
 import { dispatchToAgent } from "./agents";
 import { useComments } from "./comments";
+import { useResolveLoop } from "./resolveLoop";
 import {
   composeGuidedChallengePrompt,
   composeGuidedFilePrompt,
   composeGuidedPlanPrompt,
-  composeReviewPromptForIds,
 } from "./review";
 
 /** Normalise a session so the optional (skip-when-empty) arrays are real arrays. */
@@ -225,15 +225,16 @@ export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
     if (s) set((st) => ({ sessions: replace(st.sessions, norm(s)) }));
   },
 
-  sendTasks: async (_root, id) => {
+  sendTasks: async (root, id) => {
     const s = get().sessions.find((x) => x.id === id);
     // Only this session's confirmed tasks (the ones materialised into comments).
     const ids = (s?.proposals ?? [])
       .filter((p) => p.state === "converted_to_task" && p.commentId)
       .map((p) => p.commentId as string);
     if (ids.length === 0) return;
-    set({ busy: true });
-    void dispatchToAgent(composeReviewPromptForIds(ids)).finally(() => set({ busy: false }));
+    // Hand off to the async resolve loop, pre-scoped to exactly these tasks; it
+    // dispatches the agent and tracks resolution from here.
+    await useResolveLoop.getState().start(root, ids, id);
   },
 
   close: async (root, id) => {

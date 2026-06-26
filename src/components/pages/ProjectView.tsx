@@ -47,6 +47,7 @@ import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
 import { useGuidedReview } from "../../lib/guidedReview";
+import { useResolveLoop } from "../../lib/resolveLoop";
 import { useTests } from "../../lib/tests";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useQa } from "../../lib/qa";
@@ -104,6 +105,7 @@ export function ProjectView({ root }: { root: string }) {
     useTours.getState().load(root);
     usePreReview.getState().load(root);
     useGuidedReview.getState().load(root);
+    void useResolveLoop.getState().load(root);
     void useTests.getState().detect(root);
     listFiles(root)
       .then((f) => setTotalFiles(f.length))
@@ -184,7 +186,12 @@ export function ProjectView({ root }: { root: string }) {
       // An agent mutated comments via the `reado` CLI — reload the list so the
       // UI reflects done/reply/add without a manual refresh.
       listen("comments-changed", () => {
-        useComments.getState().load(root);
+        useComments
+          .getState()
+          .load(root)
+          // The resolve loop tracks progress by watching comments resolve.
+          .then(() => useResolveLoop.getState().sync(root))
+          .catch(() => {});
         rebuildIndex(root).catch(() => {});
       }),
       // A guided review advanced (the agent planned a route or proposed an
@@ -230,6 +237,14 @@ export function ProjectView({ root }: { root: string }) {
     if (openTaskCount < prevOpenTasks.current) notifyResolved(openTaskCount);
     prevOpenTasks.current = openTaskCount;
   }, [openTaskCount]);
+
+  // Idle heuristic for the resolve loop: if the agent goes quiet mid-loop, flag
+  // it as waiting for the human (delivered to a paired phone via Anywhere).
+  useEffect(() => {
+    if (!root) return;
+    const t = setInterval(() => useResolveLoop.getState().tick(root), 15_000);
+    return () => clearInterval(t);
+  }, [root]);
 
   // Drag the sidebar's right edge to resize. The panel starts after the 48px
   // activity bar, so its width tracks the cursor's x minus that offset.

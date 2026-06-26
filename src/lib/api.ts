@@ -539,6 +539,10 @@ export const sessionSetSummary = (root: string, id: string, text: string) =>
 export const sessionClose = (root: string, id: string) =>
   invoke<Session>("session_close", { root, id });
 
+/** Publish (or clear with null) the resolve-loop state for paired phones. */
+export const anywherePublishLoop = (json: string | null) =>
+  invoke<void>("anywhere_publish_loop", { json });
+
 /** Recompute the anchors of `file`'s comments against its current content. */
 export const reanchorFile = (root: string, file: string) =>
   invoke<Comment[]>("reanchor_file", { root, file });

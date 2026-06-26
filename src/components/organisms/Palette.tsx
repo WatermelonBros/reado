@@ -50,6 +50,8 @@ import { useBookmarks } from "../../lib/bookmarks";
 import { exportSettings, importSettings } from "../../lib/settingsSync";
 import { useOnboarding } from "../../lib/onboarding";
 import { usePreReview } from "../../lib/preReview";
+import { useGuidedReview } from "../../lib/guidedReview";
+import { useResolveLoop } from "../../lib/resolveLoop";
 import { enableMcp } from "../../lib/mcp";
 import { useSemanticSearch } from "../../lib/semanticSearch";
 import { prompt as promptDialog } from "../../lib/prompt";
@@ -449,6 +451,30 @@ function commandRows(
       run: () => {
         usePreReview.getState().generate(project.root);
         useWorkspace.getState().selectTool("prereview");
+        close();
+      },
+    },
+    {
+      label: t("guided.cmd.start"),
+      run: () => {
+        void useGuidedReview.getState().start(project.root, { kind: "diff" }, "bug_risk");
+        useWorkspace.getState().selectTool("guidedreview");
+        close();
+      },
+    },
+    {
+      label: t("guided.cmd.open"),
+      run: () => {
+        useGuidedReview.getState().load(project.root);
+        useWorkspace.getState().selectTool("guidedreview");
+        close();
+      },
+    },
+    {
+      label: t("loop.cmd.start"),
+      run: () => {
+        void useResolveLoop.getState().start(project.root, []);
+        useWorkspace.getState().selectTool("guidedreview");
         close();
       },
     },

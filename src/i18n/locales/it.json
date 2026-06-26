@@ -142,6 +142,10 @@
   },
   "guided": {
     "panel": "Revisione guidata",
+    "cmd": {
+      "start": "Avvia revisione guidata (modifiche correnti)",
+      "open": "Apri revisione guidata"
+    },
     "busy": "L'agente sta lavorando…",
     "empty": {
       "title": "Revisione guidata in coppia",
@@ -211,6 +215,16 @@
       "file_summary": "riepilogo",
       "session_summary": "riepilogo"
     }
+  },
+  "loop": {
+    "running": "In risoluzione…",
+    "needsApproval": "L'agente attende una tua risposta",
+    "finished": "Risolto — controlla le modifiche",
+    "progress": "{{resolved}}/{{total}}",
+    "cancel": "Annulla",
+    "dismiss": "Chiudi",
+    "hint": "L'agente si è fermato — controlla il terminale e rispondigli.",
+    "cmd": { "start": "Risolvi i task aperti" }
   },
   "tours": {
     "panel": "Tour",
