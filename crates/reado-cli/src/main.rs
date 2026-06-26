@@ -19,7 +19,10 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use reado_core as core;
-use reado_core::{Comment, CommentKind, CommentState, CommentType, NewComment, Scope};
+use reado_core::{
+    ArtifactType, Comment, CommentKind, CommentState, CommentType, FileState, NewComment,
+    NewProposal, NewSession, Objective, ReviewScope, Scope, ScopeKind,
+};
 
 mod mcp;
 
@@ -57,9 +60,237 @@ enum Command {
         #[command(subcommand)]
         action: KbCmd,
     },
+    /// Manage Guided Pair Review sessions (the durable, resumable review record).
+    Session {
+        #[command(subcommand)]
+        action: SessionCmd,
+    },
+    /// Drive a guided review: plan a route, advance, and propose artifacts. This
+    /// is the agent's side of the contract — it never edits the UI, only emits
+    /// structured proposals the human disposes of.
+    Review {
+        #[command(subcommand)]
+        action: ReviewCmd,
+    },
     /// Run a Model Context Protocol server (stdio) exposing the project's
     /// comments, tasks, reading progress, and bookmarks as read-only resources.
     Mcp,
+}
+
+#[derive(Subcommand)]
+enum SessionCmd {
+    /// Start a session for a scope (creates the persistent record).
+    Create {
+        /// What the review covers.
+        #[arg(long, value_enum)]
+        scope: ScopeArg,
+        /// Base branch for a `branch` scope (e.g. main).
+        #[arg(long)]
+        base: Option<String>,
+        /// Path(s) for a `folder`/`files` scope; repeatable.
+        #[arg(long = "path")]
+        paths: Vec<String>,
+        /// Optional review objective that shapes the LLM's focus.
+        #[arg(long, value_enum)]
+        objective: Option<ObjectiveArg>,
+        /// A short title (defaults from the scope).
+        #[arg(long)]
+        title: Option<String>,
+    },
+    /// List sessions, newest first.
+    List,
+    /// Show a session in full (route, files, proposals, summaries).
+    Show { id: String },
+    /// Print a compact progress line (reviewed / remaining) for a session.
+    Status { id: String },
+    /// Set a file's review state.
+    SetFile {
+        id: String,
+        #[arg(long)]
+        file: String,
+        #[arg(long, value_enum)]
+        state: FileStateArg,
+    },
+    /// Record a session decision (kept as session memory, distinct from a comment).
+    Decision {
+        id: String,
+        #[arg(long, default_value = "")]
+        file: String,
+        text: String,
+    },
+    /// Capture a summary — the file's mini-summary with --file, else the session recap.
+    Summarize {
+        id: String,
+        #[arg(long)]
+        file: Option<String>,
+        text: String,
+    },
+    /// Close a session (marks it done; the record stays for resume/history).
+    Close { id: String },
+}
+
+#[derive(Subcommand)]
+enum ReviewCmd {
+    /// Set the ranked route from a JSON array of
+    /// `{file, priority, reason, suggestedReviewMode, relatedFiles}`.
+    Plan {
+        id: String,
+        #[arg(long)]
+        route: String,
+    },
+    /// Advance to the next unfinished file and print it (or "done").
+    Next { id: String },
+    /// Print the agent's context for a file: route entry, state, summary, proposals.
+    Context {
+        id: String,
+        #[arg(long)]
+        file: String,
+    },
+    /// Propose an anchored comment on a line (never auto-final; the human disposes).
+    ProposeComment {
+        id: String,
+        #[arg(long)]
+        file: String,
+        #[arg(long)]
+        line: u32,
+        #[arg(long)]
+        end: Option<u32>,
+        #[arg(long = "type", value_enum, default_value = "note")]
+        comment_type: TypeArg,
+        body: String,
+    },
+    /// Propose a non-comment artifact (question / follow-up / needs-context).
+    Propose {
+        id: String,
+        #[arg(long, value_enum)]
+        kind: ProposeKindArg,
+        #[arg(long, default_value = "")]
+        file: String,
+        #[arg(long, default_value_t = 0)]
+        line: u32,
+        body: String,
+    },
+    /// Replace the route mid-session (a proposed route change the human accepted).
+    ProposeRouteChange {
+        id: String,
+        #[arg(long)]
+        route: String,
+    },
+    /// Capture a file's mini-summary on completion.
+    SummarizeFile {
+        id: String,
+        #[arg(long)]
+        file: String,
+        text: String,
+    },
+    /// Accept a proposal: materialise a durable comment (task by default, or note).
+    Accept {
+        id: String,
+        proposal: String,
+        /// Materialise as a note instead of a task.
+        #[arg(long)]
+        note: bool,
+    },
+    /// Discard a proposal (kept as session memory).
+    Discard { id: String, proposal: String },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum ScopeArg {
+    Diff,
+    Branch,
+    Folder,
+    Files,
+    Comments,
+    Project,
+    Pr,
+}
+
+impl From<ScopeArg> for ScopeKind {
+    fn from(s: ScopeArg) -> Self {
+        match s {
+            ScopeArg::Diff => ScopeKind::Diff,
+            ScopeArg::Branch => ScopeKind::Branch,
+            ScopeArg::Folder => ScopeKind::Folder,
+            ScopeArg::Files => ScopeKind::Files,
+            ScopeArg::Comments => ScopeKind::Comments,
+            ScopeArg::Project => ScopeKind::Project,
+            ScopeArg::Pr => ScopeKind::Pr,
+        }
+    }
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum ObjectiveArg {
+    BugRisk,
+    Design,
+    Maintainability,
+    Security,
+    Performance,
+    TestCoverage,
+    AiSanity,
+    Onboarding,
+    General,
+}
+
+impl From<ObjectiveArg> for Objective {
+    fn from(o: ObjectiveArg) -> Self {
+        match o {
+            ObjectiveArg::BugRisk => Objective::BugRisk,
+            ObjectiveArg::Design => Objective::Design,
+            ObjectiveArg::Maintainability => Objective::Maintainability,
+            ObjectiveArg::Security => Objective::Security,
+            ObjectiveArg::Performance => Objective::Performance,
+            ObjectiveArg::TestCoverage => Objective::TestCoverage,
+            ObjectiveArg::AiSanity => Objective::AiSanity,
+            ObjectiveArg::Onboarding => Objective::Onboarding,
+            ObjectiveArg::General => Objective::General,
+        }
+    }
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum FileStateArg {
+    NotStarted,
+    Queued,
+    InReview,
+    Reviewed,
+    NeedsFollowup,
+    Skipped,
+    Blocked,
+    OutOfScope,
+}
+
+impl From<FileStateArg> for FileState {
+    fn from(s: FileStateArg) -> Self {
+        match s {
+            FileStateArg::NotStarted => FileState::NotStarted,
+            FileStateArg::Queued => FileState::Queued,
+            FileStateArg::InReview => FileState::InReview,
+            FileStateArg::Reviewed => FileState::Reviewed,
+            FileStateArg::NeedsFollowup => FileState::NeedsFollowup,
+            FileStateArg::Skipped => FileState::Skipped,
+            FileStateArg::Blocked => FileState::Blocked,
+            FileStateArg::OutOfScope => FileState::OutOfScope,
+        }
+    }
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum ProposeKindArg {
+    Question,
+    Followup,
+    NeedsContext,
+}
+
+impl From<ProposeKindArg> for ArtifactType {
+    fn from(k: ProposeKindArg) -> Self {
+        match k {
+            ProposeKindArg::Question => ArtifactType::Question,
+            ProposeKindArg::Followup => ArtifactType::FollowUp,
+            ProposeKindArg::NeedsContext => ArtifactType::NeedsContext,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -154,9 +385,325 @@ fn run(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::Task { action } => task(cli, &root, &agent, action)?,
         Command::Comment { action } => comment(cli, &root, &agent, action)?,
         Command::Kb { action } => kb(cli, &root, action)?,
+        Command::Session { action } => session(cli, &root, &agent, action)?,
+        Command::Review { action } => review(cli, &root, &agent, action)?,
         Command::Mcp => mcp::serve(&root)?,
     }
     Ok(())
+}
+
+/// Guided Pair Review sessions: the durable record the agent and human share.
+fn session(
+    cli: &Cli,
+    root: &str,
+    agent: &str,
+    action: &SessionCmd,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match action {
+        SessionCmd::Create {
+            scope,
+            base,
+            paths,
+            objective,
+            title,
+        } => {
+            let kind: ScopeKind = (*scope).into();
+            let title = title.clone().unwrap_or_else(|| default_title(kind, paths));
+            let input = NewSession {
+                title,
+                scope: ReviewScope {
+                    kind,
+                    base: base.clone(),
+                    paths: paths.clone(),
+                    pr: None,
+                },
+                objective: objective.map(|o| o.into()),
+            };
+            let s = core::create_session(root, input, Some(agent.to_string()))?;
+            emit(cli, &s, || {
+                println!("session {} created: {}", s.id, s.title)
+            })?;
+        }
+        SessionCmd::List => {
+            let sessions = core::list_sessions(root);
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&sessions)?);
+            } else if sessions.is_empty() {
+                println!("No review sessions.");
+            } else {
+                for s in &sessions {
+                    println!("{}  {:?}  {}", s.id, s.status, s.title);
+                }
+            }
+        }
+        SessionCmd::Show { id } => {
+            let s = core::get_session(root, id)?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&s)?);
+            } else {
+                print_session(&s);
+            }
+        }
+        SessionCmd::Status { id } => {
+            let s = core::get_session(root, id)?;
+            let (reviewed, total) = progress(&s);
+            if cli.json {
+                let v = serde_json::json!({
+                    "id": s.id, "status": s.status, "reviewed": reviewed, "total": total,
+                    "position": s.position, "proposals": s.proposals.len(),
+                });
+                println!("{}", serde_json::to_string_pretty(&v)?);
+            } else {
+                println!("{:?} — {reviewed}/{total} files reviewed", s.status);
+            }
+        }
+        SessionCmd::SetFile { id, file, state } => {
+            let new_state: FileState = (*state).into();
+            let s = core::set_file_state(root, id, file, new_state)?;
+            emit(cli, &s, || println!("{file}: {new_state:?}"))?;
+        }
+        SessionCmd::Decision { id, file, text } => {
+            let p = core::add_decision(root, id, text.clone(), file)?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&p)?);
+            } else {
+                println!("decision recorded: {}", p.id);
+            }
+        }
+        SessionCmd::Summarize { id, file, text } => {
+            let s = match file {
+                Some(f) => core::set_file_summary(root, id, f, text.clone())?,
+                None => core::set_session_summary(root, id, text.clone())?,
+            };
+            emit(cli, &s, || println!("summary saved"))?;
+        }
+        SessionCmd::Close { id } => {
+            let s = core::close_session(root, id)?;
+            emit(cli, &s, || println!("session {} closed", s.id))?;
+        }
+    }
+    Ok(())
+}
+
+/// The agent's review verbs: plan a route, advance, and propose artifacts.
+fn review(
+    cli: &Cli,
+    root: &str,
+    agent: &str,
+    action: &ReviewCmd,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match action {
+        ReviewCmd::Plan { id, route } | ReviewCmd::ProposeRouteChange { id, route } => {
+            let route = serde_json::from_str(route)
+                .map_err(|e| format!("invalid route JSON: {e} — expected an array of {{file, priority, reason, suggestedReviewMode, relatedFiles}}"))?;
+            let s = core::set_route(root, id, route)?;
+            emit(cli, &s, || println!("route set: {} files", s.route.len()))?;
+        }
+        ReviewCmd::Next { id } => {
+            let s = core::advance(root, id)?;
+            let entry = s.route.get(s.position);
+            let all_done = progress(&s).0 == progress(&s).1 && !s.route.is_empty();
+            if cli.json {
+                let v = serde_json::json!({
+                    "done": all_done,
+                    "position": s.position,
+                    "total": s.route.len(),
+                    "entry": entry,
+                });
+                println!("{}", serde_json::to_string_pretty(&v)?);
+            } else if all_done {
+                println!("done — every file reviewed");
+            } else if let Some(e) = entry {
+                println!("→ {} ({:?})  {}", e.file, e.suggested_review_mode, e.reason);
+            } else {
+                println!("no route yet — run `reado review plan`");
+            }
+        }
+        ReviewCmd::Context { id, file } => {
+            let s = core::get_session(root, id)?;
+            let entry = s.route.iter().find(|e| &e.file == file);
+            let fstate = s.files.iter().find(|f| &f.file == file);
+            let proposals: Vec<_> = s.proposals.iter().filter(|p| &p.file == file).collect();
+            if cli.json {
+                let v = serde_json::json!({
+                    "file": file,
+                    "entry": entry,
+                    "state": fstate.map(|f| f.state),
+                    "summary": fstate.and_then(|f| f.summary.clone()),
+                    "proposals": proposals,
+                });
+                println!("{}", serde_json::to_string_pretty(&v)?);
+            } else {
+                println!("{file}");
+                if let Some(e) = entry {
+                    println!("  reason: {}", e.reason);
+                    if !e.related_files.is_empty() {
+                        println!("  related: {}", e.related_files.join(", "));
+                    }
+                }
+                println!("  proposals: {}", proposals.len());
+            }
+        }
+        ReviewCmd::ProposeComment {
+            id,
+            file,
+            line,
+            end,
+            comment_type,
+            body,
+        } => {
+            let p = core::add_proposal(
+                root,
+                id,
+                NewProposal {
+                    artifact_type: ArtifactType::Comment,
+                    file: file.clone(),
+                    start_line: *line,
+                    end_line: end.unwrap_or(*line),
+                    comment_type: Some((*comment_type).into()),
+                    body: body.clone(),
+                },
+                "agent",
+                Some(agent.to_string()),
+            )?;
+            emit_proposal(cli, &p)?;
+        }
+        ReviewCmd::Propose {
+            id,
+            kind,
+            file,
+            line,
+            body,
+        } => {
+            let p = core::add_proposal(
+                root,
+                id,
+                NewProposal {
+                    artifact_type: (*kind).into(),
+                    file: file.clone(),
+                    start_line: *line,
+                    end_line: *line,
+                    comment_type: None,
+                    body: body.clone(),
+                },
+                "agent",
+                Some(agent.to_string()),
+            )?;
+            emit_proposal(cli, &p)?;
+        }
+        ReviewCmd::SummarizeFile { id, file, text } => {
+            let s = core::set_file_summary(root, id, file, text.clone())?;
+            emit(cli, &s, || println!("summary saved for {file}"))?;
+        }
+        ReviewCmd::Accept { id, proposal, note } => {
+            let kind = if *note {
+                CommentKind::Note
+            } else {
+                CommentKind::Task
+            };
+            let s = core::accept_proposal(root, id, proposal, kind)?;
+            emit(cli, &s, || println!("accepted {proposal}"))?;
+        }
+        ReviewCmd::Discard { id, proposal } => {
+            let s =
+                core::set_proposal_state(root, id, proposal, core::ArtifactState::Discarded, None)?;
+            emit(cli, &s, || println!("discarded {proposal}"))?;
+        }
+    }
+    Ok(())
+}
+
+fn default_title(kind: ScopeKind, paths: &[String]) -> String {
+    match kind {
+        ScopeKind::Diff => "Review the current diff".into(),
+        ScopeKind::Branch => "Review this branch".into(),
+        ScopeKind::Folder => format!(
+            "Review {}",
+            paths.first().map(String::as_str).unwrap_or(".")
+        ),
+        ScopeKind::Files => "Review selected files".into(),
+        ScopeKind::Comments => "Review open comments".into(),
+        ScopeKind::Project => "Review the project".into(),
+        ScopeKind::Pr => "Review the pull request".into(),
+    }
+}
+
+/// Reviewed-or-otherwise-finished files over total routed files.
+fn progress(s: &core::Session) -> (usize, usize) {
+    let total = s.route.len();
+    let reviewed = s
+        .route
+        .iter()
+        .filter(|e| {
+            s.files
+                .iter()
+                .find(|f| f.file == e.file)
+                .map(|f| {
+                    matches!(
+                        f.state,
+                        FileState::Reviewed | FileState::Skipped | FileState::OutOfScope
+                    )
+                })
+                .unwrap_or(false)
+        })
+        .count();
+    (reviewed, total)
+}
+
+/// Print the session as JSON (when `--json`), else run the human fallback.
+fn emit(
+    cli: &Cli,
+    s: &core::Session,
+    human: impl FnOnce(),
+) -> Result<(), Box<dyn std::error::Error>> {
+    if cli.json {
+        println!("{}", serde_json::to_string_pretty(s)?);
+    } else {
+        human();
+    }
+    Ok(())
+}
+
+fn emit_proposal(cli: &Cli, p: &core::Proposal) -> Result<(), Box<dyn std::error::Error>> {
+    if cli.json {
+        println!("{}", serde_json::to_string_pretty(p)?);
+    } else {
+        println!("proposed {} ({:?})", p.id, p.artifact_type);
+    }
+    Ok(())
+}
+
+fn print_session(s: &core::Session) {
+    let (reviewed, total) = progress(s);
+    println!("{}  [{:?}]  {}", s.id, s.status, s.title);
+    if let Some(obj) = s.objective {
+        println!("  objective: {obj:?}");
+    }
+    println!("  progress: {reviewed}/{total} files reviewed");
+    if !s.route.is_empty() {
+        println!("  route:");
+        for (i, e) in s.route.iter().enumerate() {
+            let here = if i == s.position { "→" } else { " " };
+            let st = s
+                .files
+                .iter()
+                .find(|f| f.file == e.file)
+                .map(|f| format!("{:?}", f.state))
+                .unwrap_or_else(|| "?".into());
+            println!("   {here} {} [{st}]  {}", e.file, e.reason);
+        }
+    }
+    let open: Vec<_> = s
+        .proposals
+        .iter()
+        .filter(|p| p.state == core::ArtifactState::Proposed)
+        .collect();
+    if !open.is_empty() {
+        println!("  open proposals: {}", open.len());
+    }
+    if let Some(sum) = &s.summary {
+        println!("  summary: {sum}");
+    }
 }
 
 /// The knowledge base: docs, specs and notes, so an agent can consult the plan

@@ -32,6 +32,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+mod session;
+pub use session::*;
+
 // ---- Errors --------------------------------------------------------------
 
 /// Errors from store operations.
@@ -213,16 +216,23 @@ fn archive_dir(root: &str) -> PathBuf {
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-fn now_millis() -> u64 {
+pub(crate) fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }
 
-fn new_id() -> String {
+/// Generate a unique id with the given prefix (e.g. `c` for comments, `s` for
+/// sessions, `p` for proposals). The counter is shared so ids never collide
+/// within a process even at the same millisecond.
+pub(crate) fn gen_id(prefix: &str) -> String {
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("c_{:x}_{:x}", now_millis(), n)
+    format!("{prefix}_{:x}_{:x}", now_millis(), n)
+}
+
+fn new_id() -> String {
+    gen_id("c")
 }
 
 // ---- Serialization to/from the `.md` format ------------------------------
