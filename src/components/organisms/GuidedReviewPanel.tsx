@@ -280,16 +280,16 @@ function SessionView({ root, session }: { root: string; session: Session }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {/* Progress + objective */}
-      <div className="flex-none px-3 pt-2.5">
-        <div className="flex items-center justify-between text-[10px] text-faint">
-          <span>{t("guided.progress", { reviewed, total })}</span>
+      <div className="flex-none px-3 pt-3">
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="text-muted tabular-nums">{t("guided.progress", { reviewed, total })}</span>
           {session.objective && (
-            <span className="rounded bg-surface px-1.5 py-0.5 text-muted">
+            <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] text-muted">
               {t(`guided.obj.${session.objective}` as MessageKey)}
             </span>
           )}
         </div>
-        <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface">
+        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface">
           <div
             className="h-full rounded-full bg-accent transition-[width] duration-300"
             style={{ width: total ? `${(reviewed / total) * 100}%` : "0%" }}
@@ -297,51 +297,59 @@ function SessionView({ root, session }: { root: string; session: Session }) {
         </div>
       </div>
 
-      {/* Current file + actions. Keyed by file so it re-animates when the
-          current file changes — a clear cue that the focus moved. */}
+      {/* Current file card — the focus zone. Keyed by file so it re-animates
+          when the current file changes (a clear cue the focus moved). */}
       {entry && (
-        <section key={entry.file} className="animate-rise flex-none border-b border-line/60 px-3 pb-2.5 pt-3">
-          <p className="text-[10px] uppercase tracking-wide text-faint">{t("guided.current")}</p>
-          <button
-            type="button"
-            onClick={() => void store().focusFile(root, session.id, entry.file)}
-            className="mt-0.5 block w-full truncate text-left text-sm font-medium text-ink hover:text-accent"
-            title={entry.file}
+        <section className="flex-none px-3 pt-3">
+          <div
+            key={entry.file}
+            className="animate-rise rounded-lg border border-line bg-surface/50 p-3"
           >
-            {entry.file.split("/").pop()}
-          </button>
-          {entry.reason && (
-            <p className="mt-0.5 text-[11px] leading-snug text-muted">{entry.reason}</p>
-          )}
-          {!!entry.relatedFiles?.length && (
-            <p className="mt-0.5 text-[10px] text-faint">
-              {t("guided.related")}: {entry.relatedFiles.join(", ")}
+            <p className="text-[10px] font-medium uppercase tracking-wider text-faint">
+              {t("guided.current")}
             </p>
-          )}
-          {/* Primary: run the AI review. Then navigate (reviewed/skip advance to
-              the next file). Second opinion only appears once findings exist. */}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <Action
-              primary
-              title={t("guided.action.reviewHint")}
-              onClick={() => void store().reviewFile(root, session.id, entry.file)}
+            <button
+              type="button"
+              onClick={() => void store().focusFile(root, session.id, entry.file)}
+              className="mt-1 block w-full truncate text-left text-sm font-semibold text-ink hover:text-accent"
+              title={entry.file}
             >
-              {t("guided.action.review")}
-            </Action>
-            <Action onClick={() => void store().finishFile(root, session.id, entry.file, "reviewed")}>
-              {t("guided.action.reviewed")}
-            </Action>
-            <Action onClick={() => void store().finishFile(root, session.id, entry.file, "skipped")}>
-              {t("guided.action.skip")}
-            </Action>
-            {reviewedCurrent && (
-              <Action
-                title={t("guided.action.challengeHint")}
-                onClick={() => void store().challenge(root, session.id, entry.file)}
-              >
-                {t("guided.action.challenge")}
-              </Action>
+              {entry.file.split("/").pop()}
+            </button>
+            {entry.reason && (
+              <p className="mt-1 text-xs leading-relaxed text-muted">{entry.reason}</p>
             )}
+            {!!entry.relatedFiles?.length && (
+              <p className="mt-1 truncate text-[10px] text-faint" title={entry.relatedFiles.join(", ")}>
+                {t("guided.related")}: {entry.relatedFiles.join(", ")}
+              </p>
+            )}
+            {/* Primary CTA: run the AI review. Secondary chips navigate
+                (reviewed/skip advance). Second opinion appears once findings exist. */}
+            <div className="mt-3">
+              <PrimaryButton
+                title={t("guided.action.reviewHint")}
+                onClick={() => void store().reviewFile(root, session.id, entry.file)}
+              >
+                {t("guided.action.review")}
+              </PrimaryButton>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <Action onClick={() => void store().finishFile(root, session.id, entry.file, "reviewed")}>
+                {t("guided.action.reviewed")}
+              </Action>
+              <Action onClick={() => void store().finishFile(root, session.id, entry.file, "skipped")}>
+                {t("guided.action.skip")}
+              </Action>
+              {reviewedCurrent && (
+                <Action
+                  title={t("guided.action.challengeHint")}
+                  onClick={() => void store().challenge(root, session.id, entry.file)}
+                >
+                  {t("guided.action.challenge")}
+                </Action>
+              )}
+            </div>
           </div>
         </section>
       )}
@@ -385,13 +393,15 @@ function SessionView({ root, session }: { root: string; session: Session }) {
                   <button
                     type="button"
                     onClick={() => void store().focusFile(root, session.id, e.file)}
-                    className={`flex w-full items-center gap-2 px-3 py-1 text-left text-[11px] hover:bg-surface ${
-                      isCurrent ? "bg-surface text-ink" : ""
+                    className={`group flex w-full items-center gap-2 border-l-2 py-1.5 pl-3 pr-3 text-left text-[11px] transition-colors ${
+                      isCurrent
+                        ? "border-accent bg-surface text-ink"
+                        : "border-transparent text-muted hover:border-line-strong hover:bg-surface"
                     }`}
                     title={t("guided.openFile", { file: e.file })}
                   >
-                    <span className="min-w-0 flex-1 truncate text-muted">{e.file}</span>
-                    <span className={`flex-none text-[9px] ${fileStateTone(fs)}`}>
+                    <span className="min-w-0 flex-1 truncate">{e.file.split("/").pop()}</span>
+                    <span className={`flex-none text-[10px] ${fileStateTone(fs)}`}>
                       {t(`guided.fs.${fs}` as MessageKey)}
                     </span>
                   </button>
@@ -569,12 +579,14 @@ function ProposalRow({
   };
 
   return (
-    <li className="border-b border-line/60 px-3 py-2">
-      <div className="flex items-center gap-2 text-[10px] text-faint">
+    <li className="border-b border-line/60 px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] text-faint">
         <span
-          className="rounded px-1.5 py-0.5"
-          style={{ color, background: "var(--bg-surface)" }}
-        >
+          className="h-2 w-2 flex-none rounded-full"
+          style={{ background: color }}
+          aria-hidden="true"
+        />
+        <span className="font-medium uppercase tracking-wide" style={{ color }}>
           {t(`guided.at.${p.artifactType}` as MessageKey)}
         </span>
         {anchored && (
@@ -604,7 +616,7 @@ function ProposalRow({
         {editing ? (
           <>
             <Action
-              primary
+              tone="accent"
               disabled={busy}
               onClick={() => {
                 run(() => store().edit(root, sessionId, p.id, draft));
@@ -617,7 +629,7 @@ function ProposalRow({
           </>
         ) : (
           <>
-            <Action primary disabled={busy} onClick={() => run(() => store().accept(root, sessionId, p.id))}>
+            <Action tone="accent" disabled={busy} onClick={() => run(() => store().accept(root, sessionId, p.id))}>
               {t("guided.approve")}
             </Action>
             <Action disabled={busy} onClick={() => run(() => store().accept(root, sessionId, p.id, true))}>
@@ -649,30 +661,59 @@ function ProposalRow({
   );
 }
 
-function Action({
+/** A full-width primary call-to-action (one per surface — the obvious next step). */
+function PrimaryButton({
   children,
   onClick,
-  primary,
-  title,
   disabled,
+  title,
 }: {
   children: React.ReactNode;
   onClick: () => void;
-  primary?: boolean;
+  disabled?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="w-full rounded-md bg-accent px-3 py-2 text-xs font-medium text-on-accent transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** A quiet secondary action chip — reads as a button (border + padding), not a
+ *  link. `tone` lets a single chip carry meaning (accent for the positive one). */
+function Action({
+  children,
+  onClick,
+  title,
+  disabled,
+  tone = "muted",
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
   title?: string;
   disabled?: boolean;
+  tone?: "muted" | "accent" | "marker";
 }) {
+  const toneCls =
+    tone === "accent"
+      ? "text-accent hover:border-accent"
+      : tone === "marker"
+        ? "text-marker hover:border-marker"
+        : "text-muted hover:text-ink hover:border-line-strong";
   return (
     <button
       type="button"
       onClick={onClick}
       title={title}
       disabled={disabled}
-      className={`rounded-md px-2 py-0.5 text-[11px] disabled:opacity-40 ${
-        primary
-          ? "bg-surface text-accent hover:text-ink"
-          : "text-faint hover:text-ink"
-      }`}
+      className={`rounded-md border border-line bg-surface px-2.5 py-1 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${toneCls}`}
     >
       {children}
     </button>
