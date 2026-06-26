@@ -17,6 +17,7 @@ import {
   useGuidedReview,
 } from "../../lib/guidedReview";
 import { useForge } from "../../lib/forge";
+import { gitBranches } from "../../lib/api";
 import type {
   FileState,
   Objective,
@@ -159,7 +160,16 @@ function EmptyState({ root }: { root: string }) {
         {isRepo && (
           <button
             type="button"
-            onClick={() => void start(root, { kind: "branch", base: "main" }, objective)}
+            onClick={async () => {
+              // Don't assume "main": pick the repo's actual default base branch.
+              const b = await gitBranches(root).catch(() => null);
+              const base = b?.local.includes("main")
+                ? "main"
+                : b?.local.includes("master")
+                  ? "master"
+                  : (b?.current ?? "main");
+              void start(root, { kind: "branch", base }, objective);
+            }}
             className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
           >
             {t("guided.start.branch")}
@@ -470,9 +480,12 @@ function SessionView({ root, session }: { root: string; session: Session }) {
 /** Submit a PR/MR session to the host as one batched review with a verdict. */
 function PrSubmit({ root, session }: { root: string; session: Session }) {
   const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { t } = useTranslation();
   const number = Number((session.scope.pr ?? "").replace(/[^0-9]/g, "")) || 0;
+  // Without a real PR/MR number there's nothing to submit to (#0 would be wrong).
+  const disabled = number === 0 || busy;
 
   // Assemble the review body from the accepted comments + the session summary.
   const body = useMemo(() => {
@@ -483,8 +496,11 @@ function PrSubmit({ root, session }: { root: string; session: Session }) {
   }, [session]);
 
   const submit = async (verdict: Verdict) => {
+    if (disabled) return;
     setError(null);
+    setBusy(true);
     const err = await useForge.getState().submit(root, number, verdict, body || "Reviewed.");
+    setBusy(false);
     if (err) setError(err);
     else setSent(true);
   };
@@ -497,26 +513,30 @@ function PrSubmit({ root, session }: { root: string; session: Session }) {
       <div className="flex flex-wrap gap-1.5">
         <button
           type="button"
+          disabled={disabled}
           onClick={() => void submit("approve")}
-          className="rounded-md bg-surface px-2 py-1 text-[11px] text-accent hover:text-ink"
+          className="rounded-md bg-surface px-2 py-1 text-[11px] text-accent hover:text-ink disabled:opacity-40"
         >
           {t("forge.approve")}
         </button>
         <button
           type="button"
+          disabled={disabled}
           onClick={() => void submit("request_changes")}
-          className="rounded-md bg-surface px-2 py-1 text-[11px] text-marker hover:text-ink"
+          className="rounded-md bg-surface px-2 py-1 text-[11px] text-marker hover:text-ink disabled:opacity-40"
         >
           {t("forge.requestChanges")}
         </button>
         <button
           type="button"
+          disabled={disabled}
           onClick={() => void submit("comment")}
-          className="rounded-md px-2 py-1 text-[11px] text-faint hover:text-ink"
+          className="rounded-md px-2 py-1 text-[11px] text-faint hover:text-ink disabled:opacity-40"
         >
           {t("forge.comment")}
         </button>
       </div>
+      {number === 0 && <p className="text-[10px] leading-snug text-faint">{t("forge.noNumber")}</p>}
       {error && <p className="text-[10px] leading-snug text-marker">{error}</p>}
     </div>
   );
@@ -533,10 +553,20 @@ function ProposalRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(p.body);
+  const [busy, setBusy] = useState(false);
   const { t } = useTranslation();
   const store = useGuidedReview.getState;
   const anchored = !!p.file && p.startLine > 0;
   const color = p.type ? TYPE_COLOR[p.type] : "var(--text-muted)";
+
+  // Run a disposal action with the row's buttons disabled while it's in flight —
+  // a double-click on Approve would otherwise try to accept the same proposal
+  // twice (core is now idempotent too, but the UI shouldn't fire it twice).
+  const run = (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    void fn().finally(() => setBusy(false));
+  };
 
   return (
     <li className="border-b border-line/60 px-3 py-2">
@@ -575,8 +605,9 @@ function ProposalRow({
           <>
             <Action
               primary
+              disabled={busy}
               onClick={() => {
-                void store().edit(root, sessionId, p.id, draft);
+                run(() => store().edit(root, sessionId, p.id, draft));
                 setEditing(false);
               }}
             >
@@ -586,20 +617,28 @@ function ProposalRow({
           </>
         ) : (
           <>
-            <Action primary onClick={() => void store().accept(root, sessionId, p.id)}>
+            <Action primary disabled={busy} onClick={() => run(() => store().accept(root, sessionId, p.id))}>
               {t("guided.approve")}
             </Action>
-            <Action onClick={() => void store().accept(root, sessionId, p.id, true)}>
+            <Action disabled={busy} onClick={() => run(() => store().accept(root, sessionId, p.id, true))}>
               {t("guided.approveNote")}
             </Action>
-            <Action onClick={() => setEditing(true)}>{t("guided.edit")}</Action>
-            <Action onClick={() => void store().discard(root, sessionId, p.id)}>
+            <Action
+              disabled={busy}
+              onClick={() => {
+                // Seed the editor from the *current* body, not a stale mount-time copy.
+                setDraft(p.body);
+                setEditing(true);
+              }}
+            >
+              {t("guided.edit")}
+            </Action>
+            <Action disabled={busy} onClick={() => run(() => store().discard(root, sessionId, p.id))}>
               {t("guided.discard")}
             </Action>
             <Action
-              onClick={() =>
-                void store().falsePositive(root, sessionId, p.id, t("guided.fpNote"))
-              }
+              disabled={busy}
+              onClick={() => run(() => store().falsePositive(root, sessionId, p.id, t("guided.fpNote")))}
             >
               {t("guided.falsePositive")}
             </Action>
@@ -615,18 +654,21 @@ function Action({
   onClick,
   primary,
   title,
+  disabled,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   primary?: boolean;
   title?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={title}
-      className={`rounded-md px-2 py-0.5 text-[11px] ${
+      disabled={disabled}
+      className={`rounded-md px-2 py-0.5 text-[11px] disabled:opacity-40 ${
         primary
           ? "bg-surface text-accent hover:text-ink"
           : "text-faint hover:text-ink"

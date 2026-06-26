@@ -131,11 +131,25 @@ fn non_empty(s: &str) -> Option<String> {
     }
 }
 
+/// Whether `host` belongs to a forge identified by `pattern`. Matches on domain
+/// boundaries, not a bare substring, so `notgithub.example.com` doesn't match
+/// `github` while `github.com` and a self-hosted `github.mycorp.com` do. A
+/// dotted pattern (e.g. `visualstudio.com`) matches the host or its subdomains.
+fn host_matches(host: &str, pattern: &str) -> bool {
+    if pattern.contains('.') {
+        host == pattern || host.ends_with(&format!(".{pattern}"))
+    } else {
+        host.split('.').any(|label| label == pattern)
+    }
+}
+
 /// Resolve the forge for a remote URL through the registry.
 pub fn detect_from_remote(remote: &str) -> Forge {
     let host = parse_host(remote).unwrap_or_default();
     let lower = host.to_lowercase();
-    let matched = REGISTRY.iter().find(|a| lower.contains(a.host_pattern));
+    let matched = REGISTRY
+        .iter()
+        .find(|a| host_matches(&lower, a.host_pattern));
     match matched {
         Some(a) => Forge {
             provider: a.provider,
@@ -392,49 +406,65 @@ fn submit_review_blocking(
         .ok_or("no forge adapter for this remote")?;
     let root_path = Path::new(&root);
     let n = number.to_string();
-    let args: Vec<String> = match (cli, verdict) {
-        ("gh", Verdict::Approve) => vec![
-            "pr".into(),
-            "review".into(),
-            n,
-            "--approve".into(),
-            "-b".into(),
-            body,
-        ],
-        ("gh", Verdict::RequestChanges) => {
-            vec![
+    // `gh pr review --comment/--request-changes` rejects an empty body (only
+    // --approve tolerates it), so never send one.
+    let body = if body.trim().is_empty() {
+        "Reviewed.".to_string()
+    } else {
+        body
+    };
+    // A verdict may map to more than one command. On GitLab `mr approve` carries
+    // no body, so we approve AND post the review summary as a note — otherwise
+    // the session's content is silently dropped on approve.
+    let runs: Vec<Vec<String>> = match (cli, verdict) {
+        ("gh", Verdict::Approve) => {
+            vec![vec![
                 "pr".into(),
                 "review".into(),
                 n,
-                "--request-changes".into(),
+                "--approve".into(),
                 "-b".into(),
                 body,
-            ]
+            ]]
         }
-        ("gh", Verdict::Comment) => vec![
+        ("gh", Verdict::RequestChanges) => vec![vec![
             "pr".into(),
             "review".into(),
             n,
-            "--comment".into(),
+            "--request-changes".into(),
             "-b".into(),
             body,
+        ]],
+        ("gh", Verdict::Comment) => {
+            vec![vec![
+                "pr".into(),
+                "review".into(),
+                n,
+                "--comment".into(),
+                "-b".into(),
+                body,
+            ]]
+        }
+        ("glab", Verdict::Approve) => vec![
+            vec!["mr".into(), "approve".into(), n.clone()],
+            vec!["mr".into(), "note".into(), n, "-m".into(), body],
         ],
-        ("glab", Verdict::Approve) => vec!["mr".into(), "approve".into(), n],
         // glab has no request-changes verb; record the review as a note.
-        ("glab", _) => vec!["mr".into(), "note".into(), n, "-m".into(), body],
+        ("glab", _) => vec![vec!["mr".into(), "note".into(), n, "-m".into(), body]],
         _ => return Err("unsupported forge CLI".into()),
     };
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let out = command(cli)
-        .current_dir(root_path)
-        .args(&arg_refs)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if out.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    for run in &runs {
+        let arg_refs: Vec<&str> = run.iter().map(String::as_str).collect();
+        let out = command(cli)
+            .current_dir(root_path)
+            .args(&arg_refs)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+        }
     }
+    Ok(())
 }
 
 // ---- Pull existing threads -------------------------------------------------
@@ -530,8 +560,18 @@ pub fn map_glab_discussions(json: &str) -> Vec<HostThread> {
             let notes = d.get("notes").and_then(|n| n.as_array())?;
             let first = notes.first()?;
             let pos = first.get("position")?;
-            let file = pos.get("new_path").and_then(|p| p.as_str())?.to_string();
-            let line = pos.get("new_line").and_then(|l| l.as_u64()).unwrap_or(0) as u32;
+            // Prefer the new side; fall back to the old path/line so a comment on
+            // a removed line is kept (anchored to its pre-image) rather than dropped.
+            let file = pos
+                .get("new_path")
+                .and_then(|p| p.as_str())
+                .or_else(|| pos.get("old_path").and_then(|p| p.as_str()))?
+                .to_string();
+            let line = pos
+                .get("new_line")
+                .and_then(|l| l.as_u64())
+                .or_else(|| pos.get("old_line").and_then(|l| l.as_u64()))
+                .unwrap_or(0) as u32;
             let author = first
                 .pointer("/author/username")
                 .and_then(|u| u.as_str())
@@ -845,6 +885,20 @@ mod tests {
         assert_eq!(f.provider, Provider::Bitbucket);
         assert_eq!(f.cli, None);
         assert!(!f.has_adapter); // reviewable locally, no host round-trip
+    }
+
+    #[test]
+    fn lookalike_host_does_not_false_match() {
+        // A host that merely contains "github" as a substring must not map to gh.
+        let f = detect_from_remote("git@notgithub.example.com:team/repo.git");
+        assert_eq!(f.provider, Provider::Unknown);
+        assert!(!f.has_adapter);
+    }
+
+    #[test]
+    fn github_enterprise_subdomain_matches() {
+        let f = detect_from_remote("git@github.mycorp.com:team/repo.git");
+        assert_eq!(f.provider, Provider::GitHub);
     }
 
     #[test]

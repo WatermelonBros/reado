@@ -44,6 +44,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("YAML error: {0}")]
     Yaml(String),
+    #[error("JSON error: {0}")]
+    Json(String),
     #[error("no such comment: {0}")]
     NotFound(String),
 }

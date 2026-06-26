@@ -246,6 +246,7 @@
     "loading": "Caricamento…",
     "submit": "Invia revisione",
     "submitted": "Revisione inviata.",
+    "noNumber": "Nessun numero di pull/merge request — impossibile inviare.",
     "approve": "Approva",
     "requestChanges": "Richiedi modifiche",
     "comment": "Commenta"

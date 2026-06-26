@@ -501,8 +501,16 @@ fn review(
         }
         ReviewCmd::Next { id } => {
             let s = core::advance(root, id)?;
-            let entry = s.route.get(s.position);
-            let all_done = progress(&s).0 == progress(&s).1 && !s.route.is_empty();
+            // Compute progress once (it's an O(route×files) scan), and report no
+            // `entry` when finished so a consumer doesn't render the last file as
+            // if it were the next one to review.
+            let (rev, tot) = progress(&s);
+            let all_done = rev == tot && !s.route.is_empty();
+            let entry = if all_done {
+                None
+            } else {
+                s.route.get(s.position)
+            };
             if cli.json {
                 let v = serde_json::json!({
                     "done": all_done,
@@ -745,10 +753,17 @@ fn kb(cli: &Cli, root: &str, action: &KbCmd) -> Result<(), Box<dyn std::error::E
             }
         }
         KbCmd::Show { path } => {
-            if path.contains("..") {
+            // Resolve and confirm the target is inside the project. A bare
+            // `..` check misses absolute paths — `root.join("/etc/passwd")`
+            // discards the base — so canonicalize both and compare prefixes.
+            let base =
+                std::fs::canonicalize(root_path).map_err(|_| "cannot resolve the project root")?;
+            let target = std::fs::canonicalize(root_path.join(path))
+                .map_err(|_| "no such file in the project")?;
+            if !target.starts_with(&base) {
                 return Err("path must be inside the project".into());
             }
-            let text = std::fs::read_to_string(root_path.join(path))?;
+            let text = std::fs::read_to_string(&target)?;
             print!("{text}");
         }
         KbCmd::Search { query } => {

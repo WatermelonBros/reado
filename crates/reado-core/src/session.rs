@@ -266,8 +266,14 @@ fn session_path(root: &str, id: &str) -> PathBuf {
 fn save(root: &str, session: &Session) -> Result<()> {
     let dir = sessions_dir(root);
     std::fs::create_dir_all(&dir)?;
-    let json = serde_json::to_string_pretty(session).map_err(|e| Error::Yaml(e.to_string()))?;
-    std::fs::write(session_path(root, &session.id), json)?;
+    let json = serde_json::to_string_pretty(session).map_err(|e| Error::Json(e.to_string()))?;
+    // Atomic write: a partial `std::fs::write` could be read mid-flight by
+    // get_session/list_sessions as truncated JSON (and silently dropped). Write a
+    // sibling temp file, then rename it into place (atomic on the same volume).
+    let final_path = session_path(root, &session.id);
+    let tmp = dir.join(format!(".{}.tmp", session.id));
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(&tmp, &final_path)?;
     Ok(())
 }
 
@@ -319,7 +325,7 @@ pub fn get_session(root: &str, id: &str) -> Result<Session> {
     }
     let text = std::fs::read_to_string(session_path(root, id))
         .map_err(|_| Error::NotFound(id.to_string()))?;
-    serde_json::from_str(&text).map_err(|e| Error::Yaml(e.to_string()))
+    serde_json::from_str(&text).map_err(|e| Error::Json(e.to_string()))
 }
 
 /// Read-modify-write a session, stamping `updated_at`.
@@ -345,6 +351,9 @@ pub fn set_route(root: &str, id: &str, route: Vec<RouteEntry>) -> Result<Session
             }
         }
         s.route = route;
+        // Keep the cursor in range: a shorter new route must not leave position
+        // past the end, or `route[position]` panics in consumers (the UI/CLI).
+        s.position = s.position.min(s.route.len().saturating_sub(1));
         if s.status == SessionStatus::Planning {
             s.status = SessionStatus::InReview;
         }
@@ -447,6 +456,15 @@ pub fn accept_proposal(
         .ok_or_else(|| Error::NotFound(proposal_id.to_string()))?
         .clone();
 
+    // Idempotent: a second accept (double-click / retry) must not create a second
+    // durable comment and orphan the first. If it's already accepted, no-op.
+    if matches!(
+        proposal.state,
+        ArtifactState::Accepted | ArtifactState::ConvertedToTask | ArtifactState::ConvertedToNote
+    ) {
+        return Ok(session);
+    }
+
     // Anchored proposals become real comments; pure session memory (decision,
     // question, summaries) is just marked accepted in place.
     let comment_id = if !proposal.file.is_empty() {
@@ -483,6 +501,7 @@ pub fn accept_proposal(
         if let Some(p) = s.proposals.iter_mut().find(|p| p.id == proposal_id) {
             p.state = new_state;
             p.comment_id = comment_id;
+            p.updated_at = now_millis();
         }
     })
 }
@@ -752,6 +771,53 @@ mod tests {
         assert_eq!(decision.state, ArtifactState::Accepted);
         let file = updated.files.iter().find(|f| f.file == "a.rs").unwrap();
         assert_eq!(file.summary.as_deref(), Some("checked error paths"));
+    }
+
+    #[test]
+    fn set_route_clamps_position_when_route_shrinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        let s = start(root);
+        let entry = |f: &str| RouteEntry {
+            file: f.into(),
+            priority: 1,
+            reason: String::new(),
+            suggested_review_mode: ReviewMode::Normal,
+            related_files: vec![],
+        };
+        set_route(root, &s.id, vec![entry("a"), entry("b"), entry("c")]).unwrap();
+        set_position(root, &s.id, 2).unwrap(); // point at "c"
+                                               // A shorter route must pull the cursor back in range, not leave it at 2.
+        let updated = set_route(root, &s.id, vec![entry("a")]).unwrap();
+        assert_eq!(updated.route.len(), 1);
+        assert_eq!(updated.position, 0);
+    }
+
+    #[test]
+    fn accept_proposal_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        std::fs::write(dir.path().join("a.rs"), "fn main() {}\n").unwrap();
+        let s = start(root);
+        let p = add_proposal(
+            root,
+            &s.id,
+            NewProposal {
+                artifact_type: ArtifactType::Comment,
+                file: "a.rs".into(),
+                start_line: 1,
+                end_line: 1,
+                comment_type: Some(CommentType::Bug),
+                body: "bug".into(),
+            },
+            "agent",
+            None,
+        )
+        .unwrap();
+        accept_proposal(root, &s.id, &p.id, CommentKind::Task).unwrap();
+        // A second accept must be a no-op: still exactly one durable comment.
+        accept_proposal(root, &s.id, &p.id, CommentKind::Task).unwrap();
+        assert_eq!(crate::list_comments(root).len(), 1);
     }
 
     #[test]

@@ -246,6 +246,7 @@
     "loading": "Loading…",
     "submit": "Submit review",
     "submitted": "Review submitted.",
+    "noNumber": "No pull/merge request number — can't submit.",
     "approve": "Approve",
     "requestChanges": "Request changes",
     "comment": "Comment"
