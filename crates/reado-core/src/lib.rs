@@ -32,6 +32,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+mod session;
+pub use session::*;
+
 // ---- Errors --------------------------------------------------------------
 
 /// Errors from store operations.
@@ -41,6 +44,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("YAML error: {0}")]
     Yaml(String),
+    #[error("JSON error: {0}")]
+    Json(String),
     #[error("no such comment: {0}")]
     NotFound(String),
 }
@@ -134,6 +139,16 @@ pub struct CommentMeta {
     pub author: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// The hosting forge a pulled review thread came from ("github"/"gitlab"),
+    /// or `None` for a native Reado comment. Drives the inbox origin badge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    /// The host thread/discussion id, for resolution sync back to the forge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_id: Option<String>,
+    /// The host change-request ref (PR/MR number) the thread belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_ref: Option<String>,
     #[serde(default)]
     pub orphan: bool,
     pub created_at: u64,
@@ -213,16 +228,23 @@ fn archive_dir(root: &str) -> PathBuf {
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-fn now_millis() -> u64 {
+pub(crate) fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }
 
-fn new_id() -> String {
+/// Generate a unique id with the given prefix (e.g. `c` for comments, `s` for
+/// sessions, `p` for proposals). The counter is shared so ids never collide
+/// within a process even at the same millisecond.
+pub(crate) fn gen_id(prefix: &str) -> String {
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("c_{:x}_{:x}", now_millis(), n)
+    format!("{prefix}_{:x}_{:x}", now_millis(), n)
+}
+
+fn new_id() -> String {
+    gen_id("c")
 }
 
 // ---- Serialization to/from the `.md` format ------------------------------
@@ -420,6 +442,9 @@ pub fn create_comment(
         links: Vec::new(),
         author: author.to_string(),
         agent: agent.clone(),
+        origin: None,
+        external_id: None,
+        external_ref: None,
         orphan: false,
         created_at: now,
         updated_at: now,
@@ -567,6 +592,96 @@ pub fn set_comment_state(root: &str, id: &str, state: CommentState) -> Result<Co
         write_comment(&dir_for(root, archived), &comment.meta, &comment.messages)?;
     }
     Ok(comment)
+}
+
+/// Create or update a comment mirroring a host review thread, keyed by
+/// `(origin, external_id)` so re-pulling a PR/MR is idempotent. A resolved host
+/// thread maps to a `Done` comment (archived); reopening restores it. The body
+/// is stored as the root message; the anchor follows the host's file/line.
+#[allow(clippy::too_many_arguments)]
+pub fn upsert_host_comment(
+    root: &str,
+    origin: &str,
+    external_id: &str,
+    external_ref: &str,
+    file: &str,
+    line: u32,
+    author: &str,
+    body: String,
+    resolved: bool,
+) -> Result<Comment> {
+    let existing = list_comments(root)
+        .into_iter()
+        .chain(list_archived(root))
+        .find(|c| {
+            c.meta.origin.as_deref() == Some(origin)
+                && c.meta.external_id.as_deref() == Some(external_id)
+        });
+    let now = now_millis();
+    let want_done = resolved;
+
+    let (mut meta, messages, was_archived) = match existing {
+        Some(mut c) => {
+            c.meta.anchor.file = file.to_string();
+            c.meta.anchor.scope = if line > 0 { Scope::Range } else { Scope::File };
+            c.meta.anchor.start_line = line;
+            c.meta.anchor.end_line = line;
+            if let Some(root_msg) = c.messages.first_mut() {
+                root_msg.body = body.clone();
+            }
+            (c.meta, c.messages, c.archived)
+        }
+        None => {
+            let meta = CommentMeta {
+                id: new_id(),
+                comment_type: CommentType::Note,
+                state: CommentState::Open,
+                kind: CommentKind::Note,
+                anchor: Anchor {
+                    file: file.to_string(),
+                    scope: if line > 0 { Scope::Range } else { Scope::File },
+                    start_line: line,
+                    end_line: line,
+                },
+                context: Context::default(),
+                links: Vec::new(),
+                author: author.to_string(),
+                agent: None,
+                origin: Some(origin.to_string()),
+                external_id: Some(external_id.to_string()),
+                external_ref: Some(external_ref.to_string()),
+                orphan: false,
+                created_at: now,
+                updated_at: now,
+            };
+            let messages = vec![Message {
+                author: author.to_string(),
+                agent: None,
+                created_at: now,
+                body: body.clone(),
+            }];
+            (meta, messages, false)
+        }
+    };
+
+    meta.state = if want_done {
+        CommentState::Done
+    } else {
+        CommentState::Open
+    };
+    meta.updated_at = now;
+
+    // Place the file in the right store, moving it if resolution changed.
+    if was_archived != want_done {
+        let old = dir_for(root, was_archived).join(format!("{}.md", meta.id));
+        let _ = std::fs::remove_file(old);
+    }
+    write_comment(&dir_for(root, want_done), &meta, &messages)?;
+    Ok(Comment {
+        meta,
+        messages,
+        archived: want_done,
+    })
 }
 
 /// Update the stored path of every active comment anchored to `from` so it
@@ -849,6 +964,9 @@ mod tests {
             links: vec![],
             author: "user".into(),
             agent: None,
+            origin: None,
+            external_id: None,
+            external_ref: None,
             orphan: false,
             created_at: 1000,
             updated_at: 1000,
@@ -998,6 +1116,64 @@ mod tests {
 
         assert_eq!(search_comments(root, "needle").len(), 1);
         assert_eq!(search_comments(root, "absent").len(), 0);
+    }
+
+    #[test]
+    fn upsert_host_comment_is_idempotent_and_syncs_resolution() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+
+        // First pull: an open GitHub thread → one active comment with a badge.
+        let c = upsert_host_comment(
+            root,
+            "github",
+            "TH_1",
+            "42",
+            "src/a.rs",
+            10,
+            "octocat",
+            "nit here".into(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(c.meta.origin.as_deref(), Some("github"));
+        assert_eq!(c.meta.external_id.as_deref(), Some("TH_1"));
+        assert_eq!(list_comments(root).len(), 1);
+
+        // Re-pull the same thread, now resolved → still ONE comment, archived.
+        let c2 = upsert_host_comment(
+            root,
+            "github",
+            "TH_1",
+            "42",
+            "src/a.rs",
+            12,
+            "octocat",
+            "nit here".into(),
+            true,
+        )
+        .unwrap();
+        assert_eq!(c2.meta.id, c.meta.id); // same comment, not a duplicate
+        assert!(c2.archived);
+        assert_eq!(c2.meta.state, CommentState::Done);
+        assert_eq!(list_comments(root).len(), 0);
+        assert_eq!(list_archived(root).len(), 1);
+
+        // Reopen on the host → restored to active.
+        let c3 = upsert_host_comment(
+            root,
+            "github",
+            "TH_1",
+            "42",
+            "src/a.rs",
+            12,
+            "octocat",
+            "nit here".into(),
+            false,
+        )
+        .unwrap();
+        assert!(!c3.archived);
+        assert_eq!(list_comments(root).len(), 1);
     }
 
     #[test]

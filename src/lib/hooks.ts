@@ -1,6 +1,5 @@
 /** Cross-cutting React hooks: theme application and global keyboard shortcuts. */
 import { useEffect } from "react";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   useSettings,
@@ -93,16 +92,10 @@ export function useAutoUpdateCheck(): void {
 export function useApplyZoom(): void {
   const zoom = useSettings((s) => s.zoom);
   useEffect(() => {
-    // Use the webview's native zoom (like a browser's Cmd+/-): it scales the
-    // whole UI *and* keeps pointer hit-testing correct. CSS `zoom` does not —
-    // it desyncs CodeMirror's coordinate mapping so clicks land on the wrong
-    // line and Cmd+click resolves the wrong token. Fall back to CSS `zoom`
-    // only outside Tauri (e.g. the browser dev/test context).
-    getCurrentWebview()
-      .setZoom(zoom)
-      .catch(() => {
-        document.documentElement.style.zoom = String(zoom);
-      });
+    // Zoom only the content area (it consumes `--app-zoom`), leaving the title
+    // bar — a sibling above it — fixed. Not the webview (its native zoom can't be
+    // excluded) nor the document root (that scales the title bar too).
+    document.documentElement.style.setProperty("--app-zoom", String(zoom));
   }, [zoom]);
 }
 

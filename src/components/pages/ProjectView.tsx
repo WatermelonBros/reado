@@ -41,10 +41,13 @@ import { TimelinePanel } from "../organisms/TimelinePanel";
 import { QaPanel } from "../organisms/QaPanel";
 import { ToursPanel, TourBar } from "../organisms/ToursPanel";
 import { PreReviewPanel } from "../organisms/PreReviewPanel";
+import { GuidedReviewPanel } from "../organisms/GuidedReviewPanel";
 import { TestsPanel } from "../organisms/TestsPanel";
 import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
+import { useGuidedReview } from "../../lib/guidedReview";
+import { useResolveLoop } from "../../lib/resolveLoop";
 import { useTests } from "../../lib/tests";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useQa } from "../../lib/qa";
@@ -101,6 +104,8 @@ export function ProjectView({ root }: { root: string }) {
     useQa.getState().load(root);
     useTours.getState().load(root);
     usePreReview.getState().load(root);
+    useGuidedReview.getState().load(root);
+    void useResolveLoop.getState().load(root);
     void useTests.getState().detect(root);
     listFiles(root)
       .then((f) => setTotalFiles(f.length))
@@ -181,8 +186,18 @@ export function ProjectView({ root }: { root: string }) {
       // An agent mutated comments via the `reado` CLI — reload the list so the
       // UI reflects done/reply/add without a manual refresh.
       listen("comments-changed", () => {
-        useComments.getState().load(root);
+        useComments
+          .getState()
+          .load(root)
+          // The resolve loop tracks progress by watching comments resolve.
+          .then(() => useResolveLoop.getState().sync(root))
+          .catch(() => {});
         rebuildIndex(root).catch(() => {});
+      }),
+      // A guided review advanced (the agent planned a route or proposed an
+      // artifact via the CLI) — reload sessions so the Review Guide stays live.
+      listen("sessions-changed", () => {
+        useGuidedReview.getState().load(root);
       }),
       // The branch changed on disk (e.g. `git checkout` in the terminal) — refresh
       // git state so the status bar shows the real branch.
@@ -223,6 +238,14 @@ export function ProjectView({ root }: { root: string }) {
     prevOpenTasks.current = openTaskCount;
   }, [openTaskCount]);
 
+  // Idle heuristic for the resolve loop: if the agent goes quiet mid-loop, flag
+  // it as waiting for the human (delivered to a paired phone via Anywhere).
+  useEffect(() => {
+    if (!root) return;
+    const t = setInterval(() => useResolveLoop.getState().tick(root), 15_000);
+    return () => clearInterval(t);
+  }, [root]);
+
   // Drag the sidebar's right edge to resize. The panel starts after the 48px
   // activity bar, so its width tracks the cursor's x minus that offset.
   const startSidebarResize = (e: React.PointerEvent) => {
@@ -241,7 +264,9 @@ export function ProjectView({ root }: { root: string }) {
     <div
       className="grid min-h-0 flex-1 overflow-hidden"
       style={{
-        gridTemplateColumns: tool ? `48px ${sidebarWidth}px 1fr` : "48px 1fr",
+        // `auto` (not a literal 48px) ties the activity-bar column to the bar's
+        // own width, so it tracks it under interface zoom — no gap to the sidebar.
+        gridTemplateColumns: tool ? `auto ${sidebarWidth}px 1fr` : "auto 1fr",
       }}
     >
       {showActivityBar && <ActivityBar />}
@@ -306,6 +331,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "qa" && <QaPanel />}
             {tool === "tours" && <ToursPanel />}
             {tool === "prereview" && <PreReviewPanel />}
+            {tool === "guidedreview" && <GuidedReviewPanel />}
             {tool === "tests" && <TestsPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>

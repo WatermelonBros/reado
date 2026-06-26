@@ -194,6 +194,7 @@ export type Tool =
   | "qa"
   | "tours"
   | "prereview"
+  | "guidedreview"
   | "tests"
   | "extensions";
 

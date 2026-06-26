@@ -2,6 +2,12 @@
   "app": {
     "tagline": "Un posto tranquillo per leggere il codice."
   },
+  "error": {
+    "title": "Qualcosa è andato storto",
+    "body": "L'interfaccia ha incontrato un errore imprevisto. Puoi riprovare o ricaricare la finestra.",
+    "retry": "Riprova",
+    "reload": "Ricarica"
+  },
   "welcome": {
     "how": "Come funziona",
     "step1": "Leggi — apri i file e muoviti nel codice.",
@@ -139,6 +145,111 @@
     "empty": "Nessun suggerimento. Avvia la pre-revisione AI sulle modifiche correnti.",
     "approve": "Approva",
     "discard": "Scarta"
+  },
+  "guided": {
+    "panel": "Revisione guidata",
+    "cmd": {
+      "start": "Avvia revisione guidata (modifiche correnti)",
+      "open": "Apri revisione guidata"
+    },
+    "busy": "L'agente sta lavorando…",
+    "empty": {
+      "title": "Revisione guidata in coppia",
+      "body": "L'agente propone un percorso, revisiona file per file e bozza i commenti; tu decidi. Scegli un focus e inizia — niente è definitivo finché non approvi."
+    },
+    "objective": { "label": "Obiettivo" },
+    "obj": {
+      "bug_risk": "Rischio bug",
+      "design": "Design e API",
+      "maintainability": "Manutenibilità",
+      "security": "Sicurezza",
+      "performance": "Performance",
+      "test_coverage": "Copertura test",
+      "ai_sanity": "Controllo codice AI",
+      "onboarding": "Onboarding",
+      "general": "Revisione senior"
+    },
+    "start": {
+      "diff": "Revisiona le modifiche correnti",
+      "branch": "Revisiona questo branch vs main"
+    },
+    "progress": "{reviewed}/{total} revisionati",
+    "planning": "Pianificazione del percorso — l'agente sta leggendo le modifiche…",
+    "noRoute": "Nessun percorso. Revisiona un file o rilancia la pianificazione.",
+    "current": "File corrente",
+    "related": "Collegati",
+    "action": {
+      "review": "Revisiona questo file",
+      "reviewHint": "Chiedi all'agente di revisionare questo file e proporre commenti",
+      "challenge": "Secondo parere",
+      "challengeHint": "Chiedi a un secondo agente di sfidare i risultati su questo file",
+      "reviewed": "Segna revisionato",
+      "skip": "Salta"
+    },
+    "openFile": "Mostra {file}",
+    "proposals": "Proposte",
+    "noProposals": "Nessuna proposta aperta. Revisiona un file per generarne.",
+    "approve": "Approva",
+    "approveNote": "Come nota",
+    "edit": "Modifica",
+    "save": "Salva",
+    "cancel": "Annulla",
+    "discard": "Scarta",
+    "falsePositive": "Falso positivo",
+    "fpNote": "Verificato — non è un problema.",
+    "route": "Percorso",
+    "fileSummary": "Riepilogo file",
+    "decisions": "Decisioni",
+    "summary": "Riepilogo sessione",
+    "memory": "{count} tenuti in memoria",
+    "sendTasks": "Invia {count} task confermati",
+    "close": "Chiudi sessione",
+    "reset": "Scarta revisione",
+    "fs": {
+      "not_started": "—",
+      "queued": "in coda",
+      "in_review": "in revisione",
+      "reviewed": "fatto",
+      "needs_followup": "da rivedere",
+      "skipped": "saltato",
+      "blocked": "bloccato",
+      "out_of_scope": "fuori scope"
+    },
+    "at": {
+      "comment": "commento",
+      "task": "task",
+      "note": "nota",
+      "question": "domanda",
+      "decision": "decisione",
+      "follow_up": "follow-up",
+      "needs_context": "serve contesto",
+      "false_positive": "falso positivo",
+      "file_summary": "riepilogo",
+      "session_summary": "riepilogo"
+    }
+  },
+  "loop": {
+    "running": "In risoluzione…",
+    "needsApproval": "L'agente attende una tua risposta",
+    "finished": "Risolto — controlla le modifiche",
+    "progress": "{resolved}/{total}",
+    "cancel": "Annulla",
+    "dismiss": "Chiudi",
+    "hint": "L'agente si è fermato — controlla il terminale e rispondigli.",
+    "cmd": { "start": "Risolvi i task aperti" }
+  },
+  "forge": {
+    "noAdapter": "Il round-trip con l'host non è ancora disponibile per {provider} — revisiona in locale.",
+    "installHint": "{cli} non è installato — serve per aprire le richieste da questo host.",
+    "install": "Installa {cli}",
+    "list": "Apri una {term}",
+    "loading": "Caricamento…",
+    "submit": "Invia revisione",
+    "submitted": "Revisione inviata.",
+    "noNumber": "Nessun numero di pull/merge request — impossibile inviare.",
+    "approve": "Approva",
+    "requestChanges": "Richiedi modifiche",
+    "comment": "Commenta"
   },
   "tours": {
     "panel": "Tour",

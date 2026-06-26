@@ -17,6 +17,11 @@ NOT orchestrate parallelism itself.
 - **WHEN** the queue is confirmed
 - **THEN** the agent is dispatched once to resolve the queued comments, and the agent manages its own subagents/parallelism
 
+#### Scenario: Queue pre-scoped by a guided session
+
+- **WHEN** a Guided Pair Review (`guided-pair-review`) sends "only this session's confirmed tasks"
+- **THEN** the loop's queue is pre-scoped to exactly those tasks (instead of all open tasks), still deselectable, and dispatched as one run
+
 ### Requirement: Track Progress By Watching Resolution
 
 Reado SHALL track loop progress by watching how many queued comments have been

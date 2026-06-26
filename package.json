@@ -1,7 +1,7 @@
 {
   "name": "reado",
   "private": true,
-  "version": "0.11.2",
+  "version": "0.12.0",
   "type": "module",
   "description": "Reado — a calm, read-first code IDE where comments are durable, AI-resolvable artifacts.",
   "license": "MIT",
@@ -11,6 +11,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:dev": "bash scripts/bundle-cli.sh && tauri dev",
     "tauri:build": "bash scripts/bundle-cli.sh && tauri build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

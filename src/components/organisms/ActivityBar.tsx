@@ -15,6 +15,7 @@ import { useHierarchy } from "../../lib/hierarchy";
 import { useQa } from "../../lib/qa";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
+import { useGuidedReview, openProposals } from "../../lib/guidedReview";
 import { useTests } from "../../lib/tests";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
@@ -35,6 +36,7 @@ import {
   HierarchyIcon,
   TimelineIcon,
   SparkleIcon,
+  RouteIcon,
   TourIcon,
   TestIcon,
 } from "../atoms/icons";
@@ -67,6 +69,9 @@ export function ActivityBar() {
   const qaCount = useQa((s) => s.notes.length);
   const tourCount = useTours((s) => s.tours.length);
   const preReviewCount = usePreReview((s) => s.drafts.length);
+  const guidedOpen = useGuidedReview((s) =>
+    s.sessions.reduce((n, sess) => n + openProposals(sess).length, 0),
+  );
   const hasTests = useTests((s) => s.runners.length > 0);
   const { t } = useTranslation();
 
@@ -74,6 +79,9 @@ export function ActivityBar() {
   // fix; Specs only when the project has an OpenSpec/speckit plan.
   const tools: ToolDef[] = [
     ...BASE_TOOLS,
+    // The guided-review cockpit is always available — its empty state teaches how
+    // to start a session, which is one of the feature's entry points.
+    { id: "guidedreview", labelKey: "guided.panel", Icon: RouteIcon },
     ...(isRepo
       ? [{ id: "git" as Tool, labelKey: "git.panel" as MessageKey, Icon: GitBranchIcon }]
       : []),
@@ -117,7 +125,9 @@ export function ActivityBar() {
           ? problemCount
           : id === "prereview"
             ? preReviewCount
-            : 0;
+            : id === "guidedreview"
+              ? guidedOpen
+              : 0;
 
   // One shared accent bar that slides to the active tool (button pitch = 44px:
   // h-10 (40px) + gap-1 (4px)).

@@ -2,6 +2,12 @@
   "app": {
     "tagline": "A calm place to read code."
   },
+  "error": {
+    "title": "Something went wrong",
+    "body": "The interface hit an unexpected error. You can retry, or reload the window.",
+    "retry": "Try again",
+    "reload": "Reload"
+  },
   "welcome": {
     "how": "How it works",
     "step1": "Read — open files and move through the code.",
@@ -139,6 +145,111 @@
     "empty": "No suggestions. Run AI pre-review on your current changes.",
     "approve": "Approve",
     "discard": "Discard"
+  },
+  "guided": {
+    "panel": "Guided Review",
+    "cmd": {
+      "start": "Start guided review (current changes)",
+      "open": "Open guided review"
+    },
+    "busy": "Agent working…",
+    "empty": {
+      "title": "Guided Pair Review",
+      "body": "The agent proposes a route, reviews file by file and drafts comments; you decide. Pick a focus and start — nothing is final until you approve it."
+    },
+    "objective": { "label": "Objective" },
+    "obj": {
+      "bug_risk": "Bug risk",
+      "design": "Design & API",
+      "maintainability": "Maintainability",
+      "security": "Security",
+      "performance": "Performance",
+      "test_coverage": "Test coverage",
+      "ai_sanity": "AI-code sanity",
+      "onboarding": "Onboarding",
+      "general": "Senior review"
+    },
+    "start": {
+      "diff": "Review current changes",
+      "branch": "Review this branch vs main"
+    },
+    "progress": "{reviewed}/{total} reviewed",
+    "planning": "Planning the route — the agent is reading the change…",
+    "noRoute": "No route yet. Review a file or restart the planning pass.",
+    "current": "Current file",
+    "related": "Related",
+    "action": {
+      "review": "Review this file",
+      "reviewHint": "Ask the agent to review this file and propose comments",
+      "challenge": "Second opinion",
+      "challengeHint": "Ask a second agent to challenge the findings on this file",
+      "reviewed": "Mark reviewed",
+      "skip": "Skip"
+    },
+    "openFile": "Show {file}",
+    "proposals": "Proposals",
+    "noProposals": "No open proposals. Review a file to gather some.",
+    "approve": "Approve",
+    "approveNote": "As note",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "discard": "Discard",
+    "falsePositive": "False positive",
+    "fpNote": "Checked — not an issue.",
+    "route": "Route",
+    "fileSummary": "File summary",
+    "decisions": "Decisions",
+    "summary": "Session summary",
+    "memory": "{count} kept as memory",
+    "sendTasks": "Send {count} confirmed tasks",
+    "close": "Close session",
+    "reset": "Discard review",
+    "fs": {
+      "not_started": "—",
+      "queued": "queued",
+      "in_review": "reviewing",
+      "reviewed": "done",
+      "needs_followup": "follow-up",
+      "skipped": "skipped",
+      "blocked": "blocked",
+      "out_of_scope": "out of scope"
+    },
+    "at": {
+      "comment": "comment",
+      "task": "task",
+      "note": "note",
+      "question": "question",
+      "decision": "decision",
+      "follow_up": "follow-up",
+      "needs_context": "needs context",
+      "false_positive": "false positive",
+      "file_summary": "summary",
+      "session_summary": "summary"
+    }
+  },
+  "loop": {
+    "running": "Resolving…",
+    "needsApproval": "Agent needs your input",
+    "finished": "Resolved — review the changes",
+    "progress": "{resolved}/{total}",
+    "cancel": "Cancel",
+    "dismiss": "Dismiss",
+    "hint": "The agent has gone quiet — check the terminal and answer it.",
+    "cmd": { "start": "Resolve open tasks" }
+  },
+  "forge": {
+    "noAdapter": "Host round-trip isn't available for {provider} yet — review locally.",
+    "installHint": "{cli} isn't installed — needed to open requests from this host.",
+    "install": "Install {cli}",
+    "list": "Open a {term}",
+    "loading": "Loading…",
+    "submit": "Submit review",
+    "submitted": "Review submitted.",
+    "noNumber": "No pull/merge request number — can't submit.",
+    "approve": "Approve",
+    "requestChanges": "Request changes",
+    "comment": "Comment"
   },
   "tours": {
     "panel": "Tours",

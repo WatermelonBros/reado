@@ -10,6 +10,7 @@ mod anywhere;
 mod bookmarks;
 mod cli;
 mod error;
+mod forge;
 mod format;
 mod fs;
 mod git;
@@ -21,6 +22,7 @@ mod proc;
 mod progress;
 mod pty;
 mod search;
+mod sessions;
 mod symbols;
 mod watcher;
 
@@ -143,6 +145,26 @@ pub fn run() {
             annotations::write_project_config,
             annotations::reanchor_file,
             annotations::set_anchor,
+            sessions::session_create,
+            sessions::session_list,
+            sessions::session_get,
+            sessions::session_set_file_state,
+            sessions::session_set_position,
+            sessions::session_accept_proposal,
+            sessions::session_set_proposal_state,
+            sessions::session_add_decision,
+            sessions::session_set_file_summary,
+            sessions::session_set_summary,
+            sessions::session_close,
+            sessions::session_delete,
+            git::git_changed_files,
+            forge::detect_forge,
+            forge::forge_cli_present,
+            forge::forge_list_prs,
+            forge::forge_checkout_pr,
+            forge::forge_submit_review,
+            forge::forge_pull_threads,
+            forge::forge_resolve_thread,
             index::rebuild_index,
             progress::list_read,
             progress::set_read,
@@ -166,6 +188,7 @@ pub fn run() {
             anywhere::anywhere_set_project,
             anywhere::anywhere_clear_project,
             anywhere::anywhere_set_recents,
+            anywhere::anywhere_publish_loop,
             log::log_record,
             log::log_path,
             log::log_set_config,

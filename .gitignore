@@ -39,3 +39,6 @@ src-tauri/binaries/
 *.sw?
 .playwright-mcp/
 icon-options/
+
+# go-task fingerprint cache
+.task/

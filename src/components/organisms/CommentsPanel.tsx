@@ -154,6 +154,11 @@ export function CommentsPanel() {
                   <span className="flex items-center gap-2">
                     <Dot color={TYPE_COLOR[c.type]} />
                     <span className="text-xs font-medium text-ink">{t(typeKey(c.type))}</span>
+                    {c.origin && (
+                      <span className="rounded bg-overlay px-1 text-[9px] uppercase tracking-wide text-faint">
+                        {c.origin}
+                      </span>
+                    )}
                     {c.orphan && <span className="text-xs text-marker">⚠</span>}
                     <span className="ml-auto text-[10px] text-faint">
                       {pending

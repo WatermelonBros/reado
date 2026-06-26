@@ -3,9 +3,10 @@
 ### Requirement: Start A Guided Review From A Scope
 
 Reado SHALL let the user start a Guided Pair Review from a chosen scope — current
-diff, branch vs main, a local/remote PR, a folder, selected files, open
-tasks/comments, or the whole project (sampled progressively) — and an optional
-objective. Starting it SHALL create a persistent session.
+diff, branch vs main, a folder, selected files, open tasks/comments, or the whole
+project (sampled progressively) — and an optional objective. A hosted PR/MR scope is
+supplied by the `pull-request-review` adapter (which detects GitHub/GitLab/… from
+the remote). Starting a review SHALL create a persistent session.
 
 #### Scenario: Start from a scope
 
@@ -16,6 +17,16 @@ objective. Starting it SHALL create a persistent session.
 
 - **WHEN** the chosen scope is the whole project
 - **THEN** Reado does not load the entire codebase at once; it works progressively
+
+#### Scenario: Multiple entry points
+
+- **WHEN** the user invokes "Start Guided Review" from the file tree, the diff view, a PR/MR review view, the command palette, the knowledge graph, or the terminal/agent panel
+- **THEN** a guided review starts scoped appropriately to where it was launched
+
+#### Scenario: Pick an objective
+
+- **WHEN** the user starts a review
+- **THEN** they may pick an objective — bug risk, design/API quality, maintainability, security, performance, test coverage, AI-generated-code sanity check, onboarding/comprehension, or general senior review — and it shapes the LLM's focus
 
 ### Requirement: Planning Pass Proposes A Route
 
@@ -34,6 +45,16 @@ to accept, edit, or skip the proposed route.
 - **WHEN** the user edits or skips the proposed route
 - **THEN** the session follows the user's choice, not the LLM's
 
+#### Scenario: Route entries are structured and ranked
+
+- **WHEN** the planning pass ranks files
+- **THEN** each entry carries `{ file, priority, reason, suggested_review_mode, related_files }` (review mode ∈ quick / normal / deep) so the route can be sorted, filtered, and resumed
+
+#### Scenario: Planning heuristics ground the ranking
+
+- **WHEN** the LLM ranks what to review first
+- **THEN** it weighs signals such as diff size and number of changed lines, file type and role (impl vs test vs config), imports/dependents, files that already carry comments/tasks, recency of change, symbols (LSP/tree-sitter) and knowledge-graph references — not an arbitrary order
+
 ### Requirement: File-By-File Pair Review
 
 For the current file/group the LLM SHALL ask targeted questions and propose
@@ -50,6 +71,48 @@ follow-up, jump to a related file, defer, or discard each proposal.
 
 - **WHEN** the LLM guides the current file
 - **THEN** its questions/observations are grounded in that file's code, not broad generic remarks
+
+#### Scenario: Per-proposal actions
+
+- **WHEN** the user acts on a single proposed comment
+- **THEN** the available actions are: approve as-is, edit then approve, mark as task, mark as note, ask a follow-up question, jump to a related file, defer, or discard — and each updates the artifact's state
+
+### Requirement: The Review Guide Panel
+
+Alongside the code (which stays the hero), Reado SHALL show a **Review Guide**
+panel for the active session that surfaces, without scraping the editor: the
+current session and objective, the current file/group, the LLM's guidance and
+targeted questions, the proposed next action, the route queue, open questions, the
+current file's running summary, and session progress (files reviewed / remaining).
+The panel SHALL expose the session's quick actions.
+
+#### Scenario: Panel reflects session state
+
+- **WHEN** a guided review is active
+- **THEN** the Review Guide panel shows the current file/group, the LLM's guidance and questions, the proposed next action, the route queue, open questions, the file summary, and progress (reviewed vs remaining)
+
+#### Scenario: Quick actions from the panel
+
+- **WHEN** the user acts from the Review Guide panel
+- **THEN** they can accept/edit a comment, create a task, ask why, open a related file, deep-dive, skip the file, mark it reviewed, change the route, ask a second opinion, and send confirmed tasks — without leaving the review
+
+### Requirement: Durable Artifact Types
+
+Beyond a comment's lifecycle state, a session SHALL record distinct artifact
+**types**: anchored comment, task, note, question, session decision, follow-up
+item, "needs context" marker, resolved false positive, file-level summary, and
+session-level summary. Each type SHALL persist in the session and be attributable
+to the human or the agent.
+
+#### Scenario: A decision is recorded as its own artifact
+
+- **WHEN** the user makes a judgment call during review (e.g. "intentional debt, leave it")
+- **THEN** it is stored as a session decision artifact, distinct from a comment, and survives in session memory
+
+#### Scenario: A "needs context" marker is captured
+
+- **WHEN** the LLM cannot judge a line without more context
+- **THEN** it records a "needs context" marker (rather than a confident comment) that the user can later resolve or expand
 
 ### Requirement: Dynamic Routing Under Human Control
 
@@ -118,6 +181,11 @@ the session and MAY feed the knowledge graph and future reviews.
 - **WHEN** the user asks to summarize the session
 - **THEN** Reado reports what has been reviewed, what's decided, and what high-risk files remain
 
+#### Scenario: Resume verbs
+
+- **WHEN** the user returns to a session
+- **THEN** they can ask Reado to "continue last guided review", "show reviewed files", "show remaining high-risk files", "summarize what we found so far", "send only confirmed tasks", or "ask a second agent to challenge this review" — each acting on the persisted session
+
 ### Requirement: Controlled Context Expansion
 
 The session SHALL load context progressively (overview → current file → selected
@@ -134,6 +202,33 @@ ask). The LLM SHALL prefer asking for context over assuming, and an explicit
 
 - **WHEN** the user invokes "Widen Review" (e.g. review the whole subsystem, compare with specs, run tests)
 - **THEN** the larger context is loaded for that pass
+
+#### Scenario: Big-pass actions are enumerated
+
+- **WHEN** the user opens the "Widen Review" / Big Pass options
+- **THEN** the available passes include: review the whole subsystem, review all files in the route so far, compare the change with specs/docs, scan for a repeated pattern across the codebase, run tests/typecheck and react to the results, search for similar code, and ask a second agent for a critique
+
+#### Scenario: No broad generic comments by default
+
+- **WHEN** the LLM has no grounded observation for the current file
+- **THEN** it does not emit a broad generic comment; it stays silent, asks a question, or records a "needs context" marker, preserving uncertainty instead of inventing findings
+
+### Requirement: Second-Agent Challenge
+
+The session SHALL let the user invoke a **second agent** to challenge the review —
+either to critique the current file/findings (a contrarian second opinion) or, after
+fixes, to review the proposed changes. The second agent's output SHALL be surfaced
+as proposals/questions the user disposes of, never as auto-accepted verdicts.
+
+#### Scenario: Challenge the current review
+
+- **WHEN** the user asks a second agent to challenge the review
+- **THEN** Reado runs a second pass that critiques or contradicts the current findings, and its remarks appear as proposals the user can accept, edit, or discard
+
+#### Scenario: Second opinion on the fixes
+
+- **WHEN** the agent has applied fixes and the user asks a second agent to review them
+- **THEN** that review is run and its findings re-enter the session as proposals, not as a silent merge
 
 ### Requirement: CLI Session And Review Contract
 
@@ -153,12 +248,12 @@ propose-route-change, summarize-file).
 - **WHEN** a session is created, advanced, and closed via the CLI
 - **THEN** the persisted session reflects each change
 
-### Requirement: Integrate With The Existing Resolve Loop
+### Requirement: Integrate With The Resolve Loop
 
-A Guided Pair Review SHALL feed the existing AI-resolve loop: at any point the user
-SHALL be able to send only the confirmed tasks to the agent, keep reviewing before
-sending, and resume the session after the agent's fixes. The existing loop SHALL
-remain intact; guided review sits before and around it.
+A Guided Pair Review SHALL feed the resolve loop (`async-review-loop`): at any point
+the user SHALL be able to send only the confirmed tasks to the agent, keep reviewing
+before sending, and resume the session after the agent's fixes. The resolve loop
+SHALL remain a separate capability; guided review sits before and around it.
 
 #### Scenario: Send confirmed tasks only
 
@@ -169,3 +264,13 @@ remain intact; guided review sits before and around it.
 
 - **WHEN** the agent has resolved the sent tasks
 - **THEN** the user can resume the guided review on the changed files
+
+#### Scenario: Resolve-handoff options
+
+- **WHEN** the user reaches the resolve handoff
+- **THEN** the options include: send confirmed tasks now, keep reviewing before sending, create an implementation batch, ask the agent to fix only this session's tasks, and ask a second agent to review the proposed fixes
+
+#### Scenario: Export the session as a review summary
+
+- **WHEN** the user asks to export the session
+- **THEN** Reado produces a PR/MR-review-style summary (verdict, confirmed comments/tasks, decisions, remaining risks) that `pull-request-review` can submit to the host, or that the user can copy out

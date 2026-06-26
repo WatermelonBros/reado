@@ -38,6 +38,49 @@ fn run_git(root: &Path, args: &[&str]) -> Option<String> {
     }
 }
 
+/// Project-relative paths changed for a guided-review scope. With no `base`,
+/// the working-tree changes (tracked edits + untracked files) against HEAD; with
+/// a `base` branch/ref, the files that differ on this branch (`base...HEAD`).
+/// Used to seed a guided review's scope; never errors (empty on any failure).
+#[tauri::command]
+pub fn git_changed_files(root: String, base: Option<String>) -> Vec<String> {
+    let root = Path::new(&root);
+    let mut files: Vec<String> = Vec::new();
+    let mut push = |s: Option<String>| {
+        if let Some(out) = s {
+            for line in out.lines() {
+                let p = line.trim();
+                if !p.is_empty() && !files.iter().any(|f| f == p) {
+                    files.push(p.to_string());
+                }
+            }
+        }
+    };
+    match base
+        .as_deref()
+        .map(str::trim)
+        // Reject a base that would be read as a git option (`-`/`--…`) rather
+        // than a revision — defence against argument injection.
+        .filter(|b| !b.is_empty() && !b.starts_with('-'))
+    {
+        Some(base) => {
+            // Branch scope: what this branch changed relative to its base.
+            let range = format!("{base}...HEAD");
+            push(run_git(root, &["diff", "--name-only", &range]));
+        }
+        None => {
+            // Diff scope: the working tree vs HEAD, plus untracked files.
+            push(run_git(root, &["diff", "--name-only", "HEAD"]));
+            push(run_git(
+                root,
+                &["ls-files", "--others", "--exclude-standard"],
+            ));
+        }
+    }
+    files.sort();
+    files
+}
+
 /// Inspect the git state of a project root. Never errors: a missing `git`, or a
 /// non-repository folder, simply yields `is_repo: false`.
 #[tauri::command]

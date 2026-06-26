@@ -92,6 +92,11 @@ struct Running {
     info: AnywhereInfo,
 }
 
+/// The latest resolve-loop state (raw JSON), published by the desktop for paired
+/// phones to poll. `reado-anywhere` only carries it; `async-review-loop` produces
+/// it. `None` means no loop is active.
+type Loop = Arc<Mutex<Option<String>>>;
+
 /// Tauri-managed state: the server, the open-project registry, and the recents.
 #[derive(Default)]
 pub struct AnywhereState {
@@ -99,6 +104,7 @@ pub struct AnywhereState {
     projects: Projects,
     recents: Recents,
     terminals: Terminals,
+    loop_state: Loop,
 }
 
 /// Shared state handed to the axum handlers.
@@ -108,6 +114,7 @@ struct Api {
     projects: Projects,
     recents: Recents,
     terminals: Terminals,
+    loop_state: Loop,
     app: AppHandle,
 }
 
@@ -203,6 +210,7 @@ async fn start_server(
     projects: Projects,
     recents: Recents,
     terminals: Terminals,
+    loop_state: Loop,
 ) -> Result<(Handle, AnywhereInfo), String> {
     install_crypto();
 
@@ -230,6 +238,7 @@ async fn start_server(
         projects,
         recents,
         terminals,
+        loop_state,
         app,
     };
 
@@ -245,6 +254,7 @@ async fn start_server(
         .route("/api/comment-update", post(comment_update))
         .route("/api/run-agent", post(run_agent))
         .route("/api/prereview", post(prereview))
+        .route("/api/loop", get(loop_get))
         .layer(middleware::from_fn_with_state(api.clone(), auth));
 
     let js = |body: &'static str, ct: &'static str| {
@@ -303,6 +313,7 @@ pub async fn anywhere_enable(
         state.projects.clone(),
         state.recents.clone(),
         state.terminals.clone(),
+        state.loop_state.clone(),
     )
     .await?;
     *state.running.lock().map_err(|e| e.to_string())? = Some(Running {
@@ -324,6 +335,7 @@ pub fn dev_autostart(app: &AppHandle) {
     let projects = state.projects.clone();
     let recents = state.recents.clone();
     let terminals = state.terminals.clone();
+    let loop_state = state.loop_state.clone();
     // For testing without clicking the native UI, seed a project from
     // READO_ANYWHERE_PROJECT so the phone has something to browse immediately.
     if let Ok(root) = std::env::var("READO_ANYWHERE_PROJECT") {
@@ -342,7 +354,13 @@ pub fn dev_autostart(app: &AppHandle) {
             );
         }
     }
-    match tauri::async_runtime::block_on(start_server(app.clone(), projects, recents, terminals)) {
+    match tauri::async_runtime::block_on(start_server(
+        app.clone(),
+        projects,
+        recents,
+        terminals,
+        loop_state,
+    )) {
         Ok((handle, info)) => {
             crate::log::info(
                 "anywhere",
@@ -436,6 +454,15 @@ pub fn anywhere_set_recents(
 ) -> Result<(), String> {
     *state.recents.lock().map_err(|e| e.to_string())? = recents;
     Ok(())
+}
+
+/// Publish (or clear, with `None`) the resolve-loop state for paired phones to
+/// poll at `/api/loop`. Carried by Anywhere; produced by `async-review-loop`.
+#[tauri::command]
+pub fn anywhere_publish_loop(state: TauriState<'_, AnywhereState>, json: Option<String>) {
+    if let Ok(mut g) = state.loop_state.lock() {
+        *g = json;
+    }
 }
 
 /// Drop a project from the registry when its window closes.
@@ -943,6 +970,19 @@ async fn prereview(State(api): State<Api>, Json(q): Json<ProjectQuery>) -> Statu
         Some(root) => signal(&api, "anywhere://prereview", root),
         None => StatusCode::NOT_FOUND,
     }
+}
+
+/// The current resolve-loop state for a paired phone to poll. `{}` when no loop
+/// is active. The desktop publishes it via `anywhere_publish_loop`; this
+/// capability only carries it (delivery is Anywhere's job).
+async fn loop_get(State(api): State<Api>) -> impl axum::response::IntoResponse {
+    let body = api
+        .loop_state
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or_else(|| "{}".to_string());
+    ([(header::CONTENT_TYPE, "application/json")], body)
 }
 
 #[cfg(test)]

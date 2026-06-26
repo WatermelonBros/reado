@@ -303,6 +303,12 @@ export interface Comment {
   links: string[];
   author: string;
   agent?: string;
+  /** The hosting forge a pulled review thread came from ("github"/"gitlab"). */
+  origin?: string;
+  /** The host thread/discussion id, for resolution sync. */
+  externalId?: string;
+  /** The host change-request ref (PR/MR number) the thread belongs to. */
+  externalRef?: string;
   orphan: boolean;
   createdAt: number;
   updatedAt: number;
@@ -368,6 +374,257 @@ export const readProjectConfig = (root: string) =>
 
 export const writeProjectConfig = (root: string, json: string) =>
   invoke<void>("write_project_config", { root, json });
+
+// ---- Guided Pair Review sessions -----------------------------------------
+
+export type ScopeKind =
+  | "diff"
+  | "branch"
+  | "folder"
+  | "files"
+  | "comments"
+  | "project"
+  | "pr";
+
+export type Objective =
+  | "bug_risk"
+  | "design"
+  | "maintainability"
+  | "security"
+  | "performance"
+  | "test_coverage"
+  | "ai_sanity"
+  | "onboarding"
+  | "general";
+
+export type ReviewMode = "quick" | "normal" | "deep";
+
+export type FileState =
+  | "not_started"
+  | "queued"
+  | "in_review"
+  | "reviewed"
+  | "needs_followup"
+  | "skipped"
+  | "blocked"
+  | "out_of_scope";
+
+export type SessionStatus = "planning" | "in_review" | "done";
+
+export type ArtifactType =
+  | "comment"
+  | "task"
+  | "note"
+  | "question"
+  | "decision"
+  | "follow_up"
+  | "needs_context"
+  | "false_positive"
+  | "file_summary"
+  | "session_summary";
+
+export type ArtifactState =
+  | "proposed"
+  | "accepted"
+  | "edited"
+  | "discarded"
+  | "converted_to_task"
+  | "converted_to_note"
+  | "resolved_as_false_positive";
+
+export interface ReviewScope {
+  kind: ScopeKind;
+  base?: string;
+  paths?: string[];
+  pr?: string;
+}
+
+export interface RouteEntry {
+  file: string;
+  priority: number;
+  reason: string;
+  suggestedReviewMode: ReviewMode;
+  relatedFiles?: string[];
+}
+
+export interface FileEntry {
+  file: string;
+  state: FileState;
+  summary?: string;
+}
+
+export interface Proposal {
+  id: string;
+  artifactType: ArtifactType;
+  state: ArtifactState;
+  file: string;
+  startLine: number;
+  endLine: number;
+  type?: CommentType;
+  body: string;
+  author: string;
+  agent?: string;
+  commentId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface Session {
+  id: string;
+  title: string;
+  scope: ReviewScope;
+  objective?: Objective;
+  status: SessionStatus;
+  position: number;
+  route?: RouteEntry[];
+  files?: FileEntry[];
+  proposals?: Proposal[];
+  summary?: string;
+  agent?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface NewSession {
+  title: string;
+  scope: ReviewScope;
+  objective?: Objective;
+}
+
+/** Project-relative files changed for a scope (working tree, or `base...HEAD`). */
+export const gitChangedFiles = (root: string, base?: string) =>
+  invoke<string[]>("git_changed_files", { root, base });
+
+export const sessionCreate = (root: string, input: NewSession) =>
+  invoke<Session>("session_create", { root, input });
+
+export const sessionList = (root: string) =>
+  invoke<Session[]>("session_list", { root });
+
+export const sessionGet = (root: string, id: string) =>
+  invoke<Session>("session_get", { root, id });
+
+export const sessionSetFileState = (
+  root: string,
+  id: string,
+  file: string,
+  state: FileState,
+) => invoke<Session>("session_set_file_state", { root, id, file, state });
+
+/** Move the route cursor to a file index (the focused/current file). */
+export const sessionSetPosition = (root: string, id: string, index: number) =>
+  invoke<Session>("session_set_position", { root, id, index });
+
+export const sessionAcceptProposal = (
+  root: string,
+  id: string,
+  proposal: string,
+  kind: CommentKind,
+) => invoke<Session>("session_accept_proposal", { root, id, proposal, kind });
+
+export const sessionSetProposalState = (
+  root: string,
+  id: string,
+  proposal: string,
+  state: ArtifactState,
+  body?: string,
+) =>
+  invoke<Session>("session_set_proposal_state", { root, id, proposal, state, body });
+
+export const sessionAddDecision = (
+  root: string,
+  id: string,
+  text: string,
+  file: string,
+) => invoke<Proposal>("session_add_decision", { root, id, text, file });
+
+export const sessionSetFileSummary = (
+  root: string,
+  id: string,
+  file: string,
+  text: string,
+) => invoke<Session>("session_set_file_summary", { root, id, file, text });
+
+export const sessionSetSummary = (root: string, id: string, text: string) =>
+  invoke<Session>("session_set_summary", { root, id, text });
+
+export const sessionClose = (root: string, id: string) =>
+  invoke<Session>("session_close", { root, id });
+
+/** Delete a session entirely (reset/discard). Accepted comments are untouched. */
+export const sessionDelete = (root: string, id: string) =>
+  invoke<void>("session_delete", { root, id });
+
+/** Publish (or clear with null) the resolve-loop state for paired phones. */
+export const anywherePublishLoop = (json: string | null) =>
+  invoke<void>("anywhere_publish_loop", { json });
+
+// ---- Forge adapter (pull-request-review) ---------------------------------
+
+export type ForgeProvider =
+  | "github"
+  | "gitlab"
+  | "bitbucket"
+  | "gitea"
+  | "azuredevops"
+  | "unknown";
+
+export interface Forge {
+  provider: ForgeProvider;
+  host: string;
+  cli?: string;
+  term: string;
+  hasAdapter: boolean;
+}
+
+export interface Pr {
+  number: number;
+  title: string;
+  author: string;
+  branch: string;
+}
+
+export type Verdict = "approve" | "request_changes" | "comment";
+
+/** Detect the hosting forge from the project's origin remote. */
+export const detectForge = (root: string) => invoke<Forge>("detect_forge", { root });
+
+/** Whether a forge CLI (gh/glab) is on PATH. */
+export const forgeCliPresent = (cli: string) =>
+  invoke<boolean>("forge_cli_present", { cli });
+
+/** Open PRs/MRs via the detected CLI (empty when none/unavailable). */
+export const forgeListPrs = (root: string) => invoke<Pr[]>("forge_list_prs", { root });
+
+/** Fetch + check out a PR/MR branch so a guided review can read it. */
+export const forgeCheckoutPr = (root: string, number: number) =>
+  invoke<void>("forge_checkout_pr", { root, number });
+
+/** Submit the session as one batched review with a verdict. */
+export const forgeSubmitReview = (
+  root: string,
+  number: number,
+  verdict: Verdict,
+  body: string,
+) => invoke<void>("forge_submit_review", { root, number, verdict, body });
+
+export interface PullResult {
+  comments: Comment[];
+  /** Host threads that failed to import (a partial sync, surfaced not hidden). */
+  dropped: number;
+}
+
+/** Pull a PR/MR's existing review threads into the comment inbox (idempotent). */
+export const forgePullThreads = (root: string, number: number) =>
+  invoke<PullResult>("forge_pull_threads", { root, number });
+
+/** Resolve (or reopen) a host thread to mirror a resolution made in Reado. */
+export const forgeResolveThread = (
+  root: string,
+  number: number,
+  externalId: string,
+  resolved: boolean,
+) => invoke<void>("forge_resolve_thread", { root, number, externalId, resolved });
 
 /** Recompute the anchors of `file`'s comments against its current content. */
 export const reanchorFile = (root: string, file: string) =>

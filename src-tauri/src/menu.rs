@@ -8,8 +8,7 @@
 
 use std::sync::Mutex;
 
-use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{App, Emitter, Manager};
+use tauri::App;
 
 /// The label of the most recently focused window. The app menu is shared across
 /// windows, so a menu action must be delivered here — `is_focused()` is often
@@ -18,8 +17,28 @@ use tauri::{App, Emitter, Manager};
 #[derive(Default)]
 pub struct LastFocused(pub Mutex<Option<String>>);
 
-/// Build the menu, install it, and forward custom-item clicks to the frontend.
+/// Install the menu. The native menu is used **only on macOS**, where it is the
+/// global menu bar. On Windows/Linux Reado draws its own MenuBar in the custom
+/// title bar (dispatching the same commands directly), so attaching a native
+/// window menu there would render a second, duplicate bar — skip it.
 pub fn init(app: &App) -> tauri::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        init_macos(app)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
+/// Build the macOS global menu and forward custom-item clicks to the frontend.
+#[cfg(target_os = "macos")]
+fn init_macos(app: &App) -> tauri::Result<()> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+    use tauri::{Emitter, Manager};
+
     let app_menu = SubmenuBuilder::new(app, "Reado")
         .about(None)
         .separator()

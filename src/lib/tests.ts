@@ -6,8 +6,8 @@
  * covered/failing without leaving the reader.
  */
 import { create } from "zustand";
-import { readFile } from "./api";
-import { runInTerminal } from "./agents";
+import { readFile, listFiles } from "./api";
+import { runInShell } from "./agents";
 import { useProject } from "./store";
 
 export interface Runner {
@@ -58,8 +58,19 @@ export async function detectRunners(root: string): Promise<Runner[]> {
       /* malformed package.json → skip */
     }
   }
-  if (await has(root, "Cargo.toml")) {
-    runners.push({ id: "rust", label: "cargo test", all: "cargo test" });
+  // Cargo: a manifest may be at the root (a crate or workspace) OR only in
+  // subdirectories (this repo has crates/* and src-tauri/ without a root
+  // workspace). Running `cargo test` from the project root would then fail with
+  // "could not find Cargo.toml", so target each manifest explicitly.
+  const cargoManifests = (await listFiles(root).catch(() => []))
+    .map((f) => f.replace(/\\/g, "/"))
+    .filter((f) => (f === "Cargo.toml" || f.endsWith("/Cargo.toml")) && !f.includes("/target/"))
+    .sort();
+  if (cargoManifests.length > 0) {
+    const all = cargoManifests.includes("Cargo.toml")
+      ? "cargo test" // a root crate/workspace covers its members
+      : cargoManifests.map((m) => `cargo test --manifest-path ${m}`).join(" && ");
+    runners.push({ id: "rust", label: "cargo test", all });
   }
   if (await has(root, "go.mod")) {
     runners.push({
@@ -89,12 +100,12 @@ interface TestsState {
 export const useTests = create<TestsState>((set) => ({
   runners: [],
   detect: async (root) => set({ runners: await detectRunners(root) }),
-  runAll: (r) => runInTerminal(r.all),
+  runAll: (r) => runInShell(r.all),
   runFile: (r) => {
     const active = useProject.getState().active;
     const root = useProject.getState().root;
     if (!active || !r.fileCmd) return;
     const rel = active.startsWith(root) ? active.slice(root.length).replace(/^[\\/]+/, "") : active;
-    runInTerminal(r.fileCmd(rel.replace(/\\/g, "/")));
+    runInShell(r.fileCmd(rel.replace(/\\/g, "/")));
   },
 }));
