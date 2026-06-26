@@ -301,6 +301,12 @@ export interface Comment {
   links: string[];
   author: string;
   agent?: string;
+  /** The hosting forge a pulled review thread came from ("github"/"gitlab"). */
+  origin?: string;
+  /** The host thread/discussion id, for resolution sync. */
+  externalId?: string;
+  /** The host change-request ref (PR/MR number) the thread belongs to. */
+  externalRef?: string;
   orphan: boolean;
   createdAt: number;
   updatedAt: number;
@@ -591,6 +597,18 @@ export const forgeSubmitReview = (
   verdict: Verdict,
   body: string,
 ) => invoke<void>("forge_submit_review", { root, number, verdict, body });
+
+/** Pull a PR/MR's existing review threads into the comment inbox (idempotent). */
+export const forgePullThreads = (root: string, number: number) =>
+  invoke<Comment[]>("forge_pull_threads", { root, number });
+
+/** Resolve (or reopen) a host thread to mirror a resolution made in Reado. */
+export const forgeResolveThread = (
+  root: string,
+  number: number,
+  externalId: string,
+  resolved: boolean,
+) => invoke<void>("forge_resolve_thread", { root, number, externalId, resolved });
 
 /** Recompute the anchors of `file`'s comments against its current content. */
 export const reanchorFile = (root: string, file: string) =>

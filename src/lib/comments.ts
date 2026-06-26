@@ -16,6 +16,7 @@ import {
   deleteComment,
   setAnchor,
   listArchived,
+  forgeResolveThread,
   type Comment,
   type CommentPatch,
   type CommentState,
@@ -134,6 +135,16 @@ export const useComments = create<CommentsState>((set, get) => ({
   setState: async (id, state) => {
     const next = await setCommentState(get().root, id, state);
     set((s) => distribute(s, next));
+    // If this comment mirrors a host review thread, sync the resolution back to
+    // the forge (resolving/reopening the thread there too).
+    if (next.origin && next.externalId && next.externalRef) {
+      const number = Number(next.externalRef);
+      if (number) {
+        void forgeResolveThread(get().root, number, next.externalId, state === "done").catch(
+          () => {},
+        );
+      }
+    }
   },
 
   remove: async (id) => {

@@ -132,6 +132,8 @@ pub fn run() {
             forge::forge_list_prs,
             forge::forge_checkout_pr,
             forge::forge_submit_review,
+            forge::forge_pull_threads,
+            forge::forge_resolve_thread,
             index::rebuild_index,
             progress::list_read,
             progress::set_read,

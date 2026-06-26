@@ -13,6 +13,7 @@ import {
   forgeCheckoutPr,
   forgeCliPresent,
   forgeListPrs,
+  forgePullThreads,
   forgeSubmitReview,
   type Forge,
   type Objective,
@@ -22,6 +23,7 @@ import {
 import { runInTerminal } from "./agents";
 import { currentOS, type OS } from "./extensions";
 import { useGuidedReview } from "./guidedReview";
+import { useComments } from "./comments";
 
 /** The install command for each forge CLI, per OS (shown then user-run). */
 const INSTALL: Record<string, Record<OS, string>> = {
@@ -54,6 +56,8 @@ interface ForgeState {
   installCli: () => void;
   /** Check out a PR/MR and start a guided review scoped to it. */
   openPr: (root: string, pr: Pr, objective?: Objective) => Promise<string | null>;
+  /** Re-pull a PR/MR's host threads, reflecting their resolved state. */
+  pullThreads: (root: string, number: number) => Promise<void>;
   /** Submit the current PR session as a batched review with a verdict. */
   submit: (root: string, number: number, verdict: Verdict, body: string) => Promise<string | null>;
 }
@@ -93,7 +97,15 @@ export const useForge = create<ForgeState>((set, get) => ({
     const session = await useGuidedReview
       .getState()
       .start(root, { kind: "pr", pr: `#${pr.number}` }, objective);
+    // Pull the request's existing review threads into the inbox.
+    await get().pullThreads(root, pr.number);
     return session?.id ?? null;
+  },
+
+  pullThreads: async (root, number) => {
+    await forgePullThreads(root, number).catch(() => []);
+    // The threads were upserted as comments on disk; reload the inbox.
+    await useComments.getState().load(root);
   },
 
   submit: async (root, number, verdict, body) => {

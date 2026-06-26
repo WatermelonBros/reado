@@ -11,6 +11,7 @@
 //! round-trip is unavailable, and we say so rather than failing.
 
 use crate::proc::command;
+use reado_core::{self as core, Comment};
 use std::path::Path;
 
 use serde::Serialize;
@@ -400,9 +401,334 @@ pub fn forge_submit_review(
     }
 }
 
+// ---- Pull existing threads -------------------------------------------------
+
+/// A host review thread normalised across forges, ready to mirror as a comment.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostThread {
+    /// The host thread/discussion id — the key for resolution sync.
+    pub external_id: String,
+    pub file: String,
+    pub line: u32,
+    pub author: String,
+    pub body: String,
+    pub resolved: bool,
+}
+
+/// The GraphQL query for a PR's review threads (path, line, resolution, comments).
+const GH_THREADS_QUERY: &str = "query($owner:String!,$repo:String!,$number:Int!){\
+repository(owner:$owner,name:$repo){pullRequest(number:$number){\
+reviewThreads(first:100){nodes{id isResolved path line \
+comments(first:50){nodes{author{login} body}}}}}}}";
+
+/// Map GitHub's `reviewThreads` GraphQL response to normalised threads.
+/// Pure (no I/O) so it's unit-testable against captured payloads.
+pub fn map_gh_threads(json: &str) -> Vec<HostThread> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
+        return Vec::new();
+    };
+    let nodes = v
+        .pointer("/data/repository/pullRequest/reviewThreads/nodes")
+        .and_then(|n| n.as_array())
+        .cloned()
+        .unwrap_or_default();
+    nodes
+        .iter()
+        .filter_map(|t| {
+            let comments = t
+                .pointer("/comments/nodes")
+                .and_then(|c| c.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let author = comments
+                .first()
+                .and_then(|c| c.pointer("/author/login"))
+                .and_then(|l| l.as_str())
+                .unwrap_or("")
+                .to_string();
+            // Preserve the whole thread as "login: body" lines.
+            let body = comments
+                .iter()
+                .map(|c| {
+                    let who = c
+                        .pointer("/author/login")
+                        .and_then(|l| l.as_str())
+                        .unwrap_or("");
+                    let text = c.get("body").and_then(|b| b.as_str()).unwrap_or("");
+                    format!("{who}: {text}")
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            Some(HostThread {
+                external_id: t.get("id")?.as_str()?.to_string(),
+                file: t
+                    .get("path")
+                    .and_then(|p| p.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                line: t.get("line").and_then(|l| l.as_u64()).unwrap_or(0) as u32,
+                author,
+                body,
+                resolved: t
+                    .get("isResolved")
+                    .and_then(|r| r.as_bool())
+                    .unwrap_or(false),
+            })
+        })
+        .collect()
+}
+
+/// Map GitLab's merge-request `discussions` response to normalised threads.
+/// Only diff discussions (with a file position) are kept. Pure / testable.
+pub fn map_glab_discussions(json: &str) -> Vec<HostThread> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
+        return Vec::new();
+    };
+    let Some(discussions) = v.as_array() else {
+        return Vec::new();
+    };
+    discussions
+        .iter()
+        .filter_map(|d| {
+            let notes = d.get("notes").and_then(|n| n.as_array())?;
+            let first = notes.first()?;
+            let pos = first.get("position")?;
+            let file = pos.get("new_path").and_then(|p| p.as_str())?.to_string();
+            let line = pos.get("new_line").and_then(|l| l.as_u64()).unwrap_or(0) as u32;
+            let author = first
+                .pointer("/author/username")
+                .and_then(|u| u.as_str())
+                .unwrap_or("")
+                .to_string();
+            let body = notes
+                .iter()
+                .map(|n| {
+                    let who = n
+                        .pointer("/author/username")
+                        .and_then(|u| u.as_str())
+                        .unwrap_or("");
+                    let text = n.get("body").and_then(|b| b.as_str()).unwrap_or("");
+                    format!("{who}: {text}")
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let resolved = first
+                .get("resolved")
+                .and_then(|r| r.as_bool())
+                .unwrap_or(false);
+            Some(HostThread {
+                external_id: d.get("id")?.as_str()?.to_string(),
+                file,
+                line,
+                author,
+                body,
+                resolved,
+            })
+        })
+        .collect()
+}
+
+/// `owner/repo` for the current GitHub repo (via `gh`), split into parts.
+fn gh_name_with_owner(root: &Path) -> Option<(String, String)> {
+    let out = cli_out(
+        root,
+        "gh",
+        &[
+            "repo",
+            "view",
+            "--json",
+            "nameWithOwner",
+            "-q",
+            ".nameWithOwner",
+        ],
+    )?;
+    let s = out.trim();
+    let (owner, repo) = s.split_once('/')?;
+    Some((owner.to_string(), repo.to_string()))
+}
+
+/// Pull a PR/MR's existing review threads into Reado's comment inbox as anchored
+/// comments carrying a host origin badge, keyed by thread id so re-pulls are
+/// idempotent and reflect the host's resolved state. Empty on any failure.
+#[tauri::command]
+pub fn forge_pull_threads(root: String, number: u64) -> Vec<Comment> {
+    let forge = detect_forge(root.clone());
+    let Some(cli) = forge.cli.as_deref() else {
+        return Vec::new();
+    };
+    let root_path = Path::new(&root);
+    let (origin, threads) = match cli {
+        "gh" => {
+            let Some((owner, repo)) = gh_name_with_owner(root_path) else {
+                return Vec::new();
+            };
+            let json = cli_out(
+                root_path,
+                "gh",
+                &[
+                    "api",
+                    "graphql",
+                    "-f",
+                    &format!("query={GH_THREADS_QUERY}"),
+                    "-F",
+                    &format!("owner={owner}"),
+                    "-F",
+                    &format!("repo={repo}"),
+                    "-F",
+                    &format!("number={number}"),
+                ],
+            );
+            (
+                "github",
+                json.map(|j| map_gh_threads(&j)).unwrap_or_default(),
+            )
+        }
+        "glab" => {
+            let json = cli_out(
+                root_path,
+                "glab",
+                &[
+                    "api",
+                    &format!("projects/:id/merge_requests/{number}/discussions"),
+                ],
+            );
+            (
+                "gitlab",
+                json.map(|j| map_glab_discussions(&j)).unwrap_or_default(),
+            )
+        }
+        _ => return Vec::new(),
+    };
+
+    threads
+        .into_iter()
+        .filter(|t| !t.file.is_empty())
+        .filter_map(|t| {
+            core::upsert_host_comment(
+                &root,
+                origin,
+                &t.external_id,
+                &number.to_string(),
+                &t.file,
+                t.line,
+                &t.author,
+                t.body,
+                t.resolved,
+            )
+            .ok()
+        })
+        .collect()
+}
+
+/// Resolve (or reopen) a host thread to sync a resolution made in Reado. The
+/// `external_id` is the host thread/discussion id from `forge_pull_threads`.
+#[tauri::command]
+pub fn forge_resolve_thread(
+    root: String,
+    number: u64,
+    external_id: String,
+    resolved: bool,
+) -> Result<(), String> {
+    let forge = detect_forge(root.clone());
+    let cli = forge
+        .cli
+        .as_deref()
+        .ok_or("no forge adapter for this remote")?;
+    let root_path = Path::new(&root);
+    let out = match cli {
+        "gh" => {
+            let mutation = if resolved {
+                "mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id}}}"
+            } else {
+                "mutation($id:ID!){unresolveReviewThread(input:{threadId:$id}){thread{id}}}"
+            };
+            command("gh")
+                .current_dir(root_path)
+                .args([
+                    "api",
+                    "graphql",
+                    "-f",
+                    &format!("query={mutation}"),
+                    "-F",
+                    &format!("id={external_id}"),
+                ])
+                .output()
+        }
+        "glab" => command("glab")
+            .current_dir(root_path)
+            .args([
+                "api",
+                "--method",
+                "PUT",
+                &format!("projects/:id/merge_requests/{number}/discussions/{external_id}"),
+                "-f",
+                &format!("resolved={resolved}"),
+            ])
+            .output(),
+        _ => return Err("unsupported forge CLI".into()),
+    }
+    .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maps_github_review_threads() {
+        let json = r#"{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+          {"id":"PRRT_1","isResolved":false,"path":"src/a.rs","line":12,
+           "comments":{"nodes":[{"author":{"login":"octocat"},"body":"off by one"}]}},
+          {"id":"PRRT_2","isResolved":true,"path":"src/b.rs","line":3,
+           "comments":{"nodes":[{"author":{"login":"hubot"},"body":"fixed?"},{"author":{"login":"octocat"},"body":"yes"}]}}
+        ]}}}}}"#;
+        let threads = map_gh_threads(json);
+        assert_eq!(threads.len(), 2);
+        assert_eq!(threads[0].external_id, "PRRT_1");
+        assert_eq!(threads[0].file, "src/a.rs");
+        assert_eq!(threads[0].line, 12);
+        assert_eq!(threads[0].author, "octocat");
+        assert!(!threads[0].resolved);
+        assert!(threads[1].resolved);
+        assert!(threads[1].body.contains("hubot:") && threads[1].body.contains("octocat:"));
+    }
+
+    #[test]
+    fn github_outdated_thread_has_null_line() {
+        let json = r#"{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+          {"id":"T","isResolved":false,"path":"src/a.rs","line":null,
+           "comments":{"nodes":[{"author":{"login":"x"},"body":"hi"}]}}]}}}}}"#;
+        let threads = map_gh_threads(json);
+        assert_eq!(threads[0].line, 0);
+    }
+
+    #[test]
+    fn maps_gitlab_diff_discussions_only() {
+        let json = r#"[
+          {"id":"d1","notes":[{"author":{"username":"alice"},"body":"nit","resolved":false,
+            "position":{"new_path":"src/a.rs","new_line":10}}]},
+          {"id":"d2","notes":[{"author":{"username":"bob"},"body":"general comment"}]}
+        ]"#;
+        let threads = map_glab_discussions(json);
+        // The second discussion has no position → dropped (not a diff thread).
+        assert_eq!(threads.len(), 1);
+        assert_eq!(threads[0].external_id, "d1");
+        assert_eq!(threads[0].file, "src/a.rs");
+        assert_eq!(threads[0].line, 10);
+        assert_eq!(threads[0].author, "alice");
+    }
+
+    #[test]
+    fn malformed_json_maps_to_empty() {
+        assert!(map_gh_threads("not json").is_empty());
+        assert!(map_glab_discussions("{}").is_empty());
+    }
 
     #[test]
     fn parses_scp_form() {
