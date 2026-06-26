@@ -3,6 +3,7 @@
  * `READO_AGENT` using the syntax of the active shell (cmd / PowerShell / POSIX),
  * so it works on every platform. Shared by the terminal toolbar and the menu.
  */
+import { listen } from "@tauri-apps/api/event";
 import { ptyDefaultShell, ptyWrite, submitToTerminal } from "./api";
 import { useTerminals } from "./terminals";
 
@@ -15,9 +16,6 @@ const AGENT_BIN: Record<Agent, string> = {
   codex: "codex",
   copilot: "copilot",
 };
-
-/** How long to let a freshly-launched agent boot before sending it the prompt. */
-const AGENT_BOOT_MS = 4000;
 
 function shellFamily(shell: string | null): ShellFamily {
   const s = shell ?? "";
@@ -94,10 +92,44 @@ export async function launchAgent(agent: Agent, bin: string): Promise<void> {
 /** Default agent when the user has never launched one. */
 const DEFAULT_AGENT: Agent = "claude-code";
 
+/** How long after the agent's output goes quiet we treat it as ready for input. */
+const AGENT_IDLE_MS = 1200;
+/** Hard cap so we send even if the agent never goes quiet (or produces nothing). */
+const AGENT_READY_CAP_MS = 15000;
+
+/** Resolve once a freshly-launched agent looks ready: its PTY produced output and
+ *  then went quiet for AGENT_IDLE_MS (it's sitting at its input prompt). Far more
+ *  reliable than a fixed boot delay — a cold Claude Code start can take many
+ *  seconds, and a fixed timer would type the prompt into the boot screen and lose
+ *  it. Falls back to the cap if the agent stays silent. */
+function waitForAgentReady(id: string): Promise<void> {
+  return new Promise((resolve) => {
+    let quiet: ReturnType<typeof setTimeout> | null = null;
+    let unlisten: (() => void) | null = null;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (quiet) clearTimeout(quiet);
+      clearTimeout(cap);
+      unlisten?.();
+      resolve();
+    };
+    const cap = setTimeout(finish, AGENT_READY_CAP_MS);
+    void listen<string>(`pty-output-${id}`, () => {
+      if (quiet) clearTimeout(quiet);
+      quiet = setTimeout(finish, AGENT_IDLE_MS);
+    }).then((u) => {
+      unlisten = u;
+      if (done) u(); // resolved via the cap before the listener attached
+    });
+  });
+}
+
 /** Send an AI prompt to the agent. If the active terminal already has an agent,
  *  send it there; otherwise launch one first — the last-used agent, or Claude
- *  Code by default — and send the prompt once it has booted. We never write an
- *  AI prompt to a bare shell: it would just be run as a (broken) command. */
+ *  Code by default — and send the prompt once it has actually booted. We never
+ *  write an AI prompt to a bare shell: it would just be run as a (broken) command. */
 export async function dispatchToAgent(prompt: string): Promise<void> {
   const term = useTerminals.getState();
   const id = term.activeId ?? term.add();
@@ -109,5 +141,7 @@ export async function dispatchToAgent(prompt: string): Promise<void> {
   const shell = await ptyDefaultShell().catch(() => null);
   submitToTerminal(id, agentLaunchCommand(shellFamily(shell), agent, AGENT_BIN[agent]), 0);
   useTerminals.getState().markAgent(id, agent);
-  submitToTerminal(id, prompt, AGENT_BOOT_MS); // wait for the agent to boot
+  // Wait until the agent is booted and idle at its prompt, then send.
+  await waitForAgentReady(id);
+  submitToTerminal(id, prompt, 0);
 }
