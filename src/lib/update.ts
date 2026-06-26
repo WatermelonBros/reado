@@ -9,6 +9,9 @@
 import { create } from "zustand";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { createLogger } from "./logger";
+
+const log = createLogger("updater");
 
 interface UpdateState {
   /** The pending update handle, or null when up to date. */
@@ -50,10 +53,13 @@ export const useUpdate = create<UpdateState>((set, get) => ({
     const u = get().update;
     if (!u) return;
     set({ installing: true });
+    log.info("download + install", { version: u.version });
     try {
       await u.downloadAndInstall();
+      log.info("installed; relaunching", { version: u.version });
       await relaunch();
     } catch (e) {
+      log.error("install failed", { version: u.version, error: String(e) });
       set({ installing: false, open: false, toast: { kind: "error", text: String(e) } });
     }
   },

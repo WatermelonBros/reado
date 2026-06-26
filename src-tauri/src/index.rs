@@ -72,7 +72,21 @@ fn rebuild(root: &str) -> Result<usize> {
 /// correct even after the index was deleted or comments changed externally.
 #[tauri::command]
 pub fn rebuild_index(root: String) -> Result<usize> {
-    rebuild(&root)
+    let started = std::time::Instant::now();
+    let result = rebuild(&root);
+    match &result {
+        Ok(count) => crate::log::info(
+            "index",
+            "rebuilt",
+            serde_json::json!({ "comments": count, "ms": started.elapsed().as_millis() as u64 }),
+        ),
+        Err(e) => crate::log::error(
+            "index",
+            "rebuild failed",
+            serde_json::json!({ "error": e.to_string() }),
+        ),
+    }
+    result
 }
 
 #[cfg(test)]

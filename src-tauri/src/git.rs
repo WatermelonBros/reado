@@ -212,9 +212,20 @@ fn run_git_checked(root: &str, args: &[&str]) -> Result<(), String> {
         .output()
         .map_err(|e| e.to_string())?;
     if output.status.success() {
+        crate::log::info(
+            "git",
+            "git command ok",
+            serde_json::json!({ "root": root, "args": args }),
+        );
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        crate::log::error(
+            "git",
+            "git command failed",
+            serde_json::json!({ "root": root, "args": args, "stderr": stderr }),
+        );
+        Err(stderr)
     }
 }
 

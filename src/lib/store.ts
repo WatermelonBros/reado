@@ -63,6 +63,10 @@ export interface SettingsState {
   renderWhitespace: boolean;
   /** Show the structure ribbon (symbols/comments/diagnostics overview column). */
   showRibbon: boolean;
+  /** Write a diagnostic log file you can send back to us (on by default). */
+  logEnabled: boolean;
+  /** How much detail the log captures. */
+  logLevel: "error" | "warn" | "info" | "debug" | "trace";
   set: (patch: Partial<SettingsState>) => void;
 }
 
@@ -88,6 +92,8 @@ export const useSettings = create<SettingsState>()(
       showBreadcrumbs: true,
       renderWhitespace: false,
       showRibbon: false,
+      logEnabled: true,
+      logLevel: "info",
       set: (patch) => set(patch),
     }),
     { name: "reado.settings" },

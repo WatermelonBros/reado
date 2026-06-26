@@ -12,6 +12,8 @@ import {
 import { useLocale, type Locale, type MessageKey } from "../../i18n";
 import { installCli, cliInstalled } from "../../lib/api";
 import { checkForUpdates } from "../../lib/updater";
+import { logPath } from "../../lib/logger";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Select } from "../atoms/Select";
 import { Drawer } from "../atoms/Drawer";
 import { Checkbox } from "../atoms/Checkbox";
@@ -142,10 +144,67 @@ export function Settings() {
             />
           </Field>
 
+          <LoggingSettings />
           <CliInstall />
           <AppVersion />
         </div>
     </Drawer>
+  );
+}
+
+/** Diagnostic logging: enable toggle, detail level, and the file location. */
+function LoggingSettings() {
+  const { t } = useTranslation();
+  const settings = useSettings();
+  const [path, setPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    logPath().then(setPath).catch(() => {});
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-sm text-muted">{t("settings.logging")}</span>
+      <Checkbox
+        checked={settings.logEnabled}
+        onChange={(v) => settings.set({ logEnabled: v })}
+        label={t("settings.logEnabled")}
+        className="text-sm text-muted"
+      />
+      <Field label={t("settings.logLevel")}>
+        <Select
+          value={settings.logLevel}
+          onChange={(v) => settings.set({ logLevel: v as SettingsState["logLevel"] })}
+          options={[
+            { value: "error", label: "Error" },
+            { value: "warn", label: "Warn" },
+            { value: "info", label: "Info" },
+            { value: "debug", label: "Debug" },
+            { value: "trace", label: "Trace" },
+          ]}
+        />
+      </Field>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => path && void revealItemInDir(path).catch(() => {})}
+          disabled={!path}
+          className="rounded-md border border-line px-2.5 py-1.5 text-sm text-ink hover:bg-surface disabled:opacity-50"
+        >
+          {t("settings.logReveal")}
+        </button>
+        <button
+          type="button"
+          onClick={() => path && void navigator.clipboard.writeText(path).catch(() => {})}
+          disabled={!path}
+          className="rounded-md border border-line px-2.5 py-1.5 text-sm text-ink hover:bg-surface disabled:opacity-50"
+        >
+          {t("settings.logCopyPath")}
+        </button>
+      </div>
+      {path && <p className="break-all text-xs leading-relaxed text-faint">{path}</p>}
+      <p className="text-xs leading-relaxed text-faint">{t("settings.logHint")}</p>
+    </div>
   );
 }
 

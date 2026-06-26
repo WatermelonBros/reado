@@ -182,7 +182,19 @@ fn image_mime(path: &Path) -> Option<&'static str> {
 pub fn write_file(root: String, path: String, content: String) -> Result<()> {
     let root = PathBuf::from(&root);
     let path = ensure_within(&root, &PathBuf::from(&path))?;
-    std::fs::write(path, content)?;
+    let bytes = content.len();
+    std::fs::write(&path, content).inspect_err(|e| {
+        crate::log::error(
+            "fs",
+            "write failed",
+            serde_json::json!({ "path": path.to_string_lossy(), "error": e.to_string() }),
+        );
+    })?;
+    crate::log::info(
+        "fs",
+        "file written",
+        serde_json::json!({ "path": path.to_string_lossy(), "bytes": bytes }),
+    );
     Ok(())
 }
 
@@ -201,6 +213,11 @@ pub fn create_file(root: String, path: String) -> Result<String> {
         return Err(Error::Other("a file with that name already exists".into()));
     }
     std::fs::write(&target, "")?;
+    crate::log::info(
+        "fs",
+        "file created",
+        serde_json::json!({ "path": target.to_string_lossy() }),
+    );
     Ok(target.to_string_lossy().into_owned())
 }
 
@@ -306,6 +323,11 @@ pub fn move_path(root: String, from: String, to: String) -> Result<()> {
         ));
     }
     std::fs::rename(&src, &dest)?;
+    crate::log::info(
+        "fs",
+        "path moved",
+        serde_json::json!({ "from": src.to_string_lossy(), "to": dest.to_string_lossy() }),
+    );
     Ok(())
 }
 
@@ -319,11 +341,17 @@ pub fn import_paths(root: String, sources: Vec<String>, dest_dir: String) -> Res
     if !dir.is_dir() {
         return Err(Error::Other("destination is not a folder".into()));
     }
+    let count = sources.len();
     for src in sources {
         let src = PathBuf::from(&src);
         let name = src.file_name().ok_or(Error::PathEscapesRoot)?;
         copy_path(&src, &unique_dest(&dir.join(name)))?;
     }
+    crate::log::info(
+        "fs",
+        "paths imported",
+        serde_json::json!({ "count": count, "dest": dir.to_string_lossy() }),
+    );
     Ok(())
 }
 

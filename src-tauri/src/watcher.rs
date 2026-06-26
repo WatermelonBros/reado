@@ -82,6 +82,11 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
     watcher
         .watch(&root, RecursiveMode::Recursive)
         .map_err(|e| e.to_string())?;
+    crate::log::info(
+        "watcher",
+        "watching",
+        serde_json::json!({ "root": root.to_string_lossy() }),
+    );
 
     std::thread::spawn(move || {
         // Keep the watcher alive for the lifetime of this loop.
@@ -152,7 +157,14 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                         pending.insert(path);
                     }
                 }
-                Ok(Err(_)) => {} // a watch error; ignore and keep going
+                Ok(Err(e)) => {
+                    // a watch error; log it but keep going
+                    crate::log::warn(
+                        "watcher",
+                        "watch error",
+                        serde_json::json!({ "error": e.to_string() }),
+                    );
+                }
                 Err(RecvTimeoutError::Timeout) => {
                     let mut comments_dirty = false;
 
@@ -207,6 +219,11 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                             continue;
                         }
                         if let Some(rel) = relative(&root, &path) {
+                            crate::log::debug(
+                                "watcher",
+                                "file changed (reanchor)",
+                                serde_json::json!({ "file": rel }),
+                            );
                             let _ = app.emit("file-changed", FileChanged { file: rel });
                         }
                     }

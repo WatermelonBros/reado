@@ -14,6 +14,9 @@
  */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { createLogger } from "./logger";
+
+const log = createLogger("terminals");
 
 export interface TermSession {
   id: string;
@@ -112,6 +115,7 @@ export const useTerminals = create<TerminalsState>()(
   add: () => {
     const id = newId();
     const gid = newGroupId();
+    log.info("terminal opened", { id });
     set((s) => ({
       sessions: [...s.sessions, { id, title: `Terminal ${s.sessions.length + 1}` }],
       groups: [...s.groups, { id: gid, dir: "row", paneIds: [id], sizes: [1] }],
@@ -139,8 +143,9 @@ export const useTerminals = create<TerminalsState>()(
     return id;
   },
 
-  remove: (id) =>
-    set((s) => {
+  remove: (id) => {
+    log.info("terminal closed", { id });
+    return set((s) => {
       const sessions = s.sessions.filter((t) => t.id !== id);
       const groups = s.groups
         .map((g) => {
@@ -155,7 +160,8 @@ export const useTerminals = create<TerminalsState>()(
         agentTerminals: s.agentTerminals.filter((t) => t !== id),
         ...resolveActive(s, groups, id),
       };
-    }),
+    });
+  },
 
   restart: (id) =>
     set((s) => {

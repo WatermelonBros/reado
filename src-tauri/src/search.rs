@@ -86,6 +86,11 @@ pub fn search_text(root: String, query: String) -> Result<Vec<SearchMatch>> {
         });
     }
 
+    crate::log::debug(
+        "search",
+        "search",
+        serde_json::json!({ "query": query, "matches": matches.len() }),
+    );
     Ok(matches)
 }
 
@@ -163,6 +168,11 @@ pub fn replace_text(root: String, query: String, replacement: String) -> Result<
             changed += 1;
         }
     }
+    crate::log::info(
+        "search",
+        "replace",
+        serde_json::json!({ "query": query, "filesChanged": changed }),
+    );
     Ok(changed)
 }
 

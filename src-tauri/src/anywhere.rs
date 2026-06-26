@@ -274,6 +274,11 @@ async fn start_server(
     let handle = Handle::new();
     let serve_handle = handle.clone();
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    crate::log::info(
+        "anywhere",
+        "server starting",
+        serde_json::json!({ "addr": addr.to_string(), "fingerprint": info.fingerprint }),
+    );
     tauri::async_runtime::spawn(async move {
         let _ = axum_server::bind_rustls(addr, config)
             .handle(serve_handle)
@@ -339,6 +344,14 @@ pub fn dev_autostart(app: &AppHandle) {
     }
     match tauri::async_runtime::block_on(start_server(app.clone(), projects, recents, terminals)) {
         Ok((handle, info)) => {
+            crate::log::info(
+                "anywhere",
+                "dev autostart up",
+                serde_json::json!({ "url": info.url }),
+            );
+            // Intentional dev-only stdout (gated by READO_ANYWHERE_AUTOSTART): the
+            // pairing URL carries the session token, so it is printed for the
+            // developer's terminal but never written to the (shareable) log file.
             println!(
                 "\n[reado-anywhere] open on your phone:\n[reado-anywhere] {}\n",
                 pairing_url(&info)
@@ -347,7 +360,11 @@ pub fn dev_autostart(app: &AppHandle) {
                 *g = Some(Running { handle, info });
             }
         }
-        Err(e) => eprintln!("[reado-anywhere] autostart failed: {e}"),
+        Err(e) => crate::log::error(
+            "anywhere",
+            "dev autostart failed",
+            serde_json::json!({ "error": e }),
+        ),
     }
 }
 
@@ -449,6 +466,11 @@ async fn auth(State(api): State<Api>, req: Request, next: Next) -> Response {
     if ok {
         next.run(req).await
     } else {
+        crate::log::warn(
+            "anywhere",
+            "client auth rejected",
+            serde_json::json!({ "path": req.uri().path() }),
+        );
         StatusCode::UNAUTHORIZED.into_response()
     }
 }
@@ -732,6 +754,11 @@ async fn term(
     ws: WebSocketUpgrade,
 ) -> Response {
     if q.token != api.token {
+        crate::log::warn(
+            "anywhere",
+            "terminal ws auth rejected",
+            serde_json::Value::Null,
+        );
         return StatusCode::UNAUTHORIZED.into_response();
     }
     let root = match api.root(&q.project) {
@@ -742,6 +769,11 @@ async fn term(
         Some(s) => s,
         None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+    crate::log::info(
+        "anywhere",
+        "terminal ws connected",
+        serde_json::json!({ "project": q.project }),
+    );
     ws.on_upgrade(move |socket| term_session(socket, session))
 }
 
@@ -807,6 +839,11 @@ async fn term_session(socket: WebSocket, session: Arc<TermSession>) {
 
     // Keep the PTY alive for reattach; just stop forwarding to this socket.
     out.abort();
+    crate::log::info(
+        "anywhere",
+        "terminal ws disconnected",
+        serde_json::Value::Null,
+    );
 }
 
 async fn comments_get(

@@ -14,6 +14,7 @@ mod format;
 mod fs;
 mod git;
 mod index;
+mod log;
 mod lsp;
 mod menu;
 mod proc;
@@ -33,6 +34,24 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            // Bring up the logging engine before anything else so the rest of
+            // setup is captured. Falls back to a temp dir if the OS log dir
+            // can't be resolved; logging never blocks startup.
+            use tauri::Manager;
+            let log_dir = app
+                .path()
+                .app_log_dir()
+                .unwrap_or_else(|_| std::env::temp_dir().join("reado").join("logs"));
+            let home = app.path().home_dir().ok();
+            let log_path = log::init(log_dir, home);
+            log::info(
+                "app",
+                "startup",
+                serde_json::json!({
+                    "version": app.package_info().version.to_string(),
+                    "logPath": log_path.to_string_lossy(),
+                }),
+            );
             menu::init(app)?;
             anywhere::dev_autostart(app.handle());
             Ok(())
@@ -47,6 +66,11 @@ pub fn run() {
             // Remember the focused window so menu actions target it (the menu is
             // shared across windows).
             if let tauri::WindowEvent::Focused(true) = event {
+                log::debug(
+                    "app",
+                    "window focused",
+                    serde_json::json!({ "window": window.label() }),
+                );
                 if let Ok(mut last) = window.app_handle().state::<menu::LastFocused>().0.lock() {
                     *last = Some(window.label().to_string());
                 }
@@ -54,6 +78,11 @@ pub fn run() {
             // Reap a closing window's PTYs so its shells/dev servers don't linger
             // as orphans while other windows keep the app alive.
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                log::info(
+                    "app",
+                    "window close requested",
+                    serde_json::json!({ "window": window.label() }),
+                );
                 pty::kill_for_window(
                     &window.app_handle().state::<pty::PtyState>(),
                     window.label(),
@@ -137,6 +166,9 @@ pub fn run() {
             anywhere::anywhere_set_project,
             anywhere::anywhere_clear_project,
             anywhere::anywhere_set_recents,
+            log::log_record,
+            log::log_path,
+            log::log_set_config,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")
@@ -145,6 +177,11 @@ pub fn run() {
             // outlives the app.
             if let tauri::RunEvent::Exit = event {
                 use tauri::Manager;
+                log::info(
+                    "app",
+                    "exit: tearing down subsystems",
+                    serde_json::Value::Null,
+                );
                 pty::kill_all(&app.state::<pty::PtyState>());
                 lsp::kill_all(&app.state::<lsp::LspState>());
                 anywhere::shutdown(&app.state::<anywhere::AnywhereState>());

@@ -294,6 +294,12 @@
     "cliInstalled": "Installed",
     "cliDone": "Installed at {path}. Ensure ~/.local/bin is on your PATH.",
     "cliHint": "Links the bundled 'reado' CLI into ~/.local/bin so AI agents can read and resolve your tasks from any project.",
+    "logging": "Diagnostic logging",
+    "logEnabled": "Write a diagnostic log file",
+    "logLevel": "Detail level",
+    "logHint": "Logs what the app does to a local file you can send us to debug an issue. Secrets and file contents are never written.",
+    "logReveal": "Reveal log file",
+    "logCopyPath": "Copy path",
     "checkUpdates": "Check for updates…",
     "shortcuts": "Keyboard Shortcuts…",
     "close": "Close"

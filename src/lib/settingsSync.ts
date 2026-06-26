@@ -11,6 +11,9 @@ import { useSettings, type SettingsState } from "./store";
 import { useExtensions } from "./extensions";
 import { prompt } from "./prompt";
 import { t } from "../i18n";
+import { createLogger } from "./logger";
+
+const log = createLogger("settingsSync");
 
 const BUNDLE_VERSION = 1;
 
@@ -78,10 +81,15 @@ export function applyBundle(b: Bundle): void {
   if (Array.isArray(b.extensionsDisabled)) {
     useExtensions.setState({ disabled: b.extensionsDisabled });
   }
+  log.info("settings imported", {
+    settings: Object.keys(b.settings ?? {}).length,
+    disabled: b.extensionsDisabled?.length ?? 0,
+  });
 }
 
 /** Copy the current settings bundle to the clipboard. */
 export async function exportSettings(): Promise<void> {
+  log.info("settings exported");
   await navigator.clipboard.writeText(JSON.stringify(buildBundle(), null, 2)).catch(() => {});
 }
 
