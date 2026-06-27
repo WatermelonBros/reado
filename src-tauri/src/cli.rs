@@ -61,6 +61,11 @@ pub fn install_cli() -> Result<String> {
         std::fs::copy(&src, &dst)?;
     }
 
+    crate::log::info(
+        "cli",
+        "installed",
+        serde_json::json!({ "path": dst.to_string_lossy() }),
+    );
     Ok(dst.to_string_lossy().into_owned())
 }
 

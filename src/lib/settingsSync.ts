@@ -11,6 +11,9 @@ import { useSettings, type SettingsState } from "./store";
 import { useExtensions } from "./extensions";
 import { prompt } from "./prompt";
 import { t } from "../i18n";
+import { createLogger, safeError } from "./logger";
+
+const log = createLogger("settingsSync");
 
 const BUNDLE_VERSION = 1;
 
@@ -78,11 +81,20 @@ export function applyBundle(b: Bundle): void {
   if (Array.isArray(b.extensionsDisabled)) {
     useExtensions.setState({ disabled: b.extensionsDisabled });
   }
+  log.info("settings imported", {
+    settings: Object.keys(b.settings ?? {}).length,
+    disabled: b.extensionsDisabled?.length ?? 0,
+  });
 }
 
 /** Copy the current settings bundle to the clipboard. */
 export async function exportSettings(): Promise<void> {
-  await navigator.clipboard.writeText(JSON.stringify(buildBundle(), null, 2)).catch(() => {});
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(buildBundle(), null, 2));
+    log.info("settings exported");
+  } catch (e) {
+    log.error("settings export failed", { error: safeError(e) });
+  }
 }
 
 /** Prompt for a pasted bundle, show a summary, and apply it on confirm. */

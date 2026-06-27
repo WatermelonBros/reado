@@ -8,19 +8,25 @@
  */
 import { check } from "@tauri-apps/plugin-updater";
 import { useUpdate } from "./update";
+import { createLogger, safeError } from "./logger";
+
+const log = createLogger("updater");
 
 /**
  * Check for updates. When `interactive`, surface "up to date" / errors via a
  * toast; when silent (startup), only open the modal if an update is available.
  */
 export async function checkForUpdates(interactive: boolean): Promise<void> {
+  log.info("update check", { interactive });
   try {
     const update = await check();
     if (!update) {
+      log.info("up to date");
       if (interactive)
         useUpdate.getState().setToast({ kind: "info", text: "Reado is up to date." });
       return;
     }
+    log.info("update available", { version: update.version });
     // Don't re-nag for a version already surfaced: a background (periodic/focus)
     // check stays quiet, while a manual check reopens the modal.
     const st = useUpdate.getState();
@@ -30,6 +36,7 @@ export async function checkForUpdates(interactive: boolean): Promise<void> {
     }
     st.setAvailable(update);
   } catch (error) {
+    log.error("update check failed", { error: safeError(error) });
     if (interactive) {
       useUpdate
         .getState()

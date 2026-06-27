@@ -10,8 +10,15 @@ use crate::error::Result;
 
 #[tauri::command]
 pub fn create_comment(root: String, input: NewComment) -> Result<CreateResult> {
+    let file = input.file.clone();
     // Comments created from the desktop UI are authored by the user.
-    Ok(core::create_comment(&root, input, "user", None)?)
+    let result = core::create_comment(&root, input, "user", None)?;
+    crate::log::info(
+        "annotations",
+        "comment created",
+        serde_json::json!({ "file": file }),
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -42,12 +49,25 @@ pub fn add_reply(
 
 #[tauri::command]
 pub fn set_comment_state(root: String, id: String, state: CommentState) -> Result<Comment> {
-    Ok(core::set_comment_state(&root, &id, state)?)
+    let state_val = serde_json::to_value(state).unwrap_or(serde_json::Value::Null);
+    let result = core::set_comment_state(&root, &id, state)?;
+    crate::log::info(
+        "annotations",
+        "comment state changed",
+        serde_json::json!({ "id": id, "state": state_val }),
+    );
+    Ok(result)
 }
 
 #[tauri::command]
 pub fn delete_comment(root: String, id: String) -> Result<()> {
-    Ok(core::delete_comment(&root, &id)?)
+    core::delete_comment(&root, &id)?;
+    crate::log::info(
+        "annotations",
+        "comment deleted",
+        serde_json::json!({ "id": id }),
+    );
+    Ok(())
 }
 
 #[tauri::command]
@@ -62,12 +82,25 @@ pub fn read_project_config(root: String) -> Option<String> {
 
 #[tauri::command]
 pub fn write_project_config(root: String, json: String) -> Result<()> {
-    Ok(core::write_config(&root, &json)?)
+    core::write_config(&root, &json).inspect_err(|e| {
+        crate::log::error(
+            "annotations",
+            "write project config failed",
+            serde_json::json!({ "error": e.to_string() }),
+        );
+    })?;
+    Ok(())
 }
 
 #[tauri::command]
 pub fn reanchor_file(root: String, file: String) -> Result<Vec<Comment>> {
-    Ok(core::reanchor_file(&root, &file)?)
+    let comments = core::reanchor_file(&root, &file)?;
+    crate::log::debug(
+        "annotations",
+        "reanchored",
+        serde_json::json!({ "file": file, "comments": comments.len() }),
+    );
+    Ok(comments)
 }
 
 #[tauri::command]

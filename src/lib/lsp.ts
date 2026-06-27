@@ -39,6 +39,9 @@ import { lspStart, lspSend, lspStop, resolvePath } from "./api";
 import type { OutlineSymbol } from "./outline";
 import { useExtensions } from "./extensions";
 import { useDiagnostics } from "./diagnostics";
+import { createLogger } from "./logger";
+
+const log = createLogger("lsp");
 import { taskFromDiagnostic, explainSymbolAt } from "./lspActions";
 import { t } from "../i18n";
 
@@ -685,6 +688,7 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
   const p = (async () => {
     // Spawn the server first; this throws if it isn't installed/allowed.
     await lspStart(key, server.id, root);
+    log.info("client connected", { server: server.id });
     const handlers = new Set<(v: string) => void>();
     const unlisten = listen<string>(`lsp-${key}`, (e) => {
       tapDiagnostics(e.payload);
@@ -710,7 +714,10 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
   conns.set(key, p);
   // If startup failed (server missing), drop the cache entry so we don't retry
   // a dead promise and stay quiet.
-  p.catch(() => conns.delete(key));
+  p.catch((e) => {
+    log.error("client connect failed", { server: server.id, error: String(e) });
+    conns.delete(key);
+  });
   return p;
 }
 
@@ -762,6 +769,7 @@ export const hasServer = (path: string) => serverFor(path) !== null;
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     for (const [key, p] of conns) {
+      log.debug("client disconnected", { key });
       void p.then((c) => c.unlisten.then((u) => u())).catch(() => {});
       void lspStop(key).catch(() => {});
     }

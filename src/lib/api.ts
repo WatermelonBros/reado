@@ -5,7 +5,9 @@
  * touches stringly-typed command names, and the Rust signatures are mirrored
  * here once.
  */
-import { invoke } from "@tauri-apps/api/core";
+// Route every command through the traced wrapper so the IPC boundary (command
+// name, duration, outcome) is logged without changing any call site.
+import { tracedInvoke as invoke } from "./logger";
 
 export interface DirEntry {
   name: string;
