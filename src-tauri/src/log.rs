@@ -243,7 +243,9 @@ fn write(level: u8, target: &str, msg: &str, fields: Value) {
     );
     record.insert("level".into(), json!(level_name(level)));
     record.insert("target".into(), json!(target));
-    record.insert("msg".into(), json!(msg));
+    // `msg` is free-form and routinely embeds absolute paths (e.g. an OS or git
+    // error string), so scrub it too — not just the structured fields.
+    record.insert("msg".into(), json!(scrub(msg, logger.home.as_deref())));
     let redacted = redact(fields, logger.home.as_deref());
     if !redacted.is_null() {
         record.insert("fields".into(), redacted);
@@ -316,7 +318,7 @@ fn open_append(path: &Path) -> std::io::Result<File> {
 /// Recursively redact a fields value before it is written:
 /// - secret-named keys → `<redacted>`
 /// - content-named keys → a `{ "_len": N }` summary (string len / array len)
-/// - string values starting with the home dir → `~/…`
+/// - the home dir anywhere inside a string value → `~`
 fn redact(value: Value, home: Option<&Path>) -> Value {
     match value {
         Value::Object(map) => {
@@ -334,7 +336,7 @@ fn redact(value: Value, home: Option<&Path>) -> Value {
             Value::Object(out)
         }
         Value::Array(items) => Value::Array(items.into_iter().map(|v| redact(v, home)).collect()),
-        Value::String(s) => Value::String(shorten_path(&s, home)),
+        Value::String(s) => Value::String(scrub(&s, home)),
         other => other,
     }
 }
@@ -348,24 +350,37 @@ fn summarise_len(value: &Value) -> Value {
     }
 }
 
-/// If `s` is an absolute path *inside* the user's home, rewrite the prefix as
-/// `~`. Requires a separator boundary after the prefix so a sibling like
-/// `/home/alice2/...` isn't mangled into `~2/...` (the home dir itself maps to
-/// `~`).
-fn shorten_path(s: &str, home: Option<&Path>) -> String {
-    if let Some(home) = home {
-        let home = home.to_string_lossy();
-        if !home.is_empty() && s.starts_with(home.as_ref()) {
-            let rest = &s[home.len()..];
-            if rest.is_empty() {
-                return "~".to_string();
-            }
-            if rest.starts_with(['/', '\\']) {
-                return format!("~{rest}");
-            }
-        }
+/// Rewrite every occurrence of the user's home directory in `s` as `~`,
+/// wherever it appears — not just at the start. A match only counts when the
+/// home prefix ends on a path-separator boundary (or the end of the match), so
+/// a sibling like `/home/alice2/...` is left intact and the home dir itself
+/// maps to `~`. Scrubbing mid-string catches absolute paths embedded inside a
+/// larger value (e.g. `"fatal: /home/alice/x not found"`), which a prefix-only
+/// check would leak into a file users are meant to share with us.
+fn scrub(s: &str, home: Option<&Path>) -> String {
+    let Some(home) = home else {
+        return s.to_string();
+    };
+    let home = home.to_string_lossy();
+    if home.is_empty() || !s.contains(home.as_ref()) {
+        return s.to_string();
     }
-    s.to_string()
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(idx) = rest.find(home.as_ref()) {
+        let after = &rest[idx + home.len()..];
+        out.push_str(&rest[..idx]);
+        // Only collapse to `~` when the home prefix ends on a separator (or the
+        // string ends): a textual sibling like `/home/alice2` must stay intact.
+        if after.is_empty() || after.starts_with(['/', '\\']) {
+            out.push('~');
+        } else {
+            out.push_str(&home);
+        }
+        rest = after;
+    }
+    out.push_str(rest);
+    out
 }
 
 // --- Public logging helpers ------------------------------------------------
@@ -456,6 +471,36 @@ mod tests {
         // The home dir itself maps to "~".
         let out = redact(json!({ "path": "/home/alice" }), Some(&home));
         assert_eq!(out["path"], json!("~"));
+    }
+
+    #[test]
+    fn home_is_scrubbed_mid_string() {
+        let home = PathBuf::from("/home/alice");
+        // An absolute path embedded inside a larger error string is rewritten,
+        // and a sibling sharing the textual prefix is left intact.
+        let out = redact(
+            json!({ "error": "fatal: /home/alice/x not found; tried /home/alice2/y" }),
+            Some(&home),
+        );
+        assert_eq!(
+            out["error"],
+            json!("fatal: ~/x not found; tried /home/alice2/y")
+        );
+    }
+
+    #[test]
+    fn scrub_handles_prefix_mid_string_and_repeats() {
+        let home = PathBuf::from("/home/alice");
+        // Prefix, bare home dir, repeated occurrence, and a textual sibling.
+        assert_eq!(scrub("/home/alice/x", Some(&home)), "~/x");
+        assert_eq!(scrub("/home/alice", Some(&home)), "~");
+        assert_eq!(
+            scrub("a /home/alice/x b /home/alice/y", Some(&home)),
+            "a ~/x b ~/y"
+        );
+        assert_eq!(scrub("/home/alice2/x", Some(&home)), "/home/alice2/x");
+        // No home configured → returned unchanged.
+        assert_eq!(scrub("/home/alice/x", None), "/home/alice/x");
     }
 
     #[test]
