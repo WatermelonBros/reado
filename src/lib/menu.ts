@@ -4,7 +4,8 @@
  * action, reusing the same stores/helpers the keyboard shortcuts and palette use.
  */
 import { listen } from "@tauri-apps/api/event";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { logPath } from "./logger";
 import {
   usePalette,
   useProject,
@@ -368,6 +369,20 @@ export function runMenuCommand(id: string): void {
         break;
       case "help:releases":
         void openUrl(RELEASES);
+        break;
+      case "help:revealLog":
+        void logPath()
+          .then((p) => {
+            if (p) return revealItemInDir(p);
+          })
+          .catch(() => {});
+        break;
+      case "help:copyLogPath":
+        void logPath()
+          .then((p) => {
+            if (p) return navigator.clipboard.writeText(p);
+          })
+          .catch(() => {});
         break;
     }
 }

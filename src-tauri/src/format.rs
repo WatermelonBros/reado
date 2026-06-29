@@ -122,8 +122,24 @@ pub fn format_file(root: String, path: String, content: String) -> Result<String
     }
     for c in &candidates {
         // `None` means that formatter isn't installed — try the next candidate.
-        if let Some(formatted) = run(&root, c, &content)? {
-            return Ok(formatted);
+        match run(&root, c, &content) {
+            Ok(Some(formatted)) => {
+                crate::log::info(
+                    "format",
+                    "formatted",
+                    serde_json::json!({ "path": path, "formatter": c.program }),
+                );
+                return Ok(formatted);
+            }
+            Ok(None) => continue,
+            Err(e) => {
+                crate::log::error(
+                    "format",
+                    "formatter failed",
+                    serde_json::json!({ "path": path, "formatter": c.program, "error": e }),
+                );
+                return Err(e);
+            }
         }
     }
     Err("No formatter installed for this file type.".into())

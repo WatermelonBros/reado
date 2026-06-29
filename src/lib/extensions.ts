@@ -8,6 +8,9 @@
  */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { createLogger } from "./logger";
+
+const log = createLogger("extensions");
 
 export type OS = "mac" | "linux" | "windows";
 
@@ -288,14 +291,16 @@ export const useExtensions = create<ExtensionsState>()(
     (set, get) => ({
       disabled: [],
       isEnabled: (id) => !get().disabled.includes(id),
-      toggle: (id, enabled) =>
+      toggle: (id, enabled) => {
+        log.info(enabled ? "extension enabled" : "extension disabled", { id });
         set((s) => ({
           disabled: enabled
             ? s.disabled.filter((x) => x !== id)
             : s.disabled.includes(id)
               ? s.disabled
               : [...s.disabled, id],
-        })),
+        }));
+      },
     }),
     { name: "reado.extensions" },
   ),

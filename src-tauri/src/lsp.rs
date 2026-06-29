@@ -129,8 +129,21 @@ pub fn lsp_start(
     if state.0.lock().unwrap().contains_key(&id) {
         return Ok(());
     }
-    let (command, base_args) =
-        server_command(&server).ok_or_else(|| format!("unknown server: {server}"))?;
+    let (command, base_args) = server_command(&server).ok_or_else(|| {
+        crate::log::warn(
+            "lsp",
+            "unknown server requested",
+            serde_json::json!({ "server": server }),
+        );
+        format!("unknown server: {server}")
+    })?;
+    if !on_path(command) {
+        crate::log::warn(
+            "lsp",
+            "server binary not installed",
+            serde_json::json!({ "server": server, "binary": command }),
+        );
+    }
     let mut args: Vec<String> = base_args.iter().map(|s| (*s).to_string()).collect();
     // The Angular server needs to be told where to find typescript and
     // @angular/language-service — the project's own node_modules (the cwd).
@@ -148,40 +161,59 @@ pub fn lsp_start(
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            crate::log::error(
+                "lsp",
+                "server start failed",
+                serde_json::json!({ "server": server, "binary": command, "error": e.to_string() }),
+            );
+            e.to_string()
+        })?;
+    crate::log::info(
+        "lsp",
+        "server started",
+        serde_json::json!({ "id": id.as_str(), "server": server, "binary": command }),
+    );
 
     let stdin = child.stdin.take().ok_or("no stdin")?;
     let stdout = child.stdout.take().ok_or("no stdout")?;
     let event = format!("lsp-{id}");
+    let exit_id = id.clone();
 
     std::thread::spawn(move || {
-        let mut reader = BufReader::new(stdout);
-        loop {
-            // Parse headers up to the blank line; we only need Content-Length.
-            let mut len = 0usize;
+        // Inner closure so the early `return`s on EOF/error land here and we can
+        // log the server's exit exactly once.
+        let pump = move || {
+            let mut reader = BufReader::new(stdout);
             loop {
-                let mut line = String::new();
-                match reader.read_line(&mut line) {
-                    Ok(0) | Err(_) => return, // EOF or error → server gone
-                    Ok(_) => {}
+                // Parse headers up to the blank line; we only need Content-Length.
+                let mut len = 0usize;
+                loop {
+                    let mut line = String::new();
+                    match reader.read_line(&mut line) {
+                        Ok(0) | Err(_) => return, // EOF or error → server gone
+                        Ok(_) => {}
+                    }
+                    let trimmed = line.trim_end();
+                    if trimmed.is_empty() {
+                        break;
+                    }
+                    if let Some(v) = trimmed.strip_prefix("Content-Length:") {
+                        len = v.trim().parse().unwrap_or(0);
+                    }
                 }
-                let trimmed = line.trim_end();
-                if trimmed.is_empty() {
-                    break;
+                if len == 0 {
+                    continue;
                 }
-                if let Some(v) = trimmed.strip_prefix("Content-Length:") {
-                    len = v.trim().parse().unwrap_or(0);
+                let mut buf = vec![0u8; len];
+                if reader.read_exact(&mut buf).is_err() {
+                    return;
                 }
+                let _ = app.emit(&event, String::from_utf8_lossy(&buf).into_owned());
             }
-            if len == 0 {
-                continue;
-            }
-            let mut buf = vec![0u8; len];
-            if reader.read_exact(&mut buf).is_err() {
-                return;
-            }
-            let _ = app.emit(&event, String::from_utf8_lossy(&buf).into_owned());
-        }
+        };
+        pump();
+        crate::log::info("lsp", "server exited", serde_json::json!({ "id": exit_id }));
     });
 
     state.0.lock().unwrap().insert(id, Server { child, stdin });
@@ -207,6 +239,7 @@ pub fn lsp_send(state: State<LspState>, id: String, message: String) -> Result<(
 #[tauri::command]
 pub fn lsp_stop(state: State<LspState>, id: String) -> Result<(), String> {
     if let Some(mut server) = state.0.lock().unwrap().remove(&id) {
+        crate::log::info("lsp", "server stopped", serde_json::json!({ "id": id }));
         let _ = server.child.kill();
     }
     Ok(())

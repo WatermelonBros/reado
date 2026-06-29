@@ -9,6 +9,9 @@
 import { create } from "zustand";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { createLogger, safeError } from "./logger";
+
+const log = createLogger("updater");
 
 interface UpdateState {
   /** The pending update handle, or null when up to date. */
@@ -50,10 +53,22 @@ export const useUpdate = create<UpdateState>((set, get) => ({
     const u = get().update;
     if (!u) return;
     set({ installing: true });
+    log.info("download + install", { version: u.version });
     try {
       await u.downloadAndInstall();
+    } catch (e) {
+      // The update itself failed — nothing was installed.
+      log.error("install failed", { version: u.version, error: safeError(e) });
+      set({ installing: false, open: false, toast: { kind: "error", text: String(e) } });
+      return;
+    }
+    log.info("installed; relaunching", { version: u.version });
+    try {
       await relaunch();
     } catch (e) {
+      // Installed fine, but the restart failed — don't report it as an install
+      // failure.
+      log.error("relaunch failed", { version: u.version, error: safeError(e) });
       set({ installing: false, open: false, toast: { kind: "error", text: String(e) } });
     }
   },

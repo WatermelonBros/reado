@@ -9,7 +9,8 @@ import { RecentProjects } from "./components/pages/RecentProjects";
 import { ProjectView } from "./components/pages/ProjectView";
 import { currentProjectPath, openInNewWindow } from "./lib/window";
 import { anywhereSetRecents } from "./lib/api";
-import { useRecents } from "./lib/store";
+import { useRecents, useSettings } from "./lib/store";
+import { applyLogConfig, log } from "./lib/logger";
 import {
   useApplyTheme,
   useApplyZoom,
@@ -38,6 +39,25 @@ export default function App() {
   useCrossWindowSync();
 
   const [projectPath, setProjectPath] = useState<string | null>(currentProjectPath);
+
+  // Apply the user's logging preference on boot and whenever it changes; the
+  // backend starts at a default level until this pushes the persisted choice.
+  useEffect(() => {
+    const apply = () => {
+      const s = useSettings.getState();
+      applyLogConfig(s.logEnabled, s.logLevel);
+    };
+    apply();
+    return useSettings.subscribe(apply);
+  }, []);
+
+  // Narrate project open/close so the log tells the story of a session.
+  useEffect(() => {
+    if (!projectPath) return;
+    const name = projectPath.split(/[\\/]/).pop();
+    log.info("project opened", { name });
+    return () => log.info("project closed", { name });
+  }, [projectPath]);
 
   // Support same-window navigation (used as a fallback when a dedicated
   // project window cannot be created).

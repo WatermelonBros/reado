@@ -216,6 +216,9 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("help:website", "Reado Website")
         .text("help:report", "Report an Issue")
         .separator()
+        .text("help:revealLog", "Reveal Log File")
+        .text("help:copyLogPath", "Copy Log Path")
+        .separator()
         .text("help:releases", "Release Notes")
         .text("checkUpdates", "Check for Updates…")
         .build()?;

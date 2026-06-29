@@ -91,12 +91,25 @@ pub fn pty_spawn(
         cmd.arg(arg);
     }
     if !cwd.is_empty() {
-        cmd.cwd(cwd);
+        cmd.cwd(&cwd);
     }
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
 
-    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let child = pair.slave.spawn_command(cmd).map_err(|e| {
+        crate::log::error(
+            "pty",
+            "spawn failed",
+            serde_json::json!({ "id": id.as_str(), "error": e.to_string() }),
+        );
+        e.to_string()
+    })?;
+    let pid = child.process_id();
+    crate::log::info(
+        "pty",
+        "spawned",
+        serde_json::json!({ "id": id.as_str(), "cwd": cwd, "window": window.label(), "pid": pid }),
+    );
     // The parent does not need the slave end once the child holds it.
     drop(pair.slave);
 
@@ -106,11 +119,13 @@ pub fn pty_spawn(
     // Stream output until EOF, then signal exit.
     let output_event = format!("pty-output-{id}");
     let exit_event = format!("pty-exit-{id}");
+    let exit_id = id.clone();
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
         loop {
             match reader.read(&mut buf) {
                 Ok(0) | Err(_) => {
+                    crate::log::info("pty", "child exited", serde_json::json!({ "id": exit_id }));
                     let _ = app.emit(&exit_event, ());
                     break;
                 }
@@ -188,6 +203,7 @@ fn terminate(session: &mut Session) {
 #[tauri::command]
 pub fn pty_kill(state: State<PtyState>, id: String) -> Result<(), String> {
     if let Some(mut session) = state.0.lock().unwrap().remove(&id) {
+        crate::log::info("pty", "killed", serde_json::json!({ "id": id }));
         terminate(&mut session);
     }
     Ok(())
