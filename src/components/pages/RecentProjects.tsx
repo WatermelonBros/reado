@@ -43,6 +43,24 @@ export function RecentProjects() {
           </span>
         </button>
 
+        {/* How it works — quiet, three-step teaching so a first-run user (no
+            recents yet) understands what Reado is for before opening anything. */}
+        <section>
+          <h2 className="mb-3 text-xs tracking-[0.06em] text-faint uppercase">
+            {t("welcome.how")}
+          </h2>
+          <ol className="m-0 flex list-none flex-col gap-2.5 p-0">
+            {[t("welcome.step1"), t("welcome.step2"), t("welcome.step3")].map((step, i) => (
+              <li key={i} className="flex items-baseline gap-3 text-sm text-muted">
+                <span className="grid h-5 w-5 flex-none translate-y-0.5 place-items-center rounded-full border border-line text-[11px] text-faint">
+                  {i + 1}
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
         <section>
           <h2 className="mb-2 text-xs tracking-[0.06em] text-faint uppercase">
             {t("recents.title")}

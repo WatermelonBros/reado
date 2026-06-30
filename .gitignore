@@ -42,3 +42,5 @@ icon-options/
 
 # go-task fingerprint cache
 .task/
+coverage/
+lcov.info

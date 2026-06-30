@@ -333,7 +333,10 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
         .catch(() => {});
     });
     return () => {
-      un.then((off) => off());
+      // Swallow a rejecting unlisten (Tauri's listener map can already be gone
+      // on a fast file switch / StrictMode double-effect) so it never escapes as
+      // an unhandled rejection.
+      void un.then((off) => off()).catch(() => {});
     };
   }, [root, active, forceText]);
 

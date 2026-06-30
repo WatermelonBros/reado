@@ -9,6 +9,7 @@ import { RecentProjects } from "./components/pages/RecentProjects";
 import { ProjectView } from "./components/pages/ProjectView";
 import { currentProjectPath, openInNewWindow } from "./lib/window";
 import { anywhereSetRecents } from "./lib/api";
+import { runStartupChecks } from "./lib/startup";
 import { useRecents, useSettings } from "./lib/store";
 import { applyLogConfig, log } from "./lib/logger";
 import {
@@ -29,6 +30,8 @@ import { QaModal } from "./components/organisms/QaModal";
 import { SemanticModal } from "./components/organisms/SemanticModal";
 import { TitleBar } from "./components/organisms/TitleBar";
 import { Settings } from "./components/organisms/Settings";
+import { Palette } from "./components/organisms/Palette";
+import { OnboardingTour } from "./components/organisms/OnboardingTour";
 import { AnywhereDialog } from "./components/organisms/AnywhereDialog";
 
 export default function App() {
@@ -37,6 +40,9 @@ export default function App() {
   useGlobalShortcuts();
   useAutoUpdateCheck();
   useCrossWindowSync();
+
+  // Self-heal on launch (e.g. install the `reado` CLI onto PATH if missing).
+  useEffect(() => runStartupChecks(), []);
 
   const [projectPath, setProjectPath] = useState<string | null>(currentProjectPath);
 
@@ -70,7 +76,7 @@ export default function App() {
   // Route native-menu clicks to in-app commands.
   useEffect(() => {
     const off = listenForMenu();
-    return () => void off.then((fn) => fn());
+    return () => void off.then((fn) => fn()).catch(() => {});
   }, []);
 
   // Take focus on startup. After an auto-update the app relaunches; the fresh
@@ -94,7 +100,7 @@ export default function App() {
     const off = listen<string>("anywhere://open-project", (e) => openInNewWindow(e.payload));
     return () => {
       unsub();
-      void off.then((fn) => fn());
+      void off.then((fn) => fn()).catch(() => {});
     };
   }, []);
 
@@ -121,6 +127,14 @@ export default function App() {
           {projectPath ? <ProjectView key={projectPath} root={projectPath} /> : <RecentProjects />}
         </div>
       </div>
+      {/* The command palette / file finder is a viewport-anchored overlay, so it
+          lives OUTSIDE the zoom layer (like Settings) — otherwise it scaled with
+          the content and overflowed off-screen at zoom > 1. */}
+      <Palette />
+      {/* The tour spotlights elements inside the zoom layer but must render its
+          own backdrop/positioner OUTSIDE it (a transform ancestor breaks fixed
+          positioning), so it lives at the root like Palette/Settings. */}
+      <OnboardingTour />
       <UpdatePrompt />
       <EditMenu />
       {/* Settings and Reado Anywhere live at the app root so they open from the

@@ -58,6 +58,31 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     overflow: hidden;
+    /* Ark UI's Tour positions its overlay against the body — it requires a
+       positioned body, otherwise dialog steps land in the corner. */
+    position: relative;
+  }
+
+  /* Ark/zag Tour: zag sets inline top/left/transform only for tooltip steps
+     (anchored to a target). Dialog steps (`data-placement="center"`) get no
+     positioning, so we center them ourselves — otherwise the card falls to the
+     bottom-left of the document flow and its buttons land off-screen. */
+  [data-scope="tour"][data-part="positioner"] {
+    position: absolute;
+    z-index: 302;
+  }
+  [data-scope="tour"][data-part="positioner"][data-placement="center"] {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+  }
+  /* The tour card receives focus on open (good for keyboard/AT users), but the
+     global :focus-visible ring would draw a second accent outline around the
+     whole card — it already has its own border + shadow. Drop the ring on the
+     card; the action buttons keep theirs. */
+  [data-scope="tour"][data-part="content"]:focus-visible {
+    outline: none;
   }
 
   :focus-visible {

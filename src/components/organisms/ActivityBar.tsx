@@ -151,6 +151,7 @@ export function ActivityBar() {
             <button
               key={id}
               type="button"
+              data-tour={id}
               onClick={() => selectTool(id)}
               title={t(labelKey)}
               aria-label={t(labelKey)}
@@ -191,6 +192,7 @@ export function ActivityBar() {
         </button>
         <button
           type="button"
+          data-tour="settings"
           onClick={() => toggleSettings(true)}
           title={t("settings.title")}
           aria-label={t("settings.title")}

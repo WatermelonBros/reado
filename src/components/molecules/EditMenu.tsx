@@ -6,6 +6,7 @@
  * else, the default menu is simply suppressed.
  */
 import { useEffect, useState } from "react";
+import { readText as clipboardReadText, writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
 import { useTranslation } from "react-i18next";
 
@@ -53,21 +54,21 @@ export function EditMenu() {
       onSelect: () =>
         run(async () => {
           const start = el.selectionStart ?? 0;
-          await navigator.clipboard.writeText(selection());
+          await clipboardWriteText(selection());
           setFieldValue(el, el.value.slice(0, start) + el.value.slice(el.selectionEnd ?? 0), start);
         }),
     },
     {
       label: t("edit.copy"),
       disabled: !hasSelection,
-      onSelect: () => run(() => navigator.clipboard.writeText(selection())),
+      onSelect: () => run(() => clipboardWriteText(selection())),
     },
     {
       label: t("edit.paste"),
       onSelect: () =>
         run(async () => {
           try {
-            const text = await navigator.clipboard.readText();
+            const text = await clipboardReadText();
             if (!text) return;
             const start = el.selectionStart ?? 0;
             const end = el.selectionEnd ?? 0;

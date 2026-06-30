@@ -78,7 +78,7 @@ export const useSettings = create<SettingsState>()(
       darkTheme: "reado-dark",
       mode: "system",
       codeFont: "",
-      readingWidth: false,
+      readingWidth: true,
       focusMode: false,
       wrap: false,
       stickyScroll: true,

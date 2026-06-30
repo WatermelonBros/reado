@@ -4,20 +4,25 @@
  */
 import type { MessageKey } from "../i18n";
 
-/** Platform modifier glyph (⌘ on macOS, Ctrl elsewhere). `navigator.platform`
- * is deprecated, so sniff the user agent instead. */
-export const mod = /mac|iphone|ipad/i.test(navigator.userAgent) ? "⌘" : "Ctrl";
+// Platform modifier glyphs. `navigator.platform` is deprecated, so sniff the
+// user agent. On non-macOS the Apple symbols (⌘ ⌥ ⌃) become plain key names so
+// Windows/Linux users see keys that exist on their keyboard.
+const isMacUA = /mac|iphone|ipad/i.test(navigator.userAgent);
+export const mod = isMacUA ? "⌘" : "Ctrl";
+export const alt = isMacUA ? "⌥" : "Alt";
+export const ctrl = isMacUA ? "⌃" : "Ctrl";
+export const shift = isMacUA ? "⇧" : "Shift";
 
 export interface Shortcut {
   labelKey: MessageKey;
-  /** Display combo, e.g. "⌘P" or "⌘⇧M". */
+  /** Display combo, e.g. "⌘P" or "CtrlP". */
   combo: string;
 }
 
 export const SHORTCUTS: Shortcut[] = [
-  { labelKey: "comment.new", combo: `${mod}⇧M` },
+  { labelKey: "comment.new", combo: `${mod}${shift}M` },
   { labelKey: "finder.placeholder", combo: `${mod}P` },
-  { labelKey: "search.placeholder", combo: `${mod}⇧F` },
+  { labelKey: "search.placeholder", combo: `${mod}${shift}F` },
   { labelKey: "palette.placeholder", combo: `${mod}K` },
   { labelKey: "terminal.toggle", combo: `${mod}J` },
   { labelKey: "settings.title", combo: `${mod},` },
@@ -36,30 +41,30 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { label: "Go to File", combo: `${mod}P` },
       { label: "Command Palette", combo: `${mod}K` },
-      { label: "Search in Project", combo: `${mod}⇧F` },
-      { label: "Go to Symbol in File", combo: `${mod}⇧O` },
+      { label: "Search in Project", combo: `${mod}${shift}F` },
+      { label: "Go to Symbol in File", combo: `${mod}${shift}O` },
       { label: "Go to Symbol in Project", combo: `${mod}T` },
       { label: "Go to Definition", combo: "F12" },
-      { label: "Find References", combo: "⇧F12" },
-      { label: "Peek Definition", combo: "⌥F12" },
+      { label: "Find References", combo: `${shift}F12` },
+      { label: "Peek Definition", combo: `${alt}F12` },
       { label: "Go to Line", combo: `${mod}G` },
-      { label: "Back / Forward", combo: "⌥← / ⌥→" },
-      { label: "Switch Tabs", combo: "⌃Tab / ⌃⇧Tab" },
-      { label: "Reopen Closed Tab", combo: `${mod}⇧T` },
+      { label: "Back / Forward", combo: `${alt}← / ${alt}→` },
+      { label: "Switch Tabs", combo: `${ctrl}Tab / ${ctrl}${shift}Tab` },
+      { label: "Reopen Closed Tab", combo: `${mod}${shift}T` },
     ],
   },
   {
     titleKey: "sc.editing",
     items: [
-      { label: "Comment on Selection", combo: `${mod}⇧M` },
+      { label: "Comment on Selection", combo: `${mod}${shift}M` },
       { label: "Toggle Line Comment", combo: `${mod}/` },
       { label: "Find / Replace", combo: `${mod}F` },
       { label: "Add Selection to Next Match", combo: `${mod}D` },
-      { label: "Expand / Shrink Selection", combo: "⇧⌥→ / ⇧⌥←" },
-      { label: "Move Line Up / Down", combo: "⌥↑ / ⌥↓" },
-      { label: "Copy Line Up / Down", combo: "⇧⌥↑ / ⇧⌥↓" },
-      { label: "Delete Line", combo: `⇧${mod}K` },
-      { label: "Format Document", combo: "⇧⌥F" },
+      { label: "Expand / Shrink Selection", combo: `${shift}${alt}→ / ${shift}${alt}←` },
+      { label: "Move Line Up / Down", combo: `${alt}↑ / ${alt}↓` },
+      { label: "Copy Line Up / Down", combo: `${shift}${alt}↑ / ${shift}${alt}↓` },
+      { label: "Delete Line", combo: `${shift}${mod}K` },
+      { label: "Format Document", combo: `${shift}${alt}F` },
       { label: "Save", combo: `${mod}S` },
     ],
   },

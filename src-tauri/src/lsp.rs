@@ -7,45 +7,12 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::Path;
 use std::process::{Child, ChildStdin, Stdio};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 use tauri::{AppHandle, Emitter, State};
 
-/// The user's real PATH, from their login+interactive shell — the same env the
-/// integrated terminal gets. A GUI app launched from the Finder inherits a
-/// minimal PATH that misses nvm/cargo/go/brew dirs, so we resolve it once here
-/// and use it for both spawning servers and detecting whether they're installed.
-fn login_shell_path() -> &'static str {
-    static PATH: OnceLock<String> = OnceLock::new();
-    PATH.get_or_init(|| {
-        #[cfg(not(windows))]
-        {
-            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-            if let Ok(out) = crate::proc::command(&shell)
-                .args(["-ilc", "echo $PATH"])
-                .output()
-            {
-                if out.status.success() {
-                    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                    if !p.is_empty() {
-                        return p;
-                    }
-                }
-            }
-        }
-        std::env::var("PATH").unwrap_or_default()
-    })
-}
-
-/// Whether `bin` resolves to a file in any directory of the resolved PATH.
-fn on_path(bin: &str) -> bool {
-    let sep = if cfg!(windows) { ';' } else { ':' };
-    login_shell_path()
-        .split(sep)
-        .any(|dir| !dir.is_empty() && Path::new(dir).join(bin).is_file())
-}
+use crate::proc::on_path;
 
 /// Whether a known language server's binary is installed (on the resolved PATH).
 #[tauri::command]
@@ -153,10 +120,11 @@ pub fn lsp_start(
             args.push(cwd.clone());
         }
     }
+    // crate::proc::command already runs with the login-shell PATH, so nvm/cargo/
+    // brew-installed servers resolve here.
     let mut child = crate::proc::command(command)
         .args(&args)
         .current_dir(&cwd)
-        .env("PATH", login_shell_path()) // find servers in nvm/cargo/brew dirs
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

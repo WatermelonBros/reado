@@ -19,6 +19,7 @@ import { useTerminals } from "../../lib/terminals";
 
 import { GitBranchIcon, MessageIcon, TerminalIcon, DeviceIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
+import { mod } from "../../lib/shortcuts";
 
 /** Path relative to the project root, with forward slashes. */
 function relativePath(root: string, path: string | null): string | null {
@@ -359,8 +360,9 @@ export function StatusBar() {
         </button>
         <button
           type="button"
+          data-tour="terminal"
           onClick={() => toggleTerminal()}
-          title={`${t("terminal.toggle")} (⌘J)`}
+          title={`${t("terminal.toggle")} (${mod}J)`}
           aria-label={t("terminal.toggle")}
           className="inline-flex items-center gap-[5px] rounded-sm px-1 text-faint transition-colors hover:text-ink"
         >

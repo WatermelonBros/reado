@@ -35,6 +35,10 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // Native clipboard read/write so the terminal's paste doesn't go through
+        // the webview Clipboard API — on Windows that pops a WebView2 permission
+        // prompt naming the origin ("tauri.localhost"), not the app.
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             // Bring up the logging engine before anything else so the rest of
             // setup is captured. Resolve a *per-user private* log dir: the OS

@@ -28,7 +28,7 @@ import {
 } from "../../lib/store";
 import { openProject } from "../../lib/window";
 import { useTerminals } from "../../lib/terminals";
-import { mod } from "../../lib/shortcuts";
+import { mod, alt, shift } from "../../lib/shortcuts";
 import { checkForUpdates } from "../../lib/updater";
 import {
   formatDocument,
@@ -536,7 +536,7 @@ function commandRows(
         close();
       },
     },
-    { label: t("editor.format"), hint: "⇧⌥F", run: () => void formatDocument() },
+    { label: t("editor.format"), hint: `${shift}${alt}F`, run: () => void formatDocument() },
     { label: t("terminal.clear"), run: clearTerminal },
     { label: t("terminal.restart"), run: restartTerminal },
     { label: t("symbols.goto"), hint: `${mod}⇧O`, run: () => open("symbols") },
@@ -590,8 +590,8 @@ function commandRows(
       label: `${t("tree.showHidden")}: ${project.showHidden ? "on" : "off"}`,
       run: () => project.setShowHidden(!project.showHidden),
     },
-    { label: t("nav.back"), hint: "⌥←", run: () => useProject.getState().goBack() },
-    { label: t("nav.forward"), hint: "⌥→", run: () => useProject.getState().goForward() },
+    { label: t("nav.back"), hint: `${alt}←`, run: () => useProject.getState().goBack() },
+    { label: t("nav.forward"), hint: `${alt}→`, run: () => useProject.getState().goForward() },
     {
       label: t("tabs.reopen"),
       hint: `${mod}⇧T`,

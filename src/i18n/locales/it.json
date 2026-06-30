@@ -1,4 +1,25 @@
 {
+  "tour": {
+    "welcomeTitle": "Benvenuto in Reado",
+    "welcomeBody": "Un IDE read-first: leggi il codice con calma, annotalo, e lascia le modifiche a un agente. Ecco il flusso — circa 30 secondi.",
+    "readTitle": "Leggi il codice",
+    "readBody": "Apri i file dall'albero e muoviti nel codice. Segna i file come letti per tenere il segno nelle sessioni lunghe.",
+    "commentTitle": "Commenta e crea task",
+    "commentBody": "Seleziona delle righe e premi {key} per lasciare una nota o un task. I commenti sono un overlay: non modificano mai il codice.",
+    "tasksTitle": "Dove vivono i tuoi task",
+    "tasksBody": "Ogni nota e task si raccoglie qui, con il suo stato: aperto, in corso, fatto.",
+    "reviewTitle": "Avvia una revisione guidata",
+    "reviewBody": "Scegli scope e obiettivo; l'agente pianifica un percorso tra le modifiche, da revisionare file per file.",
+    "resolveTitle": "Fai risolvere all'agente",
+    "resolveBody": "Lancia un agente nel terminale: legge i tuoi task aperti e li risolve via CLI reado. Tu revisioni, l'agente committa.",
+    "customizeTitle": "Personalizza",
+    "customizeBody": "Tema, font del codice e larghezza di lettura — tutto nei Settings, quando vuoi.",
+    "next": "Avanti",
+    "back": "Indietro",
+    "done": "Fatto",
+    "skip": "Salta",
+    "replay": "Rivedi il tour introduttivo"
+  },
   "app": {
     "tagline": "Un posto tranquillo per leggere il codice."
   },
@@ -157,7 +178,9 @@
       "title": "Revisione guidata in coppia",
       "body": "L'agente propone un percorso, revisiona file per file e bozza i commenti; tu decidi. Scegli un focus e inizia — niente è definitivo finché non approvi."
     },
-    "objective": { "label": "Obiettivo" },
+    "objective": {
+      "label": "Obiettivo"
+    },
     "obj": {
       "bug_risk": "Rischio bug",
       "design": "Design e API",
@@ -240,7 +263,9 @@
     "cancel": "Annulla",
     "dismiss": "Chiudi",
     "hint": "L'agente si è fermato — controlla il terminale e rispondigli.",
-    "cmd": { "start": "Risolvi i task aperti" }
+    "cmd": {
+      "start": "Risolvi i task aperti"
+    }
   },
   "forge": {
     "noAdapter": "Il round-trip con l'host non è ancora disponibile per {provider} — revisiona in locale.",
@@ -403,6 +428,7 @@
     "codeFont": "Font del codice",
     "completionSound": "Riproduci un suono quando l'agente finisce",
     "notifications": "Notifiche",
+    "reading": "Lettura",
     "cli": "Strumento da riga di comando",
     "cliInstall": "Installa 'reado' nel PATH",
     "cliReinstall": "Reinstalla 'reado'",
@@ -570,7 +596,7 @@
   },
   "window": {
     "openFolderTitle": "Apri cartella",
-    "openWhere": "Aprire questa cartella in una nuova finestra?",
+    "openWhere": "Aprire questa cartella in questa finestra o in una nuova?",
     "newWindow": "Nuova finestra",
     "thisWindow": "Questa finestra",
     "minimize": "Riduci a icona",

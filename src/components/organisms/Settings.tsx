@@ -13,6 +13,7 @@ import { useLocale, type Locale, type MessageKey } from "../../i18n";
 import { installCli, cliInstalled } from "../../lib/api";
 import { checkForUpdates } from "../../lib/updater";
 import { logPath } from "../../lib/logger";
+import { useTourGuide } from "../../lib/tour";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Select } from "../atoms/Select";
 import { Drawer } from "../atoms/Drawer";
@@ -133,6 +134,25 @@ export function Settings() {
                 { value: "onFocusChange", label: t("settings.autoSaveOnFocusChange") },
               ]}
             />
+          </Field>
+
+          <Field label={t("settings.reading")}>
+            <Checkbox
+              checked={settings.readingWidth}
+              onChange={(v) => settings.set({ readingWidth: v })}
+              label={t("editor.measure")}
+              className="text-sm text-muted"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                usePalette.getState().toggleSettings(false);
+                useTourGuide.getState().run();
+              }}
+              className="mt-2 self-start rounded-md border border-line px-2.5 py-1 text-xs text-muted transition-colors hover:border-line-strong hover:text-ink"
+            >
+              {t("tour.replay")}
+            </button>
           </Field>
 
           <Field label={t("settings.notifications")}>

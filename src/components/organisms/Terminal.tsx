@@ -14,6 +14,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { readText as clipboardReadText, writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { ptySpawn, ptyWrite, ptyResize, ptyKill, resolvePath } from "../../lib/api";
 import { useProject } from "../../lib/store";
@@ -146,7 +147,7 @@ export function Terminal({ id, cwd, active }: Props) {
           const sel = term.getSelection();
           if (sel) {
             e.preventDefault();
-            void navigator.clipboard.writeText(sel).catch(() => {});
+            void clipboardWriteText(sel).catch(() => {});
             return false;
           }
         }
@@ -154,7 +155,9 @@ export function Terminal({ id, cwd, active }: Props) {
         // bracketed-paste mode intact so TUIs receive it as a paste, not typing.
         if (key === "v" && (e.metaKey || (e.ctrlKey && e.shiftKey))) {
           e.preventDefault();
-          void navigator.clipboard.readText().then((t) => t && term.paste(t)).catch(() => {});
+          // Native clipboard read (not navigator.clipboard) so Windows WebView2
+          // doesn't prompt for clipboard permission on every paste.
+          void clipboardReadText().then((t) => t && term.paste(t)).catch(() => {});
           return false;
         }
         // Cmd+F (or Ctrl+Shift+F) opens search — Ctrl+F alone stays readline's.
@@ -182,7 +185,8 @@ export function Terminal({ id, cwd, active }: Props) {
 
     return () => {
       disposed = true;
-      unlisten.forEach((off) => off());
+      // A rejecting unlisten (listener map already torn down) must not escape.
+      unlisten.forEach((off) => void Promise.resolve(off()).catch(() => {}));
       ptyKill(id).catch(() => {});
       term.dispose();
       termRef.current = null;

@@ -56,7 +56,6 @@ import { Tabs } from "../organisms/Tabs";
 import { Breadcrumb } from "../molecules/Breadcrumb";
 import { Editor } from "../organisms/Editor";
 import { StatusBar } from "../molecules/StatusBar";
-import { Palette } from "../organisms/Palette";
 import { GitignorePrompt } from "../molecules/GitignorePrompt";
 import { KnowledgeGraph } from "../organisms/KnowledgeGraph";
 import { DocsView } from "../organisms/DocsView";
@@ -168,7 +167,10 @@ export function ProjectView({ root }: { root: string }) {
     ];
     return () => {
       anywhereClearProject(id).catch(() => {});
-      subs.forEach((p) => void p.then((un) => un()));
+      // The unlisten can reject (Tauri's listener map may already be torn down
+      // on a fast remount / StrictMode double-effect) — swallow it so it doesn't
+      // surface as an unhandled rejection.
+      subs.forEach((p) => void p.then((un) => un()).catch(() => {}));
     };
   }, [root]);
 
@@ -237,7 +239,7 @@ export function ProjectView({ root }: { root: string }) {
       }),
     ];
     return () => {
-      offs.forEach((p) => p.then((off) => off()));
+      offs.forEach((p) => void p.then((off) => off()).catch(() => {}));
     };
   }, [root]);
 
@@ -414,7 +416,6 @@ export function ProjectView({ root }: { root: string }) {
         </div>
         {terminalOpen && terminalPosition === "bottom" && <TerminalPanel />}
       </main>
-      <Palette />
       <GitignorePrompt />
       {graphOpen && <KnowledgeGraph />}
       {docsOpen && <DocsView />}

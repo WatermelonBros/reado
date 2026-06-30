@@ -34,21 +34,34 @@ fn bundled_cli() -> Result<PathBuf> {
     }
 }
 
-/// The user's `~/.local/bin` (created if missing).
-fn local_bin() -> Result<PathBuf> {
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .ok_or_else(|| Error::Other("no HOME directory".into()))?;
-    let bin = PathBuf::from(home).join(".local").join("bin");
-    std::fs::create_dir_all(&bin)?;
-    Ok(bin)
+/// The directory we install the CLI into — chosen because it's already on PATH,
+/// so the agent can run `reado` with no extra setup. On Windows that's
+/// `%LOCALAPPDATA%\Microsoft\WindowsApps` (a user-writable dir on the default
+/// PATH since Win10); elsewhere it's `~/.local/bin`. The old Windows target,
+/// `~/.local/bin`, is NOT on PATH there — hence "installed but not found".
+fn install_dir() -> Result<PathBuf> {
+    #[cfg(windows)]
+    let dir = {
+        let local = std::env::var_os("LOCALAPPDATA")
+            .ok_or_else(|| Error::Other("no LOCALAPPDATA directory".into()))?;
+        PathBuf::from(local).join("Microsoft").join("WindowsApps")
+    };
+    #[cfg(not(windows))]
+    let dir = {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .ok_or_else(|| Error::Other("no HOME directory".into()))?;
+        PathBuf::from(home).join(".local").join("bin")
+    };
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
 }
 
 /// Install (symlink on Unix, copy on Windows) the CLI and return its path.
 #[tauri::command]
 pub fn install_cli() -> Result<String> {
     let src = bundled_cli()?;
-    let dst = local_bin()?.join(CLI_NAME);
+    let dst = install_dir()?.join(CLI_NAME);
 
     #[cfg(unix)]
     {
@@ -69,10 +82,10 @@ pub fn install_cli() -> Result<String> {
     Ok(dst.to_string_lossy().into_owned())
 }
 
-/// Whether the CLI is already installed on the user's `~/.local/bin`.
+/// Whether the CLI is already installed in our PATH-visible install dir.
 #[tauri::command]
 pub fn cli_installed() -> bool {
-    local_bin()
+    install_dir()
         .map(|b| b.join(CLI_NAME).exists())
         .unwrap_or(false)
 }

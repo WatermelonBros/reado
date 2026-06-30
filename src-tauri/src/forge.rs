@@ -199,14 +199,13 @@ pub fn detect_forge(root: String) -> Forge {
 }
 
 /// Whether a CLI is on PATH (so we can offer to install the matching one).
+///
+/// Uses the shared login-shell PATH probe — not `which`/`where`, which run with
+/// the GUI's stripped PATH and miss brew/winget installs that the integrated
+/// terminal finds fine (the "gh is installed but Reado says it isn't" bug).
 #[tauri::command]
 pub fn forge_cli_present(cli: String) -> bool {
-    let probe = if cfg!(windows) { "where" } else { "which" };
-    command(probe)
-        .arg(&cli)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    crate::proc::on_path(&cli)
 }
 
 /// A pull/merge request, normalised across forges for the picker.

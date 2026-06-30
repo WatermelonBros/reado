@@ -113,7 +113,9 @@ export function FileTree() {
         .catch(() => {});
     });
     return () => {
-      un.then((f) => f());
+      // FileTree unmounts on every tool switch; swallow a rejecting unlisten so
+      // it doesn't surface as an unhandled rejection.
+      void un.then((f) => f()).catch(() => {});
     };
   }, [root]);
 

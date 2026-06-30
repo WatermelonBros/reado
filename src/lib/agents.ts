@@ -97,12 +97,11 @@ const AGENT_IDLE_MS = 1200;
 /** Hard cap so we send even if the agent never goes quiet (or produces nothing). */
 const AGENT_READY_CAP_MS = 15000;
 
-/** Resolve once a freshly-launched agent looks ready: its PTY produced output and
- *  then went quiet for AGENT_IDLE_MS (it's sitting at its input prompt). Far more
- *  reliable than a fixed boot delay — a cold Claude Code start can take many
- *  seconds, and a fixed timer would type the prompt into the boot screen and lose
- *  it. Falls back to the cap if the agent stays silent. */
-function waitForAgentReady(id: string): Promise<void> {
+/** Resolve once a terminal's PTY output has been quiet for `idleMs` (with a hard
+ *  `capMs` fallback if it never settles). The building block for "is the agent at
+ *  its prompt yet?" — both for boot readiness and for knowing a pasted prompt has
+ *  finished rendering before we press Enter. */
+function waitForQuiet(id: string, idleMs: number, capMs: number): Promise<void> {
   return new Promise((resolve) => {
     let quiet: ReturnType<typeof setTimeout> | null = null;
     let unlisten: (() => void) | null = null;
@@ -115,15 +114,34 @@ function waitForAgentReady(id: string): Promise<void> {
       unlisten?.();
       resolve();
     };
-    const cap = setTimeout(finish, AGENT_READY_CAP_MS);
+    const cap = setTimeout(finish, capMs);
     void listen<string>(`pty-output-${id}`, () => {
       if (quiet) clearTimeout(quiet);
-      quiet = setTimeout(finish, AGENT_IDLE_MS);
+      quiet = setTimeout(finish, idleMs);
     }).then((u) => {
       unlisten = u;
       if (done) u(); // resolved via the cap before the listener attached
     });
   });
+}
+
+/** Resolve once a freshly-launched agent looks ready: its PTY produced output and
+ *  then went quiet (it's sitting at its input prompt). Far more reliable than a
+ *  fixed boot delay — a cold Claude Code start can take many seconds. */
+function waitForAgentReady(id: string): Promise<void> {
+  return waitForQuiet(id, AGENT_IDLE_MS, AGENT_READY_CAP_MS);
+}
+
+/** Paste a prompt into an agent and submit it. The Enter must be a *separate*
+ *  write, and it must land only once the agent has finished ingesting the paste —
+ *  with a long prompt a fixed short delay drops the Enter mid-paste, so it's read
+ *  as a newline in the text and the prompt just sits there unsubmitted (the exact
+ *  "I have to press Enter myself" symptom). So: write, wait for output to settle,
+ *  then Enter. */
+async function pasteAndSubmit(id: string, prompt: string): Promise<void> {
+  await ptyWrite(id, prompt);
+  await waitForQuiet(id, 250, 4000);
+  await ptyWrite(id, "\r");
 }
 
 /** Send an AI prompt to the agent. If the active terminal already has an agent,
@@ -134,7 +152,7 @@ export async function dispatchToAgent(prompt: string): Promise<void> {
   const term = useTerminals.getState();
   const id = term.activeId ?? term.add();
   if (term.agentTerminals.includes(id)) {
-    submitToTerminal(id, prompt, id === useTerminals.getState().activeId ? 0 : 400);
+    await pasteAndSubmit(id, prompt);
     return;
   }
   const agent = (term.lastAgent as Agent | null) ?? DEFAULT_AGENT;
@@ -143,5 +161,5 @@ export async function dispatchToAgent(prompt: string): Promise<void> {
   useTerminals.getState().markAgent(id, agent);
   // Wait until the agent is booted and idle at its prompt, then send.
   await waitForAgentReady(id);
-  submitToTerminal(id, prompt, 0);
+  await pasteAndSubmit(id, prompt);
 }

@@ -1,4 +1,25 @@
 {
+  "tour": {
+    "welcomeTitle": "Welcome to Reado",
+    "welcomeBody": "A read-first code IDE: read the code calmly, annotate it, let an agent do the edits. Here's the loop — about 30 seconds.",
+    "readTitle": "Read the code",
+    "readBody": "Open files from the tree and move through the code. Mark files as read to keep your place across a long session.",
+    "commentTitle": "Comment & create tasks",
+    "commentBody": "Select lines and press {key} to leave a note or a task. Comments are an overlay — they never change your code.",
+    "tasksTitle": "Where your tasks live",
+    "tasksBody": "Every note and task collects here, with its state: open, in progress, done.",
+    "reviewTitle": "Start a guided review",
+    "reviewBody": "Pick a scope and an objective; the agent plans a route through the changes for you to review file by file.",
+    "resolveTitle": "Let the agent resolve them",
+    "resolveBody": "Launch an agent in the terminal: it reads your open tasks and resolves them via the reado CLI. You review, the agent commits.",
+    "customizeTitle": "Make it yours",
+    "customizeBody": "Theme, code font and reading width — all in Settings, anytime.",
+    "next": "Next",
+    "back": "Back",
+    "done": "Done",
+    "skip": "Skip",
+    "replay": "Replay the intro tour"
+  },
   "app": {
     "tagline": "A calm place to read code."
   },
@@ -157,7 +178,9 @@
       "title": "Guided Pair Review",
       "body": "The agent proposes a route, reviews file by file and drafts comments; you decide. Pick a focus and start — nothing is final until you approve it."
     },
-    "objective": { "label": "Objective" },
+    "objective": {
+      "label": "Objective"
+    },
     "obj": {
       "bug_risk": "Bug risk",
       "design": "Design & API",
@@ -240,7 +263,9 @@
     "cancel": "Cancel",
     "dismiss": "Dismiss",
     "hint": "The agent has gone quiet — check the terminal and answer it.",
-    "cmd": { "start": "Resolve open tasks" }
+    "cmd": {
+      "start": "Resolve open tasks"
+    }
   },
   "forge": {
     "noAdapter": "Host round-trip isn't available for {provider} yet — review locally.",
@@ -403,6 +428,7 @@
     "codeFont": "Code font",
     "completionSound": "Play a sound when the agent finishes",
     "notifications": "Notifications",
+    "reading": "Reading",
     "cli": "Command-line tool",
     "cliInstall": "Install 'reado' on PATH",
     "cliReinstall": "Reinstall 'reado'",
@@ -570,7 +596,7 @@
   },
   "window": {
     "openFolderTitle": "Open Folder",
-    "openWhere": "Open this folder in a new window?",
+    "openWhere": "Open this folder in this window, or a new one?",
     "newWindow": "New window",
     "thisWindow": "This window",
     "minimize": "Minimize",

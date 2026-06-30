@@ -38,19 +38,27 @@ export function openInNewWindow(projectPath?: string): void {
   });
 }
 
-/** Pick a folder, then ask whether to open it here or in a new window. */
+/** Pick a folder, then open it. If this window is empty (the launcher), reuse it
+ *  silently. If a project is already open here, ask — defaulting to THIS window. */
 export async function pickFolderAndOpen(): Promise<void> {
   const selected = await openDialog({ directory: true, multiple: false });
   const path = Array.isArray(selected) ? selected[0] : selected;
   if (!path) return;
-  const newWindow = await ask(t("window.openWhere"), {
-    title: t("window.openFolderTitle"),
-    okLabel: t("window.newWindow"),
-    cancelLabel: t("window.thisWindow"),
-  });
   useRecents.getState().touch(path);
-  if (newWindow) openInNewWindow(path);
-  else await openProject(path);
+  // Nothing open in this window yet → just open here, no prompt.
+  if (!currentProjectPath()) {
+    await openProject(path);
+    return;
+  }
+  // A project is already open: ask, with "This window" as the default action
+  // (the ok/confirm button). Cancel opens a new window instead.
+  const here = await ask(t("window.openWhere"), {
+    title: t("window.openFolderTitle"),
+    okLabel: t("window.thisWindow"),
+    cancelLabel: t("window.newWindow"),
+  });
+  if (here) await openProject(path);
+  else openInNewWindow(path);
 }
 
 /** Pick a single file (defaulting into the open project) and open it. Reads are

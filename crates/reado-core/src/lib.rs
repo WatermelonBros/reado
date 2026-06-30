@@ -747,6 +747,12 @@ pub fn add_reado_gitignore(root: &str, versioned: bool) -> Result<()> {
 // ---- Anchoring -----------------------------------------------------------
 
 const FUZZY_THRESHOLD: f32 = 0.6;
+// Snippet-alone matching (step 3) has no surrounding context to corroborate it,
+// so it demands a higher bar than the context-guarded path. Otherwise two short,
+// boilerplate-heavy lines (`export function …`, `return …`) from *different*
+// functions clear 0.6 and a comment silently relocates onto a sibling instead of
+// orphaning.
+const FUZZY_SNIPPET_ONLY_THRESHOLD: f32 = 0.8;
 const CONTEXT_LINES: usize = 3;
 
 /// Capture an adaptive context snapshot for the 1-based inclusive range.
@@ -858,9 +864,11 @@ pub fn relocate(old_start: u32, context: &Context, new_content: &str) -> Option<
         }
     }
 
-    // 3. Fuzzy snippet alone.
+    // 3. Fuzzy snippet alone — stricter bar, no context to lean on.
     match best_fuzzy(&lines, &snip) {
-        Some((i, score)) if score >= FUZZY_THRESHOLD => Some(((i + 1) as u32, (i + len) as u32)),
+        Some((i, score)) if score >= FUZZY_SNIPPET_ONLY_THRESHOLD => {
+            Some(((i + 1) as u32, (i + len) as u32))
+        }
         _ => None,
     }
 }
@@ -1023,6 +1031,16 @@ mod tests {
     fn relocate_orphans_when_gone() {
         let snippet = "this exact code\nno longer exists anywhere";
         let new = "completely\ndifferent\ncontent\n";
+        assert_eq!(relocate(1, &ctx(snippet), new), None);
+    }
+
+    #[test]
+    fn relocate_orphans_rather_than_jumping_to_a_boilerplate_sibling() {
+        // The commented function is deleted; only a structurally similar sibling
+        // remains. Shared boilerplate ("export function …", "return …") must not
+        // be enough to drag the comment onto the wrong function — orphan instead.
+        let snippet = "export function greet(name) {\n  return `Hi, ${name}!`;";
+        let new = "// header line A\n\nexport function add(a, b) {\n  return a + b;\n}\n";
         assert_eq!(relocate(1, &ctx(snippet), new), None);
     }
 

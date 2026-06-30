@@ -41,7 +41,7 @@ function WindowControls() {
   useEffect(() => {
     win.isMaximized().then(setMaximized).catch(() => {});
     const un = win.onResized(() => win.isMaximized().then(setMaximized).catch(() => {}));
-    return () => void un.then((f) => f());
+    return () => void un.then((f) => f()).catch(() => {});
   }, [win]);
 
   const btn =

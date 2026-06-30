@@ -8,6 +8,7 @@
  * a personal project's annotations.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useComments } from "../../lib/comments";
 import { useProject, useWorkspace } from "../../lib/store";
 import { useSpecs } from "../../lib/specs";
@@ -52,7 +53,9 @@ export function KnowledgeGraph() {
   const close = useWorkspace((s) => s.toggleGraph);
   const { t } = useTranslation();
 
-  const size = { w: 900, h: 620 };
+  // A larger canvas (matched by the wider modal) gives the layout room to spread
+  // so nodes and labels don't pile up — the main cause of an unreadable graph.
+  const size = { w: 1280, h: 760 };
   const [docs, setDocs] = useState<DocItem[]>([]);
 
   // Close on Escape.
@@ -75,8 +78,8 @@ export function KnowledgeGraph() {
     const edges: Edge[] = [];
     const fileIds = new Set<string>();
     const seed = (i: number, n: number) => ({
-      x: size.w / 2 + Math.cos((i / Math.max(n, 1)) * Math.PI * 2) * 180 + (Math.random() - 0.5) * 40,
-      y: size.h / 2 + Math.sin((i / Math.max(n, 1)) * Math.PI * 2) * 180 + (Math.random() - 0.5) * 40,
+      x: size.w / 2 + Math.cos((i / Math.max(n, 1)) * Math.PI * 2) * 260 + (Math.random() - 0.5) * 60,
+      y: size.h / 2 + Math.sin((i / Math.max(n, 1)) * Math.PI * 2) * 260 + (Math.random() - 0.5) * 60,
     });
 
     comments.forEach((c, i) => {
@@ -199,7 +202,7 @@ export function KnowledgeGraph() {
           let dx = a.x - b.x;
           let dy = a.y - b.y;
           let d2 = dx * dx + dy * dy || 1;
-          const f = 2600 / d2;
+          const f = 5200 / d2;
           const d = Math.sqrt(d2);
           dx /= d;
           dy /= d;
@@ -216,7 +219,7 @@ export function KnowledgeGraph() {
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const d = Math.sqrt(dx * dx + dy * dy) || 1;
-        const f = (d - 90) * 0.012;
+        const f = (d - 130) * 0.012;
         a.vx += (dx / d) * f;
         a.vy += (dy / d) * f;
         b.vx -= (dx / d) * f;
@@ -284,14 +287,14 @@ export function KnowledgeGraph() {
 
   const byId = (id: string) => nodesRef.current.find((n) => n.id === id);
 
-  return (
+  return createPortal(
     <div
       onClick={() => close(false)}
       className="animate-fade fixed inset-0 z-[115] grid place-items-center reado-scrim"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative flex h-[88vh] w-[92vw] max-w-[1100px] flex-col overflow-hidden rounded-lg border border-line-strong bg-canvas shadow-[var(--shadow)]"
+        className="relative flex h-[70vh] max-h-[600px] w-[94vw] max-w-[1320px] flex-col overflow-hidden rounded-lg border border-line-strong bg-canvas shadow-[var(--shadow)]"
       >
         <header className="flex flex-none items-center justify-between border-b border-line px-4 py-2.5">
           <h2 className="m-0 text-sm font-semibold tracking-wide uppercase">
@@ -345,7 +348,10 @@ export function KnowledgeGraph() {
             {nodes.map((n) => {
               const isHub = n.kind === "change";
               const isAnchor = n.kind === "file" || isHub;
-              const showLabel = isAnchor || hoverId === n.id;
+              // Label every knowledge node (files, docs, specs, hubs) so the graph
+              // is readable at a glance; comments are many and verbose, so they
+              // reveal their text on hover.
+              const showLabel = n.kind !== "comment" || hoverId === n.id;
               return (
                 <g
                   key={n.id}
@@ -364,17 +370,22 @@ export function KnowledgeGraph() {
                   onClick={() => !dragMoved.current && navigate(n)}
                 >
                   <circle
-                    r={isAnchor ? 9 : 6}
+                    r={isAnchor ? 11 : 7.5}
                     fill={isAnchor ? "var(--bg-elevated)" : n.color}
                     stroke={n.color}
-                    strokeWidth={isAnchor ? 2 : 1}
+                    strokeWidth={isAnchor ? 2.5 : 1.5}
                   />
                   {showLabel && (
                     <text
-                      x={isAnchor ? 13 : 10}
+                      x={isAnchor ? 15 : 12}
                       y={4}
-                      fontSize={isAnchor ? 12 : 11}
+                      fontSize={isAnchor ? 13 : 12}
                       fill="var(--text)"
+                      // A halo (stroke painted under the fill) keeps the label
+                      // readable where it crosses edges or other nodes.
+                      stroke="var(--bg)"
+                      strokeWidth={3}
+                      paintOrder="stroke"
                       style={{ fontFamily: "var(--font-ui)", pointerEvents: "none" }}
                     >
                       {n.label}
@@ -410,6 +421,7 @@ export function KnowledgeGraph() {
           </footer>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -246,7 +246,54 @@ fn run_git_raw(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Run a mutating git command, surfacing stderr on failure so the UI can show it.
+/// Distil git's failure output into the message that actually explains it.
+///
+/// `git pull` dumps the whole fetch ("From …", "<sha>..<sha> … -> origin/…",
+/// "[new branch] …") to stderr even on success, so on failure that noise buries
+/// the real reason — and a merge conflict reports on *stdout*, not stderr. We
+/// merge both streams, drop the fetch chatter, and prefer the lines that name
+/// the problem; only if none match do we fall back to everything that's left.
+fn git_error_message(stdout: &str, stderr: &str) -> String {
+    let is_fetch_noise = |l: &str| {
+        l.starts_with("From ")
+            || l.starts_with("remote:")
+            || l.contains(" -> ")
+            || l.contains("[new branch]")
+            || l.contains("[new tag]")
+            || l.contains("(use 'git remote prune'")
+    };
+    let is_real_error = |l: &str| {
+        const KEYS: [&str; 10] = [
+            "fatal:",
+            "error:",
+            "hint:",
+            "CONFLICT",
+            "Automatic merge failed",
+            "Aborting",
+            "Please ",
+            "Not possible",
+            "rejected",
+            "overwritten",
+        ];
+        KEYS.iter().any(|k| l.contains(k))
+    };
+    let lines: Vec<&str> = stderr
+        .lines()
+        .chain(stdout.lines())
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !is_fetch_noise(l))
+        .collect();
+    let errs: Vec<&str> = lines.iter().copied().filter(|l| is_real_error(l)).collect();
+    let chosen = if errs.is_empty() { &lines } else { &errs };
+    let msg = chosen.join("\n");
+    if msg.trim().is_empty() {
+        "git command failed".to_string()
+    } else {
+        msg
+    }
+}
+
+/// Run a mutating git command, surfacing the failure reason so the UI can show it.
 fn run_git_checked(root: &str, args: &[&str]) -> Result<(), String> {
     let output = command("git")
         .arg("-C")
@@ -266,13 +313,15 @@ fn run_git_checked(root: &str, args: &[&str]) -> Result<(), String> {
         );
         Ok(())
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let message = git_error_message(&stdout, &stderr);
         crate::log::error(
             "git",
             "git command failed",
-            serde_json::json!({ "root": root, "op": op, "stderr": stderr }),
+            serde_json::json!({ "root": root, "op": op, "stderr": stderr.trim() }),
         );
-        Err(stderr)
+        Err(message)
     }
 }
 
@@ -533,6 +582,34 @@ pub fn git_blame(cache: State<BlameCache>, root: String, file: String) -> Vec<Bl
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pull_error_drops_fetch_noise_and_keeps_reason() {
+        // git pull: fetch chatter on stderr, the real reason buried among it.
+        let stderr = "From github.com:acme/app\n   abb1a29..f378cec dev -> origin/dev\n * [new branch]      feature-x -> origin/feature-x\nhint: You have divergent branches and need to specify how to reconcile them.\nfatal: Need to specify how to reconcile divergent branches.";
+        let msg = git_error_message("", stderr);
+        assert!(msg.contains("divergent branches"), "got: {msg}");
+        assert!(!msg.contains("[new branch]"), "fetch noise leaked: {msg}");
+        assert!(!msg.contains("-> origin/"), "fetch noise leaked: {msg}");
+    }
+
+    #[test]
+    fn merge_conflict_reason_comes_from_stdout() {
+        // Conflicts report on stdout; stderr is just fetch noise here.
+        let stdout = "Auto-merging src/a.rs\nCONFLICT (content): Merge conflict in src/a.rs\nAutomatic merge failed; fix conflicts and then commit the result.";
+        let stderr = "From github.com:acme/app\n   1111..2222 dev -> origin/dev";
+        let msg = git_error_message(stdout, stderr);
+        assert!(msg.contains("CONFLICT"), "got: {msg}");
+        assert!(msg.contains("Automatic merge failed"), "got: {msg}");
+        assert!(!msg.contains("From github"), "fetch noise leaked: {msg}");
+    }
+
+    #[test]
+    fn falls_back_to_remaining_output_when_no_keyword() {
+        let msg = git_error_message("", "something unexpected happened");
+        assert_eq!(msg, "something unexpected happened");
+        assert_eq!(git_error_message("", "   \n  "), "git command failed");
+    }
 
     #[test]
     fn categorizes_status_chars() {

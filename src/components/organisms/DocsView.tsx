@@ -8,8 +8,10 @@
  * filterable by name. Read-only; it just points the editor at the source.
  */
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { readFile, searchText, listFiles, type Comment, type CommentType } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useProject, useWorkspace } from "../../lib/store";
@@ -71,7 +73,10 @@ export function DocsView() {
     }
     let cancelled = false;
     setContent(null);
-    readFile(root, selection.path)
+    // read_file resolves `path` as given (it doesn't join `root`), so the KB's
+    // project-relative doc/spec paths must be made absolute — otherwise every
+    // document fails to load.
+    readFile(root, `${root}/${selection.path}`)
       .then((c) => !cancelled && setContent(c.kind === "text" ? c.text : ""))
       .catch(() => !cancelled && setContent(""));
     return () => {
@@ -182,14 +187,14 @@ export function DocsView() {
     </div>
   );
 
-  return (
+  return createPortal(
     <div
       onClick={() => close(false)}
       className="animate-fade fixed inset-0 z-[115] grid place-items-center reado-scrim"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex h-[88vh] w-[92vw] max-w-[1040px] flex-col overflow-hidden rounded-lg border border-line-strong bg-canvas shadow-[var(--shadow)]"
+        className="flex h-[70vh] max-h-[600px] w-[94vw] max-w-[1280px] flex-col overflow-hidden rounded-lg border border-line-strong bg-canvas shadow-[var(--shadow)]"
       >
         <header className="flex flex-none items-center gap-3 border-b border-line px-5 py-3">
           <h2 className="m-0 text-sm font-semibold tracking-wide uppercase">{t("kb.title")}</h2>
@@ -271,13 +276,19 @@ export function DocsView() {
               <p className="text-sm text-faint">{t("common.loading")}</p>
             ) : (
               <div className="prose-reado mx-auto max-w-[680px]">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                {/* Project docs (READMEs especially) embed raw HTML — centered
+                    headings, badge images. rehype-raw renders it instead of
+                    showing the literal <h1> tags as text. */}
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                  {content}
+                </ReactMarkdown>
               </div>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

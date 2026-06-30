@@ -679,6 +679,19 @@ interface Conn {
 }
 const conns = new Map<string, Promise<Conn>>();
 
+// Language servers run in the Rust backend and outlive a webview reload, but
+// this client's open-document state does not. After a reload the fresh CM
+// LSP client re-sends `didOpen` for files the surviving server still considers
+// open, which it rejects ("Can't open already open document"). Tie the server
+// lifecycle to this webview session: stop the servers we started when the page
+// goes away, so the next load spawns each server fresh.
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => {
+    for (const key of conns.keys()) void lspStop(key);
+    conns.clear();
+  });
+}
+
 /** Get (or create) a connected client for a server + project root. */
 function connect(server: ServerDef, root: string): Promise<Conn> {
   const key = `${server.id}:${root}`;
