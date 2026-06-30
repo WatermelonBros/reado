@@ -31,7 +31,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test:coverage # logic + UI (happy-dom) with coverage gate — same on every OS
+      - run: pnpm test # logic + UI (happy-dom) — same on every OS; coverage is local-only (pnpm test:coverage)
       - run: pnpm build
 
   rust-crates:

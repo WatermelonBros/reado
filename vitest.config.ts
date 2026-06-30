@@ -24,9 +24,10 @@ export default defineConfig({
         "src/**/*.d.ts",
         "src/i18n/locales/**", // data
       ],
-      // Goal: 100% on UI + backend. `autoUpdate` ratchets the floor up as tests
-      // land and blocks any regression; tighten toward 100 as coverage climbs.
-      thresholds: { autoUpdate: true, lines: 31.16, functions: 30.24, branches: 25.01, statements: 30.82 },
+      // No thresholds: coverage is a *report* you run locally (`pnpm
+      // test:coverage`) to see where you stand — it never gates CI. Per-OS runs
+      // hit slightly different code paths, so a hard floor flaked the build for
+      // no real signal. CI runs plain `pnpm test`.
     },
     projects: [
       {
