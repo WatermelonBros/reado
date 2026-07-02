@@ -25,7 +25,7 @@ const txt = (text: string) => ({ kind: "text" as const, text });
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
-  usePreReview.setState({ drafts: [], generating: false });
+  usePreReview.setState({ drafts: [], generating: false, error: false });
 });
 
 afterEach(() => {
@@ -108,11 +108,12 @@ describe("generate", () => {
     expect(s.drafts[0].type).toBe("refactor");
   });
 
-  it("clears the generating flag after 60 empty polls", async () => {
+  it("clears the generating flag and flags an error after 60 empty polls", async () => {
     vi.mocked(readFile).mockImplementation(async () => txt(""));
     usePreReview.getState().generate("/proj");
     await vi.advanceTimersByTimeAsync(60 * 1500);
     expect(usePreReview.getState().generating).toBe(false);
+    expect(usePreReview.getState().error).toBe(true);
   });
 });
 

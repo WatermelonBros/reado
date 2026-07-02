@@ -5,6 +5,7 @@
  */
 import QRCode from "qrcode";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   /** The payload to encode. */
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function QrCode({ value, size = 220 }: Props) {
+  const { t } = useTranslation();
   const { d, dim } = useMemo(() => {
     const qr = QRCode.create(value, { errorCorrectionLevel: "M" });
     const n = qr.modules.size;
@@ -35,9 +37,9 @@ export function QrCode({ value, size = 220 }: Props) {
       height={size}
       shapeRendering="crispEdges"
       role="img"
-      aria-label="QR code"
+      aria-label={t("anywhere.qrLabel")}
     >
-      <path d={d} fill="#0b0d12" />
+      <path d={d} fill="var(--qr-ink)" />
     </svg>
   );
 }

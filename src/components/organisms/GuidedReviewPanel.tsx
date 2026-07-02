@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useProject } from "../../lib/store";
+import { useProject, useSettings } from "../../lib/store";
 import {
   currentEntry,
   openProposals,
@@ -111,7 +111,7 @@ function Header({
           />
         </div>
       ) : (
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted">
           {session?.title ?? t("guided.panel")}
         </span>
       )}
@@ -128,16 +128,24 @@ function Header({
 function EmptyState({ root }: { root: string }) {
   const start = useGuidedReview((s) => s.start);
   const isRepo = useProject((s) => s.git.isRepo);
-  const [objective, setObjective] = useState<Objective>("bug_risk");
+  // Seed from the last-used objective (persisted) so it isn't re-picked each time.
+  const [objective, setObjectiveState] = useState<Objective>(() => {
+    const saved = useSettings.getState().reviewObjective;
+    return (OBJECTIVES as string[]).includes(saved) ? (saved as Objective) : "bug_risk";
+  });
+  const setObjective = (o: Objective) => {
+    setObjectiveState(o);
+    useSettings.getState().set({ reviewObjective: o });
+  };
   const { t } = useTranslation();
 
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-5">
       <div>
         <h3 className="text-xs font-semibold text-ink">{t("guided.empty.title")}</h3>
-        <p className="mt-1 text-[11px] leading-relaxed text-faint">{t("guided.empty.body")}</p>
+        <p className="mt-1 text-xs leading-relaxed text-faint">{t("guided.empty.body")}</p>
       </div>
-      <div className="flex flex-col gap-1 text-[11px] text-faint">
+      <div className="flex flex-col gap-1 text-xs text-faint">
         {t("guided.objective.label")}
         <Select
           value={objective}
@@ -199,7 +207,7 @@ function PrSection({ root, objective }: { root: string; objective: Objective }) 
   // A recognised forge without a CLI adapter: reviewable locally only.
   if (!forge.hasAdapter) {
     return (
-      <p className="border-t border-line pt-3 text-[11px] leading-relaxed text-faint">
+      <p className="border-t border-line pt-3 text-xs leading-relaxed text-faint">
         {t("forge.noAdapter", { provider: forge.provider })}
       </p>
     );
@@ -210,7 +218,7 @@ function PrSection({ root, objective }: { root: string; objective: Objective }) 
       <p className="text-[10px] uppercase tracking-wide text-faint">{forge.term}</p>
       {cliPresent === false ? (
         <>
-          <p className="text-[11px] leading-relaxed text-faint">
+          <p className="text-xs leading-relaxed text-faint">
             {t("forge.installHint", { cli: forge.cli })}
           </p>
           <button
@@ -265,6 +273,15 @@ function SessionView({ root, session }: { root: string; session: Session }) {
       [...open].sort((a, b) => Number(b.file === focusFile) - Number(a.file === focusFile)),
     [open, focusFile],
   );
+  // The current file's open proposals — the batch "approve/discard all" targets.
+  const focusFileOpen = useMemo(
+    () => open.filter((p) => p.file === focusFile),
+    [open, focusFile],
+  );
+  const disposeAll = (fn: (root: string, sessionId: string, id: string) => Promise<unknown>) => {
+    // Snapshot ids first — each call mutates the proposal list.
+    for (const id of focusFileOpen.map((p) => p.id)) void fn(root, session.id, id);
+  };
 
   const acceptedTasks = (session.proposals ?? []).filter(
     (p) => p.state === "converted_to_task" && p.commentId,
@@ -281,7 +298,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {/* Progress + objective */}
       <div className="flex-none px-3 pt-3">
-        <div className="flex items-center justify-between text-[11px]">
+        <div className="flex items-center justify-between text-xs">
           <span className="text-muted tabular-nums">{t("guided.progress", { reviewed, total })}</span>
           {session.objective && (
             <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] text-muted">
@@ -360,7 +377,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
 
       {/* While the agent is still planning the route there's nothing to act on. */}
       {!hasRoute && (
-        <p className="px-3 py-4 text-[11px] leading-relaxed text-faint">
+        <p className="px-3 py-4 text-xs leading-relaxed text-faint">
           {session.status === "planning" ? t("guided.planning") : t("guided.noRoute")}
         </p>
       )}
@@ -368,9 +385,29 @@ function SessionView({ root, session }: { root: string; session: Session }) {
       {/* Open proposals — the human disposes of each */}
       {hasRoute && (
         <section className="mt-3 flex-none">
-          <SectionLabel>{t("guided.proposals")}</SectionLabel>
+          <div className="flex items-center justify-between pr-3">
+            <SectionLabel>{t("guided.proposals")}</SectionLabel>
+            {focusFileOpen.length >= 2 && (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => disposeAll(store().accept)}
+                  className="text-xs text-accent hover:text-ink"
+                >
+                  {t("guided.approveAll")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => disposeAll(store().discard)}
+                  className="text-xs text-muted hover:text-ink"
+                >
+                  {t("guided.discardAll")}
+                </button>
+              </div>
+            )}
+          </div>
           {ordered.length === 0 ? (
-            <p className="px-3 py-2 text-[11px] text-faint">{t("guided.noProposals")}</p>
+            <p className="px-3 py-2 text-xs text-faint">{t("guided.noProposals")}</p>
           ) : (
             <ul className="m-0 list-none p-0">
               {ordered.map((p) => (
@@ -397,7 +434,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
                   <button
                     type="button"
                     onClick={() => void store().focusFile(root, session.id, e.file)}
-                    className={`group flex w-full items-center gap-2 border-l-2 py-1.5 pl-3 pr-3 text-left text-[11px] transition-colors ${
+                    className={`group flex w-full items-center gap-2 border-l-2 py-1.5 pl-3 pr-3 text-left text-xs transition-colors ${
                       isCurrent
                         ? "border-accent bg-surface text-ink"
                         : "border-transparent text-muted hover:border-line-strong hover:bg-surface"
@@ -421,7 +458,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
         session.files?.find((f) => f.file === entry.file)?.summary && (
           <section className="mt-3 flex-none px-3">
             <SectionLabel inline>{t("guided.fileSummary")}</SectionLabel>
-            <p className="mt-1 text-[11px] leading-relaxed break-words [overflow-wrap:anywhere] text-muted">
+            <p className="mt-1 text-xs leading-relaxed break-words [overflow-wrap:anywhere] text-muted">
               {session.files.find((f) => f.file === entry.file)?.summary}
             </p>
           </section>
@@ -433,7 +470,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
           <SectionLabel inline>{t("guided.decisions")}</SectionLabel>
           <ul className="m-0 mt-1 list-none space-y-1 p-0">
             {decisions.map((d) => (
-              <li key={d.id} className="text-[11px] leading-snug break-words [overflow-wrap:anywhere] text-muted">
+              <li key={d.id} className="text-xs leading-snug break-words [overflow-wrap:anywhere] text-muted">
                 · {d.body}
               </li>
             ))}
@@ -445,7 +482,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
       {session.summary && (
         <section className="mt-3 flex-none px-3">
           <SectionLabel inline>{t("guided.summary")}</SectionLabel>
-          <p className="mt-1 text-[11px] leading-relaxed break-words [overflow-wrap:anywhere] text-muted">
+          <p className="mt-1 text-xs leading-relaxed break-words [overflow-wrap:anywhere] text-muted">
             {session.summary}
           </p>
         </section>
@@ -473,7 +510,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
             <button
               type="button"
               onClick={() => void store().close(root, session.id)}
-              className="rounded-md px-2 py-1 text-[11px] text-faint hover:text-ink"
+              className="rounded-md px-2 py-1 text-xs text-faint hover:text-ink"
             >
               {t("guided.close")}
             </button>
@@ -483,7 +520,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
           <button
             type="button"
             onClick={() => void store().discardSession(root, session.id)}
-            className="rounded-md px-2 py-1 text-[11px] text-faint hover:text-marker"
+            className="rounded-md px-2 py-1 text-xs text-faint hover:text-marker"
           >
             {t("guided.reset")}
           </button>
@@ -521,7 +558,7 @@ function PrSubmit({ root, session }: { root: string; session: Session }) {
     else setSent(true);
   };
 
-  if (sent) return <p className="text-[11px] text-accent">{t("forge.submitted")}</p>;
+  if (sent) return <p className="text-xs text-accent">{t("forge.submitted")}</p>;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -531,7 +568,7 @@ function PrSubmit({ root, session }: { root: string; session: Session }) {
           type="button"
           disabled={disabled}
           onClick={() => void submit("approve")}
-          className="rounded-md bg-surface px-2 py-1 text-[11px] text-accent hover:text-ink disabled:opacity-40"
+          className="rounded-md bg-surface px-2 py-1 text-xs text-accent hover:text-ink disabled:opacity-40"
         >
           {t("forge.approve")}
         </button>
@@ -539,7 +576,7 @@ function PrSubmit({ root, session }: { root: string; session: Session }) {
           type="button"
           disabled={disabled}
           onClick={() => void submit("request_changes")}
-          className="rounded-md bg-surface px-2 py-1 text-[11px] text-marker hover:text-ink disabled:opacity-40"
+          className="rounded-md bg-surface px-2 py-1 text-xs text-marker hover:text-ink disabled:opacity-40"
         >
           {t("forge.requestChanges")}
         </button>
@@ -547,7 +584,7 @@ function PrSubmit({ root, session }: { root: string; session: Session }) {
           type="button"
           disabled={disabled}
           onClick={() => void submit("comment")}
-          className="rounded-md px-2 py-1 text-[11px] text-faint hover:text-ink disabled:opacity-40"
+          className="rounded-md px-2 py-1 text-xs text-faint hover:text-ink disabled:opacity-40"
         >
           {t("forge.comment")}
         </button>
@@ -721,7 +758,7 @@ function Action({
       onClick={onClick}
       title={title}
       disabled={disabled}
-      className={`rounded-md border border-line bg-surface px-2.5 py-1 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${toneCls}`}
+      className={`rounded-md border border-line bg-surface px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${toneCls}`}
     >
       {children}
     </button>

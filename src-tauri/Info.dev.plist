@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Custom text for the macOS permission prompts Reado can trigger, so the
+       system dialog explains *why* in Reado's words instead of a bare default.
+       (The dialogs themselves are OS-owned and can't be replaced; we prime them
+       with our own modal where possible — see the app's permission priming.) -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Reado Anywhere serves your review pages to your phone over your local network. Nothing leaves your network.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Reado opens code and docs from projects you keep in your Documents folder.</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Reado opens code and docs from projects you keep on your Desktop.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Reado opens code and docs from projects you keep in your Downloads folder.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>Reado opens code and docs from projects stored on network volumes.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>Reado opens code and docs from projects stored on removable drives.</string>
+</dict>
+</plist>

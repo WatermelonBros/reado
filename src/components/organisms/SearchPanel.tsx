@@ -8,6 +8,12 @@ import { useProject, useWorkspace } from "../../lib/store";
 import { toRelative } from "../../lib/comments";
 import { useTranslation } from "react-i18next";
 
+// Cap the rows we actually mount. A broad query can hit the backend's 2000-match
+// cap → ~4000 DOM nodes, janking every keystroke. Render the first N (like the
+// command palette) and offer a "refine your search" hint when truncated. Full
+// virtualization is a separate follow-up.
+const RENDER_CAP = 300;
+
 export function SearchPanel() {
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);
@@ -15,7 +21,14 @@ export function SearchPanel() {
   const clearPendingSearch = useWorkspace((s) => s.clearPendingSearch);
   const { t } = useTranslation();
 
-  const [query, setQuery] = useState("");
+  // Restore the last query so leaving and returning to the Search tool doesn't
+  // lose it (the debounced effect below re-runs the search from the seed).
+  const [query, setQuery] = useState(() => useWorkspace.getState().searchQuery);
+
+  // Persist the query so it survives a tool-switch / reopen.
+  useEffect(() => {
+    useWorkspace.getState().setSearchQuery(query);
+  }, [query]);
 
   // Seed the query when something requests a search (e.g. Find references).
   useEffect(() => {
@@ -26,6 +39,7 @@ export function SearchPanel() {
   }, [pendingSearch, clearPendingSearch]);
   const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   const [replacement, setReplacement] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -47,15 +61,20 @@ export function SearchPanel() {
     if (query.trim().length < 2) {
       setMatches([]);
       setError(null);
+      setSearching(false);
       return;
     }
     const id = setTimeout(() => {
+      // A slow ripgrep on a big repo shouldn't read as "no results / frozen":
+      // flag the pending state so the panel can say it's searching.
+      setSearching(true);
       searchText(root, query)
         .then((m) => {
           setMatches(m);
           setError(null);
         })
-        .catch((e) => setError(String(e)));
+        .catch((e) => setError(String(e)))
+        .finally(() => setSearching(false));
     }, 180);
     return () => clearTimeout(id);
   }, [query, root]);
@@ -104,20 +123,22 @@ export function SearchPanel() {
             </button>
           )}
         </div>
-        {status && <span className="text-[11px] text-faint">{status}</span>}
+        {status && <span className="text-xs text-faint">{status}</span>}
       </div>
       <div className="flex-1 overflow-y-auto">
         {error ? (
           <p className="px-4 py-4 text-xs text-marker">
             {error.includes("ripgrep") ? t("search.ripgrepMissing") : error}
           </p>
+        ) : searching && query.trim().length >= 2 ? (
+          <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("search.searching")}</p>
         ) : matches.length === 0 ? (
           <p className="px-4 py-6 text-xs leading-relaxed text-faint">
             {query.trim().length >= 2 ? t("search.noResults") : ""}
           </p>
         ) : (
           <ul className="m-0 list-none p-0">
-            {matches.map((m, i) => (
+            {matches.slice(0, RENDER_CAP).map((m, i) => (
               <li key={`${m.path}-${m.line}-${i}`}>
                 <button
                   type="button"
@@ -134,6 +155,15 @@ export function SearchPanel() {
                 </button>
               </li>
             ))}
+            {matches.length > RENDER_CAP && (
+              <li className="px-3 py-2 text-[10px] leading-relaxed text-faint">
+                {t("search.truncated", {
+                  shown: RENDER_CAP,
+                  total: matches.length,
+                  defaultValue: "Showing {shown} of {total} — refine your search.",
+                })}
+              </li>
+            )}
           </ul>
         )}
       </div>

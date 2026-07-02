@@ -177,7 +177,7 @@
     return ct.includes("application/json") ? res.json() : res.text();
   };
 
-  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
   const enc = encodeURIComponent;
 
   // Reado's own icon set (paths lifted from the desktop's icons.tsx) so the
@@ -305,7 +305,7 @@
       projects = open;
       let html = "";
       if (open.length) { html += '<div class="sech">Open on desktop</div>';
-        html += open.map((p) => '<button class="row open" data-id="' + p.id + '"><span class="ico accent">' + ic("folder", 18) + "</span>" +
+        html += open.map((p) => '<button class="row open" data-id="' + esc(p.id) + '"><span class="ico accent">' + ic("folder", 18) + "</span>" +
           '<span class="grow"><div class="title">' + esc(p.name) + '</div></span><span class="chev">' + ic("chevron", 16) + "</span></button>").join(""); }
       const names = new Set(open.map((p) => p.name));
       const rest = recents.filter((r) => !names.has(r.name));
@@ -443,7 +443,7 @@
       const list = await api("/api/comments?project=" + enc(proj));
       const open = list.filter((c) => c.state === "open" || c.state === "in-progress");
       if (!open.length) { els.main.innerHTML = '<div class="center"><p>No open notes. Open a file and tap a line to add one.</p></div>'; return; }
-      els.main.innerHTML = open.map((c) => '<div class="row note" data-id="' + c.id + '" data-file="' + esc(c.anchor.file) +
+      els.main.innerHTML = open.map((c) => '<div class="row note" data-id="' + esc(c.id) + '" data-file="' + esc(c.anchor.file) +
         '" data-line="' + c.anchor.startLine + '">' +
         '<span class="dot" style="background:' + (TYPE_COLOR[c.type] || "var(--muted)") + '"></span>' +
         '<span class="grow open"><div class="title">' + esc(c.messages[0] ? c.messages[0].body : "") + "</div>" +
@@ -531,10 +531,10 @@
     }
     if (open.length) {
       h += '<div><div class="sub" style="text-transform:uppercase;margin-bottom:4px">Proposals</div>' +
-        open.map((p) => '<div class="prop" data-p="' + p.id + '" style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">' +
+        open.map((p) => '<div class="prop" data-p="' + esc(p.id) + '" style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">' +
           '<div style="display:flex;align-items:center;gap:6px;font-size:10px">' +
           '<span class="dot" style="background:' + (TYPE_COLOR[p.type] || "var(--muted)") + '"></span>' +
-          '<span style="text-transform:uppercase;color:' + (TYPE_COLOR[p.type] || "var(--muted)") + '">' + (p.type || "note") + "</span>" +
+          '<span style="text-transform:uppercase;color:' + (TYPE_COLOR[p.type] || "var(--muted)") + '">' + esc(p.type || "note") + "</span>" +
           (p.who === "second" ? '<span class="badge">2nd</span>' : "") +
           '<span class="faint" style="margin-left:auto">' + esc(p.file) + (p.startLine ? ":" + p.startLine : "") + "</span></div>" +
           '<div style="margin-top:5px;font-size:13px;color:var(--bright)">' + esc(p.body) + "</div>" +
@@ -550,7 +550,7 @@
         r0.map((e) => { const st = fst(e.file) || "queued"; const cur = entry && e.file === entry.file;
           return '<div style="display:flex;gap:8px;padding:6px 0 6px 8px;border-left:2px solid ' + (cur ? "var(--accent)" : "transparent") + '">' +
             '<span class="grow" style="font-size:13px;color:' + (cur ? "var(--bright)" : "var(--muted)") + '">' + esc(e.file) + "</span>" +
-            '<span class="faint" style="font-size:11px">' + (st === "reviewed" ? "done" : st === "in_review" ? "reviewing" : st) + "</span></div>"; }).join("") + "</div>";
+            '<span class="faint" style="font-size:11px">' + (st === "reviewed" ? "done" : st === "in_review" ? "reviewing" : esc(st)) + "</span></div>"; }).join("") + "</div>";
     }
     h += '<button class="btn primary act-send"' + (tasks.length ? "" : " disabled") + ' style="width:100%">Send ' + tasks.length + " confirmed tasks</button></div>";
     els.main.innerHTML = h;

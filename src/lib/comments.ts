@@ -25,7 +25,11 @@ import {
 
 /** Convert an absolute path to a project-relative, forward-slashed path. */
 export function toRelative(root: string, path: string): string {
-  const rel = path.startsWith(root) ? path.slice(root.length) : path;
+  // Compare against root with a trailing separator so a sibling dir sharing a
+  // string prefix (e.g. `/home/me/proj-backup` vs root `/home/me/proj`) doesn't
+  // false-match. Paths outside root fall through unchanged.
+  const base = root.endsWith("/") || root.endsWith("\\") ? root : root + "/";
+  const rel = path.startsWith(base) ? path.slice(base.length) : path;
   return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/");
 }
 

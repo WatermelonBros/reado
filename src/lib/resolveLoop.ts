@@ -65,6 +65,18 @@ function openTaskIds(): Set<string> {
   );
 }
 
+/** Comment ids that are genuinely resolved: present in the store AND done.
+ * A queued id that has simply vanished (deleted) is in neither this set nor
+ * {@link openTaskIds} — it's out of scope, not a resolution. */
+function doneTaskIds(): Set<string> {
+  return new Set(
+    useComments
+      .getState()
+      .comments.filter((c) => c.kind === "task" && c.state === "done")
+      .map((c) => c.id),
+  );
+}
+
 interface ResolveLoopState {
   active: LoopState | null;
   load: (root: string) => Promise<void>;
@@ -119,18 +131,23 @@ export const useResolveLoop = create<ResolveLoopState>((set, get) => ({
     const active = get().active;
     if (!active || active.status === "finished" || active.status === "failed") return;
     const open = openTaskIds();
-    const resolvedIds = active.ids.filter((id) => !open.has(id));
+    const done = doneTaskIds();
+    // Only genuine resolutions count — a queued id must be present AND done.
+    const resolvedIds = active.ids.filter((id) => done.has(id));
     const progressed = resolvedIds.length !== active.resolvedIds.length;
-    const done = resolvedIds.length === active.ids.length;
+    // Finished once no queued id is still an open task. Deleted ids fell out of
+    // scope (neither open nor done), so they don't block completion, but they
+    // don't count as resolved either — no false completion from a deletion.
+    const finished = !active.ids.some((id) => open.has(id));
     const next: LoopState = {
       ...active,
       resolvedIds,
-      status: done ? "finished" : "running",
+      status: finished ? "finished" : "running",
       lastProgressAt: progressed ? Date.now() : active.lastProgressAt,
     };
     set({ active: next });
     void persist(root, next);
-    if (done) void notifyResolved(0);
+    if (finished) void notifyResolved(0);
   },
 
   tick: (root) => {

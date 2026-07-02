@@ -58,7 +58,10 @@
     "editSource": "Modifica sorgente",
     "problems_one": "{count} problema",
     "problems_other": "{count} problemi",
-    "readProgress": "{read} di {total} file letti"
+    "readProgress": "{read} di {total} file letti",
+    "readError": "Impossibile leggere questa cartella — controlla i permessi o che esista ancora.",
+    "markFolderRead": "Segna cartella come letta",
+    "markFolderUnread": "Segna cartella come non letta"
   },
   "editor": {
     "empty": "Seleziona un file dall'albero per iniziare a leggere.",
@@ -82,7 +85,9 @@
     "stickyJump": "Vai a questo scope",
     "measure": "Larghezza di lettura",
     "edit": "Attiva/disattiva modifica",
-    "save": "Salva"
+    "save": "Salva",
+    "saveError": "Impossibile salvare — il file potrebbe essere in sola lettura o il disco pieno.",
+    "unsaved": "Modifiche non salvate"
   },
   "symbols": {
     "goto": "Vai al simbolo nel file…",
@@ -124,7 +129,8 @@
   "timeline": {
     "panel": "Cronologia",
     "noFile": "Apri un file per vederne la cronologia.",
-    "empty": "Nessuna cronologia per questo file."
+    "empty": "Nessuna cronologia per questo file.",
+    "error": "Impossibile caricare la cronologia di questo file."
   },
   "semantic": {
     "title": "Ricerca semantica",
@@ -146,18 +152,17 @@
     "privacyNote": "Nessun account, nessun cloud. Funziona sulla stessa rete, o ovunque tramite VPN.",
     "enable": "Attiva",
     "enabling": "Avvio…",
+    "primeTitle": "macOS chiederà l'accesso alla rete locale",
+    "primeBody": "Reado serve questa pagina sulla tua rete locale così il telefono può raggiungerla. Subito dopo macOS mostrerà il suo prompt — scegli Consenti. Niente esce dalla tua rete.",
+    "primeContinue": "Continua",
     "stop": "Ferma",
     "scanHint": "Inquadra con la fotocamera del telefono sulla stessa rete (o VPN). Accetterai un avviso certificato una volta.",
     "copy": "Copia l'indirizzo",
     "copied": "Copiato",
-    "fingerprint": "Fingerprint"
-  },
-  "tests": {
-    "panel": "Test",
-    "empty": "Nessun setup di test rilevato (script test in package.json, Cargo, go.mod o pytest).",
-    "runAll": "Esegui tutti",
-    "runFile": "Esegui file corrente",
-    "note": "I test girano nel terminale integrato, dove appare il loro output."
+    "fingerprint": "Fingerprint",
+    "statusOn": "attivo",
+    "statusOff": "spento",
+    "qrLabel": "Codice QR"
   },
   "prereview": {
     "panel": "Revisione AI",
@@ -165,7 +170,8 @@
     "generating": "Revisione…",
     "empty": "Nessun suggerimento. Avvia la pre-revisione AI sulle modifiche correnti.",
     "approve": "Approva",
-    "discard": "Scarta"
+    "discard": "Scarta",
+    "error": "L'agente non ha risposto — è in esecuzione nel terminale?"
   },
   "guided": {
     "panel": "Revisione guidata",
@@ -253,7 +259,9 @@
       "false_positive": "falso positivo",
       "file_summary": "riepilogo",
       "session_summary": "riepilogo"
-    }
+    },
+    "approveAll": "Approva tutti",
+    "discardAll": "Scarta tutti"
   },
   "loop": {
     "running": "In risoluzione…",
@@ -338,7 +346,7 @@
     "super": "Supertipi",
     "empty": "Esegui “Mostra gerarchia chiamate” su un simbolo.",
     "none": "Niente in questa direzione.",
-    "unsupported": "Nessun language server, o non supporta le gerarchie qui."
+    "unsupported": "Il language server di questo file non fornisce gerarchie (o nessuno è in esecuzione)."
   },
   "nav": {
     "back": "Indietro (⌥←)",
@@ -393,7 +401,8 @@
     "useSpaces": "Indenta con spazi",
     "useTabs": "Indenta con tab",
     "language": "Seleziona linguaggio",
-    "eol": "Fine riga"
+    "eol": "Fine riga",
+    "openComments": "Commenti aperti"
   },
   "palette": {
     "placeholder": "Digita un comando…"
@@ -409,7 +418,9 @@
     "replaceConfirm": "Conferma sostituzione",
     "replaced": "Sostituito in {count} file.",
     "results": "{count} risultati",
-    "ripgrepMissing": "ripgrep (rg) non è installato o non è nel PATH."
+    "truncated": "Mostrati {shown} di {total} — affina la ricerca.",
+    "ripgrepMissing": "La ricerca richiede ripgrep (rg), che non è installato o non è nel PATH. Installalo e riprova.",
+    "searching": "Ricerca in corso…"
   },
   "settings": {
     "title": "Impostazioni",
@@ -433,8 +444,8 @@
     "cliInstall": "Installa 'reado' nel PATH",
     "cliReinstall": "Reinstalla 'reado'",
     "cliInstalled": "Installato",
-    "cliDone": "Installato in {path}. Assicurati che ~/.local/bin sia nel PATH.",
-    "cliHint": "Collega la CLI 'reado' inclusa in ~/.local/bin così gli agenti AI possono leggere e risolvere i task da qualsiasi progetto.",
+    "cliDone": "Installato in {path}. Se `reado` non viene trovato, aggiungi quella cartella al PATH.",
+    "cliHint": "Collega la CLI 'reado' inclusa così gli agenti AI possono leggere e risolvere i tuoi task da qualsiasi progetto.",
     "logging": "Log diagnostici",
     "logEnabled": "Scrivi un file di log diagnostico",
     "logLevel": "Livello di dettaglio",
@@ -506,7 +517,7 @@
     "restart": "Riavvia terminale",
     "orientation": "Cambia orientamento divisione",
     "closePane": "Chiudi pannello",
-    "sendReview": "Invia review",
+    "sendReview": "Invia revisione",
     "reviewSent": "{count} task inviati all'agente.",
     "noTasks": "Nessun task aperto da inviare.",
     "search": "Cerca…",
@@ -514,7 +525,7 @@
     "searchNext": "Risultato successivo"
   },
   "review": {
-    "title": "Invia review",
+    "title": "Invia revisione",
     "target": "Invia a",
     "send": "Invia {count}",
     "selectAll": "Seleziona tutti"
@@ -531,7 +542,7 @@
     "read": "letti"
   },
   "comments": {
-    "review": "Review",
+    "review": "Revisione",
     "audit": "Audit",
     "auditProject": "Audit del progetto",
     "panel": "Commenti",
@@ -583,7 +594,8 @@
     "stashPop": "Pop",
     "stashDrop": "Elimina",
     "discardAll": "Scarta tutte le modifiche",
-    "discardAllConfirm": "Scartare tutte le modifiche del working tree (inclusi i file non tracciati)? Non è reversibile."
+    "discardAllConfirm": "Scartare tutte le modifiche del working tree (inclusi i file non tracciati)? Non è reversibile.",
+    "stashDropConfirm": "Eliminare questo stash? L'operazione è irreversibile."
   },
   "lsp": {
     "createTask": "Crea task",
@@ -632,7 +644,8 @@
       "spec": "Spec",
       "doc": "Doc",
       "link": "Collegato"
-    }
+    },
+    "empty": "Ancora niente da mappare. Commenti, spec e doc appaiono qui come nodi collegati man mano che li aggiungi."
   },
   "docs": {
     "title": "Documentazione"
@@ -688,5 +701,17 @@
     "close": "Chiudi",
     "loading": "Caricamento…",
     "error": "Qualcosa è andato storto."
+  },
+  "agent": {
+    "notInstalled": "{name} non è installato. Installalo per usare le funzioni AI di Reado.",
+    "sent": "Inviato all'agente"
+  },
+  "breadcrumb": {
+    "label": "Percorso file"
+  },
+  "imageView": {
+    "zoomIn": "Ingrandisci",
+    "zoomOut": "Riduci",
+    "fit": "Adatta"
   }
 }

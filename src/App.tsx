@@ -28,6 +28,7 @@ import { SynopsisModal } from "./components/organisms/SynopsisModal";
 import { OnboardingModal } from "./components/organisms/OnboardingModal";
 import { QaModal } from "./components/organisms/QaModal";
 import { SemanticModal } from "./components/organisms/SemanticModal";
+import { Notice } from "./components/molecules/Notice";
 import { TitleBar } from "./components/organisms/TitleBar";
 import { Settings } from "./components/organisms/Settings";
 import { Palette } from "./components/organisms/Palette";
@@ -147,6 +148,7 @@ export default function App() {
       <OnboardingModal />
       <QaModal />
       <SemanticModal />
+      <Notice />
     </div>
   );
 }

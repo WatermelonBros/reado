@@ -39,7 +39,7 @@ export function HierarchyPanel() {
       {root && (
         <div className="flex-none border-b border-line px-3 py-2">
           <div className="truncate text-xs font-medium text-ink">{root.name}</div>
-          <div className="truncate text-[11px] text-faint">
+          <div className="truncate text-xs text-faint">
             {toRelative(rootProject, root.path)}:{root.line}
           </div>
           <div className="mt-1.5 flex gap-1">
@@ -49,7 +49,7 @@ export function HierarchyPanel() {
                 type="button"
                 onClick={() => setHierarchyDirection(d.id)}
                 aria-pressed={direction === d.id}
-                className={`rounded-md px-2 py-0.5 text-[11px] transition-colors ${
+                className={`rounded-md px-2 py-0.5 text-xs transition-colors ${
                   direction === d.id
                     ? "bg-selection text-ink"
                     : "text-muted hover:bg-surface hover:text-ink"
@@ -75,7 +75,7 @@ export function HierarchyPanel() {
               className="flex w-full items-baseline gap-2 py-1 pr-3 pl-3 text-left text-xs text-muted transition-colors hover:bg-surface hover:text-ink"
             >
               <span className="min-w-0 flex-1 truncate">{n.name}</span>
-              <span className="flex-none truncate text-[11px] text-faint">
+              <span className="flex-none truncate text-xs text-faint">
                 {toRelative(rootProject, n.path)}
               </span>
             </button>

@@ -43,13 +43,11 @@ import { QaPanel } from "../organisms/QaPanel";
 import { ToursPanel, TourBar } from "../organisms/ToursPanel";
 import { PreReviewPanel } from "../organisms/PreReviewPanel";
 import { GuidedReviewPanel } from "../organisms/GuidedReviewPanel";
-import { TestsPanel } from "../organisms/TestsPanel";
 import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
 import { useGuidedReview } from "../../lib/guidedReview";
 import { useResolveLoop } from "../../lib/resolveLoop";
-import { useTests } from "../../lib/tests";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useQa } from "../../lib/qa";
 import { Tabs } from "../organisms/Tabs";
@@ -77,11 +75,18 @@ const PANEL_TITLE: Record<string, MessageKey> = {
 
 const basename = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? p;
 
+// Keep at least this much room for the editor when applying the sidebar width,
+// so a width persisted on a large monitor can't squeeze the editor to nothing
+// on a smaller window.
+const MIN_EDITOR_WIDTH = 360;
+
 export function ProjectView({ root }: { root: string }) {
   const init = useProject((s) => s.init);
   const setGit = useProject((s) => s.setGit);
   const tabs = useProject((s) => s.tabs);
   const active = useProject((s) => s.active);
+  const expandedDirs = useProject((s) => s.expandedDirs);
+  const splitPath = useProject((s) => s.splitPath);
   const saveSession = useSessions((s) => s.save);
   const { t } = useTranslation();
 
@@ -106,9 +111,16 @@ export function ProjectView({ root }: { root: string }) {
     usePreReview.getState().load(root);
     useGuidedReview.getState().load(root);
     void useResolveLoop.getState().load(root);
-    void useTests.getState().detect(root);
     listFiles(root)
-      .then((f) => setTotalFiles(f.length))
+      .then((f) => {
+        setTotalFiles(f.length);
+        // First open of a project (no saved session): land on the top-level
+        // README so the reader starts oriented instead of on a blank screen.
+        if (!session?.active) {
+          const readme = f.find((p) => /^readme(\.[a-z]+)?$/i.test(p.replace(/\\/g, "/")));
+          if (readme) useProject.getState().open(`${root}/${readme.replace(/\\/g, "/")}`);
+        }
+      })
       .catch(() => setTotalFiles(0));
     // Build the SQLite index on open if missing/stale (rebuildable cache).
     rebuildIndex(root).catch(() => {});
@@ -174,11 +186,12 @@ export function ProjectView({ root }: { root: string }) {
     };
   }, [root]);
 
-  // Persist the session whenever the open tabs or active file change.
+  // Persist the session whenever the open tabs, active file, tree drill-down, or
+  // split pane change, so reopening the project restores all of it.
   useEffect(() => {
     if (!restored.current) return;
-    saveSession(root, { tabs, active });
-  }, [root, tabs, active, saveSession]);
+    saveSession(root, { tabs, active, expanded: expandedDirs, split: splitPath });
+  }, [root, tabs, active, expandedDirs, splitPath, saveSession]);
 
   // Apply per-project settings overrides, then persist changes back to them.
   useEffect(() => {
@@ -190,6 +203,17 @@ export function ProjectView({ root }: { root: string }) {
   // (external edits, or the agent's own writes).
   useEffect(() => {
     startWatching(root).catch(() => {});
+    // Coalesce tree refreshes: a burst of file-changed events (e.g. an agent
+    // bulk-editing) would otherwise trigger one full repo re-walk + tree re-list
+    // per file. Debounce bumpTree() to fire once after the burst settles.
+    let treeTimer: ReturnType<typeof setTimeout> | null = null;
+    const bumpTreeSoon = () => {
+      if (treeTimer) clearTimeout(treeTimer);
+      treeTimer = setTimeout(() => {
+        treeTimer = null;
+        useProject.getState().bumpTree();
+      }, 250);
+    };
     const offs = [
       listen<{ file: string }>("file-changed", (event) => {
         const { file } = event.payload;
@@ -205,8 +229,9 @@ export function ProjectView({ root }: { root: string }) {
           .then((list) => useComments.getState().replaceForFile(file, list))
           .catch(() => {});
         // Re-list the tree so files created/moved/deleted on disk (or dragged in
-        // from outside) show up without a manual refresh.
-        useProject.getState().bumpTree();
+        // from outside) show up without a manual refresh — coalesced so a burst
+        // of edits only walks the tree once.
+        bumpTreeSoon();
         // If a file open in a tab was deleted on disk, close the tab instead of
         // leaving a broken editor (VS Code behaviour).
         const { tabs, close } = useProject.getState();
@@ -239,6 +264,7 @@ export function ProjectView({ root }: { root: string }) {
       }),
     ];
     return () => {
+      if (treeTimer) clearTimeout(treeTimer);
       offs.forEach((p) => void p.then((off) => off()).catch(() => {}));
     };
   }, [root]);
@@ -255,7 +281,6 @@ export function ProjectView({ root }: { root: string }) {
   const showBreadcrumbs = useSettings((s) => s.showBreadcrumbs);
   const terminalOpen = useTerminals((s) => s.open);
   const terminalPosition = useTerminals((s) => s.position);
-  const splitPath = useProject((s) => s.splitPath);
   const closeSplit = useProject((s) => s.closeSplit);
   const swapSplit = useProject((s) => s.swapSplit);
   const readCount = useReadProgress((s) => s.read.size);
@@ -279,27 +304,56 @@ export function ProjectView({ root }: { root: string }) {
     return () => clearInterval(t);
   }, [root]);
 
+  // Live width during a drag; committed to the persisted store only on pointerup
+  // so we don't serialize+write localStorage on every pointermove. `null` means
+  // not dragging (use the persisted value).
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+
+  // Re-clamp the applied width when the window resizes (see appliedSidebarWidth);
+  // a bare counter bump is enough to re-run render with the new innerWidth.
+  const [, setResizeTick] = useState(0);
+  useEffect(() => {
+    const onResize = () => setResizeTick((n) => n + 1);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // Drag the sidebar's right edge to resize. The panel starts after the 48px
-  // activity bar, so its width tracks the cursor's x minus that offset.
+  // activity bar, so its width tracks the cursor's x minus that offset. During
+  // the drag we update local state for immediate feedback; the persisted store
+  // is written once on release.
   const startSidebarResize = (e: React.PointerEvent) => {
     e.preventDefault();
-    const onMove = (ev: PointerEvent) => setSidebarWidth(ev.clientX - 48);
+    let latest = sidebarWidth;
+    const onMove = (ev: PointerEvent) => {
+      latest = ev.clientX - 48;
+      setDragWidth(latest);
+    };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      setSidebarWidth(latest);
+      setDragWidth(null);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
 
+  // Clamp the applied (not persisted) width so the editor keeps a minimum size.
+  const appliedSidebarWidth = Math.min(
+    dragWidth ?? sidebarWidth,
+    window.innerWidth - MIN_EDITOR_WIDTH,
+  );
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
+    <h1 className="sr-only">{root.split(/[\\/]/).filter(Boolean).pop() ?? root}</h1>
     <div
       className="grid min-h-0 flex-1 overflow-hidden"
       style={{
         // `auto` (not a literal 48px) ties the activity-bar column to the bar's
         // own width, so it tracks it under interface zoom — no gap to the sidebar.
-        gridTemplateColumns: tool ? `auto ${sidebarWidth}px 1fr` : "auto 1fr",
+        gridTemplateColumns: tool ? `auto ${appliedSidebarWidth}px 1fr` : "auto 1fr",
       }}
     >
       {showActivityBar && <ActivityBar />}
@@ -365,7 +419,6 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "tours" && <ToursPanel />}
             {tool === "prereview" && <PreReviewPanel />}
             {tool === "guidedreview" && <GuidedReviewPanel />}
-            {tool === "tests" && <TestsPanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>

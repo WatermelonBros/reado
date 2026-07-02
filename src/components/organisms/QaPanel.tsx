@@ -35,7 +35,7 @@ export function QaPanel() {
     <ul className="m-0 h-full list-none overflow-y-auto p-0 py-1">
       {groups.map((g) => (
         <li key={g.file}>
-          <div className="truncate px-3 pt-2 pb-0.5 text-[11px] font-medium text-muted">
+          <div className="truncate px-3 pt-2 pb-0.5 text-xs font-medium text-muted">
             {g.file}
           </div>
           {g.items.map((n) => (
@@ -50,7 +50,7 @@ export function QaPanel() {
                 className="flex min-w-0 flex-1 items-center gap-2 py-1 pr-1 pl-3 text-left text-xs text-muted transition-colors hover:bg-surface hover:text-ink"
               >
                 <span className="min-w-0 flex-1 truncate">{n.question}</span>
-                <span className="flex-none font-mono text-[11px] text-faint tabular-nums">
+                <span className="flex-none font-mono text-xs text-faint tabular-nums">
                   {n.line}
                 </span>
               </button>
@@ -59,7 +59,7 @@ export function QaPanel() {
                 aria-label={t("qa.remove")}
                 title={t("qa.remove")}
                 onClick={() => useQa.getState().remove(root, n.id)}
-                className="grid h-6 w-6 flex-none place-items-center text-faint opacity-0 transition-opacity group-hover/qa:opacity-100 hover:text-ink"
+                className="grid h-6 w-6 flex-none place-items-center text-faint opacity-0 transition-opacity group-hover/qa:opacity-100 group-focus-within/qa:opacity-100 focus-visible:opacity-100 hover:text-ink"
               >
                 <CloseIcon className="h-3 w-3" />
               </button>

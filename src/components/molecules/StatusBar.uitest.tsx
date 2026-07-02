@@ -74,7 +74,7 @@ describe("StatusBar with no active file", () => {
 
   it("opens the Anywhere dialog from the device button", async () => {
     render(<StatusBar />);
-    await userEvent.click(screen.getByRole("button", { name: "anywhere.title" }));
+    await userEvent.click(screen.getByRole("button", { name: /anywhere\.title/ }));
     expect(usePalette.getState().anywhereOpen).toBe(true);
   });
 

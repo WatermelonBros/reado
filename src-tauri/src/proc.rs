@@ -70,6 +70,14 @@ pub fn on_path(bin: &str) -> bool {
     })
 }
 
+/// Whether an AI agent binary (e.g. `claude`, `codex`, `copilot`) resolves on the
+/// login-shell PATH — so the UI can gate AI actions instead of dispatching a
+/// prompt into a bare shell when the agent isn't installed.
+#[tauri::command]
+pub fn agent_installed(bin: String) -> bool {
+    on_path(&bin)
+}
+
 /// Like `Command::new`, but never flashes a console window on Windows AND runs
 /// with the login-shell PATH (see [`login_shell_path`]) so brew/nvm/winget tools
 /// resolve. Every external tool the app spawns should go through this.

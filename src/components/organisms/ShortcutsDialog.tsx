@@ -36,7 +36,7 @@ export function ShortcutsDialog() {
       <div className="min-h-0 flex-1 gap-8 overflow-y-auto p-5 sm:columns-2">
         {SHORTCUT_GROUPS.map((group) => (
           <section key={group.titleKey} className="mb-5 break-inside-avoid">
-            <h3 className="mb-1.5 text-[11px] font-semibold tracking-wide text-faint uppercase">
+            <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-faint uppercase">
               {t(group.titleKey)}
             </h3>
             <ul className="m-0 list-none p-0">

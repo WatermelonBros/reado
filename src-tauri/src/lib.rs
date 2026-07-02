@@ -3,7 +3,7 @@
 //! The Rust side is intentionally thin: it exposes filesystem, git and search
 //! primitives as Tauri commands and lets the React frontend own the experience.
 //! Persistence of recent projects, settings and per-project session state lives
-//! in the frontend via `tauri-plugin-store`.
+//! in the frontend (localStorage + `.reado/*.json`).
 
 mod annotations;
 mod anywhere;
@@ -32,7 +32,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         // Native clipboard read/write so the terminal's paste doesn't go through
@@ -202,6 +201,7 @@ pub fn run() {
             log::log_record,
             log::log_path,
             log::log_set_config,
+            proc::agent_installed,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")

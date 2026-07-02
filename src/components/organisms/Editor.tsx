@@ -493,6 +493,7 @@ function CodeView({
   const wrapRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const autoSaveTimer = useRef<number | undefined>(undefined);
+  const cursorSaveTimer = useRef<number | undefined>(undefined);
   const wrapComp = useMemo(() => new Compartment(), []);
   const whitespaceComp = useMemo(() => new Compartment(), []);
   const langComp = useMemo(() => new Compartment(), []);
@@ -550,6 +551,9 @@ function CodeView({
   } | null>(null);
   // Bumped on scroll/resize so the overlays re-read their anchor coordinates.
   const [, setTick] = useState(0);
+  // A failed write (read-only file, permission, disk full). Surfaced as a small
+  // dismissable banner so a save error is never swallowed silently.
+  const [saveError, setSaveError] = useState(false);
 
   // Group comments by their anchored start line for the gutter. A line is shown
   // "done" (green) only when every comment on it is resolved.
@@ -557,6 +561,9 @@ function CodeView({
     const map: LineComments = new Map();
     for (const c of comments) {
       if (c.anchor.scope !== "range") continue;
+      // An orphan keeps its stale startLine; never position it as an authoritative
+      // gutter anchor (a "wrong line"). It's surfaced in the Orphans panel instead.
+      if (c.orphan) continue;
       const line = c.anchor.startLine;
       const entry = map.get(line) ?? { ids: [], done: true };
       entry.ids.push(c.id);
@@ -594,7 +601,8 @@ function CodeView({
     const out: RibbonMark[] = [];
     for (const s of extractSymbols(text)) out.push({ line: s.line, kind: "symbol" });
     for (const c of comments) {
-      if (c.anchor.scope === "range") out.push({ line: c.anchor.startLine, kind: "comment" });
+      // Skip orphans: their stale startLine must not draw a ribbon mark (a "wrong line").
+      if (c.anchor.scope === "range" && !c.orphan) out.push({ line: c.anchor.startLine, kind: "comment" });
     }
     for (const d of diagByFile ?? []) {
       if (d.severity <= 2) out.push({ line: d.line, kind: d.severity === 1 ? "error" : "warn" });
@@ -652,8 +660,11 @@ function CodeView({
     if (!view) return;
     noteSelfWrite(relPath); // our own save — don't let it mark the file unread
     writeFile(useProject.getState().root, relPath, view.state.doc.toString())
-      .then(() => useEditorActions.getState().setDirty(false))
-      .catch(() => {});
+      .then(() => {
+        useEditorActions.getState().setDirty(false);
+        setSaveError(false); // clear any prior failure on a successful save
+      })
+      .catch(() => setSaveError(true));
   };
 
   // Auto Save: write only when there are unsaved edits (avoids needless writes).
@@ -809,7 +820,16 @@ function CodeView({
           if (u.selectionSet || u.docChanged) {
             const head = u.state.selection.main.head;
             const line = u.state.doc.lineAt(head);
-            useCursor.getState().set(line.number, head - line.from + 1);
+            const col = head - line.from + 1;
+            useCursor.getState().set(line.number, col);
+            // Persist the cursor per file (debounced, like the scroll save) so it
+            // can be restored on reopen alongside the scroll offset.
+            clearTimeout(cursorSaveTimer.current);
+            cursorSaveTimer.current = window.setTimeout(() => {
+              useSessions
+                .getState()
+                .saveCursor(useProject.getState().root, relPath, line.number, col);
+            }, 300);
           }
           if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ExternalReload))) {
             useEditorActions.getState().setDirty(true);
@@ -895,6 +915,23 @@ function CodeView({
       requestAnimationFrame(() => {
         if (viewRef.current === view) view.scrollDOM.scrollTop = savedScroll;
       });
+    }
+
+    // Restore the saved cursor position, unless the file was opened with an
+    // explicit landing/goToLine target (that jump wins). Clamp to the current
+    // doc so a stale cursor can never throw or land out of bounds.
+    const savedCursor =
+      useSessions.getState().byRoot[useProject.getState().root]?.cursor?.[relPath];
+    if (savedCursor && !landingLine) {
+      try {
+        const doc = view.state.doc;
+        const lineNo = Math.min(Math.max(savedCursor.line, 1), doc.lines);
+        const line = doc.line(lineNo);
+        const pos = Math.min(line.from + Math.max(savedCursor.col - 1, 0), line.to);
+        view.dispatch({ selection: { anchor: pos } });
+      } catch {
+        // Ignore a stale/invalid cursor — restore is best-effort.
+      }
     }
 
     // Detect and lazily load the language pack for this filename.
@@ -1340,6 +1377,24 @@ function CodeView({
       }
     >
       <div ref={hostRef} className="h-full w-full [&_.cm-editor]:h-full" />
+
+      {saveError && (
+        <div
+          role="alert"
+          className="absolute right-4 bottom-4 z-50 flex max-w-sm items-center gap-3 rounded-md border border-line-strong bg-[color-mix(in_oklch,var(--marker)_14%,var(--bg-elevated))] px-3 py-2 text-xs text-ink shadow-[var(--shadow)]"
+        >
+          <span className="min-w-0 flex-1">{t("editor.saveError")}</span>
+          <button
+            type="button"
+            title={t("common.cancel")}
+            aria-label={t("common.cancel")}
+            onClick={() => setSaveError(false)}
+            className="grid h-5 w-5 flex-none place-items-center rounded-md text-faint hover:text-ink"
+          >
+            <CloseIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {showRibbon && (
         <StructureRibbon

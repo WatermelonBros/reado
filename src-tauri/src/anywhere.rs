@@ -155,7 +155,7 @@ fn fingerprint(der: &[u8]) -> String {
 fn mint_token() -> String {
     let mut bytes = [0u8; 24];
     rand::thread_rng().fill_bytes(&mut bytes);
-    hex::encode(bytes)
+    bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
 }
 
 /// Join a project-relative path to its root, rejecting traversal (`..`). An
@@ -258,9 +258,7 @@ async fn start_server(
         .route("/api/prereview", post(prereview))
         .route("/api/loop", get(loop_get))
         .route("/api/sessions", get(sessions_get))
-        .route("/api/session", get(session_get))
         .route("/api/session-accept", post(session_accept))
-        .route("/api/session-edit", post(session_edit))
         .route("/api/session-discard", post(session_discard))
         .route("/api/session-set-file", post(session_set_file))
         .route("/api/review-action", post(review_action))
@@ -270,7 +268,20 @@ async fn start_server(
         get(move || async move { ([(header::CONTENT_TYPE, ct)], body) })
     };
     let router = Router::new()
-        .route("/", get(|| async { Html(MOBILE_HTML) }))
+        .route(
+            "/",
+            get(|| async {
+                (
+                    [(
+                        header::CONTENT_SECURITY_POLICY,
+                        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+                         img-src 'self' data:; connect-src 'self'; object-src 'none'; \
+                         base-uri 'self'; frame-src 'none'",
+                    )],
+                    Html(MOBILE_HTML),
+                )
+            }),
+        )
         .route(
             "/manifest.webmanifest",
             get(|| async {
@@ -1002,31 +1013,12 @@ async fn sessions_get(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SessionQuery {
-    project: String,
-    id: String,
-}
-
-async fn session_get(
-    State(api): State<Api>,
-    Query(q): Query<SessionQuery>,
-) -> Result<Json<core::Session>, StatusCode> {
-    let root = api.root(&q.project).ok_or(StatusCode::NOT_FOUND)?;
-    core::get_session(&root, &q.id)
-        .map(Json)
-        .map_err(|_| StatusCode::NOT_FOUND)
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct ProposalBody {
     project: String,
     id: String,
     proposal: String,
     #[serde(default)]
     note: bool,
-    #[serde(default)]
-    body: Option<String>,
 }
 
 async fn session_accept(
@@ -1040,16 +1032,6 @@ async fn session_accept(
         CommentKind::Task
     };
     core::accept_proposal(&root, &b.id, &b.proposal, kind)
-        .map(Json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-}
-
-async fn session_edit(
-    State(api): State<Api>,
-    Json(b): Json<ProposalBody>,
-) -> Result<Json<core::Session>, StatusCode> {
-    let root = api.root(&b.project).ok_or(StatusCode::NOT_FOUND)?;
-    core::set_proposal_state(&root, &b.id, &b.proposal, ArtifactState::Edited, b.body)
         .map(Json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }

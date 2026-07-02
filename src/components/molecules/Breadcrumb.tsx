@@ -49,7 +49,7 @@ export function Breadcrumb() {
 
   return (
     <nav
-      aria-label="File path"
+      aria-label={t("breadcrumb.label")}
       className="flex flex-none items-center gap-0.5 border-b border-line bg-canvas px-4 py-2 text-xs text-faint select-none"
     >
       <div className="mr-1.5 flex flex-none items-center gap-0.5">
@@ -85,7 +85,7 @@ export function Breadcrumb() {
       {dirty && (
         <span
           className="ml-1 h-1.5 w-1.5 flex-none rounded-full bg-accent"
-          title="Unsaved changes"
+          title={t("editor.unsaved")}
         />
       )}
 

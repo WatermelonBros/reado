@@ -79,7 +79,7 @@ export function OutlinePanel() {
               style={{ background: KIND_COLOR[s.kind] }}
             />
             <span className="truncate">{s.name}</span>
-            <span className="ml-auto flex-none font-mono text-[11px] text-faint tabular-nums">
+            <span className="ml-auto flex-none font-mono text-xs text-faint tabular-nums">
               {s.line}
             </span>
           </button>

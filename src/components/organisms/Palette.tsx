@@ -369,7 +369,7 @@ export function Palette() {
                   </span>
                 )}
                 {row.hint && (
-                  <kbd className="ml-auto flex-none rounded border border-line bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-muted">
+                  <kbd className="ml-auto flex-none rounded border border-line bg-canvas px-1.5 py-0.5 font-mono text-xs text-muted">
                     {row.hint}
                   </kbd>
                 )}
@@ -475,13 +475,6 @@ function commandRows(
       run: () => {
         void useResolveLoop.getState().start(project.root, []);
         useWorkspace.getState().selectTool("guidedreview");
-        close();
-      },
-    },
-    {
-      label: t("tests.panel"),
-      run: () => {
-        useWorkspace.getState().selectTool("tests");
         close();
       },
     },

@@ -38,7 +38,7 @@ export function BookmarksPanel() {
     <ul className="m-0 h-full list-none overflow-y-auto p-0 py-1">
       {groups.map((g) => (
         <li key={g.path}>
-          <div className="truncate px-3 pt-2 pb-0.5 text-[11px] font-medium text-muted">
+          <div className="truncate px-3 pt-2 pb-0.5 text-xs font-medium text-muted">
             {g.path}
           </div>
           {g.items.map((b) => (
@@ -50,7 +50,7 @@ export function BookmarksPanel() {
                 className="flex min-w-0 flex-1 items-center gap-2 py-1 pr-1 pl-3 text-left text-xs text-muted transition-colors hover:bg-surface hover:text-ink"
               >
                 <span className="min-w-0 flex-1 truncate font-mono">{b.snippet || "—"}</span>
-                <span className="flex-none font-mono text-[11px] text-faint tabular-nums">
+                <span className="flex-none font-mono text-xs text-faint tabular-nums">
                   {b.line}
                 </span>
               </button>
@@ -59,7 +59,7 @@ export function BookmarksPanel() {
                 aria-label={t("bookmarks.remove")}
                 title={t("bookmarks.remove")}
                 onClick={() => useBookmarks.getState().remove(root, b.path, b.line)}
-                className="grid h-6 w-6 flex-none place-items-center text-faint opacity-0 transition-opacity group-hover/bm:opacity-100 hover:text-ink"
+                className="grid h-6 w-6 flex-none place-items-center text-faint opacity-0 transition-opacity group-hover/bm:opacity-100 group-focus-within/bm:opacity-100 focus-visible:opacity-100 hover:text-ink"
               >
                 <CloseIcon className="h-3 w-3" />
               </button>

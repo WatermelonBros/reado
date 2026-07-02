@@ -794,15 +794,18 @@ fn window_score(window: &[String], target: &[String]) -> f32 {
         / target.len() as f32
 }
 
-/// Best fuzzy position of `target` within `lines`, with its score.
-fn best_fuzzy(lines: &[String], target: &[String]) -> Option<(usize, f32)> {
+/// Best fuzzy position of `target` within `lines`, with its score. On tied
+/// scores, prefer the window nearest `near` (the old 0-based position) — repeated
+/// blocks otherwise snap to the last occurrence regardless of proximity.
+fn best_fuzzy(lines: &[String], target: &[String], near: usize) -> Option<(usize, f32)> {
     let len = target.len();
     if len == 0 || lines.len() < len {
         return None;
     }
+    let dist = |i: usize| (i as i64 - near as i64).abs();
     (0..=lines.len() - len)
         .map(|i| (i, window_score(&lines[i..i + len], target)))
-        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| dist(b.0).cmp(&dist(a.0))))
 }
 
 /// Recompute a comment's 1-based line range against new file content, using the
@@ -827,26 +830,67 @@ pub fn relocate(old_start: u32, context: &Context, new_content: &str) -> Option<
     if lines.is_empty() {
         return None;
     }
+    let before = trim(&context.before);
+    let after = trim(&context.after);
+    let has_ctx = !before.is_empty() || !after.is_empty();
+    let near = (old_start as usize).saturating_sub(1);
 
-    // 1. Exact snippet block, nearest to the old line.
+    // How well the lines surrounding an exact match at `i` agree with the stored
+    // before/after context. `1.0` when there is no context to check. Each side is
+    // aligned independently (before ends at `i`, after starts after the snippet)
+    // and boundary-clamped, so a match near the file edge still scores fairly.
+    let ctx_score_at = |i: usize| -> f32 {
+        let mut sum = 0.0f32;
+        let mut cnt = 0u32;
+        if !before.is_empty() {
+            let k = before.len().min(i);
+            sum += if k == 0 {
+                0.0
+            } else {
+                window_score(&lines[i - k..i], &before[before.len() - k..])
+            };
+            cnt += 1;
+        }
+        if !after.is_empty() {
+            let k = after.len().min(lines.len().saturating_sub(i + len));
+            sum += if k == 0 {
+                0.0
+            } else {
+                window_score(&lines[i + len..i + len + k], &after[..k])
+            };
+            cnt += 1;
+        }
+        if cnt == 0 { 1.0 } else { sum / cnt as f32 }
+    };
+
+    // 1. Exact snippet block. With surrounding context, only accept an exact
+    //    match the context corroborates — otherwise a byte-identical *duplicate*
+    //    elsewhere would steal the comment from an edited original. Among the
+    //    accepted matches, take the one nearest the old line.
+    let dist = |i: usize| ((i as i64 + 1) - old_start as i64).abs();
     let exact: Vec<usize> = (0..=lines.len().saturating_sub(len))
         .filter(|&i| lines.get(i..i + len).is_some_and(|w| w == snip.as_slice()))
         .collect();
-    if let Some(&i) = exact
-        .iter()
-        .min_by_key(|&&i| ((i as i64 + 1) - old_start as i64).abs())
-    {
+    if has_ctx {
+        if let Some(&i) = exact
+            .iter()
+            .filter(|&&i| ctx_score_at(i) >= FUZZY_THRESHOLD)
+            .min_by_key(|&&i| dist(i))
+        {
+            return Some(((i + 1) as u32, (i + len) as u32));
+        }
+        // No exact match is context-corroborated → fall through to the context
+        // window, which follows an edited original with stable surroundings.
+    } else if let Some(&i) = exact.iter().min_by_key(|&&i| dist(i)) {
         return Some(((i + 1) as u32, (i + len) as u32));
     }
 
     // 2. Context window: anchor by the surrounding lines so an edited snippet
     //    still follows. Only worthwhile when there is real context to lean on.
-    let before = trim(&context.before);
-    let after = trim(&context.after);
-    if !before.is_empty() || !after.is_empty() {
+    if has_ctx {
         let blen = before.len();
         let window: Vec<String> = before.iter().chain(&snip).chain(&after).cloned().collect();
-        if let Some((i, score)) = best_fuzzy(&lines, &window) {
+        if let Some((i, score)) = best_fuzzy(&lines, &window, near.saturating_sub(blen)) {
             // Weight context fully but require the surrounding lines to be a
             // strong match, so we don't drag an anchor onto unrelated code.
             let ctx_only: Vec<String> = before.iter().chain(&after).cloned().collect();
@@ -865,7 +909,7 @@ pub fn relocate(old_start: u32, context: &Context, new_content: &str) -> Option<
     }
 
     // 3. Fuzzy snippet alone — stricter bar, no context to lean on.
-    match best_fuzzy(&lines, &snip) {
+    match best_fuzzy(&lines, &snip, near) {
         Some((i, score)) if score >= FUZZY_SNIPPET_ONLY_THRESHOLD => {
             Some(((i + 1) as u32, (i + len) as u32))
         }
@@ -1055,6 +1099,22 @@ mod tests {
         };
         let new = "// header\nfn outer() {\n  let a = 1;\n  let b = compute(a, opts) ?? fallback;\n  return b;\n}\n";
         assert_eq!(relocate(3, &context, new), Some((4, 4)));
+    }
+
+    #[test]
+    fn relocate_prefers_edited_original_over_untouched_duplicate() {
+        // A block is duplicated elsewhere with different surroundings. The
+        // commented ORIGINAL is edited (its snippet no longer matches exactly);
+        // the far duplicate is byte-identical. The exact match at the duplicate
+        // must NOT steal the comment — the stable before/after keep it on the
+        // edited original.
+        let context = Context {
+            before: "fn original() {".into(),
+            snippet: "    let v = compute(x);".into(),
+            after: "    return v;\n}".into(),
+        };
+        let new = "fn original() {\n    let v = compute(x, opts);\n    return v;\n}\n\nmod other {\n    let v = compute(x);\n    log(v);\n}\n";
+        assert_eq!(relocate(2, &context, new), Some((2, 2)));
     }
 
     #[test]

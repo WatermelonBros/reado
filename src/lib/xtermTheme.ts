@@ -18,6 +18,23 @@ function resolve(varName: string): string {
   return color || "#000";
 }
 
+/** Last-resort stack if neither CSS custom property resolves. */
+const CODE_FONT_FALLBACK =
+  '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace';
+
+/**
+ * Resolve the configured code font to a concrete font-family string for xterm.
+ * Mirrors the editor's `var(--code-font, var(--font-code))`: prefer the user's
+ * `--code-font` override, fall back to the default `--font-code` stack.
+ */
+export function xtermFontFamily(): string {
+  const root = getComputedStyle(document.documentElement);
+  const font =
+    root.getPropertyValue("--code-font").trim() ||
+    root.getPropertyValue("--font-code").trim();
+  return font || CODE_FONT_FALLBACK;
+}
+
 export function xtermTheme(): ITheme {
   return {
     background: resolve("--bg"),

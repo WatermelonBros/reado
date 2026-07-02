@@ -26,7 +26,6 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
-tauri-plugin-store = "2"
 # Signed auto-updates (checks an update endpoint, verifies the signature).
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
@@ -62,7 +61,6 @@ rcgen = "0.13"
 rustls = { version = "0.23", features = ["ring"] }
 # Certificate fingerprint (SHA-256, hex) shown in the QR for verification.
 sha2 = "0.10"
-hex = "0.4"
 # Single-use pairing tokens.
 rand = "0.8"
 # Discover the machine's LAN IP to put in the QR.

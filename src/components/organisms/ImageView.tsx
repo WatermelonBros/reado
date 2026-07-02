@@ -59,7 +59,7 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
           <button
             type="button"
             onClick={() => stepZoom(-1)}
-            title="Zoom out" aria-label="Zoom out"
+            title={t("imageView.zoomOut")} aria-label={t("imageView.zoomOut")}
             className="grid h-6 w-6 place-items-center rounded hover:bg-surface hover:text-ink"
           >
             −
@@ -69,12 +69,12 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
             onClick={() => setZoom((z) => (z === null ? 1 : null))}
             className="min-w-[3rem] rounded px-1.5 py-0.5 text-center tabular-nums hover:bg-surface hover:text-ink"
           >
-            {zoom === null ? "Fit" : `${Math.round(zoom * 100)}%`}
+            {zoom === null ? t("imageView.fit") : `${Math.round(zoom * 100)}%`}
           </button>
           <button
             type="button"
             onClick={() => stepZoom(1)}
-            title="Zoom in" aria-label="Zoom in"
+            title={t("imageView.zoomIn")} aria-label={t("imageView.zoomIn")}
             className="grid h-6 w-6 place-items-center rounded hover:bg-surface hover:text-ink"
           >
             +

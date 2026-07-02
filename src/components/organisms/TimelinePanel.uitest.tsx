@@ -63,10 +63,10 @@ describe("TimelinePanel", () => {
     });
   });
 
-  it("falls back to the empty state when history loading fails", async () => {
+  it("shows an error state (not the empty state) when history loading fails", async () => {
     gitFileHistory.mockRejectedValue(new Error("no git"));
     useProject.setState({ root: ROOT, active: `${ROOT}/src/a.ts` });
     render(<TimelinePanel />);
-    await screen.findByText("timeline.empty");
+    await screen.findByText("timeline.error");
   });
 });

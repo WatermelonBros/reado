@@ -58,7 +58,10 @@
     "editSource": "Edit source",
     "problems_one": "{count} problem",
     "problems_other": "{count} problems",
-    "readProgress": "{read} of {total} files read"
+    "readProgress": "{read} of {total} files read",
+    "readError": "Couldn't read this folder — check permissions or that it still exists.",
+    "markFolderRead": "Mark folder read",
+    "markFolderUnread": "Mark folder unread"
   },
   "editor": {
     "empty": "Select a file from the tree to start reading.",
@@ -66,8 +69,8 @@
     "wrap": "Wrap lines",
     "focus": "Focus mode",
     "format": "Format Document",
-    "explain": "Explain selection with AI",
-    "explainNote": "Explain & save as note",
+    "explain": "Explain Selection with AI",
+    "explainNote": "Explain & Save as Note",
     "viewSource": "Source",
     "viewRendered": "Preview",
     "goToDef": "Go to Definition",
@@ -77,12 +80,14 @@
     "lastEdit": "Go to Last Edit Location",
     "cursorsLineEnds": "Add Cursors to Line Ends",
     "ribbon": "Structure ribbon",
-    "explainSymbol": "Explain this with AI",
+    "explainSymbol": "Explain This with AI",
     "sticky": "Sticky scroll",
     "stickyJump": "Jump to this scope",
     "measure": "Reading width",
     "edit": "Toggle editing",
-    "save": "Save"
+    "save": "Save",
+    "saveError": "Couldn't save — the file may be read-only or the disk full.",
+    "unsaved": "Unsaved changes"
   },
   "symbols": {
     "goto": "Go to Symbol in File…",
@@ -124,7 +129,8 @@
   "timeline": {
     "panel": "Timeline",
     "noFile": "Open a file to see its history.",
-    "empty": "No history for this file."
+    "empty": "No history for this file.",
+    "error": "Couldn't load this file's history."
   },
   "semantic": {
     "title": "Semantic search",
@@ -146,18 +152,17 @@
     "privacyNote": "No account, no cloud. Works on the same network, or anywhere over a VPN.",
     "enable": "Enable",
     "enabling": "Starting…",
+    "primeTitle": "macOS will ask for local network access",
+    "primeBody": "Reado serves this page over your local network so your phone can reach it. macOS will show its own prompt next — choose Allow. Nothing leaves your network.",
+    "primeContinue": "Continue",
     "stop": "Stop",
     "scanHint": "Scan with your phone's camera on the same network (or VPN). You'll accept a certificate warning once.",
     "copy": "Copy the address",
     "copied": "Copied",
-    "fingerprint": "Fingerprint"
-  },
-  "tests": {
-    "panel": "Tests",
-    "empty": "No test setup detected (package.json test script, Cargo, go.mod, or pytest).",
-    "runAll": "Run all",
-    "runFile": "Run current file",
-    "note": "Tests run in the integrated terminal, where their output appears."
+    "fingerprint": "Fingerprint",
+    "statusOn": "on",
+    "statusOff": "off",
+    "qrLabel": "QR code"
   },
   "prereview": {
     "panel": "AI Review",
@@ -165,7 +170,8 @@
     "generating": "Reviewing…",
     "empty": "No suggestions. Run AI pre-review on your current changes.",
     "approve": "Approve",
-    "discard": "Discard"
+    "discard": "Discard",
+    "error": "The agent didn't respond — is it running in the terminal?"
   },
   "guided": {
     "panel": "Guided Review",
@@ -253,7 +259,9 @@
       "false_positive": "false positive",
       "file_summary": "summary",
       "session_summary": "summary"
-    }
+    },
+    "approveAll": "Approve all",
+    "discardAll": "Discard all"
   },
   "loop": {
     "running": "Resolving…",
@@ -338,7 +346,7 @@
     "super": "Supertypes",
     "empty": "Run “Show Call Hierarchy” on a symbol.",
     "none": "Nothing in this direction.",
-    "unsupported": "No language server, or it doesn’t support hierarchies here."
+    "unsupported": "This file's language server doesn't provide hierarchies (or none is running)."
   },
   "nav": {
     "back": "Go back (⌥←)",
@@ -393,7 +401,8 @@
     "useSpaces": "Indent Using Spaces",
     "useTabs": "Indent Using Tabs",
     "language": "Select language mode",
-    "eol": "Line endings"
+    "eol": "Line endings",
+    "openComments": "Open comments"
   },
   "palette": {
     "placeholder": "Type a command…"
@@ -409,7 +418,9 @@
     "replaceConfirm": "Confirm replace",
     "replaced": "Replaced in {count} file(s).",
     "results": "{count} matches",
-    "ripgrepMissing": "ripgrep (rg) is not installed or not on PATH."
+    "truncated": "Showing {shown} of {total} — refine your search.",
+    "ripgrepMissing": "Search needs ripgrep (rg), which isn't installed or on your PATH. Install it, then try again.",
+    "searching": "Searching…"
   },
   "settings": {
     "title": "Settings",
@@ -433,8 +444,8 @@
     "cliInstall": "Install 'reado' on PATH",
     "cliReinstall": "Reinstall 'reado'",
     "cliInstalled": "Installed",
-    "cliDone": "Installed at {path}. Ensure ~/.local/bin is on your PATH.",
-    "cliHint": "Links the bundled 'reado' CLI into ~/.local/bin so AI agents can read and resolve your tasks from any project.",
+    "cliDone": "Installed at {path}. If `reado` isn't found, add that folder to your PATH.",
+    "cliHint": "Links the bundled 'reado' CLI so AI agents can read and resolve your tasks from any project.",
     "logging": "Diagnostic logging",
     "logEnabled": "Write a diagnostic log file",
     "logLevel": "Detail level",
@@ -583,7 +594,8 @@
     "stashPop": "Pop",
     "stashDrop": "Drop",
     "discardAll": "Discard all changes",
-    "discardAllConfirm": "Discard all working-tree changes (including untracked files)? This cannot be undone."
+    "discardAllConfirm": "Discard all working-tree changes (including untracked files)? This cannot be undone.",
+    "stashDropConfirm": "Drop this stash? This cannot be undone."
   },
   "lsp": {
     "createTask": "Create task",
@@ -632,7 +644,8 @@
       "spec": "Spec",
       "doc": "Doc",
       "link": "Linked"
-    }
+    },
+    "empty": "Nothing to graph yet. Your comments, specs, and docs appear here as connected nodes once you add them."
   },
   "docs": {
     "title": "Documentation"
@@ -688,5 +701,17 @@
     "close": "Close",
     "loading": "Loading…",
     "error": "Something went wrong."
+  },
+  "agent": {
+    "notInstalled": "{name} isn't installed. Install it to use Reado's AI features.",
+    "sent": "Sent to agent"
+  },
+  "breadcrumb": {
+    "label": "File path"
+  },
+  "imageView": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit"
   }
 }

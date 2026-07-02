@@ -11,8 +11,20 @@ import {
 } from "./store";
 import { useTerminals } from "./terminals";
 import { useExtensions } from "./extensions";
-import { formatDocument } from "./docInfo";
+import { formatDocument, nextProblem, prevProblem } from "./docInfo";
+import { useReadProgress } from "./readProgress";
+import { toRelative } from "./comments";
 import { checkForUpdates } from "./updater";
+
+/** Toggle the read/unread state of the active file (⌘⌥R). Read progress is keyed
+ *  by project-relative path, so convert the absolute active path first. */
+function toggleActiveRead(): void {
+  const { root, active } = useProject.getState();
+  if (!active) return;
+  const rel = toRelative(root, active);
+  const isRead = useReadProgress.getState().read.has(rel);
+  useReadProgress.getState().mark(root, rel, !isRead);
+}
 
 /** The dark Reado themes — used to match the native window (title bar) chrome. */
 const DARK_THEMES: ThemeName[] = ["reado-dark", "reado-high-contrast"];
@@ -135,6 +147,13 @@ export function useGlobalShortcuts(): void {
         void formatDocument();
         return;
       }
+      // Next / previous problem (F8 / Shift+F8), like VS Code — no modifier.
+      if (e.key === "F8") {
+        e.preventDefault();
+        if (e.shiftKey) prevProblem();
+        else nextProblem();
+        return;
+      }
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const key = e.key.toLowerCase();
@@ -212,6 +231,22 @@ export function useGlobalShortcuts(): void {
         const p = useProject.getState();
         if (p.splitPath) p.closeSplit();
         else p.openSplit();
+      } else if (key === "r" && e.altKey) {
+        // Toggle read/unread for the active file (most frequent per-file verb).
+        e.preventDefault();
+        toggleActiveRead();
+      } else if (key === "e" && e.shiftKey) {
+        // Reveal the file tree.
+        e.preventDefault();
+        useWorkspace.getState().selectTool("files");
+      } else if (key === "g" && e.shiftKey) {
+        // Source control.
+        e.preventDefault();
+        useWorkspace.getState().selectTool("git");
+      } else if (key === "c" && e.shiftKey) {
+        // Comments panel.
+        e.preventDefault();
+        useWorkspace.getState().selectTool("comments");
       }
     };
     window.addEventListener("keydown", onKey);

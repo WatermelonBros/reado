@@ -27,6 +27,7 @@ import {
   EditIcon,
   SparkleIcon,
   LayoutIcon,
+  DeltaIcon,
 } from "../atoms/icons";
 import { TreeCommentDialog, type CommentTarget } from "../organisms/TreeCommentDialog";
 import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
@@ -42,7 +43,9 @@ const useProjectFiles = create<{ files: string[]; load: (root: string) => void }
   load: (root) =>
     void listFiles(root)
       .then((fs) => set({ files: fs.map((f) => f.replace(/\\/g, "/")) }))
-      .catch(() => set({ files: [] })),
+      // A transient failure keeps the cached list — wiping it to [] would flicker
+      // away the per-folder read/total badges. Stale beats empty here.
+      .catch(() => {}),
 }));
 
 /** How many of `items` (a file list or read-set) sit under `prefix` ("dir/"). */
@@ -179,6 +182,32 @@ export function FileTree() {
               },
             ]
           : []),
+        ...(menu.entry && menu.entry.isDir
+          ? [
+              {
+                label: t("tree.markFolderRead"),
+                onSelect: () => {
+                  const folderRel = toRelative(root, menu.entry!.path);
+                  const files = useProjectFiles
+                    .getState()
+                    .files.filter((f) => f.startsWith(folderRel + "/"));
+                  useReadProgress.getState().markMany(root, files, true);
+                  setMenu(null);
+                },
+              },
+              {
+                label: t("tree.markFolderUnread"),
+                onSelect: () => {
+                  const folderRel = toRelative(root, menu.entry!.path);
+                  const files = useProjectFiles
+                    .getState()
+                    .files.filter((f) => f.startsWith(folderRel + "/"));
+                  useReadProgress.getState().markMany(root, files, false);
+                  setMenu(null);
+                },
+              },
+            ]
+          : []),
         ...(menu.entry && !menu.entry.isDir && /\.svg$/i.test(menu.entry.path)
           ? [
               {
@@ -267,13 +296,21 @@ function DirChildren({
   onMove,
 }: DirChildrenProps) {
   const [entries, setEntries] = useState<DirEntry[] | null>(null);
+  const [failed, setFailed] = useState(false);
   const { t } = useTranslation();
 
   useEffect(() => {
     let cancelled = false;
+    setFailed(false);
     listDir(root, dir, showHidden)
       .then((e) => !cancelled && setEntries(e))
-      .catch(() => !cancelled && setEntries([]));
+      // A read failure must stay distinguishable from a genuinely empty folder:
+      // flag the error so we don't render `tree.empty` as if the load succeeded.
+      .catch(() => {
+        if (cancelled) return;
+        setEntries([]);
+        setFailed(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -283,6 +320,13 @@ function DirChildren({
     return (
       <div className="px-4 py-2 text-xs text-faint" style={indent(depth)}>
         {t("common.loading")}
+      </div>
+    );
+  }
+  if (failed) {
+    return (
+      <div className="px-4 py-2 text-xs text-faint" style={indent(depth)}>
+        {t("tree.readError")}
       </div>
     );
   }
@@ -326,31 +370,29 @@ function TreeNode({
   onContext: Ctx;
   onMove: (from: string, destDir: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [over, setOver] = useState(false);
   const rowRef = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation();
   const open = useProject((s) => s.open);
   const active = useProject((s) => s.active);
+  // Expansion lives in the store (persisted per project), keyed by the same
+  // project-relative path the tree uses elsewhere, so a reopen restores it and
+  // collapse-all (which clears expandedDirs) collapses everything.
+  const relPath = toRelative(root, entry.path);
+  const expanded = useProject((s) => entry.isDir && s.expandedDirs.includes(relPath));
 
   // Reveal the open file: ancestor folders auto-expand (the chain cascades as
   // each level mounts), and the active row scrolls into view.
   useEffect(() => {
     if (entry.isDir && active && active.startsWith(entry.path + sep(entry.path))) {
-      setExpanded(true);
+      useProject.getState().toggleDir(relPath, true);
     }
-  }, [active, entry.isDir, entry.path]);
+  }, [active, entry.isDir, entry.path, relPath]);
   const isActive = !entry.isDir && active === entry.path;
   useEffect(() => {
     if (isActive) rowRef.current?.scrollIntoView({ block: "nearest" });
   }, [isActive]);
-  // Collapse-all from the panel header (skip the initial 0).
-  const collapseNonce = useProject((s) => s.collapseNonce);
-  useEffect(() => {
-    if (collapseNonce && entry.isDir) setExpanded(false);
-  }, [collapseNonce, entry.isDir]);
   // Read files are dimmed (a quiet reading-progress cue).
-  const relPath = toRelative(root, entry.path);
   const isRead = useReadProgress((s) => !entry.isDir && s.read.has(relPath));
   // Per-folder aggregate: how many files under this folder have been read.
   // Selectors short-circuit for files so file rows never scan the lists.
@@ -371,94 +413,104 @@ function TreeNode({
   const hasDelta = useReadProgress((s) => !entry.isDir && s.changed.has(relPath));
 
   const onClick = useCallback(() => {
-    if (entry.isDir) setExpanded((e) => !e);
+    if (entry.isDir) useProject.getState().toggleDir(relPath);
     else open(entry.path);
-  }, [entry, open]);
+  }, [entry, open, relPath]);
 
   const dragging = (e: React.DragEvent) => e.dataTransfer.types.includes(DRAG_TYPE);
 
+  const reviewDelta = () => {
+    open(entry.path);
+    useEditorActions.getState().setDiffBase(LAST_READ_BASE);
+    useEditorActions.getState().setDiffing(true);
+  };
+
   return (
     <>
-      <button
-        ref={rowRef}
-        type="button"
-        style={indent(depth)}
-        data-dir={dropDir(entry)}
-        draggable
-        onDragStart={(e) => e.dataTransfer.setData(DRAG_TYPE, entry.path)}
-        onDragOver={(e) => {
-          if (!dragging(e)) return;
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => {
-          setOver(false);
-          if (!dragging(e)) return;
-          e.preventDefault();
-          e.stopPropagation();
-          const from = e.dataTransfer.getData(DRAG_TYPE);
-          if (from) onMove(from, dropDir(entry));
-        }}
-        onClick={onClick}
-        onContextMenu={(e) => onContext(entry, e)}
-        role="treeitem"
-        aria-expanded={entry.isDir ? expanded : undefined}
-        title={entry.name}
-        className={`flex w-full items-center gap-1.5 py-[3px] pr-3 text-left text-sm text-ink transition-colors ${
+      {/* The row-open button and the delta review control are siblings: a button
+          may not nest inside another button. */}
+      <div
+        className={`flex items-stretch ${
           over ? "bg-selection" : isActive ? "bg-selection" : "hover:bg-surface"
         }`}
       >
-        {entry.isDir ? (
-          <ChevronIcon
-            className={`h-[13px] w-[13px] flex-none text-faint transition-transform ${
-              expanded ? "rotate-90" : ""
-            }`}
-          />
-        ) : (
-          <span className="w-[13px] flex-none" />
-        )}
-        <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} />
-        <span
-          className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${
-            dimmed ? "text-muted" : ""
-          }`}
+        <button
+          ref={rowRef}
+          type="button"
+          style={indent(depth)}
+          data-dir={dropDir(entry)}
+          draggable
+          onDragStart={(e) => e.dataTransfer.setData(DRAG_TYPE, entry.path)}
+          onDragOver={(e) => {
+            if (!dragging(e)) return;
+            e.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            setOver(false);
+            if (!dragging(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const from = e.dataTransfer.getData(DRAG_TYPE);
+            if (from) onMove(from, dropDir(entry));
+          }}
+          onClick={onClick}
+          onContextMenu={(e) => onContext(entry, e)}
+          role="treeitem"
+          aria-expanded={entry.isDir ? expanded : undefined}
+          title={entry.name}
+          className="flex min-w-0 flex-1 items-center gap-1.5 py-[3px] pr-3 text-left text-sm text-ink transition-colors"
         >
-          {entry.name}
-        </span>
-        {entry.isDir && folderRead > 0 && !folderDone && (
+          {entry.isDir ? (
+            <ChevronIcon
+              className={`h-[13px] w-[13px] flex-none text-faint transition-transform ${
+                expanded ? "rotate-90" : ""
+              }`}
+            />
+          ) : (
+            <span className="w-[13px] flex-none" />
+          )}
+          <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} />
           <span
-            title={t("tree.readProgress", { read: folderRead, total: folderTotal })}
-            className="flex-none pl-1 text-[10px] text-faint tabular-nums"
+            className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${
+              dimmed ? "text-muted" : ""
+            }`}
           >
-            {folderRead}/{folderTotal}
+            {entry.name}
           </span>
-        )}
-        {errorCount > 0 && (
-          <span
-            title={t("tree.problems", { count: errorCount })}
-            className="flex-none pl-1 text-[10px] font-medium text-danger tabular-nums"
-          >
-            {errorCount}
-          </span>
-        )}
+          {entry.isDir && folderRead > 0 && !folderDone && (
+            <span
+              title={t("tree.readProgress", { read: folderRead, total: folderTotal })}
+              className="flex-none pl-1 text-[10px] text-faint tabular-nums"
+            >
+              {folderRead}/{folderTotal}
+            </span>
+          )}
+          {errorCount > 0 && (
+            <span
+              title={t("tree.problems", { count: errorCount })}
+              className="flex-none pl-1 text-[10px] font-medium text-danger tabular-nums"
+            >
+              {errorCount}
+            </span>
+          )}
+        </button>
         {hasDelta && (
-          <span
-            role="button"
-            tabIndex={0}
+          <button
+            type="button"
+            aria-label={t("delta.review")}
             title={t("delta.review")}
             onClick={(e) => {
               e.stopPropagation();
-              open(entry.path);
-              useEditorActions.getState().setDiffBase(LAST_READ_BASE);
-              useEditorActions.getState().setDiffing(true);
+              reviewDelta();
             }}
-            className="flex-none cursor-pointer pl-1 text-[11px] font-semibold text-accent hover:underline"
+            className="flex flex-none items-center pr-3 pl-1 text-accent hover:underline"
           >
-            Δ
-          </span>
+            <DeltaIcon className="h-[13px] w-[13px]" />
+          </button>
         )}
-      </button>
+      </div>
       {entry.isDir && expanded && (
         <DirChildren
           root={root}

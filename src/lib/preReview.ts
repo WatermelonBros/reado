@@ -52,6 +52,9 @@ function parse(text: string): Draft[] {
 interface PreReviewState {
   drafts: Draft[];
   generating: boolean;
+  /** Set when a run times out with no result — so the panel can show a distinct
+   *  error state instead of silently reverting to the empty state. */
+  error: boolean;
   load: (root: string) => Promise<void>;
   generate: (root: string) => void;
   approve: (root: string, id: string) => Promise<void>;
@@ -61,13 +64,14 @@ interface PreReviewState {
 export const usePreReview = create<PreReviewState>((set, get) => ({
   drafts: [],
   generating: false,
+  error: false,
   load: async (root) => {
     const c = await readFile(root, STORE).catch(() => null);
     set({ drafts: c && c.kind === "text" ? parse(c.text) : [] });
   },
   generate: (root) => {
     const mine = ++token;
-    set({ generating: true });
+    set({ generating: true, error: false });
     void dispatchToAgent(
       `Review the current uncommitted changes in this repo (run \`git diff\`). For each ` +
         `risky or notable change, propose a short review comment. Write JSON to ` +
@@ -85,7 +89,9 @@ export const usePreReview = create<PreReviewState>((set, get) => ({
           return;
         }
       }
-      if (token === mine) set({ generating: false });
+      // Timed out with nothing written: flag the error (mirrors qa.ts flipping to
+      // an error status) so the panel distinguishes this from a genuine no-result.
+      if (token === mine) set({ generating: false, error: true });
     })();
   },
   approve: async (root, id) => {

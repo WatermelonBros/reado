@@ -55,6 +55,7 @@ const STATUS: Record<GitChange["status"], { letter: string; color: string }> = {
   deleted: { letter: "D", color: "var(--marker)" },
   renamed: { letter: "R", color: "var(--syn-keyword)" },
   untracked: { letter: "U", color: "var(--text-faint)" },
+  conflicted: { letter: "!", color: "var(--diag-error)" },
 };
 
 const basename = (p: string) => p.split("/").pop() ?? p;
@@ -75,6 +76,8 @@ export function GitPanel() {
   const [busy, setBusy] = useState(false);
   // Path armed for discard confirmation (inline, like the comment delete flow).
   const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
+  // Stash index armed for drop confirmation (inline, like discardDiscard above).
+  const [confirmDropStash, setConfirmDropStash] = useState<number | null>(null);
   // Repo-level "more actions" dropdown + its data.
   const [menuOpen, setMenuOpen] = useState(false);
   // The "more" menu is positioned with fixed coords (to the right of the dots) so
@@ -101,7 +104,11 @@ export function GitPanel() {
   useEffect(() => {
     refresh();
     // Keep the view fresh as the tree changes (cheap, debounced by interval).
-    const id = window.setInterval(refresh, 4000);
+    // Skip the poll while the window is hidden — nothing to refresh for.
+    const id = window.setInterval(() => {
+      if (document.hidden) return;
+      refresh();
+    }, 4000);
     return () => clearInterval(id);
   }, [refresh]);
 
@@ -152,12 +159,13 @@ export function GitPanel() {
   const commit = () => {
     if (!message.trim() || staged.length === 0) return;
     setBusy(true);
+    setError(null);
     gitCommit(root, message.trim())
       .then(() => {
         setMessage("");
         refresh();
       })
-      .catch(() => {})
+      .catch((e) => setError(String(e)))
       .finally(() => setBusy(false));
   };
 
@@ -201,7 +209,7 @@ export function GitPanel() {
               </button>
             </div>
           ) : (
-            <div className="flex flex-none items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100">
+            <div className="flex flex-none items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
               {!c.staged && (
                 <button
                   type="button"
@@ -253,7 +261,7 @@ export function GitPanel() {
     <div className="group/hdr flex items-center gap-2 px-3 pt-3 pb-1 text-xs font-medium tracking-wide text-muted uppercase">
       <span>{label}</span>
       <span className="text-faint">{count}</span>
-      <div className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover/hdr:opacity-100">
+      <div className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover/hdr:opacity-100 group-focus-within/hdr:opacity-100">
         {actions.map((a) => (
           <button
             key={a.label}
@@ -379,27 +387,52 @@ export function GitPanel() {
                       <span className="min-w-0 flex-1 truncate text-xs text-muted" title={s.message}>
                         {s.message}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => runRepo(gitStashApply(root, s.index))}
-                        className="flex-none text-[11px] text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 hover:text-ink"
-                      >
-                        {t("git.stashApply")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => runRepo(gitStashPop(root, s.index))}
-                        className="flex-none text-[11px] text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 hover:text-ink"
-                      >
-                        {t("git.stashPop")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => runRepo(gitStashDrop(root, s.index))}
-                        className="flex-none text-[11px] text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 hover:text-marker"
-                      >
-                        {t("git.stashDrop")}
-                      </button>
+                      {confirmDropStash === s.index ? (
+                        <div className="flex flex-none items-center gap-1.5 text-xs">
+                          <span className="text-muted">{t("git.stashDropConfirm")}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmDropStash(null);
+                              runRepo(gitStashDrop(root, s.index));
+                            }}
+                            className="font-semibold text-marker hover:underline"
+                          >
+                            {t("git.stashDrop")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDropStash(null)}
+                            className="text-muted hover:text-ink"
+                          >
+                            {t("common.cancel")}
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => runRepo(gitStashApply(root, s.index))}
+                            className="flex-none text-xs text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100 hover:text-ink"
+                          >
+                            {t("git.stashApply")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => runRepo(gitStashPop(root, s.index))}
+                            className="flex-none text-xs text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100 hover:text-ink"
+                          >
+                            {t("git.stashPop")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDropStash(s.index)}
+                            className="flex-none text-xs text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100 hover:text-marker"
+                          >
+                            {t("git.stashDrop")}
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))
                 )}

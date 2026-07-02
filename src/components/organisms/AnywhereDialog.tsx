@@ -14,6 +14,7 @@ import {
   type AnywhereInfo,
 } from "../../lib/api";
 import { usePalette } from "../../lib/store";
+import { currentOS } from "../../lib/extensions";
 
 import { Modal } from "../atoms/Modal";
 import { QrCode } from "../atoms/QrCode";
@@ -24,6 +25,8 @@ import { useTranslation } from "react-i18next";
 const payload = (i: AnywhereInfo) =>
   `${i.url}/#token=${i.token}&fp=${encodeURIComponent(i.fingerprint)}`;
 
+const PRIMED_KEY = "reado.anywhere.primed";
+
 export function AnywhereDialog() {
   const open = usePalette((s) => s.anywhereOpen);
   const toggle = usePalette((s) => s.toggleAnywhere);
@@ -33,11 +36,16 @@ export function AnywhereDialog() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // macOS pops a system "allow local network access" prompt the moment the
+  // server binds. We can't restyle that dialog, but we can explain it first with
+  // our own step so it isn't a surprise — then let it fire.
+  const [priming, setPriming] = useState(false);
 
   // Reflect the real server state whenever the dialog opens.
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setPriming(false);
     anywhereStatus().then(setInfo).catch(() => setInfo(null));
   }, [open]);
 
@@ -46,12 +54,19 @@ export function AnywhereDialog() {
     setError(null);
     try {
       setInfo(await anywhereEnable());
+      setPriming(false);
+      localStorage.setItem(PRIMED_KEY, "1"); // don't re-explain on later enables
     } catch (e) {
       setError(String(e));
     } finally {
       setBusy(false);
     }
   };
+
+  // On macOS, explain the OS local-network prompt before triggering it — but only
+  // the first time (afterwards the OS remembers the grant, so priming is noise).
+  const requestEnable = () =>
+    currentOS() === "mac" && !localStorage.getItem(PRIMED_KEY) ? setPriming(true) : enable();
 
   const disable = async () => {
     setBusy(true);
@@ -81,7 +96,7 @@ export function AnywhereDialog() {
       className="flex w-[min(440px,92vw)] flex-col"
     >
       <header className="flex flex-none items-center justify-between gap-3 border-b border-line px-5 py-3">
-        <h2 className="m-0 flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
+        <h2 className="m-0 flex items-center gap-2 text-sm font-medium">
           {t("anywhere.title")}
           <span
             className="h-1.5 w-1.5 rounded-full"
@@ -94,7 +109,7 @@ export function AnywhereDialog() {
       <div className="flex flex-col items-center px-6 py-6 text-center">
         {info ? (
           <>
-            <div className="rounded-xl bg-[#f5f3ee] p-4 shadow-[var(--shadow)]">
+            <div className="rounded-xl bg-[var(--qr-surface)] p-4 shadow-[var(--shadow)]">
               <QrCode value={payload(info)} size={216} />
             </div>
             <p className="mt-5 max-w-[34ch] text-sm leading-relaxed text-muted">
@@ -115,7 +130,7 @@ export function AnywhereDialog() {
           </>
         ) : (
           <>
-            <p className="max-w-[36ch] text-[15px] leading-relaxed text-ink/85">
+            <p className="max-w-[36ch] text-lg leading-relaxed text-ink/85">
               {t("anywhere.tagline")}
             </p>
             <p className="mt-2 max-w-[36ch] text-xs leading-relaxed text-faint">
@@ -123,16 +138,22 @@ export function AnywhereDialog() {
             </p>
           </>
         )}
+        {priming && !info && (
+          <div className="mt-4 max-w-[36ch] rounded-md border border-line-strong bg-surface p-3">
+            <p className="text-base font-medium text-ink">{t("anywhere.primeTitle")}</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted">{t("anywhere.primeBody")}</p>
+          </div>
+        )}
         {error && <p className="mt-4 text-xs text-marker">{error}</p>}
       </div>
 
       <footer className="flex flex-none items-center justify-end gap-2 border-t border-line px-5 py-3">
         <button
           type="button"
-          onClick={() => toggle(false)}
+          onClick={() => (priming ? setPriming(false) : toggle(false))}
           className="rounded-md px-3 py-1.5 text-sm text-muted hover:text-ink"
         >
-          {t("common.close")}
+          {priming ? t("common.cancel") : t("common.close")}
         </button>
         {info ? (
           <button
@@ -143,10 +164,19 @@ export function AnywhereDialog() {
           >
             {t("anywhere.stop")}
           </button>
-        ) : (
+        ) : priming ? (
           <button
             type="button"
             onClick={enable}
+            disabled={busy}
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
+          >
+            {busy ? t("anywhere.enabling") : t("anywhere.primeContinue")}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={requestEnable}
             disabled={busy}
             className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
           >

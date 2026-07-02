@@ -340,6 +340,7 @@ function ThemeChoice({
           type="button"
           data-theme={theme}
           onClick={() => onChange(theme)}
+          aria-pressed={value === theme}
           title={t(`theme.${theme}` as MessageKey)}
           className={`flex flex-col gap-2 rounded-md border p-2 ${
             value === theme

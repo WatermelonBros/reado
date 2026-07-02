@@ -23,7 +23,7 @@ export function Welcome() {
         <ol className="m-0 mb-7 flex list-none flex-col gap-2.5 p-0">
           {STEPS.map((step, i) => (
             <li key={step} className="flex items-start gap-2.5">
-              <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-surface text-[11px] font-semibold text-muted">
+              <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-surface text-xs font-semibold text-muted">
                 {i + 1}
               </span>
               <span className="text-sm leading-snug text-muted">{t(step)}</span>
@@ -38,7 +38,7 @@ export function Welcome() {
           {SHORTCUTS.map((s) => (
             <li key={s.labelKey} className="flex items-center justify-between gap-4">
               <span className="text-sm text-muted">{t(s.labelKey)}</span>
-              <kbd className="flex-none rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-faint">
+              <kbd className="flex-none rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-xs text-faint">
                 {s.combo}
               </kbd>
             </li>

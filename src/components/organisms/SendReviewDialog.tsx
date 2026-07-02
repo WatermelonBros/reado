@@ -4,10 +4,10 @@
  * task 4.4 (deselectable batch + target agent).
  */
 import { useMemo, useState } from "react";
-import { submitToTerminal } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useTerminals } from "../../lib/terminals";
-import { composeReviewPrompt, composeReviewPromptForIds } from "../../lib/review";
+import { useProject } from "../../lib/store";
+import { useResolveLoop } from "../../lib/resolveLoop";
 
 import { TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
 import { Modal } from "../atoms/Modal";
@@ -40,12 +40,13 @@ export function SendReviewDialog({ open, onClose }: { open: boolean; onClose: ()
     });
 
   const send = () => {
-    const id = target || activeId || add();
-    const prompt =
-      selected.length === tasks.length
-        ? composeReviewPrompt(tasks.length)
-        : composeReviewPromptForIds(selected);
-    submitToTerminal(id, prompt, id === (target || activeId) ? 0 : 400);
+    // Route through the resolve loop so the handoff gets progress tracking,
+    // completion notification, and the hardened dispatch (agent boot-wait +
+    // install check + correct submit) — same path guided review uses. Honour the
+    // chosen target terminal by making it active first.
+    if (target) useTerminals.getState().setActive(target);
+    else if (!activeId) add();
+    void useResolveLoop.getState().start(useProject.getState().root, selected);
     onClose();
   };
 

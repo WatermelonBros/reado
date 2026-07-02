@@ -48,7 +48,7 @@ describe("AnywhereDialog", () => {
     render(<AnywhereDialog />);
     expect(await screen.findByText("anywhere.tagline")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "anywhere.enable" })).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "QR code" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "anywhere.qrLabel" })).not.toBeInTheDocument();
   });
 
   it("enabling the server renders the QR and the stop control", async () => {
@@ -56,7 +56,7 @@ describe("AnywhereDialog", () => {
     render(<AnywhereDialog />);
     await userEvent.click(await screen.findByRole("button", { name: "anywhere.enable" }));
     expect(anywhereEnable).toHaveBeenCalledOnce();
-    expect(await screen.findByRole("img", { name: "QR code" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "anywhere.qrLabel" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "anywhere.stop" })).toBeInTheDocument();
   });
 

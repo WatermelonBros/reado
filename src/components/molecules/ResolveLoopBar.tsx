@@ -33,7 +33,7 @@ export function ResolveLoopBar() {
         <SparkleIcon
           className={`h-3 w-3 flex-none ${tone} ${active.status === "running" ? "animate-pulse" : ""}`}
         />
-        <span className={`min-w-0 flex-1 truncate text-[11px] ${tone}`}>
+        <span className={`min-w-0 flex-1 truncate text-xs ${tone}`}>
           {done
             ? t("loop.finished")
             : waiting

@@ -45,7 +45,7 @@ export function OrphansPanel() {
             })}
           </p>
           {c.context.snippet && (
-            <pre className="mb-2 max-h-24 overflow-auto rounded-md border border-line bg-surface px-2 py-1.5 font-mono text-[11px] leading-relaxed text-muted">
+            <pre className="mb-2 max-h-24 overflow-auto rounded-md border border-line bg-surface px-2 py-1.5 font-mono text-xs leading-relaxed text-muted">
               {c.context.snippet}
             </pre>
           )}

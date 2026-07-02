@@ -171,6 +171,7 @@ export function StatusBar() {
                     if (e.key === "Enter") submitGoto();
                   }}
                   placeholder={t("status.goToLinePlaceholder")}
+                  aria-label={t("status.goToLinePlaceholder")}
                   className="block w-[160px] bg-transparent px-2.5 py-1 text-sm text-ink outline-none placeholder:text-faint"
                 />
               </Popover>
@@ -339,7 +340,7 @@ export function StatusBar() {
         )}
         <span
           className="inline-flex items-center gap-[5px] px-1 whitespace-nowrap"
-          title="open comments"
+          title={t("status.openComments")}
         >
           <MessageIcon className="h-[13px] w-[13px]" />
           {t("status.comments", { count: openComments })}
@@ -349,11 +350,12 @@ export function StatusBar() {
           type="button"
           onClick={() => usePalette.getState().toggleAnywhere(true)}
           title={t("anywhere.title")}
-          aria-label={t("anywhere.title")}
+          aria-label={`${t("anywhere.title")} — ${t(anywhereOn ? "anywhere.statusOn" : "anywhere.statusOff")}`}
           className="inline-flex items-center gap-[5px] rounded-sm px-1 text-faint transition-colors hover:text-ink"
         >
           <DeviceIcon className="h-[13px] w-[13px]" />
           <span
+            aria-hidden
             className="h-1.5 w-1.5 rounded-full"
             style={{ background: anywhereOn ? "var(--syn-string)" : "var(--border-strong)" }}
           />

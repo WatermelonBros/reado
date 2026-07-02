@@ -45,7 +45,7 @@ export function SemanticModal() {
               onClick={() => jump(h.file, h.line)}
               className="block w-full border-b border-line/60 px-5 py-2 text-left hover:bg-surface"
             >
-              <div className="flex items-baseline gap-2 text-[11px] text-faint">
+              <div className="flex items-baseline gap-2 text-xs text-faint">
                 <span className="min-w-0 flex-1 truncate">{h.file}</span>
                 <span className="flex-none tabular-nums">{h.line}</span>
               </div>

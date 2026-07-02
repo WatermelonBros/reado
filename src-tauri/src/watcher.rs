@@ -191,11 +191,26 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                             })
                             .collect();
                         if removed_commented.len() == 1 && created.len() == 1 {
+                            let created_path = created.iter().next().unwrap();
                             if let (Some(from), Some(to)) = (
                                 relative(&root, removed_commented[0]),
-                                relative(&root, created.iter().next().unwrap()),
+                                relative(&root, created_path),
                             ) {
+                                // Corroborate the pairing: the created file must
+                                // still contain one of the removed file's anchored
+                                // snippets. Counts of 1+1 alone are coincidental —
+                                // an unrelated delete+create in the same window
+                                // would otherwise move comments onto the wrong file.
+                                let new_content =
+                                    std::fs::read_to_string(created_path).unwrap_or_default();
+                                let looks_like_rename = comments.iter().any(|c| {
+                                    c.meta.anchor.file == from && {
+                                        let s = c.meta.context.snippet.trim();
+                                        !s.is_empty() && new_content.contains(s)
+                                    }
+                                });
                                 if from != to
+                                    && looks_like_rename
                                     && reado_core::rename_comments(&root_str, &from, &to)
                                         .unwrap_or(0)
                                         > 0

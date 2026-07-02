@@ -24,8 +24,7 @@ import {
 import { Select } from "../atoms/Select";
 import { Checkbox } from "../atoms/Checkbox";
 import { CloseIcon, SendIcon } from "../atoms/icons";
-import { useTerminals } from "../../lib/terminals";
-import { ptyWrite } from "../../lib/api";
+import { dispatchToAgent } from "../../lib/agents";
 import { composeSingleTaskPrompt } from "../../lib/review";
 import { useTranslation } from "react-i18next";
 
@@ -67,15 +66,11 @@ export function CommentThread({ comment, top, onClose }: Props) {
     setReplyText("");
   };
 
-  // "Send just this now": inject a prompt for the active agent to resolve only
-  // this task (spec 4.4).
+  // "Send just this now": hand this one task to the agent through the hardened
+  // dispatch (launches/boot-waits the agent, checks it's installed, submits
+  // correctly) rather than a raw PTY write that a TUI agent may not even submit.
   const sendToAgent = () => {
-    const terminals = useTerminals.getState();
-    const id = terminals.activeId ?? terminals.add();
-    setTimeout(
-      () => ptyWrite(id, `${composeSingleTaskPrompt(comment.id)}\r`),
-      id === terminals.activeId ? 0 : 400,
-    );
+    void dispatchToAgent(composeSingleTaskPrompt(comment.id));
   };
 
   return (
@@ -165,12 +160,12 @@ export function CommentThread({ comment, top, onClose }: Props) {
                   </span>
                 );
               })()}
-              <span className="text-[11px] text-faint">{fmtTime(m.createdAt)}</span>
+              <span className="text-xs text-faint">{fmtTime(m.createdAt)}</span>
               {i === 0 && editDraft === null && (
                 <button
                   type="button"
                   onClick={() => setEditDraft(m.body)}
-                  className="ml-auto text-[11px] text-faint opacity-0 transition-opacity group-hover/msg:opacity-100 hover:text-ink"
+                  className="ml-auto text-xs text-faint opacity-0 transition-opacity group-hover/msg:opacity-100 group-focus-within/msg:opacity-100 focus-visible:opacity-100 hover:text-ink"
                 >
                   {t("comment.edit")}
                 </button>
@@ -206,7 +201,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
                 </div>
               </div>
             ) : (
-              <div className="prose-reado text-[13px] leading-relaxed text-ink [&_p]:my-1">
+              <div className="prose-reado text-base leading-relaxed text-ink [&_p]:my-1">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.body}</ReactMarkdown>
               </div>
             )}

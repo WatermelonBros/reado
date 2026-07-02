@@ -243,7 +243,7 @@ export function OnboardingTour() {
         <Tour.Spotlight className="pointer-events-none invisible" />
         <Tour.Positioner className="z-[302]">
           <Tour.Content className="relative flex max-w-[340px] flex-col gap-2 rounded-lg border border-line-strong bg-overlay p-4 text-sm shadow-[var(--shadow),0_2px_10px_oklch(0_0_0/0.35)]">
-            <Tour.Title className="pr-6 text-[15px] font-semibold text-ink" />
+            <Tour.Title className="pr-6 text-lg font-semibold text-ink" />
             <Tour.Description className="leading-relaxed text-muted" />
             <div className="mt-2 flex items-center justify-between gap-3">
               <Tour.ProgressText className="text-xs tabular-nums text-faint" />

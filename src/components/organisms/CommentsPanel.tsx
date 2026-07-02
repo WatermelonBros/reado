@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Comment, CommentState, CommentType } from "../../lib/api";
 import { useComments, toRelative } from "../../lib/comments";
-import { useProject, useEditorActions } from "../../lib/store";
+import { useProject, useEditorActions, useWorkspace } from "../../lib/store";
 import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
 
 import { COMMENT_STATES, COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
@@ -43,10 +43,13 @@ export function CommentsPanel() {
     useEditorActions.getState().setDiffing(true);
   };
 
-  const [view, setView] = useState<"open" | "history">("open");
-  const [typeFilter, setTypeFilter] = useState<CommentType | "all">("all");
-  const [stateFilter, setStateFilter] = useState<CommentState | "all">("all");
-  const [thisFileOnly, setThisFileOnly] = useState(false);
+  // Panel filters live in the workspace store so switching tools (which unmounts
+  // this panel) doesn't reset them.
+  const filter = useWorkspace((s) => s.commentFilter);
+  const view = filter.view;
+  const typeFilter = filter.type as CommentType | "all";
+  const stateFilter = filter.state as CommentState | "all";
+  const thisFileOnly = filter.thisFile;
   const [reviewOpen, setReviewOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null);
 
@@ -82,7 +85,7 @@ export function CommentsPanel() {
   const segment = (id: "open" | "history", label: string) => (
     <button
       type="button"
-      onClick={() => setView(id)}
+      onClick={() => useWorkspace.getState().setCommentFilter({ view: id })}
       aria-pressed={view === id}
       className={`flex-1 rounded-sm px-2 py-1 text-xs transition-colors ${
         view === id
@@ -107,7 +110,7 @@ export function CommentsPanel() {
         <Select
           ariaLabel="type filter"
           value={typeFilter}
-          onChange={(v) => setTypeFilter(v as CommentType | "all")}
+          onChange={(v) => useWorkspace.getState().setCommentFilter({ type: v })}
           options={[
             { value: "all", label: t("comments.filter.all") },
             ...COMMENT_TYPES.map((tp) => ({ value: tp, label: t(typeKey(tp)), color: TYPE_COLOR[tp] })),
@@ -117,7 +120,7 @@ export function CommentsPanel() {
           <Select
             ariaLabel="state filter"
             value={stateFilter}
-            onChange={(v) => setStateFilter(v as CommentState | "all")}
+            onChange={(v) => useWorkspace.getState().setCommentFilter({ state: v })}
             options={[
               { value: "all", label: t("comments.filter.all") },
               ...COMMENT_STATES.map((st) => ({ value: st, label: t(stateKey(st)) })),
@@ -126,7 +129,7 @@ export function CommentsPanel() {
         )}
         <Checkbox
           checked={thisFileOnly}
-          onChange={setThisFileOnly}
+          onChange={(v) => useWorkspace.getState().setCommentFilter({ thisFile: v })}
           label={t("comments.filter.thisFile")}
           className="text-xs text-muted"
         />
@@ -143,7 +146,18 @@ export function CommentsPanel() {
             {filtered.map((c) => {
               const pending = view === "open" && c.state === "open" && changed.has(c.anchor.file);
               return (
-              <li key={c.id} className={`border-b border-line ${pending ? "bg-accent/5" : ""}`}>
+              <li key={c.id} className={`group relative border-b border-line ${pending ? "bg-accent/5" : ""}`}>
+                {view === "open" && c.state !== "done" && (
+                  <button
+                    type="button"
+                    onClick={() => void useComments.getState().setState(c.id, "done")}
+                    aria-label={t("comments.resolve")}
+                    title={t("comments.resolve")}
+                    className="absolute right-2 top-2 z-10 rounded-md bg-surface px-1.5 py-0.5 text-xs text-accent opacity-0 transition-opacity hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    ✓
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => jump(c)}
@@ -180,14 +194,14 @@ export function CommentsPanel() {
                     <button
                       type="button"
                       onClick={() => reviewChange(c)}
-                      className="rounded-md bg-surface px-2 py-0.5 text-[11px] text-muted hover:text-ink"
+                      className="rounded-md bg-surface px-2 py-0.5 text-xs text-muted hover:text-ink"
                     >
                       {t("comments.reviewChange")}
                     </button>
                     <button
                       type="button"
                       onClick={() => void useComments.getState().setState(c.id, "done")}
-                      className="rounded-md bg-surface px-2 py-0.5 text-[11px] text-accent hover:text-ink"
+                      className="rounded-md bg-surface px-2 py-0.5 text-xs text-accent hover:text-ink"
                     >
                       {t("comments.resolve")}
                     </button>

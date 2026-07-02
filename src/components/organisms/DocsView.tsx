@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import { readFile, searchText, listFiles, type Comment, type CommentType } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useProject, useWorkspace } from "../../lib/store";
@@ -49,6 +50,9 @@ export function DocsView() {
   const [content, setContent] = useState<string | null>(null);
   // KB paths whose *content* matches the query (full-text, not just the name).
   const [contentMatches, setContentMatches] = useState<Set<string>>(new Set());
+  // A missing ripgrep must surface (like SearchPanel), not be swallowed — else
+  // content search silently degrades to name-only with no explanation.
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     loadArchived();
@@ -113,6 +117,7 @@ export function DocsView() {
   useEffect(() => {
     if (query.trim().length < 2) {
       setContentMatches(new Set());
+      setSearchError(null);
       return;
     }
     const kbPaths = new Set([
@@ -132,8 +137,14 @@ export function DocsView() {
             if (kbPaths.has(rel)) hit.add(rel);
           }
           setContentMatches(hit);
+          setSearchError(null);
         })
-        .catch(() => {});
+        .catch((e) => {
+          if (cancelled) return;
+          // Name-filtering still works; only the full-text overlay is degraded.
+          setContentMatches(new Set());
+          setSearchError(String(e).includes("ripgrep") ? "ripgrep" : null);
+        });
     }, 200);
     return () => {
       cancelled = true;
@@ -197,11 +208,12 @@ export function DocsView() {
         className="flex h-[70vh] max-h-[600px] w-[94vw] max-w-[1280px] flex-col overflow-hidden rounded-lg border border-line-strong bg-canvas shadow-[var(--shadow)]"
       >
         <header className="flex flex-none items-center gap-3 border-b border-line px-5 py-3">
-          <h2 className="m-0 text-sm font-semibold tracking-wide uppercase">{t("kb.title")}</h2>
+          <h2 className="m-0 text-sm font-medium">{t("kb.title")}</h2>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("kb.search")}
+            aria-label={t("kb.search")}
             className="ml-2 w-48 rounded-md border border-line bg-surface px-2.5 py-1 text-sm text-ink outline-none placeholder:text-faint focus:border-line-strong"
           />
           <button
@@ -217,6 +229,11 @@ export function DocsView() {
         <div className="flex min-h-0 flex-1">
           {/* Index */}
           <nav className="w-64 flex-none overflow-y-auto border-r border-line py-1">
+            {searchError === "ripgrep" && (
+              <p className="px-3 py-2 text-xs leading-relaxed text-marker">
+                {t("search.ripgrepMissing")}
+              </p>
+            )}
             {filteredDocs.length > 0 && (
               <>
                 {sectionLabel(t("kb.docs"))}
@@ -279,7 +296,7 @@ export function DocsView() {
                 {/* Project docs (READMEs especially) embed raw HTML — centered
                     headings, badge images. rehype-raw renders it instead of
                     showing the literal <h1> tags as text. */}
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>
                   {content}
                 </ReactMarkdown>
               </div>
@@ -350,7 +367,7 @@ function NotesDigest({
                 {c.messages.map((m, i) => (
                   <div
                     key={i}
-                    className="prose-reado mb-1 text-[13px] leading-relaxed text-ink [&_p]:my-1"
+                    className="prose-reado mb-1 text-base leading-relaxed text-ink [&_p]:my-1"
                   >
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.body}</ReactMarkdown>
                   </div>

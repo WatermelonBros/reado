@@ -201,6 +201,19 @@ fn expand_status_line(line: &str) -> Vec<GitChange> {
             staged: false,
         }];
     }
+    // Unmerged (merge-conflict) states — `U` on either side, or `AA`/`DD`. These
+    // must not be split into a staged "modified" entry (which reads as "resolved
+    // and staged"); surface a single `conflicted` entry instead.
+    if matches!(
+        (x, y),
+        ('U', _) | (_, 'U') | ('A', 'A') | ('D', 'D')
+    ) {
+        return vec![GitChange {
+            path,
+            status: "conflicted".into(),
+            staged: false,
+        }];
+    }
     let mut out = Vec::new();
     if x != ' ' {
         out.push(GitChange {
@@ -638,6 +651,15 @@ mod tests {
         assert_eq!(both.len(), 2);
         assert!(both[0].staged && !both[1].staged);
 
+        // Unmerged (conflict) states collapse to a single `conflicted` entry,
+        // never a staged "modified" one.
+        let conflict = expand_status_line("UU both.rs");
+        assert_eq!(conflict.len(), 1);
+        assert_eq!(conflict[0].status, "conflicted");
+        assert!(!conflict[0].staged);
+        assert_eq!(expand_status_line("AA x.rs")[0].status, "conflicted");
+        assert_eq!(expand_status_line("DU y.rs")[0].status, "conflicted");
+
         let rename = expand_status_line("R  old.rs -> new.rs");
         assert_eq!(rename[0].path, "new.rs");
         assert_eq!(rename[0].status, "renamed");
@@ -714,7 +736,10 @@ pub struct FileCommit {
 pub fn git_file_history(root: String, file: String) -> Vec<FileCommit> {
     // Unit-separator-delimited fields, one commit per line.
     let fmt = "--format=%H%x1f%an%x1f%at%x1f%s";
-    let Some(out) = run_git_raw(Path::new(&root), &["log", "--follow", fmt, "--", &file]) else {
+    let Some(out) = run_git_raw(
+        Path::new(&root),
+        &["log", "--follow", "--max-count=200", fmt, "--", &file],
+    ) else {
         return Vec::new();
     };
     out.lines()

@@ -23,7 +23,7 @@ export function RecentProjects() {
 
   return (
     <div
-      className="grid h-full place-items-center overflow-y-auto bg-[radial-gradient(120%_80%_at_50%_0%,var(--bg-elevated),var(--bg)_60%)] p-8"
+      className="grid h-full place-items-center overflow-y-auto bg-canvas p-8"
     >
       <div className="flex w-[min(560px,100%)] flex-col gap-8">
         <header className="text-center">
@@ -52,7 +52,7 @@ export function RecentProjects() {
           <ol className="m-0 flex list-none flex-col gap-2.5 p-0">
             {[t("welcome.step1"), t("welcome.step2"), t("welcome.step3")].map((step, i) => (
               <li key={i} className="flex items-baseline gap-3 text-sm text-muted">
-                <span className="grid h-5 w-5 flex-none translate-y-0.5 place-items-center rounded-full border border-line text-[11px] text-faint">
+                <span className="grid h-5 w-5 flex-none translate-y-0.5 place-items-center rounded-full border border-line text-xs text-faint">
                   {i + 1}
                 </span>
                 <span>{step}</span>
@@ -89,7 +89,7 @@ export function RecentProjects() {
                     type="button"
                     title={t("recents.remove")} aria-label={t("recents.remove")}
                     onClick={() => remove(p.path)}
-                    className="grid w-[34px] place-items-center text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
+                    className="grid w-[34px] place-items-center text-faint opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-ink"
                   >
                     <CloseIcon className="h-[14px] w-[14px]" />
                   </button>

@@ -17,8 +17,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { readText as clipboardReadText, writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { ptySpawn, ptyWrite, ptyResize, ptyKill, resolvePath } from "../../lib/api";
-import { useProject } from "../../lib/store";
-import { xtermTheme } from "../../lib/xtermTheme";
+import { useProject, useSettings } from "../../lib/store";
+import { xtermTheme, xtermFontFamily } from "../../lib/xtermTheme";
 import { useTranslation } from "react-i18next";
 import { SearchIcon, ChevronIcon, CloseIcon } from "../atoms/icons";
 
@@ -66,7 +66,7 @@ export function Terminal({ id, cwd, active }: Props) {
     if (!hostRef.current) return;
     const term = new XTerm({
       theme: xtermTheme(),
-      fontFamily: '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
+      fontFamily: useSettings.getState().codeFont || xtermFontFamily(),
       fontSize: 13,
       lineHeight: 1.2,
       cursorBlink: true,
@@ -82,6 +82,17 @@ export function Terminal({ id, cwd, active }: Props) {
     termRef.current = term;
     fitRef.current = fit;
     searchRef.current = search;
+
+    // xtermTheme() resolves tokens to concrete colours once, so re-apply them
+    // (and the code font) whenever the active theme changes on <html>.
+    const themeObserver = new MutationObserver(() => {
+      term.options.theme = xtermTheme();
+      term.options.fontFamily = useSettings.getState().codeFont || xtermFontFamily();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
 
     // Make `path:line:col` tokens clickable → open the file in the editor.
     term.registerLinkProvider({
@@ -185,6 +196,7 @@ export function Terminal({ id, cwd, active }: Props) {
 
     return () => {
       disposed = true;
+      themeObserver.disconnect();
       // A rejecting unlisten (listener map already torn down) must not escape.
       unlisten.forEach((off) => void Promise.resolve(off()).catch(() => {}));
       ptyKill(id).catch(() => {});
@@ -218,6 +230,15 @@ export function Terminal({ id, cwd, active }: Props) {
       term.focus();
     });
   }, [active, syncSize]);
+
+  // Re-apply the code font when the setting changes at runtime (matches Editor).
+  const codeFont = useSettings((s) => s.codeFont);
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontFamily = codeFont || xtermFontFamily();
+    requestAnimationFrame(syncSize);
+  }, [codeFont, syncSize]);
 
   const find = (q: string, back = false) => {
     if (!q) return;

@@ -72,7 +72,7 @@ export function ExtensionsPanel() {
                   {s.name}
                 </span>
                 {isInstalled ? (
-                  <span className="flex-none text-[11px] font-medium text-[var(--syn-string)]">
+                  <span className="flex-none text-xs font-medium text-[var(--syn-string)]">
                     {t("ext.installed")}
                   </span>
                 ) : cmd ? (
@@ -80,12 +80,12 @@ export function ExtensionsPanel() {
                     type="button"
                     onClick={() => install(cmd)}
                     title={cmd}
-                    className="flex-none rounded-md border border-line-strong px-2 py-0.5 text-[11px] font-medium text-ink transition-colors hover:border-accent hover:text-accent"
+                    className="flex-none rounded-md border border-line-strong px-2 py-0.5 text-xs font-medium text-ink transition-colors hover:border-accent hover:text-accent"
                   >
                     {t("ext.install")}
                   </button>
                 ) : (
-                  <span className="flex-none text-[11px] text-faint">{t("ext.manual")}</span>
+                  <span className="flex-none text-xs text-faint">{t("ext.manual")}</span>
                 )}
               </div>
               <p className="mt-1 text-xs leading-relaxed text-muted">{s.description}</p>
@@ -94,10 +94,10 @@ export function ExtensionsPanel() {
                   checked={enabled}
                   onChange={(v) => toggle(s.id, v)}
                   label={t("ext.enabled")}
-                  className="text-[11px] text-muted"
+                  className="text-xs text-muted"
                 />
                 {s.requires && !isInstalled && (
-                  <span className="truncate text-[11px] text-faint" title={s.requires}>
+                  <span className="truncate text-xs text-faint" title={s.requires}>
                     {t("ext.requires", { name: s.requires })}
                   </span>
                 )}

@@ -36,7 +36,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="max-w-md">
           <h1 className="text-base font-semibold">{t("error.title")}</h1>
           <p className="mt-2 text-sm text-muted">{t("error.body")}</p>
-          <pre className="mt-3 max-h-48 overflow-auto rounded-md border border-line bg-surface p-3 text-[11px] text-faint">
+          <pre className="mt-3 max-h-48 overflow-auto rounded-md border border-line bg-surface p-3 text-xs text-faint">
             {error.message}
           </pre>
           <div className="mt-4 flex gap-2">

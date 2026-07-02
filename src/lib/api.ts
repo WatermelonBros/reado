@@ -39,6 +39,10 @@ export const listDir = (root: string, dir: string, showHidden: boolean) =>
 /** Every file path in the project, for the fuzzy finder. */
 export const listFiles = (root: string) => invoke<string[]>("list_files", { root });
 
+/** Whether an AI agent binary (claude/codex/copilot) resolves on the PATH, so
+ * AI actions can be gated instead of dispatching a prompt into a bare shell. */
+export const agentInstalled = (bin: string) => invoke<boolean>("agent_installed", { bin });
+
 /** Symlink/copy the bundled `reado` CLI into ~/.local/bin; returns its path. */
 export const installCli = () => invoke<string>("install_cli");
 /** Whether the `reado` CLI is already installed in ~/.local/bin. */
@@ -92,7 +96,7 @@ export const gitCheckout = (root: string, branch: string, remote: boolean) =>
 
 export interface GitChange {
   path: string;
-  status: "modified" | "added" | "deleted" | "renamed" | "untracked";
+  status: "modified" | "added" | "deleted" | "renamed" | "untracked" | "conflicted";
   staged: boolean;
 }
 

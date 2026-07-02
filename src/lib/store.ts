@@ -67,6 +67,10 @@ export interface SettingsState {
   logEnabled: boolean;
   /** How much detail the log captures. */
   logLevel: "error" | "warn" | "info" | "debug" | "trace";
+  /** Show hidden & git-ignored files in the tree (remembered across sessions). */
+  showHidden: boolean;
+  /** Last-used guided-review objective, so it isn't re-picked every time. */
+  reviewObjective: string;
   set: (patch: Partial<SettingsState>) => void;
 }
 
@@ -94,6 +98,8 @@ export const useSettings = create<SettingsState>()(
       showRibbon: false,
       logEnabled: true,
       logLevel: "info",
+      showHidden: false,
+      reviewObjective: "bug_risk",
       set: (patch) => set(patch),
     }),
     { name: "reado.settings" },
@@ -143,6 +149,12 @@ export interface Session {
   active: string | null;
   /** Per-file editor scroll offset (px), so reopening returns to where you were. */
   scroll?: Record<string, number>;
+  /** Per-file cursor position, so reopening restores the caret (not just scroll). */
+  cursor?: Record<string, { line: number; col: number }>;
+  /** Expanded directory paths in the tree, so the drill-down survives a reopen. */
+  expanded?: string[];
+  /** The file shown in the split pane, so a side-by-side comparison survives. */
+  split?: string | null;
 }
 
 interface SessionsState {
@@ -150,20 +162,32 @@ interface SessionsState {
   save: (root: string, session: Session) => void;
   /** Remember the editor scroll offset for a file (merged into its session). */
   saveScroll: (root: string, path: string, top: number) => void;
+  /** Remember the cursor position for a file. */
+  saveCursor: (root: string, path: string, line: number, col: number) => void;
 }
 
 export const useSessions = create<SessionsState>()(
   persist(
     (set) => ({
       byRoot: {},
-      // Preserve the existing scroll map when tabs/active change.
+      // Preserve the per-file maps (scroll/cursor) and drill-down state when
+      // tabs/active change, so a plain tab save never wipes them.
       save: (root, session) =>
-        set((s) => ({
-          byRoot: {
-            ...s.byRoot,
-            [root]: { ...session, scroll: session.scroll ?? s.byRoot[root]?.scroll },
-          },
-        })),
+        set((s) => {
+          const prev = s.byRoot[root];
+          return {
+            byRoot: {
+              ...s.byRoot,
+              [root]: {
+                ...session,
+                scroll: session.scroll ?? prev?.scroll,
+                cursor: session.cursor ?? prev?.cursor,
+                expanded: session.expanded ?? prev?.expanded,
+                split: session.split ?? prev?.split,
+              },
+            },
+          };
+        }),
       saveScroll: (root, path, top) =>
         set((s) => {
           const prev = s.byRoot[root] ?? { tabs: [], active: null };
@@ -171,6 +195,16 @@ export const useSessions = create<SessionsState>()(
             byRoot: {
               ...s.byRoot,
               [root]: { ...prev, scroll: { ...prev.scroll, [path]: top } },
+            },
+          };
+        }),
+      saveCursor: (root, path, line, col) =>
+        set((s) => {
+          const prev = s.byRoot[root] ?? { tabs: [], active: null };
+          return {
+            byRoot: {
+              ...s.byRoot,
+              [root]: { ...prev, cursor: { ...prev.cursor, [path]: { line, col } } },
             },
           };
         }),
@@ -195,7 +229,6 @@ export type Tool =
   | "tours"
   | "prereview"
   | "guidedreview"
-  | "tests"
   | "extensions";
 
 interface WorkspaceState {
@@ -220,6 +253,12 @@ interface WorkspaceState {
   /** Side-panel width in px (drag-resizable), persisted. */
   sidebarWidth: number;
   setSidebarWidth: (px: number) => void;
+  /** Comments-panel filters, remembered so a tool-switch doesn't reset them. */
+  commentFilter: { view: "open" | "history"; type: string; state: string; thisFile: boolean };
+  setCommentFilter: (patch: Partial<WorkspaceState["commentFilter"]>) => void;
+  /** Last search-panel query, so leaving and returning doesn't lose it. */
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
 }
 
 /** Tool sidebar state (which side panel is shown), persisted per user. */
@@ -244,10 +283,20 @@ export const useWorkspace = create<WorkspaceState>()(
       // Clamp so the panel stays usable and never crowds out the editor.
       setSidebarWidth: (px) =>
         set({ sidebarWidth: Math.max(180, Math.min(px, window.innerWidth - 360)) }),
+      commentFilter: { view: "open", type: "all", state: "all", thisFile: false },
+      setCommentFilter: (patch) =>
+        set((s) => ({ commentFilter: { ...s.commentFilter, ...patch } })),
+      searchQuery: "",
+      setSearchQuery: (q) => set({ searchQuery: q }),
     }),
     {
       name: "reado.workspace",
-      partialize: (s) => ({ tool: s.tool, sidebarWidth: s.sidebarWidth }),
+      partialize: (s) => ({
+        tool: s.tool,
+        sidebarWidth: s.sidebarWidth,
+        commentFilter: s.commentFilter,
+        searchQuery: s.searchQuery,
+      }),
     },
   ),
 );
@@ -321,25 +370,35 @@ interface EditorActionsState {
 }
 
 /** Bridge for triggering editor actions from outside the editor (e.g. global
- *  shortcuts or the command palette), without coupling to the editor's focus. */
-export const useEditorActions = create<EditorActionsState>((set) => ({
-  composeNonce: 0,
-  requestCompose: () => set((s) => ({ composeNonce: s.composeNonce + 1 })),
-  explainNonce: 0,
-  requestExplain: () => set((s) => ({ explainNonce: s.explainNonce + 1 })),
-  peekNonce: 0,
-  requestPeek: () => set((s) => ({ peekNonce: s.peekNonce + 1 })),
-  editing: false,
-  setEditing: (editing) => set({ editing }),
-  dirty: false,
-  setDirty: (dirty) => set({ dirty }),
-  diffing: false,
-  setDiffing: (diffing) => set({ diffing }),
-  diffBase: "HEAD",
-  setDiffBase: (base) => set({ diffBase: base }),
-  blame: false,
-  setBlame: (blame) => set({ blame }),
-}));
+ *  shortcuts or the command palette), without coupling to the editor's focus.
+ *  `blame` and `diffBase` are persisted so a preferred view survives a restart;
+ *  the transient nonces / dirty / diffing / editing flags are not. */
+export const useEditorActions = create<EditorActionsState>()(
+  persist(
+    (set) => ({
+      composeNonce: 0,
+      requestCompose: () => set((s) => ({ composeNonce: s.composeNonce + 1 })),
+      explainNonce: 0,
+      requestExplain: () => set((s) => ({ explainNonce: s.explainNonce + 1 })),
+      peekNonce: 0,
+      requestPeek: () => set((s) => ({ peekNonce: s.peekNonce + 1 })),
+      editing: false,
+      setEditing: (editing) => set({ editing }),
+      dirty: false,
+      setDirty: (dirty) => set({ dirty }),
+      diffing: false,
+      setDiffing: (diffing) => set({ diffing }),
+      diffBase: "HEAD",
+      setDiffBase: (base) => set({ diffBase: base }),
+      blame: false,
+      setBlame: (blame) => set({ blame }),
+    }),
+    {
+      name: "reado.editor",
+      partialize: (s) => ({ blame: s.blame, diffBase: s.diffBase }),
+    },
+  ),
+);
 
 interface CursorState {
   line: number;
@@ -376,6 +435,10 @@ interface ProjectState {
   /** Bumped to collapse every expanded folder in the tree. */
   collapseNonce: number;
   collapseTree: () => void;
+  /** Expanded directory paths in the tree (persisted per project via Session). */
+  expandedDirs: string[];
+  /** Toggle a directory's expansion (and remember it). */
+  toggleDir: (path: string, open?: boolean) => void;
   /** Back/forward history of visited locations, and the cursor into it. */
   navStack: { path: string; line?: number }[];
   navIndex: number;
@@ -419,7 +482,19 @@ export const useProject = create<ProjectState>((set) => ({
   treeNonce: 0,
   bumpTree: () => set((s) => ({ treeNonce: s.treeNonce + 1 })),
   collapseNonce: 0,
-  collapseTree: () => set((s) => ({ collapseNonce: s.collapseNonce + 1 })),
+  collapseTree: () => set((s) => ({ collapseNonce: s.collapseNonce + 1, expandedDirs: [] })),
+  expandedDirs: [],
+  toggleDir: (path, open) =>
+    set((s) => {
+      const has = s.expandedDirs.includes(path);
+      const want = open ?? !has;
+      if (want === has) return s;
+      return {
+        expandedDirs: want
+          ? [...s.expandedDirs, path]
+          : s.expandedDirs.filter((p) => p !== path),
+      };
+    }),
   navStack: [],
   navIndex: -1,
   closedTabs: [],
@@ -482,10 +557,14 @@ export const useProject = create<ProjectState>((set) => ({
       git,
       tabs: session?.tabs ?? [],
       active: session?.active ?? null,
+      // Restore the per-project drill-down, split, and hidden-files preference so
+      // reopening a repo lands where you left it rather than fully collapsed.
+      expandedDirs: session?.expanded ?? [],
+      splitPath: session?.split ?? null,
+      showHidden: useSettings.getState().showHidden,
       navStack: session?.active ? [{ path: session.active }] : [],
       navIndex: session?.active ? 0 : -1,
       closedTabs: [],
-      splitPath: null,
     }),
   setGit: (git) => set({ git }),
   open: (path, line) =>
@@ -538,5 +617,9 @@ export const useProject = create<ProjectState>((set) => ({
       active: s.active === from ? to : s.active,
     })),
   setActive: (path) => set({ active: path }),
-  setShowHidden: (show) => set({ showHidden: show }),
+  // Mirror to settings so the preference survives a reopen (init re-seeds from it).
+  setShowHidden: (show) => {
+    useSettings.getState().set({ showHidden: show });
+    set({ showHidden: show });
+  },
 }));

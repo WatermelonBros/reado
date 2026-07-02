@@ -7,6 +7,7 @@
  * the active group) so PTYs and scrollback persist across tab/layout changes.
  */
 import { launchAgent } from "../../lib/agents";
+import { agentInstalled } from "../../lib/api";
 import { useTerminals } from "../../lib/terminals";
 import { useProject } from "../../lib/store";
 import { useComments, toRelative } from "../../lib/comments";
@@ -87,6 +88,26 @@ export function TerminalPanel() {
     return () => obs.disconnect();
   }, []);
 
+
+  // Probe which agent binaries are on PATH so the launch buttons can signal
+  // (dimmed + a tooltip) which ones aren't installed. Mount-probe is enough;
+  // launching a missing one still surfaces the existing not-installed notice.
+  const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([
+      agentInstalled("claude"),
+      agentInstalled("codex"),
+      agentInstalled("copilot"),
+    ])
+      .then(([claude, codex, copilot]) => {
+        if (alive) setInstalled({ claude, codex, copilot });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const [reviewOpen, setReviewOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null);
@@ -206,23 +227,31 @@ export function TerminalPanel() {
 
       {/* Tab bar. */}
       <div className="flex h-9 flex-none items-center gap-1 border-b border-line pr-2 pl-1">
-        <div className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          role="tablist"
+          className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {groups.map((g) => (
             <div
               key={g.id}
-              role="tab"
-              aria-selected={g.id === activeGroupId}
-              onClick={() => setActiveGroup(g.id)}
               className={`group flex items-center gap-2 rounded-md px-3 py-1 text-xs whitespace-nowrap transition-colors ${
                 g.id === activeGroupId ? "bg-surface text-ink" : "text-muted hover:text-ink"
               }`}
             >
-              <span>{titleOf(g.paneIds[0])}</span>
-              {g.paneIds.length > 1 && (
-                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-overlay px-1 text-[10px] text-faint">
-                  {g.paneIds.length}
-                </span>
-              )}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={g.id === activeGroupId}
+                onClick={() => setActiveGroup(g.id)}
+                className="flex items-center gap-2"
+              >
+                <span>{titleOf(g.paneIds[0])}</span>
+                {g.paneIds.length > 1 && (
+                  <span className="grid h-4 min-w-4 place-items-center rounded-full bg-overlay px-1 text-[10px] text-faint">
+                    {g.paneIds.length}
+                  </span>
+                )}
+              </button>
               <button
                 type="button"
                 title={t("terminal.close")} aria-label={t("terminal.close")}
@@ -230,7 +259,7 @@ export function TerminalPanel() {
                   e.stopPropagation();
                   removeGroup(g.id);
                 }}
-                className="grid h-4 w-4 place-items-center rounded-sm text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
+                className="grid h-4 w-4 place-items-center rounded-sm text-faint opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-ink"
               >
                 <CloseIcon className="block h-3 w-3" />
               </button>
@@ -302,30 +331,60 @@ export function TerminalPanel() {
         <span className="mx-0.5 h-4 w-px flex-none bg-line" />
         <button
           type="button"
-          aria-label={t("terminal.launch", { name: "Claude Code" })}
-          title={t("terminal.launch", { name: "Claude Code" })}
+          aria-label={
+            installed.claude === false
+              ? t("agent.notInstalled", { name: "Claude Code" })
+              : t("terminal.launch", { name: "Claude Code" })
+          }
+          title={
+            installed.claude === false
+              ? t("agent.notInstalled", { name: "Claude Code" })
+              : t("terminal.launch", { name: "Claude Code" })
+          }
           onClick={() => void launchAgent("claude-code", "claude")}
-          className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
+          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
+            installed.claude === false ? "opacity-40" : ""
+          }`}
           style={{ color: CLAUDE_ORANGE }}
         >
           <ClaudeIcon className="h-4 w-4" />
         </button>
         <button
           type="button"
-          aria-label={t("terminal.launch", { name: "Codex" })}
-          title={t("terminal.launch", { name: "Codex" })}
+          aria-label={
+            installed.codex === false
+              ? t("agent.notInstalled", { name: "Codex" })
+              : t("terminal.launch", { name: "Codex" })
+          }
+          title={
+            installed.codex === false
+              ? t("agent.notInstalled", { name: "Codex" })
+              : t("terminal.launch", { name: "Codex" })
+          }
           onClick={() => void launchAgent("codex", "codex")}
-          className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
+          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
+            installed.codex === false ? "opacity-40" : ""
+          }`}
           style={{ color: CODEX_TEAL }}
         >
           <CodexIcon className="h-4 w-4" />
         </button>
         <button
           type="button"
-          aria-label={t("terminal.launch", { name: "Copilot" })}
-          title={t("terminal.launch", { name: "Copilot" })}
+          aria-label={
+            installed.copilot === false
+              ? t("agent.notInstalled", { name: "Copilot" })
+              : t("terminal.launch", { name: "Copilot" })
+          }
+          title={
+            installed.copilot === false
+              ? t("agent.notInstalled", { name: "Copilot" })
+              : t("terminal.launch", { name: "Copilot" })
+          }
           onClick={() => void launchAgent("copilot", "copilot")}
-          className="grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface"
+          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
+            installed.copilot === false ? "opacity-40" : ""
+          }`}
           style={{ color: COPILOT_VIOLET }}
         >
           <CopilotIcon className="h-4 w-4" />
@@ -394,7 +453,7 @@ export function TerminalPanel() {
                     e.stopPropagation();
                     remove(s.id);
                   }}
-                  className="absolute top-1 right-1 z-10 grid h-5 w-5 place-items-center rounded-md bg-surface/80 text-faint opacity-0 transition-opacity group-hover/pane:opacity-100 hover:text-ink"
+                  className="absolute top-1 right-1 z-10 grid h-5 w-5 place-items-center rounded-md bg-surface/80 text-faint opacity-0 transition-opacity group-hover/pane:opacity-100 group-focus-within/pane:opacity-100 focus-visible:opacity-100 hover:text-ink"
                 >
                   <CloseIcon className="h-3 w-3" />
                 </button>

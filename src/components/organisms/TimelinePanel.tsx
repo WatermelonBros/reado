@@ -26,18 +26,26 @@ export function TimelinePanel() {
   const { t } = useTranslation();
   const [history, setHistory] = useState<FileCommit[]>([]);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   // Reload when the active file changes.
   useEffect(() => {
     if (!active) {
       setHistory([]);
+      setFailed(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
+    setFailed(false);
     gitFileHistory(root, toRelative(root, active))
       .then((h) => !cancelled && setHistory(h))
-      .catch(() => !cancelled && setHistory([]))
+      // A load failure must read differently from "no history for this file".
+      .catch(() => {
+        if (cancelled) return;
+        setHistory([]);
+        setFailed(true);
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -46,6 +54,9 @@ export function TimelinePanel() {
 
   if (!active) {
     return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("timeline.noFile")}</p>;
+  }
+  if (!loading && failed) {
+    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("timeline.error")}</p>;
   }
   if (!loading && history.length === 0) {
     return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("timeline.empty")}</p>;
@@ -72,7 +83,7 @@ export function TimelinePanel() {
               }`}
             >
               <span className="truncate text-xs text-ink">{c.subject || c.hash}</span>
-              <span className="flex items-center gap-2 text-[11px] text-faint">
+              <span className="flex items-center gap-2 text-xs text-faint">
                 <span className="truncate">{c.author}</span>
                 <span className="ml-auto flex-none font-mono tabular-nums">{relAge(c.time)}</span>
               </span>

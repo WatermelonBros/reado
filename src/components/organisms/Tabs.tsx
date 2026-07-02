@@ -50,9 +50,6 @@ export function Tabs() {
         return (
           <div
             key={tabPath}
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => setActive(tabPath)}
             onContextMenu={(e) => {
               e.preventDefault();
               setMenu({ x: e.clientX, y: e.clientY, path: tabPath });
@@ -65,13 +62,21 @@ export function Tabs() {
               }
             }}
             title={tabPath}
-            className={`group flex max-w-[220px] cursor-pointer items-center gap-2 whitespace-nowrap border-r border-line pl-4 pr-2 text-sm transition-colors ${
+            className={`group flex max-w-[220px] items-stretch gap-2 whitespace-nowrap border-r border-line pr-2 text-sm transition-colors ${
               isActive
                 ? "bg-canvas text-ink shadow-[inset_0_2px_0_var(--accent)]"
                 : "text-muted hover:bg-canvas/50 hover:text-ink"
             }`}
           >
-            <span className="overflow-hidden text-ellipsis">{basename(tabPath)}</span>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActive(tabPath)}
+              className="flex min-w-0 flex-1 items-center overflow-hidden pl-4 text-left"
+            >
+              <span className="overflow-hidden text-ellipsis">{basename(tabPath)}</span>
+            </button>
             <button
               type="button"
               aria-label={`Close ${basename(tabPath)}`}
@@ -79,8 +84,10 @@ export function Tabs() {
                 e.stopPropagation();
                 close(tabPath);
               }}
-              className={`flex h-[18px] w-[18px] items-center justify-center rounded-sm leading-none text-faint transition-opacity hover:bg-overlay hover:text-ink ${
-                isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              className={`my-auto flex h-[18px] w-[18px] flex-none items-center justify-center rounded-sm leading-none text-faint transition-opacity hover:bg-overlay hover:text-ink focus-visible:opacity-100 ${
+                isActive
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
               }`}
             >
               <CloseIcon className="block h-[13px] w-[13px]" />

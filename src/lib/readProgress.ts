@@ -39,6 +39,9 @@ interface ReadProgressState {
    *  the content is snapshotted (passed in, or read from disk) so a later change
    *  can be reviewed as a delta. */
   mark: (root: string, relPath: string, read: boolean, content?: string) => void;
+  /** Bulk mark many paths read/unread in one state update (e.g. a whole folder),
+   *  snapshotting each file's content from disk when marking read. */
+  markMany: (root: string, relPaths: string[], read: boolean) => void;
   /** Flag a read file as changed-since-read (a delta is available to review). */
   markChanged: (relPath: string) => void;
   /** Clear the changed flag (e.g. after reviewing the delta). */
@@ -73,6 +76,30 @@ export const useReadProgress = create<ReadProgressState>((set, get) => ({
       readFile(root, relPath)
         .then((c) => setReadState(root, relPath, true, c.kind === "text" ? c.text : undefined))
         .catch(() => void setReadState(root, relPath, true).catch(() => {}));
+    }
+  },
+  markMany: (root, relPaths, read) => {
+    if (relPaths.length === 0) return;
+    const next = new Set(get().read);
+    const changed = new Set(get().changed);
+    for (const relPath of relPaths) {
+      if (read) {
+        next.add(relPath);
+        changed.delete(relPath); // reading clears any pending delta
+      } else {
+        next.delete(relPath);
+      }
+    }
+    set({ read: next, changed });
+    // Persist each file, snapshotting content so a later change reviews as a delta.
+    for (const relPath of relPaths) {
+      if (!read) {
+        void setReadState(root, relPath, false).catch(() => {});
+      } else {
+        readFile(root, relPath)
+          .then((c) => setReadState(root, relPath, true, c.kind === "text" ? c.text : undefined))
+          .catch(() => void setReadState(root, relPath, true).catch(() => {}));
+      }
     }
   },
   markChanged: (relPath) => set((s) => ({ changed: new Set(s.changed).add(relPath) })),

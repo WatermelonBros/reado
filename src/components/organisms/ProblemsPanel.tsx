@@ -63,7 +63,7 @@ export function ProblemsPanel() {
       type="button"
       onClick={() => toggle(bucket)}
       aria-pressed={!hidden.has(bucket)}
-      className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] tabular-nums transition-colors ${
+      className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs tabular-nums transition-colors ${
         hidden.has(bucket) ? "text-faint opacity-50" : "text-muted hover:text-ink"
       }`}
     >
@@ -85,7 +85,7 @@ export function ProblemsPanel() {
       <ul className="m-0 flex-1 list-none overflow-y-auto p-0 py-1">
         {shown.map((f) => (
           <li key={f.path}>
-            <div className="truncate px-3 pt-2 pb-0.5 text-[11px] font-medium text-muted">
+            <div className="truncate px-3 pt-2 pb-0.5 text-xs font-medium text-muted">
               {toRelative(root, f.path)}
             </div>
             {f.items.map((d, i) => (
@@ -101,7 +101,7 @@ export function ProblemsPanel() {
                   style={{ background: (SEVERITY[d.severity] ?? SEVERITY[3]).color }}
                 />
                 <span className="min-w-0 flex-1 truncate">{d.message}</span>
-                <span className="flex-none font-mono text-[11px] text-faint tabular-nums">
+                <span className="flex-none font-mono text-xs text-faint tabular-nums">
                   {d.line}
                 </span>
               </button>

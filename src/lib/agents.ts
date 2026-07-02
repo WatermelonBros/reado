@@ -4,8 +4,9 @@
  * so it works on every platform. Shared by the terminal toolbar and the menu.
  */
 import { listen } from "@tauri-apps/api/event";
-import { ptyDefaultShell, ptyWrite, submitToTerminal } from "./api";
+import { agentInstalled, ptyDefaultShell, ptyWrite, submitToTerminal } from "./api";
 import { useTerminals } from "./terminals";
+import { useNotice } from "./notice";
 
 export type Agent = "claude-code" | "codex" | "copilot";
 type ShellFamily = "cmd" | "powershell" | "posix";
@@ -79,9 +80,24 @@ export function restartTerminal(): void {
   if (activeId) restart(activeId);
 }
 
+/** Whether `bin` is installed; if not, surface a notice and return false so the
+ *  caller can bail instead of dispatching a prompt into a bare "command not
+ *  found" shell (where its backticks would run as shell commands). Fails open if
+ *  the probe itself errors, so a hiccup never blocks a working agent. */
+async function ensureAgentInstalled(bin: string): Promise<boolean> {
+  const ok = await agentInstalled(bin).catch(() => true);
+  if (!ok) {
+    // Imported lazily so this module doesn't pull in the i18n bootstrap at load.
+    const { t } = await import("../i18n");
+    useNotice.getState().show("error", t("agent.notInstalled", { name: bin }));
+  }
+  return ok;
+}
+
 /** Launch an agent in the active terminal (resolving the shell first), and
  *  remember it so later prompts go to it (and re-launch the same one by default). */
 export async function launchAgent(agent: Agent, bin: string): Promise<void> {
+  if (!(await ensureAgentInstalled(bin))) return;
   const term = useTerminals.getState();
   const id = term.activeId ?? term.add();
   const shell = await ptyDefaultShell().catch(() => null);
@@ -91,6 +107,25 @@ export async function launchAgent(agent: Agent, bin: string): Promise<void> {
 
 /** Default agent when the user has never launched one. */
 const DEFAULT_AGENT: Agent = "claude-code";
+
+/** Preference order when auto-picking an agent for the first-ever dispatch. */
+const AGENT_ORDER: Agent[] = ["claude-code", "codex", "copilot"];
+
+/** The first installed agent (probed on PATH), so a dev who only has codex or
+ *  copilot isn't dead-ended by the Claude default on their first AI action. */
+async function firstInstalledAgent(): Promise<Agent> {
+  for (const a of AGENT_ORDER) {
+    if (await agentInstalled(AGENT_BIN[a]).catch(() => false)) return a;
+  }
+  return DEFAULT_AGENT;
+}
+
+/** Brief "handed off to the agent" confirmation, so a fire-and-forget dispatch
+ *  (explain, review, single task) has visible feedback without watching the PTY. */
+async function noticeSent(): Promise<void> {
+  const { t } = await import("../i18n");
+  useNotice.getState().show("info", t("agent.sent"));
+}
 
 /** How long after the agent's output goes quiet we treat it as ready for input. */
 const AGENT_IDLE_MS = 1200;
@@ -153,13 +188,18 @@ export async function dispatchToAgent(prompt: string): Promise<void> {
   const id = term.activeId ?? term.add();
   if (term.agentTerminals.includes(id)) {
     await pasteAndSubmit(id, prompt);
+    void noticeSent();
     return;
   }
-  const agent = (term.lastAgent as Agent | null) ?? DEFAULT_AGENT;
+  // Reuse the last agent, else auto-pick the first one actually installed.
+  const agent = (term.lastAgent as Agent | null) ?? (await firstInstalledAgent());
+  // Never launch-and-paste into a shell where the agent binary is missing.
+  if (!(await ensureAgentInstalled(AGENT_BIN[agent]))) return;
   const shell = await ptyDefaultShell().catch(() => null);
   submitToTerminal(id, agentLaunchCommand(shellFamily(shell), agent, AGENT_BIN[agent]), 0);
   useTerminals.getState().markAgent(id, agent);
   // Wait until the agent is booted and idle at its prompt, then send.
   await waitForAgentReady(id);
   await pasteAndSubmit(id, prompt);
+  void noticeSent();
 }

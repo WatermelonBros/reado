@@ -51,7 +51,7 @@ export function UpdatePrompt() {
         <div className="px-4 py-3">
           <p className="m-0 text-sm text-ink">{t("update.available", { version: version ?? "" })}</p>
           {notes && (
-            <div className="prose-reado mt-3 max-h-60 overflow-y-auto text-[13px] text-muted">
+            <div className="prose-reado mt-3 max-h-60 overflow-y-auto text-base text-muted">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{notes}</ReactMarkdown>
             </div>
           )}

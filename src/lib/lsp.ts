@@ -143,12 +143,25 @@ const serverFor = (path: string) =>
   ) ?? null;
 const langIdFor = (path: string) => LANG_IDS[extOf(path)] ?? extOf(path);
 
-/** A file:// URI for an absolute path (spaces and the like encoded). */
-const toUri = (absPath: string) =>
-  "file://" + absPath.split("/").map(encodeURIComponent).join("/");
+/** A file:// URI for an absolute path (spaces and the like encoded). Handles
+ *  Windows paths (`C:\…`): backslashes are normalized and the drive gets a
+ *  leading slash (`file:///C:/…`), with the drive-letter colon left intact. */
+const toUri = (absPath: string) => {
+  const p = absPath.replace(/\\/g, "/");
+  const withSlash = p.startsWith("/") ? p : `/${p}`;
+  const enc = withSlash
+    .split("/")
+    .map((seg) => (/^[A-Za-z]:$/.test(seg) ? seg : encodeURIComponent(seg)))
+    .join("/");
+  return `file://${enc}`;
+};
 
-/** The absolute path back out of a file:// URI. */
-const fromUri = (uri: string) => decodeURIComponent(uri.replace(/^file:\/\//, ""));
+/** The absolute path back out of a file:// URI (undoes `toUri`). */
+const fromUri = (uri: string) => {
+  const p = decodeURIComponent(uri.replace(/^file:\/\//, ""));
+  // "/C:/…" → "C:/…" on Windows; leave a POSIX "/…" path untouched.
+  return /^\/[A-Za-z]:/.test(p) ? p.slice(1) : p;
+};
 
 /** Tap `publishDiagnostics` to surface per-file error counts outside the editor
  * (red filenames in the tree). The CodeMirror client still renders them; this

@@ -30,7 +30,6 @@ import { useBookmarks } from "./bookmarks";
 import { useReadProgress } from "./readProgress";
 import { useSemanticSearch } from "./semanticSearch";
 import { useSpecs } from "./specs";
-import { useTests } from "./tests";
 import { useTours } from "./tours";
 import { usePreReview } from "./preReview";
 import { useHierarchy } from "./hierarchy";
@@ -45,7 +44,7 @@ import { useTourGuide } from "./tour";
   useTourGuide,
   useDocInfo, useComments, useGuidedReview, useTerminals, useQa, useForge,
   useDiagnostics, useBookmarks, useReadProgress, useSemanticSearch, useSpecs,
-  useTests, useTours, usePreReview, useHierarchy, useOnboarding, useUpdate, useExtensions,
+  useTours, usePreReview, useHierarchy, useOnboarding, useUpdate, useExtensions,
   /** Insert text at the current selection in the focused editor. */
   editInsert(text: string) {
     const v = useDocInfo.getState().view;

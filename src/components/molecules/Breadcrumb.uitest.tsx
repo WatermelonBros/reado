@@ -76,10 +76,10 @@ describe("Breadcrumb", () => {
 
   it("shows the dirty dot only when there are unsaved changes", () => {
     const { rerender } = render(<Breadcrumb />);
-    expect(screen.queryByTitle("Unsaved changes")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("editor.unsaved")).not.toBeInTheDocument();
     useEditorActions.setState({ dirty: true });
     rerender(<Breadcrumb />);
-    expect(screen.getByTitle("Unsaved changes")).toBeInTheDocument();
+    expect(screen.getByTitle("editor.unsaved")).toBeInTheDocument();
   });
 
   it("opens the synopsis for the active file", async () => {

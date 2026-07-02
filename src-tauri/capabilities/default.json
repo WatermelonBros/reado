@@ -23,7 +23,6 @@
     "opener:default",
     "opener:allow-reveal-item-in-dir",
     "dialog:default",
-    "store:default",
     "updater:default",
     "process:default",
     "clipboard-manager:allow-read-text",

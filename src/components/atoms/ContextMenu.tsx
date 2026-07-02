@@ -40,6 +40,39 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     });
   }, [x, y]);
 
+  // Move focus into the menu on open so it's operable from the keyboard.
+  useEffect(() => {
+    const first = ref.current?.querySelector<HTMLButtonElement>(
+      'button[role="menuitem"]:not([disabled])',
+    );
+    first?.focus();
+  }, []);
+
+  // Roving focus between items: Up/Down cycle, Home/End jump. (Escape/activate
+  // are handled below and by the buttons themselves.)
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const btns = Array.from(
+      ref.current?.querySelectorAll<HTMLButtonElement>(
+        'button[role="menuitem"]:not([disabled])',
+      ) ?? [],
+    );
+    if (btns.length === 0) return;
+    const i = btns.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      btns[(i + 1) % btns.length]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      btns[(i - 1 + btns.length) % btns.length]?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      btns[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      btns[btns.length - 1]?.focus();
+    }
+  };
+
   // Dismiss on any outside interaction.
   useEffect(() => {
     const close = () => onClose();
@@ -65,6 +98,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       className="fixed z-[120] min-w-[200px] overflow-hidden rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]"
       style={{ left: pos.x, top: pos.y }}
       onClick={(e) => e.stopPropagation()}
+      onKeyDown={onKeyDown}
     >
       {items.map((item, i) => (
         <li key={item.label} role="none">

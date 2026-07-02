@@ -23,6 +23,12 @@ export const ChevronIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const DeltaIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M12 5 4 19h16z" />
+  </svg>
+);
+
 export const DeviceIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <rect x="6" y="2.5" width="12" height="19" rx="2.5" />
@@ -253,13 +259,6 @@ export const MinusIcon = ({ className }: IconProps) => (
   </svg>
 );
 
-
-export const TestIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M9 3h6M10 3v5L5 18a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-10V3" />
-    <path d="M8 14h8" />
-  </svg>
-);
 
 export const TourIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">

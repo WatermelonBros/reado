@@ -43,6 +43,11 @@
   --code-line-height: 1.65;
   /* Comfortable reading measure for long-form reading (toggleable). */
   --reading-measure: 92ch;
+
+  /* QR tile: stable dark-on-light across all themes so a phone camera can
+     scan it reliably (theme-independent by design — defined once here). */
+  --qr-surface: oklch(0.97 0.006 90);
+  --qr-ink: oklch(0.18 0.02 250);
 }
 
 /* ---- Reado Dark — gray-blue, low fatigue (default) ---------------------- */
@@ -56,10 +61,11 @@
   --border-strong: oklch(0.42 0.02 250);
   --text: oklch(0.8 0.012 250);
   --text-muted: oklch(0.62 0.012 250);
-  --text-faint: oklch(0.5 0.012 250);
+  --text-faint: oklch(0.62 0.012 250); /* 4.97:1 on --bg, 4.52:1 on --bg-elevated */
 
   --accent: oklch(0.74 0.11 260);
-  --accent-contrast: oklch(0.98 0.01 260);
+  /* Dark contrast text on the medium-light accent (button labels). */
+  --accent-contrast: oklch(0.2 0.02 260); /* 7.8:1 on --accent */
 
   /* Syntax palette (priority order). */
   --syn-control: oklch(0.74 0.12 330);
@@ -67,7 +73,7 @@
   --syn-definition: oklch(0.8 0.11 95);
   --syn-string: oklch(0.76 0.11 150);
   --syn-number: oklch(0.76 0.12 55);
-  --syn-comment: oklch(0.55 0.02 250);
+  --syn-comment: oklch(0.61 0.02 250); /* 4.78:1 on --bg */
   --syn-punctuation: oklch(0.66 0.012 250);
 
   /* Reado's own annotation marker — deliberately outside the syntax palette. */
@@ -91,12 +97,12 @@
 
   --bg: oklch(0.97 0.008 90);
   --bg-elevated: oklch(0.99 0.006 90);
-  --bg-overlay: oklch(1 0 0);
+  --bg-overlay: oklch(0.99 0.006 90); /* warm near-white, tinted to the light-theme hue (never pure #fff) */
   --border: oklch(0.88 0.008 90);
   --border-strong: oklch(0.78 0.01 90);
   --text: oklch(0.33 0.012 250);
   --text-muted: oklch(0.5 0.012 250);
-  --text-faint: oklch(0.62 0.012 250);
+  --text-faint: oklch(0.52 0.012 250); /* 5.0:1 on --bg, 5.4:1 on --bg-elevated */
 
   --accent: oklch(0.5 0.13 260);
   --accent-contrast: oklch(0.99 0.01 260);
@@ -106,7 +112,7 @@
   --syn-definition: oklch(0.52 0.12 90);
   --syn-string: oklch(0.5 0.12 150);
   --syn-number: oklch(0.52 0.14 55);
-  --syn-comment: oklch(0.62 0.03 250);
+  --syn-comment: oklch(0.54 0.03 250); /* 4.63:1 on --bg */
   --syn-punctuation: oklch(0.45 0.012 250);
 
   --marker: oklch(0.55 0.18 35);
@@ -170,7 +176,7 @@
   --border-strong: oklch(0.74 0.03 75);
   --text: oklch(0.34 0.02 60);
   --text-muted: oklch(0.5 0.02 60);
-  --text-faint: oklch(0.62 0.02 60);
+  --text-faint: oklch(0.52 0.02 60); /* 4.63:1 on --bg, 4.92:1 on --bg-elevated */
 
   --accent: oklch(0.5 0.13 40);
   --accent-contrast: oklch(0.98 0.02 75);
@@ -180,7 +186,7 @@
   --syn-definition: oklch(0.5 0.12 80);
   --syn-string: oklch(0.48 0.12 150);
   --syn-number: oklch(0.5 0.14 45);
-  --syn-comment: oklch(0.62 0.03 70);
+  --syn-comment: oklch(0.52 0.03 70); /* 4.63:1 on --bg */
   --syn-punctuation: oklch(0.46 0.02 60);
 
   --marker: oklch(0.52 0.18 25);

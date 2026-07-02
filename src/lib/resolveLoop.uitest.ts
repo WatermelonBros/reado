@@ -123,7 +123,11 @@ describe("start", () => {
 
 describe("sync", () => {
   it("records partial progress and bumps lastProgressAt", () => {
-    commentsState.comments = [{ id: "b", kind: "task", state: "open" }];
+    // a is genuinely resolved (present + done); b is still open.
+    commentsState.comments = [
+      { id: "a", kind: "task", state: "done" },
+      { id: "b", kind: "task", state: "open" },
+    ];
     useResolveLoop.setState({ active: loop({ ids: ["a", "b"], lastProgressAt: 1 }) });
     useResolveLoop.getState().sync("/p");
     const active = useResolveLoop.getState().active;
@@ -134,11 +138,28 @@ describe("sync", () => {
   });
 
   it("finishes and notifies when every task resolves", () => {
-    commentsState.comments = [];
+    commentsState.comments = [{ id: "a", kind: "task", state: "done" }];
     useResolveLoop.setState({ active: loop({ ids: ["a"] }) });
     useResolveLoop.getState().sync("/p");
-    expect(useResolveLoop.getState().active?.status).toBe("finished");
+    const active = useResolveLoop.getState().active;
+    expect(active?.status).toBe("finished");
+    expect(active?.resolvedIds).toEqual(["a"]);
     expect(notifyResolved).toHaveBeenCalledWith(0);
+  });
+
+  it("does not count a deleted (gone) task as resolved", () => {
+    // a is genuinely done; b was deleted while c is still open — b must fall
+    // out of scope (not resolved) and must not prematurely finish the batch.
+    commentsState.comments = [
+      { id: "a", kind: "task", state: "done" },
+      { id: "c", kind: "task", state: "open" },
+    ];
+    useResolveLoop.setState({ active: loop({ ids: ["a", "b", "c"] }) });
+    useResolveLoop.getState().sync("/p");
+    const active = useResolveLoop.getState().active;
+    expect(active?.resolvedIds).toEqual(["a"]);
+    expect(active?.status).toBe("running");
+    expect(notifyResolved).not.toHaveBeenCalled();
   });
 
   it("is a no-op without an active loop", () => {

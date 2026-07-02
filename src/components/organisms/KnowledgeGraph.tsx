@@ -297,7 +297,7 @@ export function KnowledgeGraph() {
         className="relative flex h-[70vh] max-h-[600px] w-[94vw] max-w-[1320px] flex-col overflow-hidden rounded-lg border border-line-strong bg-canvas shadow-[var(--shadow)]"
       >
         <header className="flex flex-none items-center justify-between border-b border-line px-4 py-2.5">
-          <h2 className="m-0 text-sm font-semibold tracking-wide uppercase">
+          <h2 className="m-0 text-sm font-medium">
             {t("graph.title")}
           </h2>
           <button
@@ -310,7 +310,7 @@ export function KnowledgeGraph() {
           </button>
         </header>
         {nodes.length === 0 ? (
-          <p className="grid flex-1 place-items-center text-sm text-faint">{t("comments.empty")}</p>
+          <p className="grid flex-1 place-items-center text-sm text-faint">{t("graph.empty")}</p>
         ) : (
           <svg
             ref={svgRef}
@@ -397,7 +397,7 @@ export function KnowledgeGraph() {
           </svg>
         )}
         {nodes.length > 0 && (
-          <footer className="flex flex-none items-center gap-4 border-t border-line px-4 py-2 text-[11px] text-faint">
+          <footer className="flex flex-none items-center gap-4 border-t border-line px-4 py-2 text-xs text-faint">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full border-2 border-accent bg-surface" />
               {t("graph.legend.file")}
