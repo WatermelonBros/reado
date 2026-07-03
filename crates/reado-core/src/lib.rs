@@ -860,7 +860,11 @@ pub fn relocate(old_start: u32, context: &Context, new_content: &str) -> Option<
             };
             cnt += 1;
         }
-        if cnt == 0 { 1.0 } else { sum / cnt as f32 }
+        if cnt == 0 {
+            1.0
+        } else {
+            sum / cnt as f32
+        }
     };
 
     // 1. Exact snippet block. With surrounding context, only accept an exact

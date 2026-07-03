@@ -204,10 +204,7 @@ fn expand_status_line(line: &str) -> Vec<GitChange> {
     // Unmerged (merge-conflict) states — `U` on either side, or `AA`/`DD`. These
     // must not be split into a staged "modified" entry (which reads as "resolved
     // and staged"); surface a single `conflicted` entry instead.
-    if matches!(
-        (x, y),
-        ('U', _) | (_, 'U') | ('A', 'A') | ('D', 'D')
-    ) {
+    if matches!((x, y), ('U', _) | (_, 'U') | ('A', 'A') | ('D', 'D')) {
         return vec![GitChange {
             path,
             status: "conflicted".into(),
