@@ -5,9 +5,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { OutlineSymbol } from "../../../lib/outline";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (k: string) => k, i18n: {} }),
-}));
 // Minimal hand-rolled docInfo store: view is seeded before each render, so no
 // reactivity is needed and CodeMirror never gets pulled in.
 vi.mock("../../../lib/docInfo", () => {

@@ -3,12 +3,8 @@
 // and diff state. Stores are real; the Tauri edge and synopsis side effect are
 // stubbed.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
-}));
 
 const { gitRefs } = vi.hoisted(() => ({
   gitRefs: vi.fn(async () => ({ branches: ["main"], commits: [] })),
@@ -75,10 +71,9 @@ describe("Breadcrumb", () => {
   });
 
   it("shows the dirty dot only when there are unsaved changes", () => {
-    const { rerender } = render(<Breadcrumb />);
+    render(<Breadcrumb />);
     expect(screen.queryByTitle("editor.unsaved")).not.toBeInTheDocument();
-    useEditorActions.setState({ dirty: true });
-    rerender(<Breadcrumb />);
+    act(() => useEditorActions.setState({ dirty: true }));
     expect(screen.getByTitle("editor.unsaved")).toBeInTheDocument();
   });
 

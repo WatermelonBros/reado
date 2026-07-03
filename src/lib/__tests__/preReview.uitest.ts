@@ -29,7 +29,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // discard bumps nothing, but generate uses a module token; reset by re-mocking
   vi.useRealTimers();
 });
 

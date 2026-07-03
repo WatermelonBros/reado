@@ -266,7 +266,17 @@
     "reviewPromptTitle": "Revisiona tramite input",
     "reviewPromptHint": "Descrivi cosa vuoi far revisionare — l'agente decide quali file sono rilevanti.",
     "reviewPromptPlaceholder": "es. Revisiona il flusso di auth in src/lib per race condition e gestione errori mancante",
-    "reviewPromptSubmit": "Avvia revisione"
+    "reviewPromptSubmit": "Avvia revisione",
+    "source": "Cosa revisionare",
+    "src": {
+      "diff": "Modifiche correnti",
+      "branch": "Confronta un branch",
+      "pr": "Pull request",
+      "prompt": "Descrivi tu"
+    },
+    "startReview": "Avvia revisione",
+    "pickPr": "Scegli una pull request…",
+    "branchBase": "Branch base"
   },
   "loop": {
     "running": "In risoluzione…",
@@ -291,7 +301,11 @@
     "noNumber": "Nessun numero di pull/merge request — impossibile inviare.",
     "approve": "Approva",
     "requestChanges": "Richiedi modifiche",
-    "comment": "Commenta"
+    "comment": "Commenta",
+    "pickTitle": "Pull request aperte",
+    "pickEmpty": "Nessuna pull request aperta.",
+    "pickNoForge": "Nessun forge rilevato per questo repo — aggiungi un remote GitHub o GitLab per revisionare le pull request.",
+    "checkoutFailed": "Impossibile fare checkout della PR #{number} — {error}"
   },
   "tours": {
     "panel": "Tour",

@@ -5,9 +5,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { FileCommit } from "../../../lib/api";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (k: string) => k, i18n: {} }),
-}));
 const gitFileHistory = vi.fn<(root: string, file: string) => Promise<FileCommit[]>>();
 vi.mock("../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../lib/api")>()),

@@ -54,7 +54,7 @@ export function Select<T extends string>({
       collection={collection}
       value={[value]}
       onValueChange={(d) => d.value[0] && onChange(d.value[0] as T)}
-      positioning={{ gutter: 4, placement: "bottom-start" }}
+      positioning={{ gutter: 4, placement: "bottom-start", sameWidth: true }}
     >
       <ArkSelect.Control>
         <ArkSelect.Trigger

@@ -1,9 +1,7 @@
 // Anchored Q&A answer modal: the loading / error / ready (Markdown) states and
 // the basename shown in the header. i18n is mocked to keys.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
 import { QaModal } from "../QaModal";
 import { useQa } from "../../../lib/qa";

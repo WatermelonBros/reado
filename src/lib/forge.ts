@@ -91,8 +91,12 @@ export const useForge = create<ForgeState>((set, get) => ({
   openPr: async (root, pr, objective) => {
     try {
       await forgeCheckoutPr(root, pr.number);
-    } catch {
-      return null; // surfaced by the caller; the branch wasn't checked out
+    } catch (e) {
+      // The checkout failed (dirty working tree, auth, conflict…). Surface why —
+      // otherwise clicking a PR silently does nothing.
+      const [{ useNotice }, { t }] = await Promise.all([import("./notice"), import("../i18n")]);
+      useNotice.getState().show("error", t("forge.checkoutFailed", { number: pr.number, error: String(e) }));
+      return null;
     }
     const session = await useGuidedReview
       .getState()

@@ -5,11 +5,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (k: string) => k, i18n: {} }),
-  // tours.ts → docInfo → lsp → i18n/index pulls this in at import time.
-  initReactI18next: { type: "3rdParty", init: () => {} },
-}));
 const promptMock = vi.fn();
 vi.mock("../../../lib/prompt", () => ({ prompt: (...a: unknown[]) => promptMock(...a) }));
 
@@ -69,7 +64,7 @@ describe("ToursPanel", () => {
     promptMock.mockResolvedValue(null);
     render(<ToursPanel />);
     await userEvent.click(screen.getByRole("button", { name: /tours.new/ }));
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r));
     expect(actions.createTour).not.toHaveBeenCalled();
   });
 

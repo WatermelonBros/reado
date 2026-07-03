@@ -1,6 +1,6 @@
 // Cross-OS UI test: the interface theme is applied to <html data-theme>.
 // Establishes the Tauri-mock pattern for component tests. Runs on all 3 OSes.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render } from "@testing-library/react";
 
 // Tauri's window API isn't present in a simulated DOM — mock it.
@@ -27,6 +27,10 @@ beforeEach(() => {
   }));
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("interface theme applies to <html data-theme>", () => {
   it("manual mode honours the chosen theme", () => {
     useSettings.setState({ mode: "manual", theme: "reado-sepia" });
@@ -44,5 +48,17 @@ describe("interface theme applies to <html data-theme>", () => {
     useSettings.setState({ mode: "system", darkTheme: "reado-dark", lightTheme: "reado-light" });
     render(<Probe />);
     expect(document.documentElement.dataset.theme).toBe("reado-dark");
+  });
+
+  it("system mode resolves to the light-theme pair when the OS prefers light", () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: false,
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    useSettings.setState({ mode: "system", darkTheme: "reado-dark", lightTheme: "reado-light" });
+    render(<Probe />);
+    expect(document.documentElement.dataset.theme).toBe("reado-light");
   });
 });

@@ -1,10 +1,8 @@
 // Shortcuts reference dialog: renders the grouped binding list when the palette
 // flag is on, and the close button toggles it shut. i18n is mocked to keys.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
 import { ShortcutsDialog } from "../ShortcutsDialog";
 import { usePalette } from "../../../lib/store";

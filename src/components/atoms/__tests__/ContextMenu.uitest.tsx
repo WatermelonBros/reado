@@ -44,7 +44,9 @@ describe("ContextMenu", () => {
     setup([{ label: "Disabled", onSelect: disabledSelect, disabled: true }]);
     const btn = screen.getByText("Disabled").closest("button")!;
     expect(btn).toBeDisabled();
-    await userEvent.click(btn).catch(() => {});
+    // pointerEventsCheck: 0 — a disabled button has pointer-events:none, which
+    // would otherwise make userEvent throw; we want the click to be a no-op.
+    await userEvent.setup({ pointerEventsCheck: 0 }).click(btn);
     expect(disabledSelect).not.toHaveBeenCalled();
   });
 });

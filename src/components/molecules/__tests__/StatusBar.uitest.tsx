@@ -5,13 +5,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
-  // StatusBar pulls in i18n init transitively (docInfo → lsp → i18n), which
-  // registers this plugin; keep a no-op stub so init doesn't throw.
-  initReactI18next: { type: "3rdParty", init: () => {} },
-}));
-
 const api = vi.hoisted(() => ({
   anywhereStatus: vi.fn(async () => null as unknown),
   gitBranches: vi.fn(async () => ({

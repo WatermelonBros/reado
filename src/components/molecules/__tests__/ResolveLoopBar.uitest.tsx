@@ -5,10 +5,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
-}));
-
 // resolveLoop's clear() persists via these api wrappers; stub the Tauri edge.
 vi.mock("../../../lib/api", () => ({
   createFile: vi.fn(async () => {}),

@@ -19,7 +19,6 @@ import {
 import { useForge } from "../../lib/forge";
 import { dispatchToAgent, sanitizePromptText } from "../../lib/agents";
 import { composeReviewRequestPrompt } from "../../lib/review";
-import { ReviewPromptModal } from "./ReviewPromptModal";
 import { gitBranches } from "../../lib/api";
 import type {
   FileState,
@@ -33,6 +32,10 @@ import { RouteIcon, SparkleIcon } from "../atoms/icons";
 import { Select } from "../atoms/Select";
 import { ResolveLoopBar } from "../molecules/ResolveLoopBar";
 import { type MessageKey } from "../../i18n";
+
+/** What a new review runs over. Three are git-scoped (a concrete file set); the
+ *  fourth lets the agent decide from a free-text description. */
+type Source = "diff" | "branch" | "pr" | "prompt";
 
 const OBJECTIVES: Objective[] = [
   "bug_risk",
@@ -140,16 +143,109 @@ function EmptyState({ root }: { root: string }) {
     setObjectiveState(o);
     useSettings.getState().set({ reviewObjective: o });
   };
-  const [promptOpen, setPromptOpen] = useState(false);
+  const [source, setSource] = useState<Source>("diff");
+  const [base, setBase] = useState("");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [promptText, setPromptText] = useState("");
+  const [prNumber, setPrNumber] = useState<number | null>(null);
   const { t } = useTranslation();
+
+  // Load the repo's branches when the "branch" source is chosen; default the base
+  // to main / master / the current branch.
+  useEffect(() => {
+    if (source !== "branch") return;
+    void gitBranches(root)
+      .then((b) => {
+        const locals = b?.local ?? [];
+        setBranches(locals);
+        setBase(
+          (cur) =>
+            cur ||
+            (locals.includes("main")
+              ? "main"
+              : locals.includes("master")
+                ? "master"
+                : (b?.current ?? locals[0] ?? "")),
+        );
+      })
+      .catch(() => {});
+  }, [source, root]);
+
+  const sourceOptions = [
+    { value: "diff", label: t("guided.src.diff") },
+    ...(isRepo
+      ? [
+          { value: "branch", label: t("guided.src.branch") },
+          { value: "pr", label: t("guided.src.pr") },
+        ]
+      : []),
+    { value: "prompt", label: t("guided.src.prompt") },
+  ];
+
+  // The primary button is always present; it's enabled once the chosen source
+  // has what it needs (a base branch, a selected PR, some text — diff needs none).
+  const canStart =
+    source === "diff" ||
+    (source === "branch" && !!base) ||
+    (source === "pr" && prNumber != null) ||
+    (source === "prompt" && !!promptText.trim());
+
+  const onStart = () => {
+    if (source === "diff") void start(root, { kind: "diff" }, objective);
+    else if (source === "branch" && base) void start(root, { kind: "branch", base }, objective);
+    else if (source === "pr" && prNumber != null) {
+      const pr = useForge.getState().prs.find((p) => p.number === prNumber);
+      if (pr) void useForge.getState().openPr(root, pr, objective);
+    } else if (source === "prompt" && promptText.trim())
+      void dispatchToAgent(composeReviewRequestPrompt(sanitizePromptText(promptText)));
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-5">
-      <div>
-        <h3 className="text-xs font-semibold text-ink">{t("guided.empty.title")}</h3>
-        <p className="mt-1 text-xs leading-relaxed text-faint">{t("guided.empty.body")}</p>
-      </div>
-      <div className="flex flex-col gap-1 text-xs text-faint">
+      <p className="text-xs leading-relaxed text-faint">{t("guided.empty.body")}</p>
+
+      {/* Primary choice: what to review. */}
+      <label className="flex flex-col gap-1 text-xs text-faint">
+        {t("guided.source")}
+        <Select
+          value={source}
+          options={sourceOptions}
+          onChange={(v) => setSource(v as Source)}
+          ariaLabel={t("guided.source")}
+          className="w-full"
+        />
+      </label>
+
+      {/* The chosen source's own control appears inline — no modal indirection. */}
+      {source === "branch" && (
+        <label className="flex flex-col gap-1 text-xs text-faint">
+          {t("guided.branchBase")}
+          <Select
+            value={base}
+            options={branches.map((b) => ({ value: b, label: b }))}
+            onChange={setBase}
+            ariaLabel={t("guided.branchBase")}
+            className="w-full"
+          />
+        </label>
+      )}
+
+      {source === "prompt" && (
+        <label className="flex flex-col gap-1 text-xs text-faint">
+          {t("guided.reviewPromptHint")}
+          <textarea
+            value={promptText}
+            onChange={(e) => setPromptText(e.target.value)}
+            placeholder={t("guided.reviewPromptPlaceholder")}
+            className="h-28 resize-none rounded-md border border-line bg-surface p-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-line-strong"
+          />
+        </label>
+      )}
+
+      {source === "pr" && <PrList root={root} selected={prNumber} onSelect={setPrNumber} />}
+
+      {/* Refinement: the review focus, applied to whatever source is chosen. */}
+      <label className="flex flex-col gap-1 text-xs text-faint">
         {t("guided.objective.label")}
         <Select
           value={objective}
@@ -159,118 +255,82 @@ function EmptyState({ root }: { root: string }) {
           }))}
           onChange={(o) => setObjective(o)}
           ariaLabel={t("guided.objective.label")}
+          className="w-full"
         />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <button
-          type="button"
-          onClick={() => void start(root, { kind: "diff" }, objective)}
-          className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90"
-        >
-          {t("guided.start.diff")}
-        </button>
-        {isRepo && (
-          <button
-            type="button"
-            onClick={async () => {
-              // Don't assume "main": pick the repo's actual default base branch.
-              const b = await gitBranches(root).catch(() => null);
-              const base = b?.local.includes("main")
-                ? "main"
-                : b?.local.includes("master")
-                  ? "master"
-                  : (b?.current ?? "main");
-              void start(root, { kind: "branch", base }, objective);
-            }}
-            className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
-          >
-            {t("guided.start.branch")}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setPromptOpen(true)}
-          className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
-        >
-          {t("guided.reviewPrompt")}
-        </button>
-      </div>
-      <PrSection root={root} objective={objective} />
-      <ReviewPromptModal
-        open={promptOpen}
-        onClose={() => setPromptOpen(false)}
-        onSubmit={(text) => void dispatchToAgent(composeReviewRequestPrompt(sanitizePromptText(text)))}
-      />
+      </label>
+
+      <button
+        type="button"
+        onClick={onStart}
+        disabled={!canStart}
+        className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
+      >
+        {t("guided.startReview")}
+      </button>
     </div>
   );
 }
 
-/** The hosted-PR entry point: detect the forge, offer the matching CLI if
- *  missing, list requests, and start a guided review over the chosen one. */
-function PrSection({ root, objective }: { root: string; objective: Objective }) {
+/** Inline, selectable list of the repo's open PRs. Picking one highlights it;
+ *  the shared "Start review" button then runs on the selection — so the primary
+ *  action stays put. Handles no-forge / CLI-missing / loading / empty. */
+function PrList({
+  root,
+  selected,
+  onSelect,
+}: {
+  root: string;
+  selected: number | null;
+  onSelect: (n: number) => void;
+}) {
+  const { t } = useTranslation();
   const forge = useForge((s) => s.forge);
   const cliPresent = useForge((s) => s.cliPresent);
   const prs = useForge((s) => s.prs);
   const loadingPrs = useForge((s) => s.loadingPrs);
-  const { t } = useTranslation();
 
   useEffect(() => {
     void useForge.getState().detect(root);
   }, [root]);
+  useEffect(() => {
+    if (forge?.hasAdapter && cliPresent) void useForge.getState().listPrs(root);
+  }, [forge?.hasAdapter, cliPresent, root]);
 
-  if (!forge || forge.provider === "unknown") return null;
-
-  // A recognised forge without a CLI adapter: reviewable locally only.
-  if (!forge.hasAdapter) {
+  if (!forge || forge.provider === "unknown" || !forge.hasAdapter)
+    return <p className="text-xs leading-relaxed text-faint">{t("forge.pickNoForge")}</p>;
+  if (cliPresent === false)
     return (
-      <p className="border-t border-line pt-3 text-xs leading-relaxed text-faint">
-        {t("forge.noAdapter", { provider: forge.provider })}
-      </p>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5 border-t border-line pt-3">
-      <p className="text-[10px] uppercase tracking-wide text-faint">{forge.term}</p>
-      {cliPresent === false ? (
-        <>
-          <p className="text-xs leading-relaxed text-faint">
-            {t("forge.installHint", { cli: forge.cli })}
-          </p>
-          <button
-            type="button"
-            onClick={() => useForge.getState().installCli()}
-            className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
-          >
-            {t("forge.install", { cli: forge.cli })}
-          </button>
-        </>
-      ) : prs.length === 0 ? (
+      <div className="flex flex-col gap-2">
+        <p className="text-xs leading-relaxed text-faint">{t("forge.installHint", { cli: forge.cli })}</p>
         <button
           type="button"
-          disabled={loadingPrs}
-          onClick={() => void useForge.getState().listPrs(root)}
-          className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink disabled:opacity-50"
+          onClick={() => useForge.getState().installCli()}
+          className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
         >
-          {loadingPrs ? t("forge.loading") : t("forge.list", { term: forge.term })}
+          {t("forge.install", { cli: forge.cli })}
         </button>
-      ) : (
-        <ul className="m-0 list-none p-0">
-          {prs.map((pr) => (
-            <li key={pr.number}>
-              <button
-                type="button"
-                onClick={() => void useForge.getState().openPr(root, pr, objective)}
-                className="flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left hover:bg-surface"
-              >
-                <span className="flex-none text-[10px] tabular-nums text-faint">#{pr.number}</span>
-                <span className="min-w-0 flex-1 truncate text-xs text-ink">{pr.title}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+      </div>
+    );
+  if (loadingPrs) return <p className="text-xs text-faint">{t("forge.loading")}</p>;
+  if (prs.length === 0) return <p className="text-xs leading-relaxed text-faint">{t("forge.pickEmpty")}</p>;
+  return (
+    <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+      {prs.map((pr) => (
+        <li key={pr.number}>
+          <button
+            type="button"
+            aria-pressed={selected === pr.number}
+            onClick={() => onSelect(pr.number)}
+            className={`flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left ${
+              selected === pr.number ? "bg-selection text-ink" : "hover:bg-surface"
+            }`}
+          >
+            <span className="flex-none text-[10px] tabular-nums text-faint">#{pr.number}</span>
+            <span className="min-w-0 flex-1 truncate text-xs text-ink">{pr.title}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

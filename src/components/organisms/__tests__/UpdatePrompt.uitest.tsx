@@ -6,7 +6,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }));
 vi.mock("@tauri-apps/plugin-updater", () => ({}));
 
@@ -48,17 +47,16 @@ describe("UpdatePrompt", () => {
     expect(screen.getByRole("button", { name: "update.install" })).toBeInTheDocument();
   });
 
-  it("the Later button dismisses the modal and leaves the indicator", () => {
+  it("the Later button dismisses the modal and leaves the indicator", async () => {
     useUpdate.setState({ update: fakeUpdate, version: "1.2.3", open: true });
     render(<UpdatePrompt />);
     // Both the header X (aria-label) and the footer button carry "update.later".
     const [closeBtn] = screen.getAllByRole("button", { name: "update.later" });
-    return userEvent.click(closeBtn).then(() => {
-      expect(useUpdate.getState().open).toBe(false);
-      expect(useUpdate.getState().dismissed).toBe(true);
-      // Indicator now shows (available + dismissed + not open).
-      expect(screen.getByText("update.indicator")).toBeInTheDocument();
-    });
+    await userEvent.click(closeBtn);
+    expect(useUpdate.getState().open).toBe(false);
+    expect(useUpdate.getState().dismissed).toBe(true);
+    // Indicator now shows (available + dismissed + not open).
+    expect(screen.getByText("update.indicator")).toBeInTheDocument();
   });
 
   it("the Install button triggers the install action", async () => {

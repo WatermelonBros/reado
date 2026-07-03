@@ -5,9 +5,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (k: string) => k, i18n: {} }),
-}));
 const lspInstalled = vi.fn<(server: string) => Promise<boolean>>();
 const submitToTerminal = vi.fn();
 vi.mock("../../../lib/api", async (orig) => ({

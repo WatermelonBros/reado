@@ -266,7 +266,17 @@
     "reviewPromptTitle": "Review via prompt",
     "reviewPromptHint": "Describe what you want reviewed — the agent decides which files are relevant.",
     "reviewPromptPlaceholder": "e.g. Review the auth flow in src/lib for race conditions and missing error handling",
-    "reviewPromptSubmit": "Start review"
+    "reviewPromptSubmit": "Start review",
+    "source": "What to review",
+    "src": {
+      "diff": "Current changes",
+      "branch": "Compare a branch",
+      "pr": "Pull request",
+      "prompt": "Describe it"
+    },
+    "startReview": "Start review",
+    "pickPr": "Choose a pull request…",
+    "branchBase": "Base branch"
   },
   "loop": {
     "running": "Resolving…",
@@ -291,7 +301,11 @@
     "noNumber": "No pull/merge request number — can't submit.",
     "approve": "Approve",
     "requestChanges": "Request changes",
-    "comment": "Comment"
+    "comment": "Comment",
+    "pickTitle": "Open pull requests",
+    "pickEmpty": "No open pull requests.",
+    "pickNoForge": "No forge detected for this repo — add a GitHub or GitLab remote to review pull requests.",
+    "checkoutFailed": "Couldn't check out PR #{number} — {error}"
   },
   "tours": {
     "panel": "Tours",

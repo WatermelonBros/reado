@@ -1,11 +1,9 @@
 // Reado Anywhere pairing dialog: the disabled (tagline) state, enabling the
 // server (renders the QR + stop control), copying the URL, and disabling again.
 // `../../lib/api` is mocked at the three Anywhere commands; i18n is mocked to keys.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
 const anywhereStatus = vi.fn();
 const anywhereEnable = vi.fn();
@@ -34,7 +32,11 @@ beforeEach(() => {
   anywhereStatus.mockResolvedValue(null);
   anywhereEnable.mockResolvedValue(info);
   anywhereDisable.mockResolvedValue(undefined);
-  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("AnywhereDialog", () => {

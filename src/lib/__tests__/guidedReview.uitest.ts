@@ -53,7 +53,6 @@ import type {
   ReviewScope,
   RouteEntry,
   Session,
-  SessionStatus,
 } from "../api";
 
 const flush = () => new Promise((r) => setTimeout(r));
@@ -464,7 +463,3 @@ describe("scopeFromChanges", () => {
     expect(scope).toEqual({ kind: "diff", base: undefined });
   });
 });
-
-// Keep an unused import referenced so the type-only import is not flagged.
-const _types: SessionStatus = "planning";
-void _types;
