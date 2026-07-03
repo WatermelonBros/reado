@@ -142,7 +142,7 @@
   "mcp": {
     "title": "Reado MCP",
     "enable": "Abilita Reado MCP per l'agente",
-    "enabled": "Aggiunto il server MCP di Reado a .mcp.json. Riavvia l'agente (Claude Code) così legge commenti, task, progresso di lettura e segnalibri come contesto.",
+    "enabled": "Server MCP di Reado configurato per: {agents}. Riavvia l'agente così legge commenti, task, progresso di lettura e segnalibri come contesto.",
     "parseError": "Il tuo .mcp.json non è JSON valido — correggilo prima, poi riprova."
   },
   "anywhere": {
@@ -261,7 +261,12 @@
       "session_summary": "riepilogo"
     },
     "approveAll": "Approva tutti",
-    "discardAll": "Scarta tutti"
+    "discardAll": "Scarta tutti",
+    "reviewPrompt": "Revisiona tramite input…",
+    "reviewPromptTitle": "Revisiona tramite input",
+    "reviewPromptHint": "Descrivi cosa vuoi far revisionare — l'agente decide quali file sono rilevanti.",
+    "reviewPromptPlaceholder": "es. Revisiona il flusso di auth in src/lib per race condition e gestione errori mancante",
+    "reviewPromptSubmit": "Avvia revisione"
   },
   "loop": {
     "running": "In risoluzione…",
@@ -454,7 +459,10 @@
     "logCopyPath": "Copia percorso",
     "checkUpdates": "Controlla aggiornamenti…",
     "shortcuts": "Scorciatoie da tastiera…",
-    "close": "Chiudi"
+    "close": "Chiudi",
+    "fileIcons": "Icone file",
+    "fileIconsPlain": "Semplici",
+    "fileIconsColored": "Colorate per tipo"
   },
   "sc": {
     "title": "Scorciatoie da tastiera",

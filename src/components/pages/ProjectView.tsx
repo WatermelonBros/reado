@@ -112,15 +112,7 @@ export function ProjectView({ root }: { root: string }) {
     useGuidedReview.getState().load(root);
     void useResolveLoop.getState().load(root);
     listFiles(root)
-      .then((f) => {
-        setTotalFiles(f.length);
-        // First open of a project (no saved session): land on the top-level
-        // README so the reader starts oriented instead of on a blank screen.
-        if (!session?.active) {
-          const readme = f.find((p) => /^readme(\.[a-z]+)?$/i.test(p.replace(/\\/g, "/")));
-          if (readme) useProject.getState().open(`${root}/${readme.replace(/\\/g, "/")}`);
-        }
-      })
+      .then((f) => setTotalFiles(f.length))
       .catch(() => setTotalFiles(0));
     // Build the SQLite index on open if missing/stale (rebuildable cache).
     rebuildIndex(root).catch(() => {});

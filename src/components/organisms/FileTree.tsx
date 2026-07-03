@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listDir, listFiles, movePath, importPaths, type DirEntry } from "../../lib/api";
-import { useProject, useEditorActions } from "../../lib/store";
+import { useProject, useEditorActions, useSettings } from "../../lib/store";
 import { useTextView } from "../../lib/textView";
 import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
 import { useDiagnostics } from "../../lib/diagnostics";
@@ -375,6 +375,8 @@ function TreeNode({
   const { t } = useTranslation();
   const open = useProject((s) => s.open);
   const active = useProject((s) => s.active);
+  // Primitive selector → re-renders only when the icon mode actually flips.
+  const coloredIcons = useSettings((s) => s.fileIcons === "colored");
   // Expansion lives in the store (persisted per project), keyed by the same
   // project-relative path the tree uses elsewhere, so a reopen restores it and
   // collapse-all (which clears expandedDirs) collapses everything.
@@ -471,7 +473,7 @@ function TreeNode({
           ) : (
             <span className="w-[13px] flex-none" />
           )}
-          <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} />
+          <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} colored={coloredIcons} />
           <span
             className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${
               dimmed ? "text-muted" : ""

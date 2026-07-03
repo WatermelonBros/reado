@@ -10,7 +10,7 @@
  * CodeMirror virtualizes rendering, so multi-thousand-line files stay smooth.
  * Syntax highlighting and the editor theme come from `lib/codemirror.ts`.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { EditorState, Compartment, StateEffect, StateField, Annotation, Facet } from "@codemirror/state";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -40,6 +40,30 @@ import { search, searchKeymap, gotoLine, highlightSelectionMatches } from "@code
 import { forEachDiagnostic } from "@codemirror/lint";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownRehype } from "../../lib/markdown";
+
+/** Rendered markdown preview, memoized so it only re-parses when the document
+ *  text (or reading width) changes — react-markdown parses synchronously, so an
+ *  unmemoized re-render on every unrelated store change froze the UI on large
+ *  READMEs (the parse can block the main thread for seconds). */
+const RenderedMarkdown = memo(function RenderedMarkdown({
+  text,
+  readingWidth,
+}: {
+  text: string;
+  readingWidth: boolean;
+}) {
+  return (
+    <div
+      className="prose-reado mx-auto h-full w-full overflow-y-auto p-8"
+      style={{ maxWidth: readingWidth ? "var(--reading-measure)" : undefined }}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={markdownRehype}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+});
 
 import {
   readFile,
@@ -422,12 +446,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             primary={primary}
           />
         ) : (
-          <div
-            className="prose-reado mx-auto h-full w-full overflow-y-auto p-8"
-            style={{ maxWidth: readingWidth ? "var(--reading-measure)" : undefined }}
-          >
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content.text}</ReactMarkdown>
-          </div>
+          <RenderedMarkdown text={content.text} readingWidth={readingWidth} />
         )}
       </div>
     );

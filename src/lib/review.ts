@@ -29,6 +29,21 @@ export function composeReviewPromptForIds(ids: string[]): string {
 }
 
 /**
+ * Free-text review: the human describes what they want looked at, and the agent
+ * decides which files are relevant, reads them, and records findings as Reado
+ * comments. Single line so it submits as one message in the agent TUI.
+ */
+export function composeReviewRequestPrompt(request: string): string {
+  return (
+    `READO REVIEW — review request from me: "${request}". ` +
+    "Work out which files are relevant yourself, read them, and record your findings as Reado " +
+    "comments anchored to the exact line(s): " +
+    '`reado comment add --file <path> --line <n> [--end <m>] --type <bug|refactor|performance|question|note> "<body>"` ' +
+    "— a task comment for actionable issues, add `--note` for observations. Do NOT change any code. Start now."
+  );
+}
+
+/**
  * Compose the prompt that asks the agent to audit a file or folder and record
  * its findings as Reado comments (so they show up inline in the code). Single
  * line, like the review prompts, so it submits as one message in the agent TUI.

@@ -11,8 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
+import { markdownRehype } from "../../lib/markdown";
 import { readFile, searchText, listFiles, type Comment, type CommentType } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useProject, useWorkspace } from "../../lib/store";
@@ -296,7 +295,7 @@ export function DocsView() {
                 {/* Project docs (READMEs especially) embed raw HTML — centered
                     headings, badge images. rehype-raw renders it instead of
                     showing the literal <h1> tags as text. */}
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={markdownRehype}>
                   {content}
                 </ReactMarkdown>
               </div>

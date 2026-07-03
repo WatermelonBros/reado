@@ -124,6 +124,17 @@ export function Settings() {
             />
           </Field>
 
+          <Field label={t("settings.fileIcons")}>
+            <Select
+              value={settings.fileIcons}
+              onChange={(v) => settings.set({ fileIcons: v as "plain" | "colored" })}
+              options={[
+                { value: "plain", label: t("settings.fileIconsPlain") },
+                { value: "colored", label: t("settings.fileIconsColored") },
+              ]}
+            />
+          </Field>
+
           <Field label={t("settings.autoSave")}>
             <Select
               value={settings.autoSave}

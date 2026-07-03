@@ -142,7 +142,7 @@
   "mcp": {
     "title": "Reado MCP",
     "enable": "Enable Reado MCP for the agent",
-    "enabled": "Added Reado's MCP server to .mcp.json. Restart the agent (Claude Code) so it picks up your comments, tasks, reading progress, and bookmarks as context.",
+    "enabled": "Wired Reado's MCP server for: {agents}. Restart the agent so it picks up your comments, tasks, reading progress, and bookmarks as context.",
     "parseError": "Your .mcp.json is not valid JSON — fix it first, then try again."
   },
   "anywhere": {
@@ -261,7 +261,12 @@
       "session_summary": "summary"
     },
     "approveAll": "Approve all",
-    "discardAll": "Discard all"
+    "discardAll": "Discard all",
+    "reviewPrompt": "Review via prompt…",
+    "reviewPromptTitle": "Review via prompt",
+    "reviewPromptHint": "Describe what you want reviewed — the agent decides which files are relevant.",
+    "reviewPromptPlaceholder": "e.g. Review the auth flow in src/lib for race conditions and missing error handling",
+    "reviewPromptSubmit": "Start review"
   },
   "loop": {
     "running": "Resolving…",
@@ -454,7 +459,10 @@
     "logCopyPath": "Copy path",
     "checkUpdates": "Check for updates…",
     "shortcuts": "Keyboard Shortcuts…",
-    "close": "Close"
+    "close": "Close",
+    "fileIcons": "File icons",
+    "fileIconsPlain": "Plain",
+    "fileIconsColored": "Colored by type"
   },
   "sc": {
     "title": "Keyboard Shortcuts",

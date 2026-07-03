@@ -33,6 +33,8 @@ import {
   ClaudeIcon,
   CodexIcon,
   CopilotIcon,
+  GeminiIcon,
+  OpenCodeIcon,
   LayoutIcon,
 } from "../atoms/icons";
 
@@ -40,6 +42,7 @@ import {
 const CLAUDE_ORANGE = "#D97757";
 const CODEX_TEAL = "#10A37F";
 const COPILOT_VIOLET = "#8957E5";
+const OPENCODE_GREY = "#656363";
 
 // Below this panel width the labelled buttons collapse to icon-only.
 const COMPACT_WIDTH = 560;
@@ -99,9 +102,11 @@ export function TerminalPanel() {
       agentInstalled("claude"),
       agentInstalled("codex"),
       agentInstalled("copilot"),
+      agentInstalled("gemini"),
+      agentInstalled("opencode"),
     ])
-      .then(([claude, codex, copilot]) => {
-        if (alive) setInstalled({ claude, codex, copilot });
+      .then(([claude, codex, copilot, gemini, opencode]) => {
+        if (alive) setInstalled({ claude, codex, copilot, gemini, opencode });
       })
       .catch(() => {});
     return () => {
@@ -388,6 +393,45 @@ export function TerminalPanel() {
           style={{ color: COPILOT_VIOLET }}
         >
           <CopilotIcon className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label={
+            installed.gemini === false
+              ? t("agent.notInstalled", { name: "Gemini" })
+              : t("terminal.launch", { name: "Gemini" })
+          }
+          title={
+            installed.gemini === false
+              ? t("agent.notInstalled", { name: "Gemini" })
+              : t("terminal.launch", { name: "Gemini" })
+          }
+          onClick={() => void launchAgent("gemini", "gemini")}
+          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
+            installed.gemini === false ? "opacity-40" : ""
+          }`}
+        >
+          <GeminiIcon className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label={
+            installed.opencode === false
+              ? t("agent.notInstalled", { name: "OpenCode" })
+              : t("terminal.launch", { name: "OpenCode" })
+          }
+          title={
+            installed.opencode === false
+              ? t("agent.notInstalled", { name: "OpenCode" })
+              : t("terminal.launch", { name: "OpenCode" })
+          }
+          onClick={() => void launchAgent("opencode", "opencode")}
+          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
+            installed.opencode === false ? "opacity-40" : ""
+          }`}
+          style={{ color: OPENCODE_GREY }}
+        >
+          <OpenCodeIcon className="h-4 w-4" />
         </button>
         <span className="mx-0.5 h-4 w-px flex-none bg-line" />
         <button

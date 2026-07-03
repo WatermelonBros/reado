@@ -351,6 +351,12 @@ export function runMenuCommand(id: string): void {
       case "terminal:launch:copilot":
         void launchAgent("copilot", "copilot");
         break;
+      case "terminal:launch:gemini":
+        void launchAgent("gemini", "gemini");
+        break;
+      case "terminal:launch:opencode":
+        void launchAgent("opencode", "opencode");
+        break;
       case "terminal:sendReview": {
         const count = openCount(useComments.getState().comments);
         void dispatchToAgent(composeReviewPrompt(count));

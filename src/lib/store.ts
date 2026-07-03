@@ -63,6 +63,8 @@ export interface SettingsState {
   renderWhitespace: boolean;
   /** Show the structure ribbon (symbols/comments/diagnostics overview column). */
   showRibbon: boolean;
+  /** File-tree icon style: one neutral glyph, or tinted per file type/extension. */
+  fileIcons: "plain" | "colored";
   /** Write a diagnostic log file you can send back to us (on by default). */
   logEnabled: boolean;
   /** How much detail the log captures. */
@@ -96,6 +98,7 @@ export const useSettings = create<SettingsState>()(
       showBreadcrumbs: true,
       renderWhitespace: false,
       showRibbon: false,
+      fileIcons: "plain",
       logEnabled: true,
       logLevel: "info",
       showHidden: false,

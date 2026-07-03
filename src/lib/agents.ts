@@ -8,7 +8,7 @@ import { agentInstalled, ptyDefaultShell, ptyWrite, submitToTerminal } from "./a
 import { useTerminals } from "./terminals";
 import { useNotice } from "./notice";
 
-export type Agent = "claude-code" | "codex" | "copilot";
+export type Agent = "claude-code" | "codex" | "copilot" | "gemini" | "opencode";
 type ShellFamily = "cmd" | "powershell" | "posix";
 
 /** The binary that runs each agent. */
@@ -16,6 +16,8 @@ const AGENT_BIN: Record<Agent, string> = {
   "claude-code": "claude",
   codex: "codex",
   copilot: "copilot",
+  gemini: "gemini",
+  opencode: "opencode",
 };
 
 function shellFamily(shell: string | null): ShellFamily {
@@ -109,7 +111,7 @@ export async function launchAgent(agent: Agent, bin: string): Promise<void> {
 const DEFAULT_AGENT: Agent = "claude-code";
 
 /** Preference order when auto-picking an agent for the first-ever dispatch. */
-const AGENT_ORDER: Agent[] = ["claude-code", "codex", "copilot"];
+const AGENT_ORDER: Agent[] = ["claude-code", "codex", "copilot", "gemini", "opencode"];
 
 /** The first installed agent (probed on PATH), so a dev who only has codex or
  *  copilot isn't dead-ended by the Claude default on their first AI action. */

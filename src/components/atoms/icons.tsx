@@ -353,23 +353,87 @@ export const CopilotIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+/** Google Gemini spark — self-coloured with Gemini's own brand gradient (the
+ *  logo IS a gradient), so it renders correctly regardless of theme. */
+export const GeminiIcon = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" width={16} height={16} className={className} aria-hidden="true">
+    <defs>
+      <linearGradient id="reado-gemini" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#439DDF" />
+        <stop offset="0.524" stopColor="#4F87ED" />
+        <stop offset="0.781" stopColor="#9476C5" />
+        <stop offset="0.888" stopColor="#BC688E" />
+        <stop offset="1" stopColor="#D6645D" />
+      </linearGradient>
+    </defs>
+    <path
+      fill="url(#reado-gemini)"
+      d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"
+    />
+  </svg>
+);
+
+/** OpenCode block mark. Filled via currentColor (brand grey applied by caller). */
+export const OpenCodeIcon = ({ className }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    width={16}
+    height={16}
+    className={className}
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <path d="M22 24H2V0h20zM17 4.8H7v14.4h10z" />
+  </svg>
+);
+
 const folderPath =
   "M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.4.6L11.6 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z";
 const filePath =
   "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5";
 
 /** A folder or file glyph. The folder differs subtly when expanded. */
+/** Language/type colours keyed by file extension (GitHub-linguist palette), for
+ *  the "colored" file-icon mode. Unknown types fall back to the neutral faint. */
+const FILE_COLORS: Record<string, string> = {
+  ts: "#3178C6", tsx: "#3178C6", mts: "#3178C6", cts: "#3178C6",
+  js: "#F1E05A", jsx: "#F1E05A", mjs: "#F1E05A", cjs: "#F1E05A",
+  rs: "#DEA584", py: "#3572A5", go: "#00ADD8", rb: "#701516",
+  java: "#B07219", kt: "#A97BFF", kts: "#A97BFF", scala: "#C22D40",
+  swift: "#F05138", c: "#555555", h: "#555555", cpp: "#F34B7D",
+  cc: "#F34B7D", hpp: "#F34B7D", cs: "#178600", php: "#4F5D95",
+  json: "#CBCB41", jsonc: "#CBCB41", yaml: "#CB171E", yml: "#CB171E",
+  toml: "#9C4221", md: "#419BFF", markdown: "#419BFF", mdx: "#419BFF",
+  html: "#E34C26", htm: "#E34C26", css: "#563D7C", scss: "#C6538C",
+  sass: "#C6538C", less: "#1D365D", sh: "#89E051", bash: "#89E051",
+  zsh: "#89E051", vue: "#41B883", svelte: "#FF3E00", sql: "#E38C00",
+  lua: "#4A6FB3", dart: "#00B4AB", ex: "#6E4A7E", exs: "#6E4A7E",
+  zig: "#EC915C", nim: "#FFC200", clj: "#5881D8", hs: "#5E5086",
+  ml: "#EC6813", vim: "#199F4B", r: "#198CE7", pl: "#0298C3",
+  proto: "#7E7E7E", graphql: "#E10098", tf: "#844FBA", svg: "#FFB13B",
+};
+
+const fileColor = (name?: string): string => {
+  const ext = name?.split(".").pop()?.toLowerCase();
+  return (ext && FILE_COLORS[ext]) || "var(--text-faint)";
+};
+
 export const FileIcon = ({
   isDir,
   expanded,
+  colored,
+  name,
   className,
-}: IconProps & { isDir: boolean; expanded?: boolean; name?: string }) => (
+}: IconProps & { isDir: boolean; expanded?: boolean; colored?: boolean; name?: string }) => (
   <svg
     {...base}
     width={15}
     height={15}
     className={className}
-    style={{ color: isDir ? "var(--accent)" : "var(--text-faint)", flex: "none" }}
+    style={{
+      color: isDir ? "var(--accent)" : colored ? fileColor(name) : "var(--text-faint)",
+      flex: "none",
+    }}
     aria-hidden="true"
   >
     {isDir ? (

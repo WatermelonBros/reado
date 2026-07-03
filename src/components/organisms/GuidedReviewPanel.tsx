@@ -17,6 +17,9 @@ import {
   useGuidedReview,
 } from "../../lib/guidedReview";
 import { useForge } from "../../lib/forge";
+import { dispatchToAgent, sanitizePromptText } from "../../lib/agents";
+import { composeReviewRequestPrompt } from "../../lib/review";
+import { ReviewPromptModal } from "./ReviewPromptModal";
 import { gitBranches } from "../../lib/api";
 import type {
   FileState,
@@ -137,6 +140,7 @@ function EmptyState({ root }: { root: string }) {
     setObjectiveState(o);
     useSettings.getState().set({ reviewObjective: o });
   };
+  const [promptOpen, setPromptOpen] = useState(false);
   const { t } = useTranslation();
 
   return (
@@ -183,8 +187,20 @@ function EmptyState({ root }: { root: string }) {
             {t("guided.start.branch")}
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setPromptOpen(true)}
+          className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
+        >
+          {t("guided.reviewPrompt")}
+        </button>
       </div>
       <PrSection root={root} objective={objective} />
+      <ReviewPromptModal
+        open={promptOpen}
+        onClose={() => setPromptOpen(false)}
+        onSubmit={(text) => void dispatchToAgent(composeReviewRequestPrompt(sanitizePromptText(text)))}
+      />
     </div>
   );
 }
