@@ -21,6 +21,7 @@ import {
   type Verdict,
 } from "./api";
 import { runInTerminal } from "./agents";
+import { log, safeError } from "./logger";
 import { currentOS, type OS } from "./extensions";
 import { useGuidedReview } from "./guidedReview";
 import { useComments } from "./comments";
@@ -50,6 +51,8 @@ interface ForgeState {
   cliPresent: boolean | null;
   prs: Pr[];
   loadingPrs: boolean;
+  /** The last list failure (CLI missing / auth / not a repo), or null. */
+  prsError: string | null;
   detect: (root: string) => Promise<void>;
   listPrs: (root: string) => Promise<void>;
   /** Run the matching CLI's install command in the terminal (user-confirmed). */
@@ -67,18 +70,26 @@ export const useForge = create<ForgeState>((set, get) => ({
   cliPresent: null,
   prs: [],
   loadingPrs: false,
+  prsError: null,
 
   detect: async (root) => {
     const forge = await detectForge(root).catch(() => null);
     let cliPresent: boolean | null = null;
     if (forge?.cli) cliPresent = await forgeCliPresent(forge.cli).catch(() => false);
-    set({ forge, cliPresent });
+    // Reset the request list for the new project so it auto-loads fresh instead
+    // of showing the previous repo's PRs.
+    set({ forge, cliPresent, prs: [], prsError: null });
   },
 
   listPrs: async (root) => {
-    set({ loadingPrs: true });
-    const prs = await forgeListPrs(root).catch(() => []);
-    set({ prs, loadingPrs: false });
+    set({ loadingPrs: true, prsError: null });
+    try {
+      const prs = await forgeListPrs(root);
+      set({ prs, loadingPrs: false });
+    } catch (e) {
+      log.error("forge list failed", { error: safeError(e) });
+      set({ prsError: safeError(e), loadingPrs: false });
+    }
   },
 
   installCli: () => {

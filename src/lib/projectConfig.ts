@@ -7,6 +7,7 @@
  * are written back to the project's config.
  */
 import { useSettings, type SettingsState } from "./store";
+import { log, safeError } from "./logger";
 import { readProjectConfig, writeProjectConfig } from "./api";
 
 /** Settings that are meaningful to override per project. */
@@ -22,8 +23,8 @@ export async function loadProjectConfig(root: string): Promise<void> {
     const patch: Record<string, unknown> = {};
     for (const k of KEYS) if (cfg[k] !== undefined) patch[k] = cfg[k];
     useSettings.getState().set(patch as Partial<SettingsState>);
-  } catch {
-    /* malformed config — ignore */
+  } catch (e) {
+    log.warn("projectConfig: malformed config, ignoring", { error: safeError(e) });
   }
 }
 
