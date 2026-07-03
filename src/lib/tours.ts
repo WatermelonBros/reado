@@ -6,6 +6,7 @@
  * didn't write".
  */
 import { create } from "zustand";
+import { log, safeError } from "./logger";
 import { readFile, createFile, writeFile } from "./api";
 import { dispatchToAgent } from "./agents";
 import { useProject } from "./store";
@@ -37,8 +38,8 @@ async function load(root: string): Promise<Tour[]> {
   if (c && c.kind === "text") {
     try {
       return JSON.parse(c.text) as Tour[];
-    } catch {
-      /* corrupt → empty */
+    } catch (e) {
+      log.warn("tours: corrupt store, treating as empty", { error: safeError(e) });
     }
   }
   return [];

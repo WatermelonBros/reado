@@ -288,6 +288,7 @@ function PrList({
   const cliPresent = useForge((s) => s.cliPresent);
   const prs = useForge((s) => s.prs);
   const loadingPrs = useForge((s) => s.loadingPrs);
+  const prsError = useForge((s) => s.prsError);
 
   useEffect(() => {
     void useForge.getState().detect(root);
@@ -312,6 +313,14 @@ function PrList({
       </div>
     );
   if (loadingPrs) return <p className="text-xs text-faint">{t("forge.loading")}</p>;
+  // A failed list (auth / not a repo / CLI error) surfaces here instead of being
+  // swallowed into an empty list — the backend now carries gh/glab's stderr.
+  if (prsError)
+    return (
+      <p className="text-xs leading-relaxed text-danger">
+        {t("forge.listError", { term: forge.term, error: prsError })}
+      </p>
+    );
   if (prs.length === 0) return <p className="text-xs leading-relaxed text-faint">{t("forge.pickEmpty")}</p>;
   return (
     <ul className="m-0 flex list-none flex-col gap-0.5 p-0">

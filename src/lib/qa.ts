@@ -7,9 +7,12 @@
  * question-driven.
  */
 import { create } from "zustand";
+import { createLogger, safeError } from "./logger";
 import { readFile, createFile, writeFile } from "./api";
 import { dispatchToAgent, sanitizePromptText } from "./agents";
 import { useProject } from "./store";
+
+const log = createLogger("qa");
 
 type Status = "loading" | "ready" | "error";
 
@@ -40,8 +43,8 @@ async function loadIndex(root: string): Promise<QaNote[]> {
   if (c && c.kind === "text") {
     try {
       return JSON.parse(c.text) as QaNote[];
-    } catch {
-      /* corrupt → empty */
+    } catch (e) {
+      log.warn("qa: corrupt notes index, treating as empty", { error: safeError(e) });
     }
   }
   return [];

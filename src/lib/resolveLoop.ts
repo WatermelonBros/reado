@@ -12,6 +12,7 @@
  * Delivery is Anywhere's job; this store only produces the events.
  */
 import { create } from "zustand";
+import { log, safeError } from "./logger";
 import {
   anywherePublishLoop,
   createFile,
@@ -103,8 +104,8 @@ export const useResolveLoop = create<ResolveLoopState>((set, get) => ({
         set({ active: parsed });
         get().sync(root);
       }
-    } catch {
-      /* malformed — ignore */
+    } catch (e) {
+      log.warn("resolveLoop: malformed persisted state, ignoring", { error: safeError(e) });
     }
   },
 

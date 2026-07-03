@@ -5,11 +5,13 @@
  * never edits code and never posts comments directly — the human curates.
  */
 import { create } from "zustand";
+import { createLogger, safeError } from "./logger";
 import { readFile, createFile, writeFile, type CommentType } from "./api";
 import { dispatchToAgent } from "./agents";
 import { useComments } from "./comments";
 
 const STORE = ".reado/pre-review.json";
+const log = createLogger("preReview");
 
 export interface Draft {
   id: string;
@@ -44,7 +46,8 @@ function parse(text: string): Draft[] {
         type: normType(d.type),
         body: d.body as string,
       }));
-  } catch {
+  } catch (e) {
+    log.warn("preReview: malformed drafts JSON, treating as empty", { error: safeError(e) });
     return [];
   }
 }

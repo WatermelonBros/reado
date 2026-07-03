@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("../../i18n", () => ({ t: (k: string, o?: Record<string, unknown>) => (o ? `${k}:${JSON.stringify(o)}` : k) }));
 vi.mock("../prompt", () => ({ prompt: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn() }));
-vi.mock("../logger", () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }), safeError: (e: unknown) => String(e) }));
+vi.mock("../logger", () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }), safeError: (e: unknown) => String(e) }));
 
 import {
   buildBundle,

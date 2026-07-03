@@ -218,41 +218,52 @@ pub struct Pr {
     pub branch: String,
 }
 
-/// List open PRs/MRs via the detected forge's CLI. Empty on any failure (no
-/// adapter, CLI missing, not authenticated) — the caller falls back to local.
+/// List open PRs/MRs via the detected forge's CLI. Returns an error carrying the
+/// CLI's stderr (CLI missing, not authenticated, not a repo) so the caller can
+/// say *why* the list is empty instead of silently falling back. A recognised
+/// host with no CLI adapter is a benign empty list, not an error.
 ///
 /// Async + `spawn_blocking`: the CLI does **network** I/O, so it must not run on
 /// the main thread (a slow/hanging `gh`/`glab` would otherwise freeze the UI).
 #[tauri::command]
-pub async fn forge_list_prs(root: String) -> Vec<Pr> {
-    tauri::async_runtime::spawn_blocking(move || list_prs_blocking(root))
-        .await
-        .unwrap_or_default()
+pub async fn forge_list_prs(root: String) -> Result<Vec<Pr>, String> {
+    match tauri::async_runtime::spawn_blocking(move || list_prs_blocking(root)).await {
+        Ok(r) => r,
+        Err(e) => Err(e.to_string()),
+    }
 }
 
-fn list_prs_blocking(root: String) -> Vec<Pr> {
+fn list_prs_blocking(root: String) -> Result<Vec<Pr>, String> {
     let forge = detect_forge(root.clone());
     let Some(cli) = forge.cli.as_deref() else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
     let root_path = Path::new(&root);
     match cli {
         "gh" => gh_list(root_path),
         "glab" => glab_list(root_path),
-        _ => Vec::new(),
+        _ => Ok(Vec::new()),
     }
 }
 
-fn cli_out(root: &Path, program: &str, args: &[&str]) -> Option<String> {
+/// Run a read-only CLI op, preserving *why* it failed: a spawn error or the
+/// process's stderr (mirroring [`checkout_pr_blocking`]). Callers surface or log
+/// the error instead of letting it vanish into an empty result.
+fn cli_out_result(root: &Path, program: &str, args: &[&str]) -> Result<String, String> {
     let out = command(program)
         .current_dir(root)
         .args(args)
         .output()
-        .ok()?;
+        .map_err(|e| format!("failed to run {program}: {e}"))?;
     if out.status.success() {
-        Some(String::from_utf8_lossy(&out.stdout).into_owned())
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
-        None
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        Err(if stderr.is_empty() {
+            format!("{program} exited with status {}", out.status)
+        } else {
+            stderr
+        })
     }
 }
 
@@ -268,8 +279,8 @@ where
     }
 }
 
-fn gh_list(root: &Path) -> Vec<Pr> {
-    let Some(json) = cli_out(
+fn gh_list(root: &Path) -> Result<Vec<Pr>, String> {
+    let json = cli_out_result(
         root,
         "gh",
         &[
@@ -282,13 +293,17 @@ fn gh_list(root: &Path) -> Vec<Pr> {
             "--limit",
             "50",
         ],
-    ) else {
-        return Vec::new();
-    };
-    let Ok(rows) = serde_json::from_str::<Vec<serde_json::Value>>(&json) else {
-        return Vec::new();
-    };
-    rows.into_iter()
+    )?;
+    parse_gh_prs(&json)
+}
+
+/// Parse `gh pr list --json` output into PRs. Split out so the mapping (and its
+/// error on malformed JSON) is unit-testable without spawning `gh`.
+fn parse_gh_prs(json: &str) -> Result<Vec<Pr>, String> {
+    let rows = serde_json::from_str::<Vec<serde_json::Value>>(json)
+        .map_err(|e| format!("failed to parse gh output: {e}"))?;
+    Ok(rows
+        .into_iter()
         .filter_map(|r| {
             Some(Pr {
                 number: r.get("number")?.as_u64()?,
@@ -306,17 +321,21 @@ fn gh_list(root: &Path) -> Vec<Pr> {
                     .to_string(),
             })
         })
-        .collect()
+        .collect())
 }
 
-fn glab_list(root: &Path) -> Vec<Pr> {
-    let Some(json) = cli_out(root, "glab", &["mr", "list", "--output", "json"]) else {
-        return Vec::new();
-    };
-    let Ok(rows) = serde_json::from_str::<Vec<serde_json::Value>>(&json) else {
-        return Vec::new();
-    };
-    rows.into_iter()
+fn glab_list(root: &Path) -> Result<Vec<Pr>, String> {
+    let json = cli_out_result(root, "glab", &["mr", "list", "--output", "json"])?;
+    parse_glab_prs(&json)
+}
+
+/// Parse `glab mr list --output json` into PRs. Split out for unit tests (see
+/// [`parse_gh_prs`]).
+fn parse_glab_prs(json: &str) -> Result<Vec<Pr>, String> {
+    let rows = serde_json::from_str::<Vec<serde_json::Value>>(json)
+        .map_err(|e| format!("failed to parse glab output: {e}"))?;
+    Ok(rows
+        .into_iter()
         .filter_map(|r| {
             Some(Pr {
                 number: r.get("iid").or_else(|| r.get("number"))?.as_u64()?,
@@ -334,7 +353,7 @@ fn glab_list(root: &Path) -> Vec<Pr> {
                     .to_string(),
             })
         })
-        .collect()
+        .collect())
 }
 
 /// Fetch and check out a PR/MR's branch so a guided review reads it with the full
@@ -624,7 +643,7 @@ pub fn map_glab_discussions(json: &str) -> Vec<HostThread> {
 
 /// `owner/repo` for the current GitHub repo (via `gh`), split into parts.
 fn gh_name_with_owner(root: &Path) -> Option<(String, String)> {
-    let out = cli_out(
+    let out = cli_out_result(
         root,
         "gh",
         &[
@@ -635,7 +654,15 @@ fn gh_name_with_owner(root: &Path) -> Option<(String, String)> {
             "-q",
             ".nameWithOwner",
         ],
-    )?;
+    )
+    .map_err(|e| {
+        crate::log::warn(
+            "forge",
+            "gh repo view failed",
+            serde_json::json!({ "error": e }),
+        )
+    })
+    .ok()?;
     let s = out.trim();
     let (owner, repo) = s.split_once('/')?;
     Some((owner.to_string(), repo.to_string()))
@@ -671,8 +698,16 @@ fn gh_all_threads(root: &Path, number: u64) -> Vec<HostThread> {
             args.push(format!("cursor={c}"));
         }
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        let Some(json) = cli_out(root, "gh", &refs) else {
-            break;
+        let json = match cli_out_result(root, "gh", &refs) {
+            Ok(json) => json,
+            Err(e) => {
+                crate::log::warn(
+                    "forge",
+                    "gh threads query failed",
+                    serde_json::json!({ "error": e }),
+                );
+                break;
+            }
         };
         all.extend(map_gh_threads(&json));
         match gh_page_info(&json) {
@@ -690,8 +725,16 @@ fn glab_all_threads(root: &Path, number: u64) -> Vec<HostThread> {
     for page in 1..=MAX_PAGES {
         let path =
             format!("projects/:id/merge_requests/{number}/discussions?per_page=100&page={page}");
-        let Some(json) = cli_out(root, "glab", &["api", &path]) else {
-            break;
+        let json = match cli_out_result(root, "glab", &["api", &path]) {
+            Ok(json) => json,
+            Err(e) => {
+                crate::log::warn(
+                    "forge",
+                    "glab discussions query failed",
+                    serde_json::json!({ "error": e }),
+                );
+                break;
+            }
         };
         // Page by the RAW discussion count (map filters out non-diff ones).
         let raw = serde_json::from_str::<serde_json::Value>(&json)
@@ -975,5 +1018,48 @@ mod tests {
         let f = detect_from_remote("");
         assert_eq!(f.provider, Provider::Unknown);
         assert_eq!(f.host, "");
+    }
+
+    #[test]
+    fn parses_gh_pr_list() {
+        let json = r#"[
+          {"number":7,"title":"Fix it","author":{"login":"octocat"},"headRefName":"fix-it"},
+          {"number":9,"title":"Add it","author":{"login":"hubot"},"headRefName":"add-it"}
+        ]"#;
+        let prs = parse_gh_prs(json).expect("valid json parses");
+        assert_eq!(prs.len(), 2);
+        assert_eq!(prs[0].number, 7);
+        assert_eq!(prs[0].title, "Fix it");
+        assert_eq!(prs[0].author, "octocat");
+        assert_eq!(prs[0].branch, "fix-it");
+    }
+
+    #[test]
+    fn parses_glab_mr_list_by_iid() {
+        let json = r#"[
+          {"iid":3,"title":"MR","author":{"username":"alice"},"source_branch":"feat"}
+        ]"#;
+        let prs = parse_glab_prs(json).expect("valid json parses");
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].number, 3);
+        assert_eq!(prs[0].author, "alice");
+        assert_eq!(prs[0].branch, "feat");
+    }
+
+    #[test]
+    fn malformed_pr_json_is_an_error_not_empty() {
+        // The key fix: a parse failure must surface as Err (so the UI + tracer
+        // see *why* it failed), not silently collapse to an empty list.
+        assert!(parse_gh_prs("not json").is_err());
+        assert!(parse_glab_prs("{ broken").is_err());
+    }
+
+    #[test]
+    fn list_prs_on_non_repo_is_empty_not_error() {
+        // A directory with no git remote has no forge adapter — a benign empty
+        // list, never an error.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        assert_eq!(list_prs_blocking(root).expect("no adapter is Ok").len(), 0);
     }
 }

@@ -6,6 +6,7 @@
  * is a possible future backend; this delivers the user-facing capability now.)
  */
 import { create } from "zustand";
+import { log, safeError } from "./logger";
 import { readFile } from "./api";
 import { dispatchToAgent, sanitizePromptText } from "./agents";
 import { useProject } from "./store";
@@ -34,7 +35,8 @@ function parse(text: string): Hit[] {
         line: typeof h.line === "number" ? h.line : 1,
         snippet: typeof h.snippet === "string" ? h.snippet : "",
       }));
-  } catch {
+  } catch (e) {
+    log.warn("semanticSearch: malformed results JSON", { error: safeError(e) });
     return [];
   }
 }

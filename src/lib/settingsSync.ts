@@ -60,7 +60,8 @@ export function parseBundle(json: string): Bundle | null {
   let b: Bundle;
   try {
     b = JSON.parse(json) as Bundle;
-  } catch {
+  } catch (e) {
+    log.warn("malformed bundle JSON", { error: safeError(e) });
     return null;
   }
   if (!b || typeof b !== "object" || typeof b.settings !== "object") return null;
