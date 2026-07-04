@@ -122,12 +122,28 @@ export function composeExplainPrompt(
 // disposes of. Reado never calls an LLM directly — these single-line prompts
 // (TUI submit) hand the session id to the agent and tell it which verb to run.
 
-/** Kick off the planning pass: read the scope and emit a ranked route. */
-export function composeGuidedPlanPrompt(sessionId: string, scopeDesc: string): string {
+/** A PR fetched in place — head/base git refs to read the change from without
+ *  ever touching the working tree. Derivable from the PR number. */
+export interface PrRefs {
+  head: string;
+  base: string;
+}
+
+/** Kick off the planning pass: read the scope and emit a ranked route. When the
+ *  scope is a PR, the change lives in git refs (not the working tree), so the
+ *  agent is told to read it non-destructively via `git diff`/`git show`. */
+export function composeGuidedPlanPrompt(
+  sessionId: string,
+  scopeDesc: string,
+  pr?: PrRefs,
+): string {
+  const inspect = pr
+    ? `This PR is fetched locally as git refs — the working tree is NOT the PR, so do NOT check anything out or edit it. ` +
+      `Inspect the change with \`git diff ${pr.base}...${pr.head}\` and read file versions with \`git show ${pr.head}:<path>\`, `
+    : "inspect the changed files (git diff, the tree, symbols, existing comments), ";
   return (
     `READO GUIDED REVIEW — planning pass for session ${sessionId} (scope: ${scopeDesc}). ` +
-    `Run \`reado session show ${sessionId} --json\` for context, inspect the changed files ` +
-    "(git diff, the tree, symbols, existing comments), then propose an ordered review route. " +
+    `Run \`reado session show ${sessionId} --json\` for context, ${inspect}then propose an ordered review route. ` +
     `Emit it with \`reado review plan ${sessionId} --route '<json>'\` where <json> is an array of ` +
     '{"file","priority","reason","suggestedReviewMode":"quick|normal|deep","relatedFiles":[...]} ' +
     "ranked by risk (diff size, role, dependents, files with comments). Do NOT review deeply yet " +
@@ -141,11 +157,16 @@ export function composeGuidedFilePrompt(
   file: string,
   mode: string,
   objective?: string,
+  pr?: PrRefs,
 ): string {
   const focus = objective ? ` Objective: ${objective}.` : "";
+  const read = pr
+    ? `Read the PR's version with \`git show ${pr.head}:${file}\` (the working tree is NOT the PR — never edit it) ` +
+      `and diff it with \`git diff ${pr.base}...${pr.head} -- ${file}\`; anchor line numbers to the PR version. `
+    : "Read the file and ";
   return (
     `READO GUIDED REVIEW — review \`${file}\` for session ${sessionId} (${mode} pass).${focus} ` +
-    `Run \`reado review context ${sessionId} --file ${file} --json\` first. Read the file and ` +
+    `Run \`reado review context ${sessionId} --file ${file} --json\` first. ${read}` +
     "raise concrete, grounded observations — never broad generic remarks. For each, PROPOSE a " +
     `comment: \`reado review propose-comment ${sessionId} --file ${file} --line <n> [--end <m>] ` +
     '--type <bug|refactor|performance|question|note> "<body>"\`. ' +

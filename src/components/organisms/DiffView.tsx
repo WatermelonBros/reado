@@ -29,11 +29,15 @@ import { useTranslation } from "react-i18next";
 interface Props {
   relPath: string;
   text: string;
+  /** Override the git base to diff against (PR review diffs head vs the PR base
+   *  ref, not the working tree's HEAD). Falls back to the shared diff base. */
+  base?: string;
 }
 
-export function DiffView({ relPath, text }: Props) {
+export function DiffView({ relPath, text, base: baseOverride }: Props) {
   const root = useProject((s) => s.root);
-  const base = useEditorActions((s) => s.diffBase);
+  const storeBase = useEditorActions((s) => s.diffBase);
+  const base = baseOverride ?? storeBase;
   const { codeFont, readingWidth } = useSettings();
   const { t } = useTranslation();
   const [head, setHead] = useState<string | null | undefined>(undefined);

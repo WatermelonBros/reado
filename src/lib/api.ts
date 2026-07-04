@@ -179,6 +179,11 @@ export const gitRefs = (root: string) => invoke<GitRefs>("git_refs", { root });
 export const gitShowRef = (root: string, file: string, base: string) =>
   invoke<string | null>("git_show_ref", { root, file, base });
 
+/** Head-side line ranges (1-based, inclusive) a file changed across `base...head`
+ *  — the lines a PR touched, for inline change markers. */
+export const gitDiffLines = (root: string, file: string, base: string, head: string) =>
+  invoke<[number, number][]>("git_diff_lines", { root, file, base, head });
+
 export interface FileCommit {
   hash: string;
   author: string;
@@ -600,17 +605,32 @@ export const forgeCliPresent = (cli: string) =>
 /** Open PRs/MRs via the detected CLI (empty when none/unavailable). */
 export const forgeListPrs = (root: string) => invoke<Pr[]>("forge_list_prs", { root });
 
-/** Fetch + check out a PR/MR branch so a guided review can read it. */
-export const forgeCheckoutPr = (root: string, number: number) =>
-  invoke<void>("forge_checkout_pr", { root, number });
+/** A PR fetched in place — head/base as hidden refs, no working-tree change. */
+export interface PrCheckout {
+  head: string;
+  base: string;
+  files: string[];
+}
+
+/** Fetch a PR/MR non-destructively (refs only) for an in-place review. */
+export const forgeFetchPr = (root: string, number: number) =>
+  invoke<PrCheckout>("forge_fetch_pr", { root, number });
 
 /** Submit the session as one batched review with a verdict. */
+/** A line-anchored comment to post inline on the PR (GitHub). */
+export interface ReviewComment {
+  path: string;
+  line: number;
+  body: string;
+}
+
 export const forgeSubmitReview = (
   root: string,
   number: number,
   verdict: Verdict,
   body: string,
-) => invoke<void>("forge_submit_review", { root, number, verdict, body });
+  comments: ReviewComment[],
+) => invoke<void>("forge_submit_review", { root, number, verdict, body, comments });
 
 export interface PullResult {
   comments: Comment[];

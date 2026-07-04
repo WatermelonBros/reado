@@ -305,7 +305,8 @@
     "pickTitle": "Open pull requests",
     "pickEmpty": "No open pull requests.",
     "pickNoForge": "No forge detected for this repo — add a GitHub or GitLab remote to review pull requests.",
-    "checkoutFailed": "Couldn't check out PR #{number} — {error}"
+    "checkoutFailed": "Couldn't open PR #{number} — check that gh/glab is set up and try again.",
+    "checkoutAuth": "Couldn't open PR #{number}: the forge CLI isn't signed in. Run `gh auth login` (or `glab auth login`)."
   },
   "tours": {
     "panel": "Tours",

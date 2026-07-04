@@ -775,3 +775,42 @@ pub fn git_show_ref(root: String, file: String, base: String) -> Option<String> 
         None
     }
 }
+
+/// The line ranges a file gained or changed between two refs (`base...head`,
+/// merge-base semantics — a PR's own changes). Each `[start, end]` is 1-based and
+/// inclusive on the *head* side, for inline change markers in the reader. Empty
+/// on any failure. Pure deletions (no head lines) are omitted.
+#[tauri::command]
+pub fn git_diff_lines(root: String, file: String, base: String, head: String) -> Vec<[u32; 2]> {
+    let range = format!("{base}...{head}");
+    let output = match command("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["diff", "--unified=0", &range, "--", &file])
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return Vec::new(),
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut ranges = Vec::new();
+    for line in text.lines() {
+        // Hunk header: `@@ -a,b +c,d @@ …`. The `+c,d` is the head-side range.
+        let Some(rest) = line.strip_prefix("@@") else {
+            continue;
+        };
+        let Some(plus) = rest.split_whitespace().find(|t| t.starts_with('+')) else {
+            continue;
+        };
+        let mut nums = plus[1..].split(',');
+        let Some(start) = nums.next().and_then(|s| s.parse::<u32>().ok()) else {
+            continue;
+        };
+        let count = nums.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(1);
+        if count == 0 {
+            continue; // a pure deletion — nothing to mark on the head side
+        }
+        ranges.push([start, start + count - 1]);
+    }
+    ranges
+}

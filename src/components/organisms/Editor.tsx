@@ -70,6 +70,8 @@ import {
   reanchorFile,
   writeFile,
   gitBlame,
+  gitShowRef,
+  gitDiffLines,
   findDefinition,
   resolveImport,
   type Comment,
@@ -91,6 +93,8 @@ import { useComments, commentsForFile, toRelative } from "../../lib/comments";
 import { useTextView } from "../../lib/textView";
 import { useReadProgress, noteSelfWrite } from "../../lib/readProgress";
 import { dispatchToAgent } from "../../lib/agents";
+import { useGuidedReview, prRefsFor } from "../../lib/guidedReview";
+import { changedLinesHighlight } from "../../lib/changedLines";
 import { composeExplainPrompt, composeSymbolExplainPrompt } from "../../lib/review";
 import { lspSupport, hasServer, lspLocate, lspDefinition, lspHover } from "../../lib/lsp";
 import { taskFromDiagnostic, explainSymbolAt } from "../../lib/lspActions";
@@ -323,27 +327,74 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   );
   const [error, setError] = useState<{ path: string; message: string } | null>(null);
 
-  // Load the active file whenever it changes (or when forced to text).
+  // When a PR is under in-place review, its files are read from the fetched git
+  // ref (never checked out) so the editor shows the PR's version — not the user's
+  // working tree — and the imported/proposed comments line up with it.
+  const prSession = useGuidedReview((s) => {
+    const sess = s.sessions.find((x) => x.id === s.currentId);
+    return sess && sess.scope.kind === "pr" ? sess : null;
+  });
+  const prRefs = useMemo(() => {
+    if (!prSession || !active) return null;
+    const rel = toRelative(root, active);
+    const inScope =
+      (prSession.route ?? []).some((e) => e.file === rel) ||
+      (prSession.files ?? []).some((f) => f.file === rel);
+    return inScope ? (prRefsFor(prSession.scope) ?? null) : null;
+  }, [prSession, active, root]);
+  const prRef = prRefs?.head ?? null;
+
+  // The lines the PR changed, marked inline in the code view (so the diff is
+  // visible without leaving the reliable, commentable view).
+  const [changedLines, setChangedLines] = useState<Array<[number, number]>>([]);
+  useEffect(() => {
+    if (!prRefs || !active) {
+      setChangedLines([]);
+      return;
+    }
+    let cancelled = false;
+    const rel = toRelative(root, active);
+    gitDiffLines(root, rel, prRefs.base, prRefs.head)
+      .then((r) => !cancelled && setChangedLines(r))
+      .catch(() => !cancelled && setChangedLines([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [prRefs, active, root]);
+
+  // Load the active file whenever it changes (or when forced to text). In PR
+  // mode the bytes come from the ref (`git show`), falling back to the working
+  // tree if the path isn't in the ref (e.g. a binary or deleted file).
   const forceText = useTextView((s) => s.force);
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
-    readFile(root, active, forceText.has(active))
+    const rel = toRelative(root, active);
+    const load: Promise<FileContent> = prRef
+      ? gitShowRef(root, rel, prRef).then((text) =>
+          text == null
+            ? readFile(root, active, forceText.has(active))
+            : ({ kind: "text", text }),
+        )
+      : readFile(root, active, forceText.has(active));
+    load
       .then((c) => !cancelled && setLoaded({ path: active, content: c }))
       .catch((e) => !cancelled && setError({ path: active, message: String(e) }));
     return () => {
       cancelled = true;
     };
-  }, [root, active, forceText]);
+  }, [root, active, forceText, prRef]);
 
   // Recompute this file's comment anchors on open (spec: recompute on open).
+  // Skipped in PR mode: reanchoring reads the working tree, but the shown bytes
+  // are the PR's — the comments are already anchored to those exact lines.
   useEffect(() => {
-    if (!active) return;
+    if (!active || prRef) return;
     const rel = toRelative(root, active);
     reanchorFile(root, rel)
       .then((list) => useComments.getState().replaceForFile(rel, list))
       .catch(() => {});
-  }, [root, active]);
+  }, [root, active, prRef]);
 
   // Reload the open file when it changes on disk (e.g. an agent edited it),
   // unless the user has unsaved manual edits in progress.
@@ -351,7 +402,8 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
     if (!active) return;
     const rel = toRelative(root, active);
     const un = listen<{ file: string }>("file-changed", (e) => {
-      if (e.payload.file !== rel || useEditorActions.getState().dirty) return;
+      // In PR mode the shown bytes come from the ref, not disk — ignore writes.
+      if (e.payload.file !== rel || useEditorActions.getState().dirty || prRef) return;
       readFile(root, active, forceText.has(active))
         .then((c) => setLoaded({ path: active, content: c }))
         .catch(() => {});
@@ -362,7 +414,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
       // an unhandled rejection.
       void un.then((off) => off()).catch(() => {});
     };
-  }, [root, active, forceText]);
+  }, [root, active, forceText, prRef]);
 
   // Each file opens with a clean default view: reset the dirty and diff state.
   // Only the primary pane owns this shared state.
@@ -444,6 +496,8 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             renderWhitespace={renderWhitespace}
             landingLine={landing?.path === active ? landing : null}
             primary={primary}
+            pinned={prRef != null}
+            changedLines={changedLines}
           />
         ) : (
           <RenderedMarkdown text={content.text} readingWidth={readingWidth} />
@@ -453,7 +507,11 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   }
 
   if (diffing) {
-    return <DiffView key={relPath} relPath={relPath} text={content.text} />;
+    // In PR review, diff the PR head (what's shown) against the PR base ref —
+    // not the working tree's HEAD, which is the reviewer's own branch.
+    return (
+      <DiffView key={relPath} relPath={relPath} text={content.text} base={prRefs?.base} />
+    );
   }
   // Show active comments plus resolved (done) ones, so a finished task stays
   // readable inline (marked done) instead of vanishing from the code.
@@ -475,6 +533,8 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
       renderWhitespace={renderWhitespace}
       landingLine={landing?.path === active ? landing : null}
       primary={primary}
+      pinned={prRef != null}
+      changedLines={changedLines}
     />
   );
 }
@@ -492,6 +552,10 @@ interface CodeViewProps {
   landingLine: { line: number; nonce: number } | null;
   /** Whether this is the primary pane (owns shared status-bar/cursor state). */
   primary: boolean;
+  /** Content is pinned to a git ref (PR review) — read-only, never saved to disk. */
+  pinned: boolean;
+  /** Head-side line ranges the PR changed, to mark inline (empty when not a PR). */
+  changedLines: Array<[number, number]>;
 }
 
 /** The CodeMirror-backed read-only code viewer, with the comment overlay. */
@@ -507,6 +571,8 @@ function CodeView({
   focusMode,
   renderWhitespace,
   landingLine,
+  pinned,
+  changedLines,
 }: CodeViewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -522,6 +588,7 @@ function CodeView({
   const bookmarkComp = useMemo(() => new Compartment(), []);
   const tabSizeComp = useMemo(() => new Compartment(), []);
   const lspComp = useMemo(() => new Compartment(), []);
+  const changedComp = useMemo(() => new Compartment(), []);
   const blame = useEditorActions((s) => s.blame);
   const indentSize = useDocInfo((s) => s.indentSize);
   const languageOverride = useDocInfo((s) => s.languageOverride);
@@ -623,11 +690,13 @@ function CodeView({
       // Skip orphans: their stale startLine must not draw a ribbon mark (a "wrong line").
       if (c.anchor.scope === "range" && !c.orphan) out.push({ line: c.anchor.startLine, kind: "comment" });
     }
-    for (const d of diagByFile ?? []) {
+    // Skip diagnostics for a PR-pinned file: the LSP is off for it (its bytes
+    // don't match the on-disk workspace), so any store entry is stale/misleading.
+    for (const d of pinned ? [] : (diagByFile ?? [])) {
       if (d.severity <= 2) out.push({ line: d.line, kind: d.severity === 1 ? "error" : "warn" });
     }
     return out;
-  }, [text, comments, diagByFile]);
+  }, [text, comments, diagByFile, pinned]);
   const jumpToRibbon = (line: number) => {
     const view = viewRef.current;
     if (!view) return;
@@ -673,10 +742,11 @@ function CodeView({
     setComposer({ startLine, endLine, context, initialBody: prefill?.body, initialType: prefill?.type });
   };
 
-  // Save the buffer to disk (Cmd/Ctrl+S).
+  // Save the buffer to disk (Cmd/Ctrl+S). Never in PR mode: the bytes are the
+  // PR's (from a ref), so writing them would clobber the user's working tree.
   const saveFile = () => {
     const view = viewRef.current;
-    if (!view) return;
+    if (!view || pinned) return;
     noteSelfWrite(relPath); // our own save — don't let it mark the file unread
     writeFile(useProject.getState().root, relPath, view.state.doc.toString())
       .then(() => {
@@ -899,6 +969,7 @@ function CodeView({
         // Alt+F12 — peek the definition inline.
         keymap.of([{ key: "Alt-F12", run: () => peekDefinition() }]),
         gutterComp.of(commentGutter(lineComments, openThreadAtLine)),
+        changedComp.of(changedLinesHighlight(changedLines)),
         bookmarkComp.of(bookmarkGutter(bookmarkLines, toggleBookmarkLine)),
         blameComp.of([]),
         lspComp.of([]),
@@ -911,9 +982,10 @@ function CodeView({
         // These bindings live in historyKeymap, not defaultKeymap.
         history(),
         keymap.of([...historyKeymap, ...defaultKeymap, ...searchKeymap, ...foldKeymap]),
-        // Editing is always available; read-first is about the clean default
-        // view (no diff/AI overlay), not about being read-only.
-        editableExtension(true),
+        // Editing is normally available; read-first is about the clean default
+        // view, not read-only. The exception is PR mode, where the buffer is a
+        // git ref's content and must not be edited into the working tree.
+        editableExtension(!pinned),
         readoAppearance,
         // Mark diagnostics along the scrollbar so problems are easy to find.
         diagnosticsRuler,
@@ -993,6 +1065,13 @@ function CodeView({
     });
   }, [wrap, wrapComp]);
 
+  // Update the PR change markers when they arrive (async) or the file changes.
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: changedComp.reconfigure(changedLinesHighlight(changedLines)),
+    });
+  }, [changedLines, changedComp]);
+
   // Toggle whitespace rendering live.
   useEffect(() => {
     viewRef.current?.dispatch({
@@ -1006,7 +1085,11 @@ function CodeView({
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    if (!primary || !hasServer(path)) {
+    // No language server for a PR-pinned file: its bytes are the PR's, but the
+    // workspace on disk is the reviewer's branch, so the LSP would flag the PR's
+    // own additions (new params, new symbols) as errors. Diagnostics here are
+    // noise, not signal.
+    if (!primary || pinned || !hasServer(path)) {
       view.dispatch({ effects: lspComp.reconfigure([]) });
       return;
     }
@@ -1017,7 +1100,7 @@ function CodeView({
     return () => {
       cancelled = true;
     };
-  }, [path, primary, lspComp]);
+  }, [path, primary, pinned, lspComp]);
 
   // Apply the (possibly status-bar-overridden) tab display width.
   useEffect(() => {

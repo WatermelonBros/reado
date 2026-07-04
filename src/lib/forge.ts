@@ -10,7 +10,7 @@
 import { create } from "zustand";
 import {
   detectForge,
-  forgeCheckoutPr,
+  forgeFetchPr,
   forgeCliPresent,
   forgeListPrs,
   forgePullThreads,
@@ -19,6 +19,7 @@ import {
   type Objective,
   type Pr,
   type Verdict,
+  type ReviewComment,
 } from "./api";
 import { runInTerminal } from "./agents";
 import { log, safeError } from "./logger";
@@ -57,12 +58,19 @@ interface ForgeState {
   listPrs: (root: string) => Promise<void>;
   /** Run the matching CLI's install command in the terminal (user-confirmed). */
   installCli: () => void;
-  /** Check out a PR/MR and start a guided review scoped to it. */
+  /** Fetch a PR/MR in place (no checkout) and start a guided review scoped to it. */
   openPr: (root: string, pr: Pr, objective?: Objective) => Promise<string | null>;
   /** Re-pull a PR/MR's host threads, reflecting their resolved state. */
   pullThreads: (root: string, number: number) => Promise<void>;
-  /** Submit the current PR session as a batched review with a verdict. */
-  submit: (root: string, number: number, verdict: Verdict, body: string) => Promise<string | null>;
+  /** Submit the current PR session as a batched review with a verdict, posting
+   *  the locally authored comments inline on their exact PR lines. */
+  submit: (
+    root: string,
+    number: number,
+    verdict: Verdict,
+    body: string,
+    comments: ReviewComment[],
+  ) => Promise<string | null>;
 }
 
 export const useForge = create<ForgeState>((set, get) => ({
@@ -100,18 +108,25 @@ export const useForge = create<ForgeState>((set, get) => ({
   },
 
   openPr: async (root, pr, objective) => {
+    let checkout;
     try {
-      await forgeCheckoutPr(root, pr.number);
+      // Non-destructive: fetch the PR into hidden refs — the working tree and
+      // current branch stay put; the review reads the PR straight from the refs.
+      checkout = await forgeFetchPr(root, pr.number);
     } catch (e) {
-      // The checkout failed (dirty working tree, auth, conflict…). Surface why —
-      // otherwise clicking a PR silently does nothing.
+      // Turn the raw CLI stderr into a human sentence with a next step — dumping
+      // it verbatim into a toast isn't readable.
+      const raw = String(e);
+      const key = /auth|logged in|log in|login|credential|token/i.test(raw)
+        ? "forge.checkoutAuth"
+        : "forge.checkoutFailed";
       const [{ useNotice }, { t }] = await Promise.all([import("./notice"), import("../i18n")]);
-      useNotice.getState().show("error", t("forge.checkoutFailed", { number: pr.number, error: String(e) }));
+      useNotice.getState().show("error", t(key, { number: pr.number }));
       return null;
     }
     const session = await useGuidedReview
       .getState()
-      .start(root, { kind: "pr", pr: `#${pr.number}` }, objective);
+      .start(root, { kind: "pr", pr: `#${pr.number}`, base: checkout.base }, objective);
     // Pull the request's existing review threads into the inbox.
     await get().pullThreads(root, pr.number);
     return session?.id ?? null;
@@ -127,9 +142,9 @@ export const useForge = create<ForgeState>((set, get) => ({
     await useComments.getState().load(root);
   },
 
-  submit: async (root, number, verdict, body) => {
+  submit: async (root, number, verdict, body, comments) => {
     try {
-      await forgeSubmitReview(root, number, verdict, body);
+      await forgeSubmitReview(root, number, verdict, body, comments);
       return null;
     } catch (e) {
       return String(e);

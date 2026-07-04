@@ -77,6 +77,12 @@ const editorTheme = EditorView.theme({
   },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--text-muted)" },
   ".cm-activeLine": { backgroundColor: "color-mix(in oklch, var(--bg-elevated) 60%, transparent)" },
+  // PR review: lines the PR added/changed, marked inline (left bar + faint tint)
+  // so the diff is visible without leaving the commentable code view.
+  ".cm-pr-changed": {
+    backgroundColor: "color-mix(in oklch, var(--accent) 9%, transparent)",
+    boxShadow: "inset 2px 0 0 0 var(--accent)",
+  },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection": {
     backgroundColor: "var(--selection)",
   },

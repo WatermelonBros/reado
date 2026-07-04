@@ -6,7 +6,7 @@ const { startMock, loadMock } = vi.hoisted(() => ({ startMock: vi.fn(), loadMock
 
 vi.mock("../api", () => ({
   detectForge: vi.fn(),
-  forgeCheckoutPr: vi.fn(),
+  forgeFetchPr: vi.fn(),
   forgeCliPresent: vi.fn(),
   forgeListPrs: vi.fn(),
   forgePullThreads: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock("../comments", () => ({ useComments: { getState: () => ({ load: loadMock
 import { useForge, installCommandFor } from "../forge";
 import {
   detectForge,
-  forgeCheckoutPr,
+  forgeFetchPr,
   forgeCliPresent,
   forgeListPrs,
   forgePullThreads,
@@ -123,27 +123,35 @@ describe("installCli", () => {
 });
 
 describe("openPr", () => {
-  it("checks out, starts a guided review and pulls threads", async () => {
-    vi.mocked(forgeCheckoutPr).mockResolvedValue(undefined as never);
+  it("fetches the PR non-destructively, starts a guided review and pulls threads", async () => {
+    vi.mocked(forgeFetchPr).mockResolvedValue({
+      head: "refs/reado/pr-7",
+      base: "refs/reado/pr-7-base",
+      files: ["a.ts"],
+    });
     startMock.mockResolvedValue({ id: "sess-1" });
     vi.mocked(forgePullThreads).mockResolvedValue({ comments: [], dropped: 0 });
     const id = await useForge.getState().openPr("/root", pr(7));
-    expect(forgeCheckoutPr).toHaveBeenCalledWith("/root", 7);
-    expect(startMock).toHaveBeenCalledWith("/root", { kind: "pr", pr: "#7" }, undefined);
+    expect(forgeFetchPr).toHaveBeenCalledWith("/root", 7);
+    expect(startMock).toHaveBeenCalledWith(
+      "/root",
+      { kind: "pr", pr: "#7", base: "refs/reado/pr-7-base" },
+      undefined,
+    );
     expect(forgePullThreads).toHaveBeenCalledWith("/root", 7);
     expect(loadMock).toHaveBeenCalledWith("/root");
     expect(id).toBe("sess-1");
   });
 
-  it("returns null when checkout fails", async () => {
-    vi.mocked(forgeCheckoutPr).mockRejectedValue(new Error("dirty tree"));
+  it("returns null when the fetch fails", async () => {
+    vi.mocked(forgeFetchPr).mockRejectedValue(new Error("network down"));
     const id = await useForge.getState().openPr("/root", pr(7));
     expect(id).toBeNull();
     expect(startMock).not.toHaveBeenCalled();
   });
 
   it("returns null when the session could not start", async () => {
-    vi.mocked(forgeCheckoutPr).mockResolvedValue(undefined as never);
+    vi.mocked(forgeFetchPr).mockResolvedValue({ head: "refs/reado/pr-7", base: "refs/reado/pr-7-base", files: [] });
     startMock.mockResolvedValue(null);
     vi.mocked(forgePullThreads).mockResolvedValue({ comments: [], dropped: 0 });
     const id = await useForge.getState().openPr("/root", pr(7));
@@ -177,13 +185,14 @@ describe("pullThreads", () => {
 describe("submit", () => {
   it("returns null on success", async () => {
     vi.mocked(forgeSubmitReview).mockResolvedValue(undefined as never);
-    const err = await useForge.getState().submit("/root", 7, "approve", "lgtm");
-    expect(forgeSubmitReview).toHaveBeenCalledWith("/root", 7, "approve", "lgtm");
+    const inline = [{ path: "a.ts", line: 3, body: "nit" }];
+    const err = await useForge.getState().submit("/root", 7, "approve", "lgtm", inline);
+    expect(forgeSubmitReview).toHaveBeenCalledWith("/root", 7, "approve", "lgtm", inline);
     expect(err).toBeNull();
   });
   it("returns the stringified error on failure", async () => {
     vi.mocked(forgeSubmitReview).mockRejectedValue(new Error("403"));
-    const err = await useForge.getState().submit("/root", 7, "comment", "x");
+    const err = await useForge.getState().submit("/root", 7, "comment", "x", []);
     expect(err).toBe("Error: 403");
   });
 });

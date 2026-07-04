@@ -39,6 +39,7 @@ import {
   composeGuidedFilePrompt,
   composeGuidedPlanPrompt,
   composeGuidedRespondPrompt,
+  type PrRefs,
 } from "./review";
 
 /** Normalise a session so the optional (skip-when-empty) arrays are real arrays. */
@@ -63,10 +64,21 @@ const SCOPE_LABEL: Record<ReviewScope["kind"], string> = {
 
 /** A short human description of a scope, for the agent's planning prompt. */
 function scopeDesc(scope: ReviewScope): string {
+  if (scope.kind === "pr" && scope.pr) return `PR ${scope.pr}`;
   if (scope.kind === "branch" && scope.base) return `this branch vs ${scope.base}`;
   if ((scope.kind === "folder" || scope.kind === "files") && scope.paths?.length)
     return scope.paths.join(", ");
   return SCOPE_LABEL[scope.kind];
+}
+
+/** The hidden git refs a PR was fetched into — a deterministic function of its
+ *  number (see `forge_fetch_pr`), so any surface can recover them from the scope
+ *  without threading extra state. `undefined` for non-PR scopes. */
+export function prRefsFor(scope: ReviewScope): PrRefs | undefined {
+  if (scope.kind !== "pr" || !scope.pr) return undefined;
+  const n = scope.pr.replace(/\D/g, "");
+  if (!n) return undefined;
+  return { head: `refs/reado/pr-${n}`, base: scope.base ?? `refs/reado/pr-${n}-base` };
 }
 
 /** Open a project-relative file in the editor (the code is the hero). */
@@ -170,7 +182,8 @@ export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
     if (!created) return null;
     const s = norm(created);
     set((st) => ({ sessions: replace(st.sessions, s), currentId: s.id, busy: true }));
-    void dispatchToAgent(composeGuidedPlanPrompt(s.id, scopeDesc(scope))).finally(() =>
+    void dispatchToAgent(composeGuidedPlanPrompt(s.id, scopeDesc(scope), prRefsFor(scope))).finally(
+      () =>
       set({ busy: false }),
     );
     return s;
@@ -197,7 +210,13 @@ export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
     await get().setFileState(root, id, file, "in_review");
     set({ busy: true });
     void dispatchToAgent(
-      composeGuidedFilePrompt(id, file, entry?.suggestedReviewMode ?? "normal", objective),
+      composeGuidedFilePrompt(
+        id,
+        file,
+        entry?.suggestedReviewMode ?? "normal",
+        objective,
+        s ? prRefsFor(s.scope) : undefined,
+      ),
     ).finally(() => set({ busy: false }));
   },
 

@@ -17,6 +17,7 @@ import {
   useGuidedReview,
 } from "../../lib/guidedReview";
 import { useForge } from "../../lib/forge";
+import { useComments } from "../../lib/comments";
 import { dispatchToAgent, sanitizePromptText } from "../../lib/agents";
 import { composeReviewRequestPrompt } from "../../lib/review";
 import { gitBranches } from "../../lib/api";
@@ -624,20 +625,32 @@ function PrSubmit({ root, session }: { root: string; session: Session }) {
   const number = Number((session.scope.pr ?? "").replace(/[^0-9]/g, "")) || 0;
   // Without a real PR/MR number there's nothing to submit to (#0 would be wrong).
   const disabled = number === 0 || busy;
+  const allComments = useComments((s) => s.comments);
 
-  // Assemble the review body from the accepted comments + the session summary.
-  const body = useMemo(() => {
-    const lines = (session.proposals ?? [])
-      .filter((p) => p.state === "converted_to_task" || p.state === "converted_to_note")
-      .map((p) => `- ${p.file}${p.startLine ? `:${p.startLine}` : ""} — ${p.body}`);
-    return [session.summary, ...lines].filter(Boolean).join("\n");
-  }, [session]);
+  // The review body is just the session summary; the per-line detail rides along
+  // as inline comments.
+  const body = session.summary ?? "";
+
+  // Locally authored, line-anchored comments on the PR's files — the user's own
+  // and accepted agent proposals. Pulled host threads (`externalId`) are excluded
+  // so we never re-post what already exists on the PR.
+  const comments = useMemo(() => {
+    const routeFiles = new Set((session.route ?? []).map((e) => e.file));
+    return allComments
+      .filter((c) => !c.externalId && c.anchor.startLine > 0 && routeFiles.has(c.anchor.file))
+      .map((c) => ({
+        path: c.anchor.file,
+        line: c.anchor.startLine,
+        body: c.messages[0]?.body ?? "",
+      }))
+      .filter((c) => c.body.trim().length > 0);
+  }, [allComments, session.route]);
 
   const submit = async (verdict: Verdict) => {
     if (disabled) return;
     setError(null);
     setBusy(true);
-    const err = await useForge.getState().submit(root, number, verdict, body || "Reviewed.");
+    const err = await useForge.getState().submit(root, number, verdict, body, comments);
     setBusy(false);
     if (err) setError(err);
     else setSent(true);

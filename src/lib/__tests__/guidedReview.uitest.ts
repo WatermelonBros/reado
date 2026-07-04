@@ -206,7 +206,7 @@ describe("start", () => {
       "/p",
       expect.objectContaining({ title: "Review the current diff", scope }),
     );
-    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("new", "the current diff");
+    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("new", "the current diff", undefined);
     expect(useGuidedReview.getState().currentId).toBe("new");
     await flush();
     expect(useGuidedReview.getState().busy).toBe(false);
@@ -215,13 +215,22 @@ describe("start", () => {
   it("describes a branch scope with its base", async () => {
     vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "n" }));
     await useGuidedReview.getState().start("/p", { kind: "branch", base: "main" });
-    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "this branch vs main");
+    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "this branch vs main", undefined);
   });
 
   it("describes a folder scope by its paths", async () => {
     vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "n" }));
     await useGuidedReview.getState().start("/p", { kind: "folder", paths: ["src", "lib"] });
-    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "src, lib");
+    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "src, lib", undefined);
+  });
+
+  it("passes the PR's derived git refs to the plan prompt (non-destructive)", async () => {
+    vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "n" }));
+    await useGuidedReview.getState().start("/p", { kind: "pr", pr: "#42" });
+    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "PR #42", {
+      head: "refs/reado/pr-42",
+      base: "refs/reado/pr-42-base",
+    });
   });
 
   it("returns null and dispatches nothing when creation fails", async () => {
@@ -259,7 +268,13 @@ describe("reviewFile / challenge / respond", () => {
     vi.mocked(api.sessionSetPosition).mockResolvedValue(s);
     await useGuidedReview.getState().reviewFile("/p", "s1", "a.ts");
     expect(api.sessionSetFileState).toHaveBeenCalledWith("/p", "s1", "a.ts", "in_review");
-    expect(composeGuidedFilePrompt).toHaveBeenCalledWith("s1", "a.ts", "deep", "bug risk");
+    expect(composeGuidedFilePrompt).toHaveBeenCalledWith(
+      "s1",
+      "a.ts",
+      "deep",
+      "bug risk",
+      undefined,
+    );
     expect(dispatchToAgent).toHaveBeenCalledWith("file-prompt");
     await flush();
     expect(useGuidedReview.getState().busy).toBe(false);

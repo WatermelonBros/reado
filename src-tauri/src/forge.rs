@@ -12,7 +12,9 @@
 
 use crate::proc::command;
 use reado_core::{self as core, Comment};
+use std::io::Write;
 use std::path::Path;
+use std::process::Stdio;
 
 use serde::Serialize;
 
@@ -143,28 +145,55 @@ fn host_matches(host: &str, pattern: &str) -> bool {
     }
 }
 
-/// Resolve the forge for a remote URL through the registry.
-pub fn detect_from_remote(remote: &str) -> Forge {
-    let host = parse_host(remote).unwrap_or_default();
+/// Match a hostname against the registry, `None` if no adapter recognises it.
+fn forge_for_host(host: &str) -> Option<Forge> {
     let lower = host.to_lowercase();
-    let matched = REGISTRY
+    REGISTRY
         .iter()
-        .find(|a| host_matches(&lower, a.host_pattern));
-    match matched {
-        Some(a) => Forge {
+        .find(|a| host_matches(&lower, a.host_pattern))
+        .map(|a| Forge {
             provider: a.provider,
-            host,
+            host: host.to_string(),
             cli: a.cli.map(String::from),
             term: a.term.to_string(),
             has_adapter: a.cli.is_some(),
-        },
-        None => Forge {
-            provider: Provider::Unknown,
-            host,
-            cli: None,
-            term: "pull request".into(),
-            has_adapter: false,
-        },
+        })
+}
+
+/// The real hostname behind an SSH config alias, via `ssh -G <host>`. Returns
+/// `None` when it resolves to itself (a plain hostname, not an alias) or on any
+/// failure. This is what lets `git@mycompany:owner/repo` — where `mycompany` is
+/// an `~/.ssh/config` alias for `gitlab.com` — be recognised as GitLab.
+fn resolve_ssh_alias(host: &str) -> Option<String> {
+    let out = command("ssh").args(["-G", host]).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("hostname ").map(str::trim))
+        .filter(|h| !h.is_empty() && !h.eq_ignore_ascii_case(host))
+        .map(str::to_string)
+}
+
+/// Resolve the forge for a remote URL through the registry. Falls back to
+/// resolving an SSH config alias when the literal host isn't a known forge.
+pub fn detect_from_remote(remote: &str) -> Forge {
+    let host = parse_host(remote).unwrap_or_default();
+    if let Some(f) = forge_for_host(&host) {
+        return f;
+    }
+    if let Some(real) = resolve_ssh_alias(&host) {
+        if let Some(f) = forge_for_host(&real) {
+            return f;
+        }
+    }
+    Forge {
+        provider: Provider::Unknown,
+        host,
+        cli: None,
+        term: "pull request".into(),
+        has_adapter: false,
     }
 }
 
@@ -389,6 +418,119 @@ fn checkout_pr_blocking(root: String, number: u64) -> Result<(), String> {
     }
 }
 
+/// A PR fetched *without* checking it out: both sides materialised as hidden
+/// refs (`refs/reado/pr-<n>` / `-base`) plus the files it touches. The working
+/// tree and current branch are never moved — the review reads the PR's versions
+/// straight from these refs (`git show <ref>:<path>`).
+#[derive(Debug, Serialize)]
+pub struct PrCheckout {
+    /// The PR head, as a local ref.
+    pub head: String,
+    /// The PR base branch tip, as a local ref (the diff's left side).
+    pub base: String,
+    /// Files changed by the PR (`base...head`), forward-slash paths.
+    pub files: Vec<String>,
+}
+
+/// Fetch a PR/MR non-destructively so a guided review can read it in place.
+/// Unlike [`forge_checkout_pr`], this never touches the working tree or `HEAD`:
+/// it only writes `refs/reado/*`. Async (network I/O in the CLI/git fetch).
+#[tauri::command]
+pub async fn forge_fetch_pr(root: String, number: u64) -> Result<PrCheckout, String> {
+    match tauri::async_runtime::spawn_blocking(move || fetch_pr_blocking(root, number)).await {
+        Ok(r) => r,
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn fetch_pr_blocking(root: String, number: u64) -> Result<PrCheckout, String> {
+    let forge = detect_forge(root.clone());
+    let cli = forge
+        .cli
+        .as_deref()
+        .ok_or("no forge adapter for this remote")?;
+    let root_path = Path::new(&root);
+    // The remote to fetch from — first configured remote, else `origin`.
+    let remote = cli_out(root_path, "git", &["remote"])
+        .and_then(|s| s.lines().next().map(|l| l.trim().to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "origin".into());
+    // The base branch, resolved from the forge (GitHub `baseRefName` /
+    // GitLab `target_branch`) — that's the left side of the review diff.
+    let base_branch = match cli {
+        "gh" => cli_out(
+            root_path,
+            "gh",
+            &[
+                "pr",
+                "view",
+                &number.to_string(),
+                "--json",
+                "baseRefName",
+                "--jq",
+                ".baseRefName",
+            ],
+        ),
+        "glab" => cli_out(
+            root_path,
+            "glab",
+            &["mr", "view", &number.to_string(), "-F", "json"],
+        )
+        .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok())
+        .and_then(|v| {
+            v.get("target_branch")
+                .and_then(|t| t.as_str())
+                .map(str::to_string)
+        }),
+        _ => return Err("unsupported forge CLI".into()),
+    }
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty())
+    .ok_or("couldn't resolve the PR's base branch")?;
+    // The forge-specific refspec exposing a PR/MR head to `git fetch`.
+    let head_spec = match cli {
+        "gh" => format!("pull/{number}/head:refs/reado/pr-{number}"),
+        "glab" => format!("merge-requests/{number}/head:refs/reado/pr-{number}"),
+        _ => return Err("unsupported forge CLI".into()),
+    };
+    // `+` forces the local ref up to date if the PR was re-pushed / rebased.
+    git_fetch(root_path, &remote, &format!("+{head_spec}"))?;
+    git_fetch(
+        root_path,
+        &remote,
+        &format!("+refs/heads/{base_branch}:refs/reado/pr-{number}-base"),
+    )?;
+    let head = format!("refs/reado/pr-{number}");
+    let base = format!("refs/reado/pr-{number}-base");
+    // `base...head` (merge-base) mirrors what the forge shows as the PR's changes.
+    let files = cli_out(
+        root_path,
+        "git",
+        &["diff", "--name-only", &format!("{base}...{head}")],
+    )
+    .map(|s| {
+        s.lines()
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect()
+    })
+    .unwrap_or_default();
+    Ok(PrCheckout { head, base, files })
+}
+
+fn git_fetch(root: &Path, remote: &str, refspec: &str) -> Result<(), String> {
+    let out = command("git")
+        .current_dir(root)
+        .args(["fetch", remote, refspec])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
 /// The verdict to attach to a submitted review, mapped per forge.
 #[derive(Debug, Clone, Copy, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -398,17 +540,29 @@ pub enum Verdict {
     Comment,
 }
 
+/// One line-anchored comment to post inline on the PR, mirroring a locally
+/// authored Reado comment (never a pulled host thread — those already exist).
+#[derive(Debug, serde::Deserialize)]
+pub struct ReviewComment {
+    pub path: String,
+    pub line: u32,
+    pub body: String,
+}
+
 /// Submit the session's review to the host as one batched review with a verdict.
-/// `body` is the assembled review summary. Async (network) so it never blocks the
-/// main thread; best-effort, errors surface to the UI.
+/// `body` is the assembled review summary; `comments` are posted inline on the
+/// exact PR lines (GitHub). Async (network) so it never blocks the main thread;
+/// best-effort, errors surface to the UI.
 #[tauri::command]
 pub async fn forge_submit_review(
     root: String,
     number: u64,
     verdict: Verdict,
     body: String,
+    comments: Vec<ReviewComment>,
 ) -> Result<(), String> {
-    spawn_blocking_result(move || submit_review_blocking(root, number, verdict, body)).await
+    spawn_blocking_result(move || submit_review_blocking(root, number, verdict, body, comments))
+        .await
 }
 
 fn submit_review_blocking(
@@ -416,6 +570,7 @@ fn submit_review_blocking(
     number: u64,
     verdict: Verdict,
     body: String,
+    comments: Vec<ReviewComment>,
 ) -> Result<(), String> {
     let forge = detect_forge(root.clone());
     let cli = forge
@@ -423,28 +578,47 @@ fn submit_review_blocking(
         .as_deref()
         .ok_or("no forge adapter for this remote")?;
     let root_path = Path::new(&root);
+    // With inline comments, post them on their exact lines — a real, line-anchored
+    // review rather than a flat summary. GitHub batches them into one review;
+    // GitLab needs one positioned discussion per comment.
+    if !comments.is_empty() {
+        return match cli {
+            "gh" => gh_review_with_comments(root_path, number, verdict, &body, &comments),
+            "glab" => glab_review_with_comments(root_path, number, verdict, &body, &comments),
+            _ => Err("unsupported forge CLI".into()),
+        };
+    }
+    run_verdict(cli, root_path, number, verdict, &body)
+}
+
+/// Apply just the verdict + summary via the per-CLI review verbs (no inline
+/// comments). `body` is coerced non-empty because `gh pr review --comment` and
+/// GitLab notes reject an empty message.
+fn run_verdict(
+    cli: &str,
+    root: &Path,
+    number: u64,
+    verdict: Verdict,
+    body: &str,
+) -> Result<(), String> {
     let n = number.to_string();
-    // `gh pr review --comment/--request-changes` rejects an empty body (only
-    // --approve tolerates it), so never send one.
     let body = if body.trim().is_empty() {
         "Reviewed.".to_string()
     } else {
-        body
+        body.to_string()
     };
     // A verdict may map to more than one command. On GitLab `mr approve` carries
     // no body, so we approve AND post the review summary as a note — otherwise
     // the session's content is silently dropped on approve.
     let runs: Vec<Vec<String>> = match (cli, verdict) {
-        ("gh", Verdict::Approve) => {
-            vec![vec![
-                "pr".into(),
-                "review".into(),
-                n,
-                "--approve".into(),
-                "-b".into(),
-                body,
-            ]]
-        }
+        ("gh", Verdict::Approve) => vec![vec![
+            "pr".into(),
+            "review".into(),
+            n,
+            "--approve".into(),
+            "-b".into(),
+            body,
+        ]],
         ("gh", Verdict::RequestChanges) => vec![vec![
             "pr".into(),
             "review".into(),
@@ -453,16 +627,14 @@ fn submit_review_blocking(
             "-b".into(),
             body,
         ]],
-        ("gh", Verdict::Comment) => {
-            vec![vec![
-                "pr".into(),
-                "review".into(),
-                n,
-                "--comment".into(),
-                "-b".into(),
-                body,
-            ]]
-        }
+        ("gh", Verdict::Comment) => vec![vec![
+            "pr".into(),
+            "review".into(),
+            n,
+            "--comment".into(),
+            "-b".into(),
+            body,
+        ]],
         ("glab", Verdict::Approve) => vec![
             vec!["mr".into(), "approve".into(), n.clone()],
             vec!["mr".into(), "note".into(), n, "-m".into(), body],
@@ -474,7 +646,7 @@ fn submit_review_blocking(
     for run in &runs {
         let arg_refs: Vec<&str> = run.iter().map(String::as_str).collect();
         let out = command(cli)
-            .current_dir(root_path)
+            .current_dir(root)
             .args(&arg_refs)
             .output()
             .map_err(|e| e.to_string())?;
@@ -483,6 +655,142 @@ fn submit_review_blocking(
         }
     }
     Ok(())
+}
+
+/// Post a GitHub review with line-anchored inline comments in one API call.
+/// `gh api` fills `{owner}/{repo}` from the repo in `root`; the payload goes on
+/// stdin so the (possibly large, multi-line) comment bodies need no escaping.
+fn gh_review_with_comments(
+    root: &Path,
+    number: u64,
+    verdict: Verdict,
+    body: &str,
+    comments: &[ReviewComment],
+) -> Result<(), String> {
+    let event = match verdict {
+        Verdict::Approve => "APPROVE",
+        Verdict::RequestChanges => "REQUEST_CHANGES",
+        Verdict::Comment => "COMMENT",
+    };
+    let payload = serde_json::json!({
+        "event": event,
+        // APPROVE tolerates an empty body; COMMENT/REQUEST_CHANGES don't.
+        "body": if body.trim().is_empty() { "Reviewed." } else { body },
+        "comments": comments
+            .iter()
+            .map(|c| serde_json::json!({
+                "path": c.path, "line": c.line, "side": "RIGHT", "body": c.body
+            }))
+            .collect::<Vec<_>>(),
+    })
+    .to_string();
+    let mut child = command("gh")
+        .current_dir(root)
+        .args([
+            "api",
+            "--method",
+            "POST",
+            &format!("repos/{{owner}}/{{repo}}/pulls/{number}/reviews"),
+            "--input",
+            "-",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    {
+        let mut stdin = child.stdin.take().ok_or("failed to open gh stdin")?;
+        stdin
+            .write_all(payload.as_bytes())
+            .map_err(|e| e.to_string())?;
+        // Dropping `stdin` here closes the pipe (EOF) so `gh` can proceed.
+    }
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+/// Post a GitLab review: each comment becomes a positioned MR discussion on its
+/// exact line, then the verdict + summary follow. GitLab rejects a position that
+/// isn't on the MR diff, so any comment it won't take is folded into the summary
+/// note rather than lost — best-effort, never a hard failure on positioning.
+fn glab_review_with_comments(
+    root: &Path,
+    number: u64,
+    verdict: Verdict,
+    body: &str,
+    comments: &[ReviewComment],
+) -> Result<(), String> {
+    let n = number.to_string();
+    // The MR's diff SHAs are required to anchor a discussion to a line.
+    let diff_refs = cli_out(
+        root,
+        "glab",
+        &["api", &format!("projects/:id/merge_requests/{n}")],
+    )
+    .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok());
+    let sha = |k: &str| {
+        diff_refs
+            .as_ref()
+            .and_then(|v| v.pointer(&format!("/diff_refs/{k}")))
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    let (base, head, start) = (sha("base_sha"), sha("head_sha"), sha("start_sha"));
+
+    // Comments GitLab wouldn't place inline — appended to the summary note below.
+    let mut leftover: Vec<&ReviewComment> = Vec::new();
+    if base.is_empty() || head.is_empty() {
+        leftover.extend(comments.iter());
+    } else {
+        for c in comments {
+            let path = format!("projects/:id/merge_requests/{n}/discussions");
+            let args: Vec<String> = vec![
+                "api".into(),
+                "--method".into(),
+                "POST".into(),
+                path,
+                "-f".into(),
+                format!("body={}", c.body),
+                "-f".into(),
+                "position[position_type]=text".into(),
+                "-f".into(),
+                format!("position[base_sha]={base}"),
+                "-f".into(),
+                format!("position[head_sha]={head}"),
+                "-f".into(),
+                format!("position[start_sha]={start}"),
+                "-f".into(),
+                format!("position[new_path]={}", c.path),
+                "-f".into(),
+                format!("position[new_line]={}", c.line),
+            ];
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+            let out = command("glab")
+                .current_dir(root)
+                .args(&arg_refs)
+                .output()
+                .map_err(|e| e.to_string())?;
+            if !out.status.success() {
+                leftover.push(c);
+            }
+        }
+    }
+    // Verdict + summary, folding in whatever couldn't be positioned inline.
+    let mut note = body.to_string();
+    if !leftover.is_empty() {
+        let extra: String = leftover
+            .iter()
+            .map(|c| format!("\n- {}:{} — {}", c.path, c.line, c.body))
+            .collect();
+        note = format!("{note}{extra}");
+    }
+    run_verdict("glab", root, number, verdict, &note)
 }
 
 // ---- Pull existing threads -------------------------------------------------
