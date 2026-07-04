@@ -296,6 +296,13 @@ fn cli_out_result(root: &Path, program: &str, args: &[&str]) -> Result<String, S
     }
 }
 
+/// Like [`cli_out_result`] but `None` on any failure — for best-effort reads
+/// (PR fetch metadata, inline-comment diff refs) where an error just means we
+/// skip that enrichment rather than surfacing it.
+fn cli_out(root: &Path, program: &str, args: &[&str]) -> Option<String> {
+    cli_out_result(root, program, args).ok()
+}
+
 /// Run a blocking, fallible CLI op off the main thread (so network I/O in
 /// `gh`/`glab` can't freeze the UI), flattening the join error.
 async fn spawn_blocking_result<F>(f: F) -> Result<(), String>
