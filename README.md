@@ -2,7 +2,7 @@
 
 <p align="center"><em>A calm place to read code.</em></p>
 
-<p align="center"><a href="https://reado.watermelon-studio.it"><strong>reado.watermelon-studio.it</strong></a></p>
+<p align="center"><a href="https://reado.watermelon-studio.it"><strong>reado.watermelon-studio.it</strong></a> · <a href="https://discord.gg/HHqT9ucXn4"><strong>Discord</strong></a></p>
 
 Most IDEs are built for **writing** code. Reado inverts that: the primary
 experience is **reading**, and the primary action is leaving durable comments

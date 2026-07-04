@@ -214,6 +214,7 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("help:shortcuts", "Keyboard Shortcuts")
         .text("docs", "Documentation")
         .text("help:website", "Reado Website")
+        .text("help:discord", "Discord Community")
         .text("help:report", "Report an Issue")
         .separator()
         .text("help:revealLog", "Reveal Log File")

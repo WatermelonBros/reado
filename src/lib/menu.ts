@@ -58,6 +58,7 @@ import { useComments, openCount } from "./comments";
 import { closeProject, openInNewWindow, pickFolderAndOpen, openFileDialog } from "./window";
 
 const WEBSITE = "https://reado.watermelon-studio.it";
+const DISCORD = "https://discord.gg/HHqT9ucXn4";
 const ISSUES = "https://github.com/WatermelonBros/reado/issues";
 const RELEASES = "https://github.com/WatermelonBros/reado/releases";
 
@@ -369,6 +370,9 @@ export function runMenuCommand(id: string): void {
         break;
       case "help:website":
         void openUrl(WEBSITE);
+        break;
+      case "help:discord":
+        void openUrl(DISCORD);
         break;
       case "help:report":
         void openUrl(ISSUES);

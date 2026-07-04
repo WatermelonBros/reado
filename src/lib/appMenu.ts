@@ -166,6 +166,7 @@ export const APP_MENUS: Menu[] = [
       { id: "help:shortcuts", label: "Keyboard Shortcuts" },
       { id: "docs", label: "Documentation" },
       { id: "help:website", label: "Reado Website" },
+      { id: "help:discord", label: "Discord Community" },
       { id: "help:report", label: "Report an Issue" },
       { sep: true },
       { id: "help:revealLog", label: "Reveal Log File" },

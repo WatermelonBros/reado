@@ -10,15 +10,34 @@
  */
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { usePalette } from "../../lib/store";
 import { currentOS } from "../../lib/extensions";
 import { mod } from "../../lib/shortcuts";
-import { SearchIcon, MinusIcon, CloseIcon } from "../atoms/icons";
+import { SearchIcon, MinusIcon, CloseIcon, DiscordIcon } from "../atoms/icons";
 import { MenuBar } from "../molecules/MenuBar";
 import { useTranslation } from "react-i18next";
 
 const os = currentOS();
 const isMac = os === "mac";
+
+const DISCORD = "https://discord.gg/HHqT9ucXn4";
+
+/** Icon button linking to the Discord community — top-right on macOS, top-left
+ *  (after the menu bar) on Windows/Linux. */
+function DiscordButton({ className = "" }: { className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => void openUrl(DISCORD)}
+      title="Discord"
+      aria-label="Discord community"
+      className={`pointer-events-auto grid h-6 w-8 flex-none place-items-center rounded-md text-muted transition-colors hover:bg-surface hover:text-ink ${className}`}
+    >
+      <DiscordIcon className="h-3.5 w-3.5" />
+    </button>
+  );
+}
 
 /** Overlapping-squares glyph for "restore"; a single square for "maximize". */
 const MaximizeGlyph = ({ maximized }: { maximized: boolean }) =>
@@ -106,15 +125,21 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
       }`}
     >
       {isMac ? (
-        // macOS: traffic lights sit top-left; the pill floats centered on the window.
-        <div className="pointer-events-none absolute inset-x-0 flex justify-center">{pill}</div>
+        // macOS: traffic lights sit top-left; the pill floats centered on the
+        // window; Discord sits top-right (ml-auto pushes it to the edge).
+        <>
+          <div className="pointer-events-none absolute inset-x-0 flex justify-center">{pill}</div>
+          <DiscordButton className="ml-auto" />
+        </>
       ) : (
-        // Win/Linux: menu bar (left) · pill (center) · window controls (right).
-        // The center area is the drag handle — the menu bar and controls fill the
-        // sides, so without this there's nowhere to grab to move the window. The
-        // pill (a button) stays clickable since drag only fires on the bare region.
+        // Win/Linux: menu bar + Discord (left) · pill (center) · window controls
+        // (right). The center area is the drag handle — the menu bar and controls
+        // fill the sides, so without this there's nowhere to grab to move the
+        // window. The pill (a button) stays clickable since drag only fires on the
+        // bare region.
         <>
           <MenuBar />
+          <DiscordButton />
           <div
             data-tauri-drag-region
             className="flex min-w-0 flex-1 justify-center px-3"
