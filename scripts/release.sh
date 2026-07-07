@@ -54,7 +54,9 @@ sed -i.bak -E "s/(\"version\"[[:space:]]*:[[:space:]]*\")[^\"]+(\")/\1${next}\2/
   package.json src-tauri/tauri.conf.json
 rm -f package.json.bak src-tauri/tauri.conf.json.bak
 
-git add package.json src-tauri/tauri.conf.json
+# CHANGELOG.md ships in the release commit: move its [Unreleased] entries under
+# the new version before running this (see CLAUDE.md → Releases & changelog).
+git add package.json src-tauri/tauri.conf.json CHANGELOG.md
 git commit -m "release: ${tag}"
 git tag "${tag}"
 git push origin HEAD

@@ -34,25 +34,30 @@ const MAX_MATCHES: usize = 2000;
 /// `query` is interpreted as a ripgrep regex; ripgrep's smart-case rule makes it
 /// case-insensitive unless the query contains an uppercase letter.
 #[tauri::command]
-pub fn search_text(root: String, query: String) -> Result<Vec<SearchMatch>> {
+pub fn search_text(root: String, query: String, exclude: Vec<String>) -> Result<Vec<SearchMatch>> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
     }
 
-    let output = match command("rg")
-        .arg("--json")
+    let mut cmd = command("rg");
+    cmd.arg("--json")
         .arg("--smart-case")
         .arg("--max-count")
-        .arg("100") // per-file cap; MAX_MATCHES bounds the overall total
-        .arg(&query)
-        .current_dir(Path::new(&root))
-        .output()
-    {
+        .arg("100"); // per-file cap; MAX_MATCHES bounds the overall total
+
+    // Exclude the user's globs (ripgrep glob is `!pattern` to negate/ignore).
+    for g in &exclude {
+        let g = g.trim();
+        if !g.is_empty() {
+            cmd.arg("-g").arg(format!("!{g}"));
+        }
+    }
+    let output = match cmd.arg(&query).current_dir(Path::new(&root)).output() {
         Ok(out) => out,
         // No ripgrep on PATH — fall back to an in-process, gitignore-aware walk
         // so search still works (literal smart-case match, not regex).
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(search_fallback(&root, &query));
+            return Ok(search_fallback(&root, &query, &exclude));
         }
         Err(e) => return Err(Error::Io(e)),
     };
@@ -98,7 +103,7 @@ pub fn search_text(root: String, query: String) -> Result<Vec<SearchMatch>> {
 /// `.gitignore` and skipping hidden/VCS dirs (via the `ignore` crate), and finds
 /// literal, smart-case matches line by line. Binary files (invalid UTF-8) are
 /// skipped. Not a regex engine — just enough to keep search working everywhere.
-fn search_fallback(root: &str, query: &str) -> Vec<SearchMatch> {
+fn search_fallback(root: &str, query: &str, exclude: &[String]) -> Vec<SearchMatch> {
     let smart_case = query.chars().any(|c| c.is_uppercase());
     let needle = if smart_case {
         query.to_string()
@@ -106,8 +111,12 @@ fn search_fallback(root: &str, query: &str) -> Vec<SearchMatch> {
         query.to_lowercase()
     };
 
+    let mut walk = ignore::WalkBuilder::new(root);
+    if let Some(ov) = crate::fs::exclude_overrides(&std::path::PathBuf::from(root), exclude) {
+        walk.overrides(ov);
+    }
     let mut matches = Vec::new();
-    for entry in ignore::WalkBuilder::new(root).build().flatten() {
+    for entry in walk.build().flatten() {
         if matches.len() >= MAX_MATCHES {
             break;
         }
@@ -207,11 +216,11 @@ mod tests {
         let root = dir.path().to_str().unwrap();
 
         // Lowercase query → case-insensitive: matches both "Hello" and "hello".
-        let lower = search_fallback(root, "hello");
+        let lower = search_fallback(root, "hello", &[]);
         assert_eq!(lower.len(), 2);
 
         // Query with an uppercase letter → case-sensitive: only "Hello world".
-        let upper = search_fallback(root, "Hello");
+        let upper = search_fallback(root, "Hello", &[]);
         assert_eq!(upper.len(), 1);
         assert_eq!(upper[0].line, 1);
     }

@@ -281,9 +281,6 @@ export function runMenuCommand(id: string): void {
       case "view:focus":
         settings.set({ focusMode: !settings.focusMode });
         break;
-      case "view:readingWidth":
-        settings.set({ readingWidth: !settings.readingWidth });
-        break;
       case "view:activityBar":
         settings.set({ showActivityBar: !settings.showActivityBar });
         break;

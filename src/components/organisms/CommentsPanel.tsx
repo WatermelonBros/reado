@@ -14,6 +14,7 @@ import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
 import { COMMENT_STATES, COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
 import { Checkbox } from "../atoms/Checkbox";
+import { SegmentedControl } from "../atoms/SegmentedControl";
 import { SendIcon, SparkleIcon } from "../atoms/icons";
 import { SendReviewDialog } from "./SendReviewDialog";
 import { AuditDialog, type AuditTarget } from "./AuditDialog";
@@ -82,28 +83,21 @@ export function CommentsPanel() {
     if (view === "open") setActive(c.id);
   };
 
-  const segment = (id: "open" | "history", label: string) => (
-    <button
-      type="button"
-      onClick={() => useWorkspace.getState().setCommentFilter({ view: id })}
-      aria-pressed={view === id}
-      className={`flex-1 rounded-sm px-2 py-1 text-xs transition-colors ${
-        view === id
-          ? "bg-canvas font-medium text-ink"
-          : "text-muted hover:text-ink"
-      }`}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Open / History switch. */}
-      <div className="flex gap-1 border-b border-line bg-surface p-1">
-        {segment("open", t("comments.open"))}
-        {segment("history", t("comments.history"))}
-      </div>
+      <SegmentedControl
+        value={view}
+        onChange={(id) => useWorkspace.getState().setCommentFilter({ view: id })}
+        segments={[
+          { id: "open", label: t("comments.open") },
+          { id: "history", label: t("comments.history") },
+        ]}
+        ariaLabel={t("comments.panel")}
+        className="gap-1 border-b border-line bg-surface p-1"
+        segmentClassName="flex-1 rounded-sm px-2 py-1 text-xs"
+        thumbClassName="bg-canvas rounded-sm shadow-sm"
+      />
 
       {/* Filters. */}
       <div className="flex flex-wrap items-center gap-1 border-b border-line px-2 py-2">

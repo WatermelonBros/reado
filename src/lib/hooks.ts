@@ -111,6 +111,24 @@ export function useApplyZoom(): void {
   }, [zoom]);
 }
 
+/** Damp non-essential UI motion. "system" follows the OS `prefers-reduced-motion`;
+ *  the choice sets `data-reduce-motion` on the root, which the CSS honours by
+ *  collapsing decorative transitions/animations. */
+export function useApplyReduceMotion(): void {
+  const mode = useSettings((s) => s.reduceMotion);
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => {
+      const reduce = mode === "on" || (mode === "system" && mql.matches);
+      document.documentElement.toggleAttribute("data-reduce-motion", reduce);
+    };
+    apply();
+    if (mode !== "system") return;
+    mql.addEventListener("change", apply);
+    return () => mql.removeEventListener("change", apply);
+  }, [mode]);
+}
+
 /** Keep global preferences in sync across windows. zustand `persist` writes to
  *  localStorage (shared per origin), but an already-open window won't see another
  *  window's change until it re-reads. The `storage` event fires in *other*

@@ -11,13 +11,14 @@ const ROOT = "/repo";
 
 function seed(groups: SpecGroup[], active: string | null = null) {
   const open = vi.fn();
-  useSpecs.setState({ groups });
+  // Groups collapse by default; expand them all so the documents are visible.
+  useSpecs.setState({ groups, expanded: new Set(groups.map((g) => `${g.kind}:${g.title}`)) });
   useProject.setState({ root: ROOT, open, active });
   return { open };
 }
 
 beforeEach(() => {
-  useSpecs.setState({ groups: [] });
+  useSpecs.setState({ groups: [], expanded: new Set() });
 });
 
 describe("SpecsPanel", () => {

@@ -26,7 +26,7 @@ import {
   useRecents,
   THEMES,
 } from "../../lib/store";
-import { openProject } from "../../lib/window";
+import { openProjectHere } from "../../lib/window";
 import { useTerminals } from "../../lib/terminals";
 import { mod, alt, shift } from "../../lib/shortcuts";
 import { checkForUpdates } from "../../lib/updater";
@@ -258,7 +258,7 @@ export function Palette() {
         label: basename(p.path),
         detail: p.path,
         run: () => {
-          openProject(p.path);
+          void openProjectHere(p.path);
           close();
         },
       }));
@@ -558,10 +558,6 @@ function commandRows(
     {
       label: `${t("editor.sticky")}: ${settings.stickyScroll ? "on" : "off"}`,
       run: () => settings.set({ stickyScroll: !settings.stickyScroll }),
-    },
-    {
-      label: `${t("editor.measure")}: ${settings.readingWidth ? "on" : "off"}`,
-      run: () => settings.set({ readingWidth: !settings.readingWidth }),
     },
     {
       label: `${t("editor.ribbon")}: ${settings.showRibbon ? "on" : "off"}`,

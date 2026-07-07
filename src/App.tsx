@@ -7,14 +7,15 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { RecentProjects } from "./components/pages/RecentProjects";
 import { ProjectView } from "./components/pages/ProjectView";
-import { currentProjectPath, openInNewWindow } from "./lib/window";
-import { anywhereSetRecents } from "./lib/api";
+import { currentProjectPath, openInNewWindow, openPathTarget } from "./lib/window";
+import { anywhereSetRecents, drainOpenTargets } from "./lib/api";
 import { runStartupChecks } from "./lib/startup";
 import { useRecents, useSettings } from "./lib/store";
 import { applyLogConfig, log } from "./lib/logger";
 import {
   useApplyTheme,
   useApplyZoom,
+  useApplyReduceMotion,
   useAutoUpdateCheck,
   useGlobalShortcuts,
   useCrossWindowSync,
@@ -28,7 +29,9 @@ import { SynopsisModal } from "./components/organisms/SynopsisModal";
 import { OnboardingModal } from "./components/organisms/OnboardingModal";
 import { QaModal } from "./components/organisms/QaModal";
 import { SemanticModal } from "./components/organisms/SemanticModal";
+import { DefaultAppPrompt } from "./components/organisms/DefaultAppPrompt";
 import { Notice } from "./components/molecules/Notice";
+import { GlobalTooltip } from "./components/atoms/GlobalTooltip";
 import { TitleBar } from "./components/organisms/TitleBar";
 import { Settings } from "./components/organisms/Settings";
 import { Palette } from "./components/organisms/Palette";
@@ -38,6 +41,7 @@ import { AnywhereDialog } from "./components/organisms/AnywhereDialog";
 export default function App() {
   useApplyTheme();
   useApplyZoom();
+  useApplyReduceMotion();
   useGlobalShortcuts();
   useAutoUpdateCheck();
   useCrossWindowSync();
@@ -72,6 +76,20 @@ export default function App() {
     const onHashChange = () => setProjectPath(currentProjectPath());
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // "Open with Reado": files the OS handed us open at their project root. The
+  // main window owns this — cold-launch requests are queued in the backend and
+  // drained here on mount; while-running ones arrive as events.
+  useEffect(() => {
+    if (getCurrentWindow().label !== "main") return;
+    drainOpenTargets()
+      .then((targets) => targets.forEach((tgt) => void openPathTarget(tgt.root, tgt.file)))
+      .catch(() => {});
+    const off = listen<{ root: string; file: string }>("reado://open-path", (e) =>
+      void openPathTarget(e.payload.root, e.payload.file),
+    );
+    return () => void off.then((fn) => fn()).catch(() => {});
   }, []);
 
   // Route native-menu clicks to in-app commands.
@@ -148,7 +166,9 @@ export default function App() {
       <OnboardingModal />
       <QaModal />
       <SemanticModal />
+      <DefaultAppPrompt />
       <Notice />
+      <GlobalTooltip />
     </div>
   );
 }

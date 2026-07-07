@@ -11,11 +11,21 @@
  * Syntax highlighting and the editor theme come from `lib/codemirror.ts`.
  */
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { EditorState, Compartment, StateEffect, StateField, Annotation, Facet } from "@codemirror/state";
+import {
+  EditorState,
+  Compartment,
+  StateEffect,
+  StateField,
+  Annotation,
+  Facet,
+  RangeSetBuilder,
+} from "@codemirror/state";
 import { listen } from "@tauri-apps/api/event";
 import {
   EditorView,
   lineNumbers,
+  highlightActiveLine,
+  highlightActiveLineGutter,
   highlightSpecialChars,
   highlightWhitespace,
   drawSelection,
@@ -33,6 +43,7 @@ import {
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { languages } from "../../lib/languages";
 import { occurrenceHighlight } from "../../lib/occurrenceHighlight";
+import { focusBlockRange } from "../../lib/focusBlock";
 import { syntaxSelection, expandSelection, shrinkSelection } from "../../lib/syntaxSelection";
 import { keymap } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -46,18 +57,12 @@ import { markdownRehype } from "../../lib/markdown";
  *  text (or reading width) changes — react-markdown parses synchronously, so an
  *  unmemoized re-render on every unrelated store change froze the UI on large
  *  READMEs (the parse can block the main thread for seconds). */
-const RenderedMarkdown = memo(function RenderedMarkdown({
-  text,
-  readingWidth,
-}: {
-  text: string;
-  readingWidth: boolean;
-}) {
+const RenderedMarkdown = memo(function RenderedMarkdown({ text }: { text: string }) {
   return (
-    <div
-      className="prose-reado mx-auto h-full w-full overflow-y-auto p-8"
-      style={{ maxWidth: readingWidth ? "var(--reading-measure)" : undefined }}
-    >
+    // Rendered prose keeps a comfortable measure — long prose lines read badly
+    // regardless (this is typography, not the old code reading-width toggle).
+    <div className="prose-reado mx-auto h-full w-full max-w-[72ch] overflow-y-auto p-8">
+
       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={markdownRehype}>
         {text}
       </ReactMarkdown>
@@ -105,6 +110,9 @@ import {
   useSessions,
   useSettings,
   useWorkspace,
+  clampRange,
+  FONT_SIZE_RANGE,
+  LINE_HEIGHT_RANGE,
 } from "../../lib/store";
 
 import { CommentComposer } from "../organisms/CommentComposer";
@@ -291,12 +299,34 @@ const human = (bytes: number) => {
 
 const isMarkdown = (path: string) => /\.(md|markdown|mdx)$/i.test(path);
 
+const focusLineDeco = Decoration.line({ class: "cm-focus-block" });
+
+/** Decorate the lines of the block enclosing the main caret as "focused". */
+function buildFocusDeco(state: EditorState): DecorationSet {
+  const { from, to } = focusBlockRange(state, state.selection.main.head);
+  const b = new RangeSetBuilder<Decoration>();
+  for (let n = from; n <= to; n++) {
+    const line = state.doc.line(n);
+    b.add(line.from, line.from, focusLineDeco);
+  }
+  return b.finish();
+}
+
+/** Keeps the enclosing block lit; recomputes as the caret moves or the doc edits. */
+const focusBlockField = StateField.define<DecorationSet>({
+  create: buildFocusDeco,
+  update: (deco, tr) =>
+    tr.docChanged || tr.selection ? buildFocusDeco(tr.state) : deco.map(tr.changes),
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 /**
- * Focus mode dims every line except the one under the cursor (iA Writer style),
- * implemented as a content attribute so it toggles without recreating the view.
+ * Focus mode dims every line except the block under the cursor (a function, tag,
+ * or braced scope — enough to actually read), implemented as a content-attribute
+ * class plus a decoration field so it toggles without recreating the view.
  */
 const focusExtension = (on: boolean) =>
-  EditorView.contentAttributes.of({ class: on ? "cm-focus-mode" : "" });
+  on ? [EditorView.contentAttributes.of({ class: "cm-focus-mode" }), focusBlockField] : [];
 
 /** Read-only vs editable, toggled by manual-editing mode (read-first default). */
 const editableExtension = (on: boolean) => [
@@ -316,7 +346,17 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   const archived = useComments((s) => s.archived);
   const reanchoringId = useComments((s) => s.reanchoringId);
   const diffing = useEditorActions((s) => s.diffing);
-  const { wrap, readingWidth, codeFont, focusMode, renderWhitespace } = useSettings();
+  const { wrap, codeFont, focusMode, renderWhitespace } = useSettings();
+  const showResolvedComments = useSettings((s) => s.showResolvedComments);
+  // The comments shown inline: open ones always; resolved (done) ones only when
+  // the setting allows — hiding them declutters without touching the data.
+  const inlineCommentSource = useMemo(
+    () =>
+      showResolvedComments
+        ? [...allComments, ...archived.filter((c) => c.state === "done")]
+        : allComments.filter((c) => c.state !== "done" && c.state !== "discarded"),
+    [allComments, archived, showResolvedComments],
+  );
   const { t } = useTranslation();
 
   // The loaded content is kept together with the path it belongs to. Loading is
@@ -462,10 +502,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   if (isMarkdown(active) && !diffing) {
     // While re-anchoring, force source: the prose view has no lines to select.
     const asSource = forceText.has(active) || reanchoringId !== null;
-    const mdComments = commentsForFile(
-      [...allComments, ...archived.filter((c) => c.state === "done")],
-      relPath,
-    );
+    const mdComments = commentsForFile(inlineCommentSource, relPath);
     return (
       <div className="relative h-full w-full">
         <button
@@ -490,7 +527,6 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             text={content.text}
             comments={mdComments}
             wrap={wrap}
-            readingWidth={readingWidth}
             codeFont={codeFont}
             focusMode={focusMode}
             renderWhitespace={renderWhitespace}
@@ -500,7 +536,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             changedLines={changedLines}
           />
         ) : (
-          <RenderedMarkdown text={content.text} readingWidth={readingWidth} />
+          <RenderedMarkdown text={content.text} />
         )}
       </div>
     );
@@ -513,12 +549,9 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
       <DiffView key={relPath} relPath={relPath} text={content.text} base={prRefs?.base} />
     );
   }
-  // Show active comments plus resolved (done) ones, so a finished task stays
-  // readable inline (marked done) instead of vanishing from the code.
-  const fileComments = commentsForFile(
-    [...allComments, ...archived.filter((c) => c.state === "done")],
-    relPath,
-  );
+  // Open comments inline; resolved ones too when the setting allows (see
+  // `inlineCommentSource`), so a finished task stays readable unless hidden.
+  const fileComments = commentsForFile(inlineCommentSource, relPath);
   return (
     <CodeView
       key={active}
@@ -527,7 +560,6 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
       text={content.text}
       comments={fileComments}
       wrap={wrap}
-      readingWidth={readingWidth}
       codeFont={codeFont}
       focusMode={focusMode}
       renderWhitespace={renderWhitespace}
@@ -545,7 +577,6 @@ interface CodeViewProps {
   text: string;
   comments: Comment[];
   wrap: boolean;
-  readingWidth: boolean;
   codeFont: string;
   focusMode: boolean;
   renderWhitespace: boolean;
@@ -558,6 +589,48 @@ interface CodeViewProps {
   changedLines: Array<[number, number]>;
 }
 
+/** Gutter line numbers per the `lineNumbers` setting: hidden, absolute, or
+ *  relative to the caret line (the current line shows its absolute number). */
+function lineNumbersExt(mode: "off" | "on" | "relative") {
+  if (mode === "off") return [];
+  if (mode === "on") return lineNumbers();
+  return lineNumbers({
+    formatNumber: (n, state) => {
+      const cur = state.doc.lineAt(state.selection.main.head).number;
+      return n === cur ? String(n) : String(Math.abs(n - cur));
+    },
+  });
+}
+
+/** Active-line emphasis per the `activeLine` setting. */
+function activeLineExt(mode: "off" | "gutter" | "line" | "both") {
+  switch (mode) {
+    case "off":
+      return [];
+    case "gutter":
+      return highlightActiveLineGutter();
+    case "line":
+      return highlightActiveLine();
+    case "both":
+      return [highlightActiveLine(), highlightActiveLineGutter()];
+  }
+}
+
+/** Indentation guides per the `indentGuides` setting: off, uniform on all
+ *  indentation, or drawn everywhere with only the active scope emphasised. */
+function indentGuidesExt(mode: "off" | "all" | "active") {
+  if (mode === "off") return [];
+  return indentationMarkers({ hideFirstIndent: true, highlightActiveBlock: mode === "active" });
+}
+
+/** A vertical line-length guide at column `col` (0 = off): tags `.cm-content`
+ *  with the ruler class and its column, drawn by CSS at `col` characters in. */
+function rulerExt(col: number) {
+  return col > 0
+    ? EditorView.contentAttributes.of({ class: "cm-ruler", style: `--ruler-col:${col}` })
+    : [];
+}
+
 /** The CodeMirror-backed read-only code viewer, with the comment overlay. */
 function CodeView({
   path,
@@ -566,7 +639,6 @@ function CodeView({
   comments,
   primary,
   wrap,
-  readingWidth,
   codeFont,
   focusMode,
   renderWhitespace,
@@ -593,6 +665,23 @@ function CodeView({
   const indentSize = useDocInfo((s) => s.indentSize);
   const languageOverride = useDocInfo((s) => s.languageOverride);
   const stickyScroll = useSettings((s) => s.stickyScroll);
+  // Reading controls (clamped numerics apply as CSS vars; the rest as compartments).
+  const fontSize = useSettings((s) => clampRange(s.fontSize, FONT_SIZE_RANGE));
+  const lineHeight = useSettings((s) => clampRange(s.lineHeight, LINE_HEIGHT_RANGE));
+  const lineNumbersMode = useSettings((s) => s.lineNumbers);
+  const activeLineMode = useSettings((s) => s.activeLine);
+  const indentGuidesMode = useSettings((s) => s.indentGuides);
+  const bracketMatchingOn = useSettings((s) => s.bracketMatching);
+  const rulerColumn = useSettings((s) => s.rulerColumn);
+  const cursorStyle = useSettings((s) => s.cursorStyle);
+  const cursorBlink = useSettings((s) => s.cursorBlink);
+  const scrollbar = useSettings((s) => s.scrollbar);
+  const inlineDiagnostics = useSettings((s) => s.inlineDiagnostics);
+  const lineNumbersComp = useMemo(() => new Compartment(), []);
+  const activeLineComp = useMemo(() => new Compartment(), []);
+  const indentGuidesComp = useMemo(() => new Compartment(), []);
+  const bracketComp = useMemo(() => new Compartment(), []);
+  const rulerComp = useMemo(() => new Compartment(), []);
   const setActiveThread = useComments((s) => s.setActive);
   const activeId = useComments((s) => s.activeId);
   const reanchoringId = useComments((s) => s.reanchoringId);
@@ -748,7 +837,13 @@ function CodeView({
     const view = viewRef.current;
     if (!view || pinned) return;
     noteSelfWrite(relPath); // our own save — don't let it mark the file unread
-    writeFile(useProject.getState().root, relPath, view.state.doc.toString())
+    // Opt-in save hygiene, applied only on write (never on read): trim trailing
+    // whitespace and/or ensure a final newline.
+    let text = view.state.doc.toString();
+    const s = useSettings.getState();
+    if (s.trimTrailingWhitespace) text = text.replace(/[ \t]+$/gm, "");
+    if (s.insertFinalNewline && text.length > 0 && !text.endsWith("\n")) text += "\n";
+    writeFile(useProject.getState().root, relPath, text)
       .then(() => {
         useEditorActions.getState().setDirty(false);
         setSaveError(false); // clear any prior failure on a successful save
@@ -879,11 +974,13 @@ function CodeView({
     const state = EditorState.create({
       doc: text,
       extensions: [
-        lineNumbers(),
+        lineNumbersComp.of(lineNumbersExt(lineNumbersMode)),
+        activeLineComp.of(activeLineExt(activeLineMode)),
         foldGutter(),
         highlightSpecialChars(),
         drawSelection(),
-        bracketMatching(),
+        bracketComp.of(bracketMatchingOn ? bracketMatching() : []),
+        rulerComp.of(rulerExt(rulerColumn)),
         highlightSelectionMatches(),
         // Multiple cursors: Cmd/Ctrl+D adds the next occurrence, Alt+click adds a
         // caret, Alt+drag selects a column.
@@ -894,7 +991,7 @@ function CodeView({
         // Reading aids: highlight the symbol under the cursor, indentation guides,
         // and syntax-aware expand/shrink selection.
         occurrenceHighlight,
-        indentationMarkers({ hideFirstIndent: true, highlightActiveBlock: false }),
+        indentGuidesComp.of(indentGuidesExt(indentGuidesMode)),
         syntaxSelection,
         keymap.of([
           { key: "Shift-Alt-ArrowRight", run: expandSelection },
@@ -1064,6 +1161,31 @@ function CodeView({
       effects: wrapComp.reconfigure(wrap ? EditorView.lineWrapping : []),
     });
   }, [wrap, wrapComp]);
+
+  // Reading controls: reconfigure their compartments live (no editor remount).
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: lineNumbersComp.reconfigure(lineNumbersExt(lineNumbersMode)),
+    });
+  }, [lineNumbersMode, lineNumbersComp]);
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: activeLineComp.reconfigure(activeLineExt(activeLineMode)),
+    });
+  }, [activeLineMode, activeLineComp]);
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: indentGuidesComp.reconfigure(indentGuidesExt(indentGuidesMode)),
+    });
+  }, [indentGuidesMode, indentGuidesComp]);
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: bracketComp.reconfigure(bracketMatchingOn ? bracketMatching() : []),
+    });
+  }, [bracketMatchingOn, bracketComp]);
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: rulerComp.reconfigure(rulerExt(rulerColumn)) });
+  }, [rulerColumn, rulerComp]);
 
   // Update the PR change markers when they arrive (async) or the file changes.
   useEffect(() => {
@@ -1468,13 +1590,18 @@ function CodeView({
     <div
       ref={wrapRef}
       className="relative mx-auto h-full w-full"
+      data-cursor-style={cursorStyle}
+      data-cursor-blink={cursorBlink}
+      data-scrollbar={scrollbar}
+      data-inline-diagnostics={inlineDiagnostics ? "on" : "off"}
       onMouseMove={onMouseMove}
       onMouseLeave={() => setHover(null)}
       onContextMenu={onContextMenu}
       style={
         {
           "--code-font": codeFont || undefined,
-          maxWidth: readingWidth ? "var(--reading-measure)" : undefined,
+          "--code-font-size": `${fontSize}px`,
+          "--code-line-height": String(lineHeight),
         } as React.CSSProperties
       }
     >

@@ -18,11 +18,15 @@ import { t } from "../i18n";
 const WIN_SALT = (globalThis.crypto?.randomUUID?.() ?? `${Math.random()}`).slice(0, 8);
 let windowSeq = 0;
 
-/** Open a fresh OS window — empty (launcher) or pointed at a project. The label
- * matches the `project_*` capability glob so it inherits the app permissions. */
-export function openInNewWindow(projectPath?: string): void {
+/** Open a fresh OS window — empty (launcher), pointed at a project, or pointed at
+ * a project with a specific file to open. The label matches the `project_*`
+ * capability glob so it inherits the app permissions. */
+export function openInNewWindow(projectPath?: string, file?: string): void {
   const label = `project_${WIN_SALT}_${Date.now().toString(36)}_${windowSeq++}`;
-  const hash = projectPath ? `#project=${encodeURIComponent(projectPath)}` : "";
+  const params: string[] = [];
+  if (projectPath) params.push(`project=${encodeURIComponent(projectPath)}`);
+  if (file) params.push(`open=${encodeURIComponent(file)}`);
+  const hash = params.length ? `#${params.join("&")}` : "";
   const mac = currentOS() === "mac";
   new WebviewWindow(label, {
     url: `index.html${hash}`,
@@ -38,12 +42,11 @@ export function openInNewWindow(projectPath?: string): void {
   });
 }
 
-/** Pick a folder, then open it. If this window is empty (the launcher), reuse it
- *  silently. If a project is already open here, ask — defaulting to THIS window. */
-export async function pickFolderAndOpen(): Promise<void> {
-  const selected = await openDialog({ directory: true, multiple: false });
-  const path = Array.isArray(selected) ? selected[0] : selected;
-  if (!path) return;
+/** Open a known project path, honouring the current window. If this window is
+ *  empty (the launcher), reuse it silently. If a project is already open here,
+ *  ask — defaulting to THIS window (cancel opens a new one). Used by both the
+ *  Open Folder flow and the recents lists. */
+export async function openProjectHere(path: string): Promise<void> {
   useRecents.getState().touch(path);
   // Nothing open in this window yet → just open here, no prompt.
   if (!currentProjectPath()) {
@@ -59,6 +62,14 @@ export async function pickFolderAndOpen(): Promise<void> {
   });
   if (here) await openProject(path);
   else openInNewWindow(path);
+}
+
+/** Pick a folder, then open it with the window-choice logic above. */
+export async function pickFolderAndOpen(): Promise<void> {
+  const selected = await openDialog({ directory: true, multiple: false });
+  const path = Array.isArray(selected) ? selected[0] : selected;
+  if (!path) return;
+  await openProjectHere(path);
 }
 
 /** Pick a single file (defaulting into the open project) and open it. Reads are
@@ -79,6 +90,30 @@ export function currentProjectPath(): string | null {
   const hash = window.location.hash;
   const match = hash.match(/project=([^&]+)/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+/** A file to open on load (from an OS "open with Reado"), encoded in the hash. */
+export function currentOpenFile(): string | null {
+  const match = window.location.hash.match(/[#&]open=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/** Drop the `open=` param once its file has been opened, so a reload doesn't
+ *  re-open it (the project stays, so this never remounts the workspace). */
+export function clearOpenFile(): void {
+  const proj = currentProjectPath();
+  window.location.hash = proj ? `project=${encodeURIComponent(proj)}` : "";
+}
+
+/** Open a specific file (from an OS file association) at its project root: reuse
+ *  this window if it's the empty launcher, else open a dedicated new window. */
+export async function openPathTarget(root: string, file: string): Promise<void> {
+  useRecents.getState().touch(root);
+  if (!currentProjectPath()) {
+    window.location.hash = `project=${encodeURIComponent(root)}&open=${encodeURIComponent(file)}`;
+  } else {
+    openInNewWindow(root, file);
+  }
 }
 
 /** Open a project in the current window (no new window). */

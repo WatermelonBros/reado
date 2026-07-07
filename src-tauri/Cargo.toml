@@ -29,6 +29,9 @@ tauri-plugin-dialog = "2"
 # Signed auto-updates (checks an update endpoint, verifies the signature).
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# Route a second launch (the OS opening a file with Reado while it's running)
+# into the existing process so we open the file in place instead of a new app.
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # ISO-8601 timestamps for the structured log records (already in the tree).
@@ -72,3 +75,7 @@ tauri-plugin-clipboard-manager = "2.3.2"
 # Signal the PTY's process group on close so dev servers don't orphan (Unix only).
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# macOS Launch Services FFI, for "make Reado the default app for text files".
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"

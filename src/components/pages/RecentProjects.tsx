@@ -3,23 +3,19 @@
  * "open folder" action. Opening a project launches it in its own window.
  */
 import { useRecents } from "../../lib/store";
-import { openProject, pickFolderAndOpen } from "../../lib/window";
+import { openProjectHere, pickFolderAndOpen } from "../../lib/window";
 
 import { FolderOpenIcon, CloseIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
 
 export function RecentProjects() {
   const projects = useRecents((s) => s.projects);
-  const touch = useRecents((s) => s.touch);
   const remove = useRecents((s) => s.remove);
   const { t } = useTranslation();
 
   const pick = () => void pickFolderAndOpen();
 
-  const launch = (path: string) => {
-    touch(path);
-    openProject(path);
-  };
+  const launch = (path: string) => void openProjectHere(path);
 
   return (
     <div

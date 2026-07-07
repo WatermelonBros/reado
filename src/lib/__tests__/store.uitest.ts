@@ -9,6 +9,9 @@ import {
   useCursor,
   useRecents,
   useSessions,
+  clampRange,
+  FONT_SIZE_RANGE,
+  LINE_HEIGHT_RANGE,
 } from "../store";
 
 beforeEach(() => {
@@ -207,6 +210,23 @@ describe("useWorkspace", () => {
     expect(W().sidebarWidth).toBe(180);
     W().setSidebarWidth(99999);
     expect(W().sidebarWidth).toBe(window.innerWidth - 360);
+  });
+});
+
+describe("clampRange — editor reading controls", () => {
+  it("clamps below/above the range to its bounds", () => {
+    expect(clampRange(4, FONT_SIZE_RANGE)).toBe(FONT_SIZE_RANGE.min);
+    expect(clampRange(999, FONT_SIZE_RANGE)).toBe(FONT_SIZE_RANGE.max);
+    expect(clampRange(0.5, LINE_HEIGHT_RANGE)).toBe(LINE_HEIGHT_RANGE.min);
+    expect(clampRange(9, LINE_HEIGHT_RANGE)).toBe(LINE_HEIGHT_RANGE.max);
+  });
+  it("passes an in-range value through", () => {
+    expect(clampRange(14, FONT_SIZE_RANGE)).toBe(14);
+    expect(clampRange(1.6, LINE_HEIGHT_RANGE)).toBe(1.6);
+  });
+  it("falls back to the range default for a non-finite value", () => {
+    expect(clampRange(NaN, FONT_SIZE_RANGE)).toBe(FONT_SIZE_RANGE.default);
+    expect(clampRange(Infinity, LINE_HEIGHT_RANGE)).toBe(LINE_HEIGHT_RANGE.default);
   });
 });
 

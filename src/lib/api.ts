@@ -8,6 +8,10 @@
 // Route every command through the traced wrapper so the IPC boundary (command
 // name, duration, outcome) is logged without changing any call site.
 import { tracedInvoke as invoke } from "./logger";
+import { useSettings } from "./store";
+
+/** The user's exclude-from-tree/search globs, read at call time. */
+const excludeGlobs = () => useSettings.getState().excludeGlobs;
 
 export interface DirEntry {
   name: string;
@@ -34,14 +38,26 @@ export interface SearchMatch {
 
 /** List the immediate children of `dir`, honouring ignore rules. */
 export const listDir = (root: string, dir: string, showHidden: boolean) =>
-  invoke<DirEntry[]>("list_dir", { root, dir, showHidden });
+  invoke<DirEntry[]>("list_dir", { root, dir, showHidden, exclude: excludeGlobs() });
 
 /** Every file path in the project, for the fuzzy finder. */
-export const listFiles = (root: string) => invoke<string[]>("list_files", { root });
+export const listFiles = (root: string) =>
+  invoke<string[]>("list_files", { root, exclude: excludeGlobs() });
 
 /** Whether an AI agent binary (claude/codex/copilot) resolves on the PATH, so
  * AI actions can be gated instead of dispatching a prompt into a bare shell. */
 export const agentInstalled = (bin: string) => invoke<boolean>("agent_installed", { bin });
+
+/** Drain any files the OS asked to open with Reado before the UI was ready
+ * (cold launch via a file association). Each is a resolved {root, file} pair. */
+export const drainOpenTargets = () =>
+  invoke<{ root: string; file: string }[]>("drain_open_targets");
+
+/** Make Reado the default app for the given file extensions. On macOS this sets
+ * the handlers directly (`kind: "set"`); on Windows it opens the OS chooser
+ * (`kind: "settings"`); elsewhere it may report `"manual"`. */
+export const setDefaultHandler = (exts: string[]) =>
+  invoke<{ kind: "set" | "settings" | "manual"; count: number }>("set_default_handler", { exts });
 
 /** Symlink/copy the bundled `reado` CLI into ~/.local/bin; returns its path. */
 export const installCli = () => invoke<string>("install_cli");
@@ -211,7 +227,7 @@ export const gitBlame = (root: string, file: string) =>
 
 /** Full-text search across the project via ripgrep. */
 export const searchText = (root: string, query: string) =>
-  invoke<SearchMatch[]>("search_text", { root, query });
+  invoke<SearchMatch[]>("search_text", { root, query, exclude: excludeGlobs() });
 
 /** Replace every literal occurrence of `query` across the project. Returns the
  * number of files changed. */

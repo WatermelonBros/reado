@@ -28,6 +28,17 @@ export const THEMES: ThemeName[] = [
   "reado-sepia",
 ];
 
+/** Legible bounds for the editor's numeric reading controls. */
+export const FONT_SIZE_RANGE = { min: 10, max: 24, default: 13 } as const;
+export const LINE_HEIGHT_RANGE = { min: 1.2, max: 2.2, default: 1.65 } as const;
+
+/** Clamp `n` into a range; a non-finite value falls back to the range default,
+ *  so a corrupted persisted value can never reach the editor. */
+export const clampRange = (
+  n: number,
+  r: { min: number; max: number; default: number },
+): number => (Number.isFinite(n) ? Math.min(r.max, Math.max(r.min, n)) : r.default);
+
 export interface SettingsState {
   /** Theme used when mode is "manual". */
   theme: ThemeName;
@@ -37,8 +48,42 @@ export interface SettingsState {
   darkTheme: ThemeName;
   mode: ThemeMode;
   codeFont: string;
-  /** Constrain code to a comfortable reading measure. */
-  readingWidth: boolean;
+  /** Editor text size in px (clamped to FONT_SIZE_RANGE on read). */
+  fontSize: number;
+  /** Editor line height as a unitless multiplier (clamped to LINE_HEIGHT_RANGE). */
+  lineHeight: number;
+  /** Gutter line numbers: hidden, absolute, or relative to the caret. */
+  lineNumbers: "off" | "on" | "relative";
+  /** Active-line emphasis: none, gutter only, line background only, or both. */
+  activeLine: "off" | "gutter" | "line" | "both";
+  /** Indentation guides: off, on all indentation, or only the active scope. */
+  indentGuides: "off" | "all" | "active";
+  /** Highlight the bracket matching the one at the caret. */
+  bracketMatching: boolean;
+  /** Vertical guide at this column as a target max line length (0 = off). */
+  rulerColumn: number;
+  /** Damp non-essential UI motion: follow the OS, force on, or force off. */
+  reduceMotion: "system" | "on" | "off";
+  /** Editor tab strip: full row, single tab, or hidden. */
+  tabBar: "multiple" | "single" | "hidden";
+  /** Editor scrollbar visibility. */
+  scrollbar: "auto" | "always" | "hidden";
+  /** Caret shape. */
+  cursorStyle: "line" | "block" | "underline";
+  /** Caret blink behaviour. */
+  cursorBlink: "blink" | "smooth" | "solid";
+  /** Keep resolved comment threads visible, or hide them to declutter. */
+  showResolvedComments: boolean;
+  /** Draw diagnostic squiggles inline (the Problems panel is unaffected). */
+  inlineDiagnostics: boolean;
+  /** Glob patterns hidden from the file tree and project search. */
+  excludeGlobs: string[];
+  /** Restore a project's tabs/scroll/caret on reopen, or start clean. */
+  restoreSession: boolean;
+  /** Trim trailing whitespace on save (never on read). */
+  trimTrailingWhitespace: boolean;
+  /** Ensure a single final newline on save (never on read). */
+  insertFinalNewline: boolean;
   /** Soft-focus the rest of the file around the cursor. */
   focusMode: boolean;
   /** Wrap long lines instead of scrolling horizontally. */
@@ -63,8 +108,8 @@ export interface SettingsState {
   renderWhitespace: boolean;
   /** Show the structure ribbon (symbols/comments/diagnostics overview column). */
   showRibbon: boolean;
-  /** File-tree icon style: one neutral glyph, or tinted per file type/extension. */
-  fileIcons: "plain" | "colored";
+  /** File-tree icon style: generic glyph, per-type mono glyph, or tinted per type. */
+  fileIcons: "off" | "mono" | "colored";
   /** Write a diagnostic log file you can send back to us (on by default). */
   logEnabled: boolean;
   /** How much detail the log captures. */
@@ -73,6 +118,8 @@ export interface SettingsState {
   showHidden: boolean;
   /** Last-used guided-review objective, so it isn't re-picked every time. */
   reviewObjective: string;
+  /** The user dismissed the "make Reado the default app for text files" prompt. */
+  defaultAppsDismissed: boolean;
   set: (patch: Partial<SettingsState>) => void;
 }
 
@@ -83,29 +130,62 @@ export const useSettings = create<SettingsState>()(
       lightTheme: "reado-light",
       darkTheme: "reado-dark",
       mode: "system",
-      codeFont: "",
-      readingWidth: true,
+      codeFont: '"JetBrains Mono", ui-monospace, monospace',
+      fontSize: 12,
+      lineHeight: LINE_HEIGHT_RANGE.default,
+      lineNumbers: "on",
+      activeLine: "both",
+      indentGuides: "all",
+      bracketMatching: true,
+      rulerColumn: 120,
+      reduceMotion: "system",
+      tabBar: "multiple",
+      scrollbar: "auto",
+      cursorStyle: "line",
+      cursorBlink: "smooth",
+      showResolvedComments: true,
+      inlineDiagnostics: true,
+      excludeGlobs: [],
+      restoreSession: true,
+      trimTrailingWhitespace: false,
+      insertFinalNewline: false,
       focusMode: false,
-      wrap: false,
+      wrap: true,
       stickyScroll: true,
       zoom: 1,
       versionReado: false,
       gitignoreDontAsk: false,
       completionSound: false,
-      autoSave: "off",
+      autoSave: "afterDelay",
       showActivityBar: true,
       showStatusBar: true,
       showBreadcrumbs: true,
       renderWhitespace: false,
-      showRibbon: false,
-      fileIcons: "plain",
+      showRibbon: true,
+      fileIcons: "colored",
       logEnabled: true,
       logLevel: "info",
       showHidden: false,
       reviewObjective: "bug_risk",
+      defaultAppsDismissed: false,
       set: (patch) => set(patch),
     }),
-    { name: "reado.settings" },
+    {
+      name: "reado.settings",
+      version: 2,
+      migrate: (state, version) => {
+        const s = state as Partial<SettingsState>;
+        // v0 stored fileIcons as "plain" | "colored"; "plain" → per-type mono.
+        if (version < 1 && (s.fileIcons as string) === "plain") s.fileIcons = "mono";
+        // v2 added the editor reading controls; normalise the numeric ones so a
+        // stale/corrupted persisted value can't reach the editor.
+        if (version < 2) {
+          s.fontSize = clampRange(Number(s.fontSize), FONT_SIZE_RANGE);
+          s.lineHeight = clampRange(Number(s.lineHeight), LINE_HEIGHT_RANGE);
+        }
+        return s as SettingsState;
+      },
+    },
   ),
 );
 

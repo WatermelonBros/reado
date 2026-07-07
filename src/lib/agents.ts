@@ -169,16 +169,52 @@ function waitForAgentReady(id: string): Promise<void> {
   return waitForQuiet(id, AGENT_IDLE_MS, AGENT_READY_CAP_MS);
 }
 
+/** Resolve `true` if the terminal emits any PTY output within `ms`, else `false`.
+ *  Used to tell whether an Enter actually submitted — a submitted prompt makes the
+ *  agent respond immediately; silence means the keystroke was swallowed. */
+function sawOutputWithin(id: string, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let unlisten: (() => void) | null = null;
+    let done = false;
+    const finish = (v: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      unlisten?.();
+      resolve(v);
+    };
+    const timer = setTimeout(() => finish(false), ms);
+    void listen<string>(`pty-output-${id}`, () => finish(true)).then((u) => {
+      unlisten = u;
+      if (done) u();
+    });
+  });
+}
+
 /** Paste a prompt into an agent and submit it. The Enter must be a *separate*
  *  write, and it must land only once the agent has finished ingesting the paste —
  *  with a long prompt a fixed short delay drops the Enter mid-paste, so it's read
  *  as a newline in the text and the prompt just sits there unsubmitted (the exact
  *  "I have to press Enter myself" symptom). So: write, wait for output to settle,
- *  then Enter. */
+ *  then Enter.
+ *
+ *  A *freshly launched* agent adds a second failure mode: the input isn't fully
+ *  wired when the first Enter lands and the keystroke is swallowed, so the prompt
+ *  sits there even though the paste rendered fine (a submitted prompt makes the
+ *  agent respond at once). We detect that silence and press Enter once more — a
+ *  redundant Enter on an already-sent prompt is a harmless empty line. */
 async function pasteAndSubmit(id: string, prompt: string): Promise<void> {
+  // Arm the quiet-watcher BEFORE writing, so the paste's own render is what we
+  // wait to settle — attaching it after the write can miss the render entirely
+  // and stall to the cap.
+  const rendered = waitForQuiet(id, 250, 4000);
   await ptyWrite(id, prompt);
-  await waitForQuiet(id, 250, 4000);
+  await rendered;
+  // Watch for the agent's response before pressing Enter, so a fast echo can't
+  // slip through before the listener attaches.
+  const responded = sawOutputWithin(id, 1500);
   await ptyWrite(id, "\r");
+  if (!(await responded)) await ptyWrite(id, "\r");
 }
 
 /** Send an AI prompt to the agent. If the active terminal already has an agent,

@@ -104,11 +104,29 @@ export function groupSpecs(files: string[]): SpecGroup[] {
 
 interface SpecsState {
   groups: SpecGroup[];
+  /** Keys of *expanded* groups (`kind:title`). Groups are collapsed by default —
+   *  a change shows only its name until opened. Session-scoped (survives tool
+   *  switches, not a full reload). */
+  expanded: Set<string>;
+  toggleExpanded: (key: string) => void;
+  /** Collapse every group (clear expansions). */
+  collapseAll: () => void;
+  /** Expand every group whose key is given. */
+  expandAll: (keys: string[]) => void;
   load: (root: string) => Promise<void>;
 }
 
 export const useSpecs = create<SpecsState>((set) => ({
   groups: [],
+  expanded: new Set(),
+  toggleExpanded: (key) =>
+    set((s) => {
+      const next = new Set(s.expanded);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return { expanded: next };
+    }),
+  collapseAll: () => set({ expanded: new Set() }),
+  expandAll: (keys) => set({ expanded: new Set(keys) }),
   load: async (root) => {
     try {
       set({ groups: groupSpecs(await listFiles(root)) });

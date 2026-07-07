@@ -40,19 +40,54 @@ fn ensure_within(root: &Path, target: &Path) -> Result<PathBuf> {
 ///
 /// `root` is the project root; ignore rules are resolved relative to it so that
 /// listing a nested directory still applies the repository's `.gitignore`.
+/// Build an `ignore` Override that *excludes* the given globs. Override globs use
+/// gitignore semantics with `!` inverted, so a leading `!` makes a glob an ignore.
+/// Empty/blank patterns are skipped. Applied on top of (not instead of) gitignore.
+pub(crate) fn exclude_overrides(
+    root: &PathBuf,
+    exclude: &[String],
+) -> Option<ignore::overrides::Override> {
+    let mut b = ignore::overrides::OverrideBuilder::new(root);
+    let mut any = false;
+    for g in exclude {
+        let g = g.trim();
+        if g.is_empty() {
+            continue;
+        }
+        if b.add(&format!("!{g}")).is_ok() {
+            any = true;
+        }
+    }
+    if !any {
+        return None;
+    }
+    b.build().ok()
+}
+
 #[tauri::command]
-pub fn list_dir(root: String, dir: String, show_hidden: bool) -> Result<Vec<DirEntry>> {
+pub fn list_dir(
+    root: String,
+    dir: String,
+    show_hidden: bool,
+    exclude: Vec<String>,
+) -> Result<Vec<DirEntry>> {
     let root = PathBuf::from(&root);
     let dir = ensure_within(&root, &PathBuf::from(&dir))?;
 
-    let mut entries: Vec<DirEntry> = WalkBuilder::new(&dir)
-        .max_depth(Some(1)) // immediate children only — lazy expansion
+    let mut walk = WalkBuilder::new(&dir);
+    walk.max_depth(Some(1)) // immediate children only — lazy expansion
         .hidden(!show_hidden) // hide dotfiles unless asked
         .ignore(!show_hidden)
         .git_ignore(!show_hidden)
         .git_global(!show_hidden)
         .git_exclude(!show_hidden)
-        .parents(true) // honour ignore files in ancestor directories
+        .parents(true); // honour ignore files in ancestor directories
+
+    // The user's excludes are intent, applied even when hidden/ignored are shown.
+    if let Some(ov) = exclude_overrides(&root, &exclude) {
+        walk.overrides(ov);
+    }
+    let mut entries: Vec<DirEntry> = walk
         .build()
         .filter_map(|r| r.ok())
         .filter(|entry| entry.path() != dir) // WalkBuilder yields the root itself
@@ -112,14 +147,18 @@ const MAX_INDEXED_FILES: usize = 50_000;
 /// Walk the whole project (gitignore-aware) and return every file's path, for
 /// the fuzzy file finder. Directories and ignored paths are excluded.
 #[tauri::command]
-pub fn list_files(root: String) -> Result<Vec<String>> {
+pub fn list_files(root: String, exclude: Vec<String>) -> Result<Vec<String>> {
     let root = PathBuf::from(&root);
-    let files = WalkBuilder::new(&root)
-        .hidden(true)
+    let mut walk = WalkBuilder::new(&root);
+    walk.hidden(true)
         .git_ignore(true)
         .git_global(true)
         .git_exclude(true)
-        .parents(true)
+        .parents(true);
+    if let Some(ov) = exclude_overrides(&root, &exclude) {
+        walk.overrides(ov);
+    }
+    let files = walk
         .build()
         .filter_map(|r| r.ok())
         .filter(|entry| entry.file_type().is_some_and(|t| t.is_file()))
@@ -475,6 +514,37 @@ mod tests {
             s(ext.path().join("a.txt")),
         )
         .is_err());
+    }
+
+    #[test]
+    fn list_dir_honours_exclude_globs() {
+        use std::fs;
+        let proj = tempfile::TempDir::new().unwrap();
+        let root = proj.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        fs::create_dir(root.join("node_modules")).unwrap();
+        fs::create_dir(root.join("src")).unwrap();
+        fs::write(root.join("keep.txt"), b"a").unwrap();
+        fs::write(root.join("skip.log"), b"b").unwrap();
+
+        let names = |exclude: Vec<String>| {
+            super::list_dir(s(root.into()), s(root.into()), false, exclude)
+                .unwrap()
+                .into_iter()
+                .map(|e| e.name)
+                .collect::<Vec<_>>()
+        };
+
+        // No excludes → everything shows.
+        assert!(names(vec![]).contains(&"node_modules".to_string()));
+        // Excluding a dir and a glob hides both; unrelated entries remain.
+        let filtered = names(vec!["node_modules".into(), "*.log".into()]);
+        assert!(!filtered.contains(&"node_modules".to_string()));
+        assert!(!filtered.contains(&"skip.log".to_string()));
+        assert!(filtered.contains(&"src".to_string()));
+        assert!(filtered.contains(&"keep.txt".to_string()));
+        // Blank/empty patterns are ignored, not errors.
+        assert!(names(vec!["".into(), "  ".into()]).contains(&"src".to_string()));
     }
 
     #[test]

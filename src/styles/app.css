@@ -304,11 +304,92 @@
   }
 
   /* CodeMirror-injected DOM (cannot be utility classes). */
+  /* Reduce motion: collapse decorative transitions/animations to near-zero so
+     state still changes instantly, without the movement. Set on <html> by the
+     reduce-motion setting (explicit or following the OS). */
+  :root[data-reduce-motion] *,
+  :root[data-reduce-motion] *::before,
+  :root[data-reduce-motion] *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Vertical line-length guide: a faint rule at `--ruler-col` characters in,
+     a target beyond which lines are getting long. Monospace → 1ch = 1 column. */
+  .cm-content.cm-ruler {
+    position: relative;
+  }
+  .cm-content.cm-ruler::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--ruler-col, 120) * 1ch);
+    width: 1px;
+    background: color-mix(in oklch, var(--border) 65%, transparent);
+    pointer-events: none;
+  }
+
+  /* Caret style. `.cm-cursor` is a zero-width element with a left border; to make
+     a block or underline it needs an explicit width (1ch = one monospace column).
+     !important beats CodeMirror's own generated `.cm-cursor` rule. */
+  [data-cursor-style="block"] .cm-cursor {
+    width: 1ch !important;
+    border-left: none !important;
+    background-color: var(--accent) !important;
+    opacity: 0.4;
+  }
+  [data-cursor-style="underline"] .cm-cursor {
+    width: 1ch !important;
+    border-left: none !important;
+    border-bottom: 0.14em solid var(--accent) !important;
+  }
+  /* Caret blink: solid never blinks; smooth fades instead of the hard step. */
+  [data-cursor-blink="solid"] .cm-cursorLayer {
+    animation: none !important;
+  }
+  [data-cursor-blink="smooth"] .cm-cursorLayer {
+    animation: reado-cursor-fade 1.1s infinite ease-in-out !important;
+  }
+  @keyframes reado-cursor-fade {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+
+  /* Editor scrollbar visibility. `hidden` keeps scrolling but draws no bar. */
+  [data-scrollbar="hidden"] .cm-scroller {
+    scrollbar-width: none;
+  }
+  [data-scrollbar="hidden"] .cm-scroller::-webkit-scrollbar {
+    display: none;
+  }
+  [data-scrollbar="always"] .cm-scroller {
+    scrollbar-width: auto;
+    overflow: scroll;
+  }
+
+  /* Suppress inline diagnostic squiggles when the setting is off. The diagnostics
+     still exist (Problems panel, tree counts, overview ruler are unaffected); only
+     the in-editor underline is hidden. */
+  [data-inline-diagnostics="off"] .cm-lintRange {
+    background-image: none !important;
+    text-decoration: none !important;
+  }
+
   .cm-focus-mode .cm-line {
-    opacity: 0.38;
+    opacity: 0.32;
     transition: opacity var(--motion-base) var(--ease);
   }
-  .cm-focus-mode .cm-line.cm-activeLine {
+  /* The whole enclosing block (function / tag / scope) stays lit, not just the
+     caret line — enough context to actually read. */
+  .cm-focus-mode .cm-line.cm-focus-block {
     opacity: 1;
   }
 

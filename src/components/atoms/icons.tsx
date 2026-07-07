@@ -1,315 +1,149 @@
 /**
- * Inline SVG icons (stroke style, currentColor).
+ * Icon set for Reado's UI.
  *
- * Kept as a tiny local set rather than an icon dependency — Reado needs only a
- * handful, and inline SVG keeps them themeable via `currentColor`.
+ * The named UI glyphs are thin wrappers over Phosphor Icons, exported under the
+ * names the rest of the app already imports — so the whole codebase keeps
+ * working while the underlying set becomes consistent and complete. Brand marks
+ * (Claude, Codex, Copilot, Gemini, OpenCode, Discord) have no Phosphor
+ * equivalent and stay as inline SVG below.
+ *
+ * `FileIcon` renders a per-extension glyph for the file tree (Phosphor's File*
+ * family), tinted by language colour in "colored" mode.
  */
+import type { Icon } from "@phosphor-icons/react";
+import {
+  CaretRight,
+  Triangle,
+  DeviceMobile,
+  ArrowsInLineVertical,
+  PuzzlePiece,
+  ArrowLineDown,
+  ArrowLineUp,
+  ArrowsClockwise,
+  Archive,
+  DotsThree,
+  MagnifyingGlass,
+  GearSix,
+  X,
+  Folder,
+  FolderOpen,
+  GitBranch,
+  Files,
+  Eye,
+  EyeSlash,
+  GitDiff,
+  PencilSimple,
+  LinkBreak,
+  BookOpen,
+  Graph,
+  PaperPlaneTilt,
+  Terminal,
+  Sparkle,
+  Signpost,
+  Swap,
+  SquareSplitHorizontal,
+  Layout,
+  Plus,
+  Fingerprint,
+  ListBullets,
+  ClipboardText,
+  Minus,
+  Compass,
+  ClockCounterClockwise,
+  TreeStructure,
+  BookmarkSimple,
+  Warning,
+  ArrowCounterClockwise,
+  ChatCircle,
+  // File-tree glyphs
+  File,
+  FileCode,
+  FileTs,
+  FileTsx,
+  FileJs,
+  FileJsx,
+  FileCss,
+  FileHtml,
+  FilePy,
+  FileC,
+  FileCpp,
+  FileCSharp,
+  FileRs,
+  FileVue,
+  FileSql,
+  FileMd,
+  FileSvg,
+  FileCsv,
+  FileTxt,
+  FileIni,
+  FilePng,
+  FileJpg,
+  FileImage,
+  FilePdf,
+  FileDoc,
+  FileXls,
+  FilePpt,
+  FileZip,
+  FileAudio,
+  FileVideo,
+} from "@phosphor-icons/react";
+
 type IconProps = { className?: string };
 
-const base = {
-  width: 16,
-  height: 16,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.8,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
+/**
+ * Adapt a Phosphor icon to Reado's `{ className }` component shape, with our
+ * defaults: 16px, regular weight, `currentColor`. A caller's Tailwind size
+ * classes still win — CSS width/height overrides the SVG size attribute.
+ */
+const wrap = (P: Icon) => {
+  const Wrapped = ({ className }: IconProps) => (
+    <P size={16} weight="regular" className={className} aria-hidden="true" />
+  );
+  return Wrapped;
 };
 
-export const ChevronIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M9 6l6 6-6 6" />
-  </svg>
-);
-
-export const DeltaIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M12 5 4 19h16z" />
-  </svg>
-);
-
-export const DeviceIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <rect x="6" y="2.5" width="12" height="19" rx="2.5" />
-    <path d="M10.5 18.5h3" />
-  </svg>
-);
-
-export const CollapseAllIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M7 5l5 5 5-5M7 19l5-5 5 5" />
-  </svg>
-);
-
-export const ExtensionsIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <rect x="3" y="3" width="7.5" height="7.5" rx="1" />
-    <rect x="13.5" y="3" width="7.5" height="7.5" rx="1" />
-    <rect x="3" y="13.5" width="7.5" height="7.5" rx="1" />
-    <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1" />
-  </svg>
-);
-
-export const PullIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M12 3v11M8 10l4 4 4-4M5 21h14" />
-  </svg>
-);
-
-export const PushIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M12 21V10M8 14l4-4 4 4M5 3h14" />
-  </svg>
-);
-
-export const FetchIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v4h-4" />
-  </svg>
-);
-
-export const StashIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M3 7h18v5H3zM3 12v7h18v-7M9 15h6" />
-  </svg>
-);
-
-export const MoreIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <circle cx="5" cy="12" r="1" />
-    <circle cx="12" cy="12" r="1" />
-    <circle cx="19" cy="12" r="1" />
-  </svg>
-);
-
-export const SearchIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <circle cx="11" cy="11" r="7" />
-    <path d="M21 21l-4.3-4.3" />
-  </svg>
-);
-
-export const SettingsIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-  </svg>
-);
-
-export const CloseIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M18 6 6 18M6 6l12 12" />
-  </svg>
-);
-
-export const FolderOpenIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1" />
-    <path d="M3 8h17.5a1 1 0 0 1 .97 1.24l-1.5 7A1 1 0 0 1 19 17H4a1 1 0 0 1-1-1z" />
-  </svg>
-);
-
-export const GitBranchIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <circle cx="6" cy="6" r="2.5" />
-    <circle cx="6" cy="18" r="2.5" />
-    <circle cx="18" cy="8" r="2.5" />
-    <path d="M6 8.5v7M18 10.5c0 4-6 2-6 5.5" />
-  </svg>
-);
-
-export const FilesIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.4.6L11.6 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-  </svg>
-);
-
-export const EyeIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
-
-export const EyeOffIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 7 10 7a13 13 0 0 1-2.16 2.86M6.6 6.6A13 13 0 0 0 2 11s3.5 7 10 7a9 9 0 0 0 4.4-1.1" />
-    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18" />
-  </svg>
-);
-
-export const DiffIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M5 3v14M5 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 6H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H12M12 4v4M12 14v4" />
-  </svg>
-);
-
-export const EditIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
-  </svg>
-);
-
-export const UnlinkIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 3.5 8.54M8 12h3M2 2l20 20" />
-  </svg>
-);
-
-export const DocsIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
-    <path d="M14 3v5h5M8 13h8M8 17h6" />
-  </svg>
-);
-
-export const GraphIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <circle cx="5" cy="6" r="2.2" />
-    <circle cx="18" cy="5" r="2.2" />
-    <circle cx="12" cy="18" r="2.2" />
-    <path d="M7 7l4 9M16.5 6.8 13 16M7 6.4 16 5.2" />
-  </svg>
-);
-
-export const SendIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" />
-  </svg>
-);
-
-export const TerminalIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M4 17l6-5-6-5M12 19h8" />
-  </svg>
-);
-
-/** A single sparkle — the neutral "ask AI" glyph (used for Audit). */
-export const SparkleIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M12 4l1.7 4.8L18.5 10.5l-4.8 1.7L12 17l-1.7-4.8L5.5 10.5l4.8-1.7z" />
-  </svg>
-);
-
-/** Waypoints joined by a path — the guided review route. */
-export const RouteIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <circle cx="6" cy="19" r="2" />
-    <circle cx="18" cy="5" r="2" />
-    <path d="M8 19h6a4 4 0 0 0 0-8H10a4 4 0 0 1 0-8h6" />
-  </svg>
-);
-
-/** Two-way arrows — swap the split panes. */
-export const SwapIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M17 4l3 3-3 3M20 7H8M7 20l-3-3 3-3M4 17h12" />
-  </svg>
-);
-
-/** Split glyph: a frame divided evenly in two (add/arrange a second pane). */
-export const SplitIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <path d="M12 4v16" />
-  </svg>
-);
-
-/** Panel-dock glyph: a frame with a split-off side panel. */
-export const LayoutIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <path d="M15 4v16" />
-  </svg>
-);
-
-export const PlusIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M12 5v14M5 12h14" />
-  </svg>
-);
-
-export const BlameIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3 2" />
-  </svg>
-);
-
-export const OutlineIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M4 6h4M4 12h4M4 18h4" />
-    <path d="M11 6h9M11 12h9M11 18h9" opacity="0.55" />
-  </svg>
-);
-
-export const SpecsIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <rect x="5" y="5" width="14" height="16" rx="2" />
-    <path d="M9 5V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" />
-    <path d="M8.5 12l1.4 1.4 2.6-3" />
-    <path d="M14.5 12.5H16M8.5 17h7" />
-  </svg>
-);
-
-export const MinusIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M5 12h14" />
-  </svg>
-);
-
-
-export const TourIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <circle cx="6" cy="6" r="2.5" />
-    <circle cx="18" cy="18" r="2.5" />
-    <path d="M6 8.5v4a3 3 0 0 0 3 3h3.5M18 15.5v-4a3 3 0 0 0-3-3h-3.5" />
-  </svg>
-);
-
-export const TimelineIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3 2" />
-  </svg>
-);
-
-export const HierarchyIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <rect x="9" y="3" width="6" height="4" rx="1" />
-    <rect x="3" y="17" width="6" height="4" rx="1" />
-    <rect x="15" y="17" width="6" height="4" rx="1" />
-    <path d="M12 7v4M6 17v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2" />
-  </svg>
-);
-
-export const BookmarkIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v17l-6-4-6 4V4Z" />
-  </svg>
-);
-
-export const ProblemsIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M10.3 3.2 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0Z" />
-    <path d="M12 9v4" />
-    <path d="M12 17h.01" />
-  </svg>
-);
-
-export const DiscardIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M3 7v6h6" />
-    <path d="M3.5 13a9 9 0 1 0 2.3-9.3L3 7" />
-  </svg>
-);
-
-export const MessageIcon = ({ className }: IconProps) => (
-  <svg {...base} className={className} aria-hidden="true">
-    <path d="M21 11.5a8.38 8.38 0 0 1-9 8.3 8.5 8.5 0 0 1-3.8-.9L3 20l1.1-3.3A8.38 8.38 0 0 1 12 3.5a8.38 8.38 0 0 1 9 8z" />
-  </svg>
-);
+export const ChevronIcon = wrap(CaretRight);
+export const DeltaIcon = wrap(Triangle);
+export const DeviceIcon = wrap(DeviceMobile);
+export const CollapseAllIcon = wrap(ArrowsInLineVertical);
+export const ExtensionsIcon = wrap(PuzzlePiece);
+export const PullIcon = wrap(ArrowLineDown);
+export const PushIcon = wrap(ArrowLineUp);
+export const FetchIcon = wrap(ArrowsClockwise);
+export const StashIcon = wrap(Archive);
+export const MoreIcon = wrap(DotsThree);
+export const SearchIcon = wrap(MagnifyingGlass);
+export const SettingsIcon = wrap(GearSix);
+export const CloseIcon = wrap(X);
+export const FolderOpenIcon = wrap(FolderOpen);
+export const GitBranchIcon = wrap(GitBranch);
+export const FilesIcon = wrap(Files);
+export const EyeIcon = wrap(Eye);
+export const EyeOffIcon = wrap(EyeSlash);
+export const DiffIcon = wrap(GitDiff);
+export const EditIcon = wrap(PencilSimple);
+export const UnlinkIcon = wrap(LinkBreak);
+export const DocsIcon = wrap(BookOpen);
+export const GraphIcon = wrap(Graph);
+export const SendIcon = wrap(PaperPlaneTilt);
+export const TerminalIcon = wrap(Terminal);
+export const SparkleIcon = wrap(Sparkle);
+export const RouteIcon = wrap(Signpost);
+export const SwapIcon = wrap(Swap);
+export const SplitIcon = wrap(SquareSplitHorizontal);
+export const LayoutIcon = wrap(Layout);
+export const PlusIcon = wrap(Plus);
+export const BlameIcon = wrap(Fingerprint);
+export const OutlineIcon = wrap(ListBullets);
+export const SpecsIcon = wrap(ClipboardText);
+export const MinusIcon = wrap(Minus);
+export const TourIcon = wrap(Compass);
+export const TimelineIcon = wrap(ClockCounterClockwise);
+export const HierarchyIcon = wrap(TreeStructure);
+export const BookmarkIcon = wrap(BookmarkSimple);
+export const ProblemsIcon = wrap(Warning);
+export const DiscardIcon = wrap(ArrowCounterClockwise);
+export const MessageIcon = wrap(ChatCircle);
 
 /** Claude's official mark. Filled via currentColor. */
 export const ClaudeIcon = ({ className }: IconProps) => (
@@ -400,12 +234,6 @@ export const DiscordIcon = ({ className }: IconProps) => (
   </svg>
 );
 
-const folderPath =
-  "M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.4.6L11.6 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z";
-const filePath =
-  "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5";
-
-/** A folder or file glyph. The folder differs subtly when expanded. */
 /** Language/type colours keyed by file extension (GitHub-linguist palette), for
  *  the "colored" file-icon mode. Unknown types fall back to the neutral faint. */
 const FILE_COLORS: Record<string, string> = {
@@ -424,35 +252,87 @@ const FILE_COLORS: Record<string, string> = {
   zig: "#EC915C", nim: "#FFC200", clj: "#5881D8", hs: "#5E5086",
   ml: "#EC6813", vim: "#199F4B", r: "#198CE7", pl: "#0298C3",
   proto: "#7E7E7E", graphql: "#E10098", tf: "#844FBA", svg: "#FFB13B",
+  png: "#A074C4", jpg: "#A074C4", jpeg: "#A074C4", gif: "#A074C4",
+  webp: "#A074C4", pdf: "#E34C26", zip: "#E8A33D",
 };
 
-const fileColor = (name?: string): string => {
-  const ext = name?.split(".").pop()?.toLowerCase();
-  return (ext && FILE_COLORS[ext]) || "var(--text-faint)";
+/** File extension → Phosphor glyph. Unknown extensions fall back to a generic
+ *  code-file glyph — reasonable for a code IDE. */
+const FILE_GLYPHS: Record<string, Icon> = {
+  ts: FileTs, mts: FileTs, cts: FileTs,
+  tsx: FileTsx,
+  js: FileJs, mjs: FileJs, cjs: FileJs,
+  jsx: FileJsx,
+  css: FileCss, scss: FileCss, sass: FileCss, less: FileCss,
+  html: FileHtml, htm: FileHtml,
+  py: FilePy,
+  c: FileC, h: FileC,
+  cpp: FileCpp, cc: FileCpp, cxx: FileCpp, hpp: FileCpp, hh: FileCpp,
+  cs: FileCSharp,
+  rs: FileRs,
+  vue: FileVue,
+  sql: FileSql,
+  md: FileMd, markdown: FileMd, mdx: FileMd,
+  svg: FileSvg,
+  csv: FileCsv,
+  txt: FileTxt,
+  ini: FileIni, cfg: FileIni, conf: FileIni,
+  json: FileCode, jsonc: FileCode, yaml: FileCode, yml: FileCode, toml: FileCode,
+  png: FilePng,
+  jpg: FileJpg, jpeg: FileJpg,
+  gif: FileImage, webp: FileImage, bmp: FileImage, ico: FileImage, avif: FileImage,
+  pdf: FilePdf,
+  doc: FileDoc, docx: FileDoc,
+  xls: FileXls, xlsx: FileXls,
+  ppt: FilePpt, pptx: FilePpt,
+  zip: FileZip, tar: FileZip, gz: FileZip, tgz: FileZip, rar: FileZip, "7z": FileZip,
+  mp3: FileAudio, wav: FileAudio, flac: FileAudio, ogg: FileAudio, m4a: FileAudio,
+  mp4: FileVideo, mov: FileVideo, webm: FileVideo, mkv: FileVideo, avi: FileVideo,
 };
 
+const extOf = (name?: string) => name?.split(".").pop()?.toLowerCase() ?? "";
+
+/** How the file tree renders type glyphs: generic, per-type mono, or tinted. */
+export type FileIconMode = "off" | "mono" | "colored";
+
+/** A folder or file glyph for the tree. Folders open when expanded; files show
+ *  a per-extension glyph (unless mode is "off"), tinted in "colored" mode. */
 export const FileIcon = ({
   isDir,
   expanded,
-  colored,
+  mode = "colored",
   name,
   className,
-}: IconProps & { isDir: boolean; expanded?: boolean; colored?: boolean; name?: string }) => (
-  <svg
-    {...base}
-    width={15}
-    height={15}
-    className={className}
-    style={{
-      color: isDir ? "var(--accent)" : colored ? fileColor(name) : "var(--text-faint)",
-      flex: "none",
-    }}
-    aria-hidden="true"
-  >
-    {isDir ? (
-      <path d={folderPath} fillOpacity={expanded ? 0.12 : 0} fill="currentColor" />
-    ) : (
-      <path d={filePath} />
-    )}
-  </svg>
-);
+}: IconProps & {
+  isDir: boolean;
+  expanded?: boolean;
+  mode?: FileIconMode;
+  name?: string;
+}) => {
+  if (isDir) {
+    const F = expanded ? FolderOpen : Folder;
+    return (
+      <F
+        size={15}
+        weight={expanded ? "fill" : "regular"}
+        color="var(--accent)"
+        className={className}
+        style={{ flex: "none" }}
+        aria-hidden="true"
+      />
+    );
+  }
+  const ext = extOf(name);
+  const Glyph = mode === "off" ? File : (FILE_GLYPHS[ext] ?? FileCode);
+  const color = mode === "colored" ? (FILE_COLORS[ext] ?? "var(--text-faint)") : "var(--text-faint)";
+  return (
+    <Glyph
+      size={15}
+      weight="regular"
+      color={color}
+      className={className}
+      style={{ flex: "none" }}
+      aria-hidden="true"
+    />
+  );
+};

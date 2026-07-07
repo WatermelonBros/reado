@@ -1,6 +1,6 @@
 /** Open-file tab strip, with a right-click context menu per tab. */
 import { useState } from "react";
-import { useProject } from "../../lib/store";
+import { useProject, useSettings } from "../../lib/store";
 import { formatDocument } from "../../lib/docInfo";
 
 import { CloseIcon } from "../atoms/icons";
@@ -17,11 +17,15 @@ export function Tabs() {
   const closeOthers = useProject((s) => s.closeOthers);
   const closeToRight = useProject((s) => s.closeToRight);
   const closeAll = useProject((s) => s.closeAll);
+  const tabBar = useSettings((s) => s.tabBar);
   const { t } = useTranslation();
 
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null);
 
-  if (tabs.length === 0) return null;
+  if (tabs.length === 0 || tabBar === "hidden") return null;
+  // Single-tab mode shows only the active file; switching files (palette/keys)
+  // replaces it rather than accumulating a row. No open file is closed.
+  const shownTabs = tabBar === "single" ? tabs.filter((p) => p === active) : tabs;
 
   const path = menu?.path ?? "";
   const isLast = menu ? tabs.indexOf(menu.path) === tabs.length - 1 : true;
@@ -45,7 +49,7 @@ export function Tabs() {
       role="tablist"
       className="flex h-[38px] flex-none items-stretch overflow-x-auto border-b border-line bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
-      {tabs.map((tabPath) => {
+      {shownTabs.map((tabPath) => {
         const isActive = active === tabPath;
         return (
           <div
@@ -80,6 +84,7 @@ export function Tabs() {
             <button
               type="button"
               aria-label={`Close ${basename(tabPath)}`}
+              title={`Close ${basename(tabPath)}`}
               onClick={(e) => {
                 e.stopPropagation();
                 close(tabPath);

@@ -9,7 +9,9 @@ mod annotations;
 mod anywhere;
 mod bookmarks;
 mod cli;
+mod defaults;
 mod error;
+mod fileopen;
 mod forge;
 mod format;
 mod fs;
@@ -30,6 +32,17 @@ mod watcher;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Single-instance MUST be the first plugin: a second launch (e.g. the OS
+        // opening a file with Reado while it's running) forwards its argv here
+        // instead of spawning a rival process, and we open the file(s) in-place.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            for arg in argv.iter().skip(1) {
+                let p = std::path::Path::new(arg);
+                if p.is_file() {
+                    fileopen::open_path(app, p);
+                }
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -65,9 +78,13 @@ pub fn run() {
             }
             menu::init(app)?;
             anywhere::dev_autostart(app.handle());
+            // Files passed on the command line (Windows/Linux cold launch). macOS
+            // delivers them via RunEvent::Opened instead.
+            fileopen::open_from_args(app.handle());
             Ok(())
         })
         .manage(pty::PtyState::default())
+        .manage(fileopen::OpenQueue::default())
         .manage(anywhere::AnywhereState::default())
         .manage(lsp::LspState::default())
         .manage(git::BlameCache::default())
@@ -204,10 +221,21 @@ pub fn run() {
             log::log_path,
             log::log_set_config,
             proc::agent_installed,
+            fileopen::drain_open_targets,
+            defaults::set_default_handler,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")
         .run(|app, event| {
+            // macOS delivers "open these files with Reado" as an Apple event.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                for url in urls {
+                    if let Ok(path) = url.to_file_path() {
+                        fileopen::open_path(app, &path);
+                    }
+                }
+            }
             // On exit, terminate every PTY (and its dev servers) so nothing
             // outlives the app.
             if let tauri::RunEvent::Exit = event {

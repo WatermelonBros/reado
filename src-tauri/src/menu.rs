@@ -181,7 +181,6 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("view:whitespace", "Render Whitespace")
         .text("view:ribbon", "Structure Ribbon")
         .text("view:focus", "Focus Mode")
-        .text("view:readingWidth", "Centered/Reading Layout")
         .separator()
         .text("graph", "Knowledge Graph")
         .text("docs", "Documentation")

@@ -24,7 +24,7 @@ import { useProject, useSessions, useWorkspace, useSettings } from "../../lib/st
 import { useComments, toRelative } from "../../lib/comments";
 import { notifyResolved } from "../../lib/notify";
 import { loadProjectConfig, watchProjectConfig } from "../../lib/projectConfig";
-import { setWindowTitle } from "../../lib/window";
+import { setWindowTitle, currentOpenFile, clearOpenFile } from "../../lib/window";
 import { type MessageKey } from "../../i18n";
 import { ActivityBar } from "../organisms/ActivityBar";
 import { FileTree } from "../organisms/FileTree";
@@ -87,6 +87,7 @@ export function ProjectView({ root }: { root: string }) {
   const active = useProject((s) => s.active);
   const expandedDirs = useProject((s) => s.expandedDirs);
   const splitPath = useProject((s) => s.splitPath);
+  const treeNonce = useProject((s) => s.treeNonce);
   const saveSession = useSessions((s) => s.save);
   const { t } = useTranslation();
 
@@ -98,12 +99,22 @@ export function ProjectView({ root }: { root: string }) {
   // separately. Doing the restore synchronously (rather than after the async
   // git call) keeps tab order deterministic and race-free.
   useEffect(() => {
-    const session = useSessions.getState().byRoot[root];
+    // Restore the saved session only when the setting allows; otherwise start
+    // clean. The stored session is left on disk (not deleted).
+    const session = useSettings.getState().restoreSession
+      ? useSessions.getState().byRoot[root]
+      : undefined;
     init(root, { isRepo: false, branch: null }, session);
     restored.current = true;
+    // Opened from an OS file association: open the requested file, then drop the
+    // hash param so a reload doesn't re-open it.
+    const openFile = currentOpenFile();
+    if (openFile && openFile.startsWith(root)) {
+      useProject.getState().open(openFile);
+      clearOpenFile();
+    }
     setWindowTitle(basename(root));
     useComments.getState().load(root);
-    useSpecs.getState().load(root);
     useReadProgress.getState().load(root);
     useBookmarks.getState().load(root);
     useQa.getState().load(root);
@@ -120,6 +131,25 @@ export function ProjectView({ root }: { root: string }) {
       .then(setGit)
       .catch(() => {});
   }, [root, init, setGit]);
+
+  // Reload the specs list when files change on disk (mirrors the file tree), so
+  // adding/removing an OpenSpec change or capability shows up without a reopen —
+  // and the Specs tool appears the moment the first spec lands.
+  useEffect(() => {
+    void useSpecs.getState().load(root);
+  }, [root, treeNonce]);
+
+  // Re-list the tree/search when the exclude globs change (skip the initial run;
+  // the tree already lists on mount).
+  const excludeGlobs = useSettings((s) => s.excludeGlobs);
+  const firstGlobs = useRef(true);
+  useEffect(() => {
+    if (firstGlobs.current) {
+      firstGlobs.current = false;
+      return;
+    }
+    useProject.getState().bumpTree();
+  }, [excludeGlobs]);
 
   // Reado Anywhere: expose this window's project to paired phones, and act on
   // their requests (run the agent / pre-review) when they target this project.
@@ -269,6 +299,8 @@ export function ProjectView({ root }: { root: string }) {
   const showHidden = useProject((s) => s.showHidden);
   const setShowHidden = useProject((s) => s.setShowHidden);
   const showActivityBar = useSettings((s) => s.showActivityBar);
+  // Auto-hide activity bar: revealed while hovered at the left edge.
+  const [railHover, setRailHover] = useState(false);
   const showStatusBar = useSettings((s) => s.showStatusBar);
   const showBreadcrumbs = useSettings((s) => s.showBreadcrumbs);
   const terminalOpen = useTerminals((s) => s.open);
@@ -341,14 +373,35 @@ export function ProjectView({ root }: { root: string }) {
     <div className="flex h-full flex-col overflow-hidden">
     <h1 className="sr-only">{root.split(/[\\/]/).filter(Boolean).pop() ?? root}</h1>
     <div
-      className="grid min-h-0 flex-1 overflow-hidden"
+      className="relative grid min-h-0 flex-1 overflow-hidden"
       style={{
-        // `auto` (not a literal 48px) ties the activity-bar column to the bar's
-        // own width, so it tracks it under interface zoom — no gap to the sidebar.
-        gridTemplateColumns: tool ? `auto ${appliedSidebarWidth}px 1fr` : "auto 1fr",
+        // Pinned: the activity bar takes a grid column (`auto` tracks its width
+        // under interface zoom). Auto-hide: it leaves the grid entirely — 3 → 2
+        // columns — and overlays on the left edge, revealed on hover (below).
+        gridTemplateColumns: showActivityBar
+          ? tool
+            ? `auto ${appliedSidebarWidth}px 1fr`
+            : "auto 1fr"
+          : tool
+            ? `${appliedSidebarWidth}px 1fr`
+            : "1fr",
       }}
     >
       {showActivityBar && <ActivityBar />}
+      {/* Auto-hide: the bar overlays the left edge, collapsed to a thin sliver
+          you hover to reveal — so tools/Settings stay reachable without a column. */}
+      {!showActivityBar && (
+        <div
+          className="absolute inset-y-0 left-0 z-30 transition-transform duration-200 ease-out"
+          style={{ transform: railHover ? "translateX(0)" : "translateX(calc(-100% + 10px))" }}
+          onMouseEnter={() => setRailHover(true)}
+          onMouseLeave={() => setRailHover(false)}
+        >
+          <div className="h-full shadow-[var(--shadow)]">
+            <ActivityBar />
+          </div>
+        </div>
+      )}
       {tool && (
         <aside className="relative flex min-w-0 flex-col overflow-hidden border-r border-line bg-surface">
           {/* Resize handle straddling the right border. */}

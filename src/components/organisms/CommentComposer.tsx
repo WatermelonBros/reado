@@ -15,10 +15,6 @@ import { Checkbox } from "../atoms/Checkbox";
 import { Select } from "../atoms/Select";
 import { useTranslation } from "react-i18next";
 
-// Remember the last-picked type across composer opens, so a run of same-type
-// comments doesn't re-pick "note" every time. An explicit `initialType` still wins.
-let lastType: CommentType = "note";
-
 interface Props {
   relPath: string;
   startLine: number;
@@ -43,16 +39,18 @@ export function CommentComposer({
 }: Props) {
   const create = useComments((s) => s.create);
   const setGitignorePrompt = useComments((s) => s.setGitignorePrompt);
+  const setLastType = useComments((s) => s.setLastType);
   const gitignoreDontAsk = useSettings((s) => s.gitignoreDontAsk);
   const { t } = useTranslation();
 
-  const [type, setType] = useState<CommentType>(initialType ?? lastType);
+  // Seed from an explicit initialType, else the last type picked this session.
+  const [type, setType] = useState<CommentType>(initialType ?? useComments.getState().lastType);
   const [scope, setScope] = useState<Scope>("range");
   // A "note" type defaults to a note (not sent to the AI); actionable types
   // (bug/refactor/…) default to a task. The user can still toggle it.
   const [isTask, setIsTask] = useState(initialType ? initialType !== "note" : false);
   const pickType = (tp: CommentType) => {
-    lastType = tp;
+    setLastType(tp);
     setType(tp);
     setIsTask(tp !== "note");
   };

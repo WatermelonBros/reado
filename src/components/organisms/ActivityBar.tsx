@@ -128,7 +128,7 @@ export function ActivityBar() {
   const activeIndex = tools.findIndex((x) => x.id === tool);
 
   return (
-    <nav className="flex w-12 flex-none flex-col items-center border-r border-line bg-surface py-2">
+    <nav className="flex h-full w-12 flex-none flex-col items-center border-r border-line bg-surface py-2">
       <div className="relative flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <span
           aria-hidden="true"

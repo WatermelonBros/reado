@@ -38,7 +38,7 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
   const root = useProject((s) => s.root);
   const storeBase = useEditorActions((s) => s.diffBase);
   const base = baseOverride ?? storeBase;
-  const { codeFont, readingWidth } = useSettings();
+  const { codeFont } = useSettings();
   const { t } = useTranslation();
   const [head, setHead] = useState<string | null | undefined>(undefined);
   // Delta mode: diff against the last-read snapshot rather than a git ref.
@@ -101,7 +101,6 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
         original={head}
         text={text}
         codeFont={codeFont}
-        readingWidth={readingWidth}
       />
       {isDelta && (
         <button
@@ -122,13 +121,11 @@ function DiffEditor({
   original,
   text,
   codeFont,
-  readingWidth,
 }: {
   path: string;
   original: string;
   text: string;
   codeFont: string;
-  readingWidth: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -186,7 +183,6 @@ function DiffEditor({
         style={
           {
             "--code-font": codeFont || undefined,
-            maxWidth: readingWidth ? "var(--reading-measure)" : undefined,
           } as React.CSSProperties
         }
       />

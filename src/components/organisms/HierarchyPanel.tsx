@@ -7,6 +7,7 @@ import { useHierarchy, type HierDir } from "../../lib/hierarchy";
 import { setHierarchyDirection } from "../../lib/docInfo";
 import { useProject } from "../../lib/store";
 import { toRelative } from "../../lib/comments";
+import { SegmentedControl } from "../atoms/SegmentedControl";
 import { useTranslation } from "react-i18next";
 
 export function HierarchyPanel() {
@@ -42,23 +43,15 @@ export function HierarchyPanel() {
           <div className="truncate text-xs text-faint">
             {toRelative(rootProject, root.path)}:{root.line}
           </div>
-          <div className="mt-1.5 flex gap-1">
-            {dirs.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => setHierarchyDirection(d.id)}
-                aria-pressed={direction === d.id}
-                className={`rounded-md px-2 py-0.5 text-xs transition-colors ${
-                  direction === d.id
-                    ? "bg-selection text-ink"
-                    : "text-muted hover:bg-surface hover:text-ink"
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            value={direction}
+            onChange={(id) => setHierarchyDirection(id)}
+            segments={dirs}
+            ariaLabel={t("hier.panel")}
+            className="mt-1.5 gap-1"
+            segmentClassName="rounded-md px-2 py-0.5 text-xs"
+            thumbClassName="bg-selection rounded-md"
+          />
         </div>
       )}
       <ul className="m-0 flex-1 list-none overflow-y-auto p-0 py-1">

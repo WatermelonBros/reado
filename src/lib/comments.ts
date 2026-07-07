@@ -20,6 +20,7 @@ import {
   type Comment,
   type CommentPatch,
   type CommentState,
+  type CommentType,
   type NewComment,
 } from "./api";
 
@@ -44,6 +45,10 @@ interface CommentsState {
   /** Whether the first-comment gitignore prompt is showing. */
   gitignorePromptOpen: boolean;
   setGitignorePrompt: (open: boolean) => void;
+  /** Last-picked composer type, so a run of same-type comments doesn't reset to
+   *  "note" on every open (session-scoped; an explicit `initialType` still wins). */
+  lastType: CommentType;
+  setLastType: (type: CommentType) => void;
   /** Id of the comment being manually re-anchored, or null. */
   reanchoringId: string | null;
   startReanchor: (id: string) => void;
@@ -92,6 +97,9 @@ export const useComments = create<CommentsState>((set, get) => ({
   activeId: null,
   gitignorePromptOpen: false,
   setGitignorePrompt: (open) => set({ gitignorePromptOpen: open }),
+
+  lastType: "note",
+  setLastType: (type) => set({ lastType: type }),
 
   reanchoringId: null,
   startReanchor: (id) => set({ reanchoringId: id, activeId: null }),

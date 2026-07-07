@@ -11,7 +11,7 @@ import { log, safeError } from "./logger";
 import { readProjectConfig, writeProjectConfig } from "./api";
 
 /** Settings that are meaningful to override per project. */
-const KEYS = ["wrap", "readingWidth", "focusMode", "codeFont", "versionReado"] as const;
+const KEYS = ["wrap", "focusMode", "codeFont", "versionReado"] as const;
 type Key = (typeof KEYS)[number];
 
 /** Apply a project's saved overrides over the current (global) settings. */

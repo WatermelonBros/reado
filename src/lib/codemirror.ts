@@ -58,10 +58,10 @@ const editorTheme = EditorView.theme({
     color: "var(--text)",
     backgroundColor: "transparent",
     height: "100%",
-    fontSize: "var(--text-md)",
   },
   ".cm-scroller": {
     fontFamily: "var(--code-font, var(--font-code))",
+    fontSize: "var(--code-font-size, var(--text-md))",
     lineHeight: "var(--code-line-height)",
   },
   ".cm-content": {
@@ -75,7 +75,13 @@ const editorTheme = EditorView.theme({
     border: "none",
     paddingRight: "var(--space-2)",
   },
-  ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--text-muted)" },
+  // The active line's number stands out clearly (ink + weight) against the faint
+  // gutter, so "active line" is legible in the gutter, not just the background.
+  ".cm-activeLineGutter": {
+    backgroundColor: "transparent",
+    color: "var(--accent)",
+    fontWeight: "600",
+  },
   ".cm-activeLine": { backgroundColor: "color-mix(in oklch, var(--bg-elevated) 60%, transparent)" },
   // PR review: lines the PR added/changed, marked inline (left bar + faint tint)
   // so the diff is visible without leaving the commentable code view.

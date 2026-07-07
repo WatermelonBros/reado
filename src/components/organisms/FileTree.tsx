@@ -376,7 +376,7 @@ function TreeNode({
   const open = useProject((s) => s.open);
   const active = useProject((s) => s.active);
   // Primitive selector → re-renders only when the icon mode actually flips.
-  const coloredIcons = useSettings((s) => s.fileIcons === "colored");
+  const iconMode = useSettings((s) => s.fileIcons);
   // Expansion lives in the store (persisted per project), keyed by the same
   // project-relative path the tree uses elsewhere, so a reopen restores it and
   // collapse-all (which clears expandedDirs) collapses everything.
@@ -473,7 +473,7 @@ function TreeNode({
           ) : (
             <span className="w-[13px] flex-none" />
           )}
-          <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} colored={coloredIcons} />
+          <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} mode={iconMode} />
           <span
             className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${
               dimmed ? "text-muted" : ""

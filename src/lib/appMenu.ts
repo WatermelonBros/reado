@@ -129,7 +129,6 @@ export const APP_MENUS: Menu[] = [
       { id: "view:wrap", label: "Toggle Word Wrap" },
       { id: "view:whitespace", label: "Render Whitespace" },
       { id: "view:focus", label: "Focus Mode" },
-      { id: "view:readingWidth", label: "Centered/Reading Layout" },
       { sep: true },
       { id: "graph", label: "Knowledge Graph" },
       { id: "docs", label: "Documentation" },
