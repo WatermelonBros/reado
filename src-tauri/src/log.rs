@@ -171,10 +171,17 @@ fn write_persisted_config(enabled: bool, level: u8) {
         .get()
         .and_then(|l| l.sink.lock().ok().map(|s| s.dir.clone()))
     {
-        let body = json!({ "enabled": enabled, "level": level_name(level) });
-        if let Ok(text) = serde_json::to_string(&body) {
-            let _ = fs::write(dir.join(CONFIG_FILE), text);
-        }
+        write_persisted_config_to(&dir, enabled, level);
+    }
+}
+
+/// Persist the config into a specific directory. Split out from
+/// `write_persisted_config` so tests can round-trip through a private tempdir
+/// instead of the global logger's shared file (which parallel tests race on).
+fn write_persisted_config_to(dir: &Path, enabled: bool, level: u8) {
+    let body = json!({ "enabled": enabled, "level": level_name(level) });
+    if let Ok(text) = serde_json::to_string(&body) {
+        let _ = fs::write(dir.join(CONFIG_FILE), text);
     }
 }
 
@@ -585,30 +592,21 @@ mod tests {
 
     #[test]
     fn persisted_config_round_trips() {
-        // `write_persisted_config` targets the *global* logger's directory, and
-        // `read_persisted_config` reads a directory we pass. To round-trip through
-        // both regardless of which tempdir the OnceLock logger actually points at,
-        // ensure a logger exists, write, then read back from the logger's own
-        // directory (derived from `current_path`), not our local tempdir.
+        // Round-trip through the real serialize/parse pair against a *private*
+        // tempdir. The public `write_persisted_config` targets the global logger's
+        // shared config file, which parallel tests race on (the flake that failed
+        // CI); using the dir-taking core keeps this test isolated and independent
+        // of the OnceLock logger.
         let dir = tempfile::tempdir().unwrap();
-        init(dir.path().to_path_buf(), None);
 
-        // The active logger may be one another test installed first, whose tempdir
-        // could already have been cleaned up. Recreate that directory before
-        // persisting so `write_persisted_config`'s `fs::write` can't silently fail
-        // — this keeps the round-trip order-independent under parallel tests.
-        let active = current_path().expect("logger initialised");
-        let cfg_dir = Path::new(&active).parent().unwrap().to_path_buf();
-        let _ = fs::create_dir_all(&cfg_dir);
-
-        write_persisted_config(false, LEVEL_DEBUG);
-        let (enabled, level) = read_persisted_config(&cfg_dir);
+        write_persisted_config_to(dir.path(), false, LEVEL_DEBUG);
+        let (enabled, level) = read_persisted_config(dir.path());
         assert!(!enabled);
         assert_eq!(level, LEVEL_DEBUG);
 
-        // Round-trip a different pairing to prove the mapping isn't hard-coded.
-        write_persisted_config(true, LEVEL_WARN);
-        let (enabled, level) = read_persisted_config(&cfg_dir);
+        // A different pairing proves the mapping isn't hard-coded.
+        write_persisted_config_to(dir.path(), true, LEVEL_WARN);
+        let (enabled, level) = read_persisted_config(dir.path());
         assert!(enabled);
         assert_eq!(level, LEVEL_WARN);
     }
