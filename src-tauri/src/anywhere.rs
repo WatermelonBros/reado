@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, Once};
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, Request, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
@@ -179,6 +179,36 @@ const XTERM_JS: &str = include_str!("vendor/xterm.js");
 const XTERM_CSS: &str = include_str!("vendor/xterm.css");
 const XTERM_FIT: &str = include_str!("vendor/addon-fit.js");
 
+/// The single inline `<script>` in the mobile HTML — the whole app logic. The
+/// vendor scripts use `<script src=…>`, so the only *bare* `<script>` is the app.
+/// Returns the exact text content the browser hashes for the CSP.
+fn inline_script() -> &'static str {
+    let open = "<script>";
+    let start = MOBILE_HTML
+        .find(open)
+        .map(|i| i + open.len())
+        .expect("mobile HTML must contain an inline <script>");
+    let end = MOBILE_HTML[start..]
+        .find("</script>")
+        .map(|i| start + i)
+        .expect("inline <script> must be closed");
+    &MOBILE_HTML[start..end]
+}
+
+/// The Content-Security-Policy for the mobile page. The app logic ships as one
+/// inline `<script>`, so `script-src` MUST allow it — we do so by its SHA-256
+/// hash (computed from the served HTML, so the policy can never drift from the
+/// script) rather than the blunt `'unsafe-inline'`. Without allowing it the
+/// browser silently blocks the script and the page renders as an empty shell
+/// (header only, empty tab bar and body).
+fn content_security_policy() -> String {
+    let hash = crate::fs::base64_encode(&Sha256::digest(inline_script().as_bytes()));
+    format!(
+        "default-src 'self'; script-src 'self' 'sha256-{hash}'; style-src 'self' 'unsafe-inline'; \
+         img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-src 'none'"
+    )
+}
+
 /// The login+interactive shell to spawn for a phone terminal, per platform.
 fn shell() -> (String, Vec<String>) {
     #[cfg(windows)]
@@ -267,19 +297,15 @@ async fn start_server(
     let js = |body: &'static str, ct: &'static str| {
         get(move || async move { ([(header::CONTENT_TYPE, ct)], body) })
     };
+    // Allow the app's inline <script> by its hash (see `content_security_policy`)
+    // — computed once here and served on the page.
+    let csp = HeaderValue::from_str(&content_security_policy()).expect("valid CSP header");
     let router = Router::new()
         .route(
             "/",
-            get(|| async {
-                (
-                    [(
-                        header::CONTENT_SECURITY_POLICY,
-                        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
-                         img-src 'self' data:; connect-src 'self'; object-src 'none'; \
-                         base-uri 'self'; frame-src 'none'",
-                    )],
-                    Html(MOBILE_HTML),
-                )
+            get(move || {
+                let csp = csp.clone();
+                async move { ([(header::CONTENT_SECURITY_POLICY, csp)], Html(MOBILE_HTML)) }
             }),
         )
         .route(
@@ -1136,5 +1162,35 @@ mod tests {
         assert!(safe_join("/root", "../etc/passwd").is_none());
         assert!(safe_join("/root", "src/main.rs").is_some());
         assert!(safe_join("/root", "").is_some());
+    }
+
+    #[test]
+    fn mobile_html_has_exactly_one_inline_script() {
+        // The CSP hash targets the single bare <script> (the app). The terminal
+        // vendor scripts must stay external (`src=`) so the hash addresses the
+        // right block. This guards the assumption `inline_script()` relies on.
+        assert_eq!(MOBILE_HTML.matches("<script>").count(), 1);
+        assert!(MOBILE_HTML.contains("<script src=\"/vendor/xterm.js\">"));
+        // The extracted block is really the app logic, not an empty/wrong slice.
+        assert!(inline_script().contains("reado_anywhere_token"));
+    }
+
+    #[test]
+    fn csp_allows_the_inline_app_script_by_hash() {
+        // Regression guard for the empty-shell bug: a strict `script-src 'self'`
+        // (no hash) silently blocks the inline app script and the mobile page
+        // renders as header-only. The served CSP must carry the script's SHA-256.
+        let hash = crate::fs::base64_encode(&Sha256::digest(inline_script().as_bytes()));
+        let csp = content_security_policy();
+        assert!(
+            csp.contains(&format!("script-src 'self' 'sha256-{hash}'")),
+            "CSP does not allow the inline script by hash: {csp}"
+        );
+        // It must NOT fall back to the blunt unsafe-inline for scripts…
+        assert!(!csp.contains("script-src 'self' 'unsafe-inline'"));
+        // …while the <style> block legitimately keeps style unsafe-inline.
+        assert!(csp.contains("style-src 'self' 'unsafe-inline'"));
+        // The value is a valid HTTP header value (no control chars, etc.).
+        assert!(HeaderValue::from_str(&csp).is_ok());
     }
 }

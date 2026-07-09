@@ -10,94 +10,98 @@
  * `FileIcon` renders a per-extension glyph for the file tree (Phosphor's File*
  * family), tinted by language colour in "colored" mode.
  */
-import type { Icon } from "@phosphor-icons/react";
+import type { Icon, IconWeight } from "@phosphor-icons/react";
 import {
-  CaretRight,
-  Triangle,
-  DeviceMobile,
-  ArrowsInLineVertical,
-  PuzzlePiece,
-  ArrowLineDown,
-  ArrowLineUp,
-  ArrowsClockwise,
-  Archive,
-  DotsThree,
-  MagnifyingGlass,
-  GearSix,
-  X,
-  Folder,
-  FolderOpen,
-  GitBranch,
-  Files,
-  Eye,
-  EyeSlash,
-  GitDiff,
-  PencilSimple,
-  LinkBreak,
-  BookOpen,
-  Graph,
-  PaperPlaneTilt,
-  Terminal,
-  Sparkle,
-  Signpost,
-  Swap,
-  SquareSplitHorizontal,
-  Layout,
-  Plus,
-  Fingerprint,
-  ListBullets,
-  ClipboardText,
-  Minus,
-  Compass,
-  ClockCounterClockwise,
-  TreeStructure,
-  BookmarkSimple,
-  Warning,
-  ArrowCounterClockwise,
-  ChatCircle,
+  CaretRightIcon as CaretRight,
+  TriangleIcon as Triangle,
+  DeviceMobileIcon as DeviceMobile,
+  ArrowsInLineVerticalIcon as ArrowsInLineVertical,
+  PuzzlePieceIcon as PuzzlePiece,
+  ArrowLineDownIcon as ArrowLineDown,
+  ArrowLineUpIcon as ArrowLineUp,
+  ArrowsClockwiseIcon as ArrowsClockwise,
+  ArrowsDownUpIcon as ArrowsDownUp,
+  ArchiveIcon as Archive,
+  DotsThreeIcon as DotsThree,
+  MagnifyingGlassIcon as MagnifyingGlass,
+  GearSixIcon as GearSix,
+  XIcon as X,
+  FolderIcon as Folder,
+  FolderOpenIcon as FolderOpen,
+  GitBranchIcon as GitBranch,
+  FilesIcon as Files,
+  EyeIcon as Eye,
+  EyeSlashIcon as EyeSlash,
+  GitDiffIcon as GitDiff,
+  PencilSimpleIcon as PencilSimple,
+  LinkBreakIcon as LinkBreak,
+  BookOpenIcon as BookOpen,
+  GraphIcon as Graph,
+  PaperPlaneTiltIcon as PaperPlaneTilt,
+  TerminalIcon as Terminal,
+  SparkleIcon as Sparkle,
+  SignpostIcon as Signpost,
+  SwapIcon as Swap,
+  SquareSplitHorizontalIcon as SquareSplitHorizontal,
+  LayoutIcon as Layout,
+  PlusIcon as Plus,
+  FingerprintIcon as Fingerprint,
+  ListBulletsIcon as ListBullets,
+  ClipboardTextIcon as ClipboardText,
+  MinusIcon as Minus,
+  CompassIcon as Compass,
+  ClockCounterClockwiseIcon as ClockCounterClockwise,
+  TreeStructureIcon as TreeStructure,
+  BookmarkSimpleIcon as BookmarkSimple,
+  WarningIcon as Warning,
+  TrashIcon as Trash,
+  ArrowCounterClockwiseIcon as ArrowCounterClockwise,
+  ChatCircleIcon as ChatCircle,
+  ChartDonutIcon as ChartDonut,
   // File-tree glyphs
-  File,
-  FileCode,
-  FileTs,
-  FileTsx,
-  FileJs,
-  FileJsx,
-  FileCss,
-  FileHtml,
-  FilePy,
-  FileC,
-  FileCpp,
-  FileCSharp,
-  FileRs,
-  FileVue,
-  FileSql,
-  FileMd,
-  FileSvg,
-  FileCsv,
-  FileTxt,
-  FileIni,
-  FilePng,
-  FileJpg,
-  FileImage,
-  FilePdf,
-  FileDoc,
-  FileXls,
-  FilePpt,
-  FileZip,
-  FileAudio,
-  FileVideo,
+  FileIcon as File,
+  FileCodeIcon as FileCode,
+  FileTsIcon as FileTs,
+  FileTsxIcon as FileTsx,
+  FileJsIcon as FileJs,
+  FileJsxIcon as FileJsx,
+  FileCssIcon as FileCss,
+  FileHtmlIcon as FileHtml,
+  FilePyIcon as FilePy,
+  FileCIcon as FileC,
+  FileCppIcon as FileCpp,
+  FileCSharpIcon as FileCSharp,
+  FileRsIcon as FileRs,
+  FileVueIcon as FileVue,
+  FileSqlIcon as FileSql,
+  FileMdIcon as FileMd,
+  FileSvgIcon as FileSvg,
+  FileCsvIcon as FileCsv,
+  FileTxtIcon as FileTxt,
+  FileIniIcon as FileIni,
+  FilePngIcon as FilePng,
+  FileJpgIcon as FileJpg,
+  FileImageIcon as FileImage,
+  FilePdfIcon as FilePdf,
+  FileDocIcon as FileDoc,
+  FileXlsIcon as FileXls,
+  FilePptIcon as FilePpt,
+  FileZipIcon as FileZip,
+  FileAudioIcon as FileAudio,
+  FileVideoIcon as FileVideo,
 } from "@phosphor-icons/react";
 
-type IconProps = { className?: string };
+type IconProps = { className?: string; weight?: IconWeight };
 
 /**
  * Adapt a Phosphor icon to Reado's `{ className }` component shape, with our
  * defaults: 16px, regular weight, `currentColor`. A caller's Tailwind size
- * classes still win — CSS width/height overrides the SVG size attribute.
+ * classes still win — CSS width/height overrides the SVG size attribute, and an
+ * optional `weight` lets a call site render e.g. the active tool as duotone.
  */
 const wrap = (P: Icon) => {
-  const Wrapped = ({ className }: IconProps) => (
-    <P size={16} weight="regular" className={className} aria-hidden="true" />
+  const Wrapped = ({ className, weight = "regular" }: IconProps) => (
+    <P size={16} weight={weight} className={className} aria-hidden="true" />
   );
   return Wrapped;
 };
@@ -110,6 +114,7 @@ export const ExtensionsIcon = wrap(PuzzlePiece);
 export const PullIcon = wrap(ArrowLineDown);
 export const PushIcon = wrap(ArrowLineUp);
 export const FetchIcon = wrap(ArrowsClockwise);
+export const SyncIcon = wrap(ArrowsDownUp);
 export const StashIcon = wrap(Archive);
 export const MoreIcon = wrap(DotsThree);
 export const SearchIcon = wrap(MagnifyingGlass);
@@ -135,6 +140,7 @@ export const LayoutIcon = wrap(Layout);
 export const PlusIcon = wrap(Plus);
 export const BlameIcon = wrap(Fingerprint);
 export const OutlineIcon = wrap(ListBullets);
+export const CoverageIcon = wrap(ChartDonut);
 export const SpecsIcon = wrap(ClipboardText);
 export const MinusIcon = wrap(Minus);
 export const TourIcon = wrap(Compass);
@@ -142,6 +148,7 @@ export const TimelineIcon = wrap(ClockCounterClockwise);
 export const HierarchyIcon = wrap(TreeStructure);
 export const BookmarkIcon = wrap(BookmarkSimple);
 export const ProblemsIcon = wrap(Warning);
+export const TrashIcon = wrap(Trash);
 export const DiscardIcon = wrap(ArrowCounterClockwise);
 export const MessageIcon = wrap(ChatCircle);
 

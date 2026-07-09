@@ -11,6 +11,7 @@ import { type MessageKey } from "../../i18n";
 import { COMMENT_TYPES, TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
 import { Checkbox } from "../atoms/Checkbox";
 import { Modal } from "../atoms/Modal";
+import { Textarea } from "../atoms/Textarea";
 import { useTranslation } from "react-i18next";
 
 export interface CommentTarget {
@@ -111,16 +112,15 @@ export function TreeCommentDialog({
         ))}
       </div>
 
-      <textarea
+      <Textarea
+        variant="plain"
         autoFocus
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") close();
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
-        }}
+        onSubmit={save}
+        onCancel={close}
         placeholder={t("comment.bodyPlaceholder")}
-        className="mt-2 block max-h-60 min-h-24 w-full resize-y bg-transparent px-4 py-2 text-sm text-ink outline-none placeholder:text-faint"
+        className="mt-2 max-h-60 min-h-24 px-4 py-2"
       />
 
       <div className="flex items-center justify-between border-t border-line px-4 py-2.5">

@@ -43,6 +43,7 @@ import { QaPanel } from "../organisms/QaPanel";
 import { ToursPanel, TourBar } from "../organisms/ToursPanel";
 import { PreReviewPanel } from "../organisms/PreReviewPanel";
 import { GuidedReviewPanel } from "../organisms/GuidedReviewPanel";
+import { CoveragePanel } from "../organisms/CoveragePanel";
 import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
@@ -60,8 +61,16 @@ import { DocsView } from "../organisms/DocsView";
 import { TerminalPanel } from "../organisms/TerminalPanel";
 import { useTerminals } from "../../lib/terminals";
 import { EyeIcon, EyeOffIcon, CloseIcon, SwapIcon, CollapseAllIcon } from "../atoms/icons";
+import { IconButton } from "../atoms/IconButton";
 import { useTranslation } from "react-i18next";
+import { createLogger, safeError } from "../../lib/logger";
+import { notifyError } from "../../lib/notice";
+import { t as translate } from "../../i18n";
 
+const log = createLogger("project");
+
+// Sidebar header title per tool. Every tool must be present (keys mirror the
+// ActivityBar label keys) — a missing entry rendered `t(undefined)` as the header.
 const PANEL_TITLE: Record<string, MessageKey> = {
   files: "files.panel",
   search: "search.placeholder",
@@ -70,6 +79,15 @@ const PANEL_TITLE: Record<string, MessageKey> = {
   git: "git.panel",
   orphans: "orphans.panel",
   specs: "specs.panel",
+  problems: "problems.panel",
+  bookmarks: "bookmarks.panel",
+  hierarchy: "hier.panel",
+  timeline: "timeline.panel",
+  qa: "qa.panel",
+  tours: "tours.panel",
+  prereview: "prereview.panel",
+  guidedreview: "guided.panel",
+  coverage: "coverage.panel",
   extensions: "ext.panel",
 };
 
@@ -104,7 +122,7 @@ export function ProjectView({ root }: { root: string }) {
     const session = useSettings.getState().restoreSession
       ? useSessions.getState().byRoot[root]
       : undefined;
-    init(root, { isRepo: false, branch: null }, session);
+    init(root, { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false }, session);
     restored.current = true;
     // Opened from an OS file association: open the requested file, then drop the
     // hash param so a reload doesn't re-open it.
@@ -126,10 +144,10 @@ export function ProjectView({ root }: { root: string }) {
       .then((f) => setTotalFiles(f.length))
       .catch(() => setTotalFiles(0));
     // Build the SQLite index on open if missing/stale (rebuildable cache).
-    rebuildIndex(root).catch(() => {});
+    rebuildIndex(root).catch((e) => log.warn("index rebuild failed", { error: safeError(e) }));
     gitInfo(root)
       .then(setGit)
-      .catch(() => {});
+      .catch((e) => log.warn("git info failed", { error: safeError(e) }));
   }, [root, init, setGit]);
 
   // Reload the specs list when files change on disk (mirrors the file tree), so
@@ -224,7 +242,9 @@ export function ProjectView({ root }: { root: string }) {
   // Watch the project and re-anchor a file's comments when it changes on disk
   // (external edits, or the agent's own writes).
   useEffect(() => {
-    startWatching(root).catch(() => {});
+    // A failed watcher silently breaks live refresh (external edits, agent writes
+    // won't show) — surface it so the user knows updates won't stream in.
+    startWatching(root).catch((e) => notifyError("project", translate("notice.watchFailed"), e));
     // Coalesce tree refreshes: a burst of file-changed events (e.g. an agent
     // bulk-editing) would otherwise trigger one full repo re-walk + tree re-list
     // per file. Debounce bumpTree() to fire once after the burst settles.
@@ -271,8 +291,8 @@ export function ProjectView({ root }: { root: string }) {
           .load(root)
           // The resolve loop tracks progress by watching comments resolve.
           .then(() => useResolveLoop.getState().sync(root))
-          .catch(() => {});
-        rebuildIndex(root).catch(() => {});
+          .catch((e) => log.warn("resolve-loop sync failed", { error: safeError(e) }));
+        rebuildIndex(root).catch((e) => log.warn("index rebuild failed", { error: safeError(e) }));
       }),
       // A guided review advanced (the agent planned a route or proposed an
       // artifact via the CLI) — reload sessions so the Review Guide stays live.
@@ -282,7 +302,9 @@ export function ProjectView({ root }: { root: string }) {
       // The branch changed on disk (e.g. `git checkout` in the terminal) — refresh
       // git state so the status bar shows the real branch.
       listen("git-changed", () => {
-        gitInfo(root).then(setGit).catch(() => {});
+        gitInfo(root)
+          .then(setGit)
+          .catch((e) => log.warn("git info failed", { error: safeError(e) }));
       }),
     ];
     return () => {
@@ -345,12 +367,15 @@ export function ProjectView({ root }: { root: string }) {
   // Drag the sidebar's right edge to resize. The panel starts after the 48px
   // activity bar, so its width tracks the cursor's x minus that offset. During
   // the drag we update local state for immediate feedback; the persisted store
-  // is written once on release.
+  // is written once on release. `clientX` is a viewport (visual) pixel but the
+  // width is a layout pixel inside the interface-zoom transform, so divide by the
+  // zoom to convert — otherwise the sidebar tracks the wrong width at zoom ≠ 1.
   const startSidebarResize = (e: React.PointerEvent) => {
     e.preventDefault();
     let latest = sidebarWidth;
+    const zoom = useSettings.getState().zoom || 1;
     const onMove = (ev: PointerEvent) => {
-      latest = ev.clientX - 48;
+      latest = ev.clientX / zoom - 48;
       setDragWidth(latest);
     };
     const onUp = () => {
@@ -364,9 +389,12 @@ export function ProjectView({ root }: { root: string }) {
   };
 
   // Clamp the applied (not persisted) width so the editor keeps a minimum size.
+  // Widths are layout pixels; `innerWidth` is a visual pixel, so convert it to the
+  // layout viewport width (innerWidth / zoom) before subtracting the min editor.
+  const zoom = useSettings((s) => s.zoom) || 1;
   const appliedSidebarWidth = Math.min(
     dragWidth ?? sidebarWidth,
-    window.innerWidth - MIN_EDITOR_WIDTH,
+    window.innerWidth / zoom - MIN_EDITOR_WIDTH,
   );
 
   return (
@@ -420,31 +448,25 @@ export function ProjectView({ root }: { root: string }) {
             </span>
             {tool === "files" && (
               <span className="flex items-center gap-0.5">
-                <button
-                  type="button"
+                <IconButton
+                  size="sm"
+                  label={t("tree.collapseAll")}
                   onClick={() => useProject.getState().collapseTree()}
-                  title={t("tree.collapseAll")}
-                  aria-label={t("tree.collapseAll")}
-                  className="grid h-6 w-6 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-ink"
-                >
-                  <CollapseAllIcon className="h-[15px] w-[15px]" />
-                </button>
-                <button
-                  type="button"
+                  icon={<CollapseAllIcon className="h-[15px] w-[15px]" />}
+                />
+                <IconButton
+                  size="sm"
+                  label={t("tree.showHidden")}
+                  active={showHidden}
                   onClick={() => setShowHidden(!showHidden)}
-                  aria-pressed={showHidden}
-                  title={t("tree.showHidden")}
-                  aria-label={t("tree.showHidden")}
-                  className={`grid h-6 w-6 place-items-center rounded-md transition-colors hover:bg-overlay hover:text-ink ${
-                    showHidden ? "text-accent" : "text-faint"
-                  }`}
-                >
-                  {showHidden ? (
-                    <EyeIcon className="h-[15px] w-[15px]" />
-                  ) : (
-                    <EyeOffIcon className="h-[15px] w-[15px]" />
-                  )}
-                </button>
+                  icon={
+                    showHidden ? (
+                      <EyeIcon className="h-[15px] w-[15px]" weight="duotone" />
+                    ) : (
+                      <EyeOffIcon className="h-[15px] w-[15px]" />
+                    )
+                  }
+                />
               </span>
             )}
           </header>
@@ -464,6 +486,7 @@ export function ProjectView({ root }: { root: string }) {
             {tool === "tours" && <ToursPanel />}
             {tool === "prereview" && <PreReviewPanel />}
             {tool === "guidedreview" && <GuidedReviewPanel />}
+            {tool === "coverage" && <CoveragePanel />}
             {tool === "extensions" && <ExtensionsPanel />}
           </div>
         </aside>

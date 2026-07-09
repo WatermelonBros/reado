@@ -39,6 +39,7 @@ import { lspStart, lspSend, lspStop, resolvePath } from "./api";
 import type { OutlineSymbol } from "./outline";
 import { useExtensions } from "./extensions";
 import { useDiagnostics } from "./diagnostics";
+import { notify } from "./notice";
 import { createLogger } from "./logger";
 
 const log = createLogger("lsp");
@@ -689,8 +690,26 @@ export function lspTypes(
 interface Conn {
   client: LSPClient;
   unlisten: Promise<UnlistenFn>;
+  exitUnlisten: Promise<UnlistenFn>;
 }
 const conns = new Map<string, Promise<Conn>>();
+
+// Connections we've already told the user crashed, so a flapping server notifies
+// at most once until it successfully reconnects (the flag is cleared on connect).
+const crashNotified = new Set<string>();
+
+/** Drop a connection and unsubscribe both its listeners (idempotent). */
+function dropConn(key: string): void {
+  const p = conns.get(key);
+  conns.delete(key);
+  if (!p) return;
+  void p
+    .then((c) => {
+      void c.unlisten.then((u) => u()).catch(() => {});
+      void c.exitUnlisten.then((u) => u()).catch(() => {});
+    })
+    .catch(() => {});
+}
 
 // Language servers run in the Rust backend and outlive a webview reload, but
 // this client's open-document state does not. After a reload the fresh CM
@@ -700,8 +719,11 @@ const conns = new Map<string, Promise<Conn>>();
 // goes away, so the next load spawns each server fresh.
 if (typeof window !== "undefined") {
   window.addEventListener("pagehide", () => {
-    for (const key of conns.keys()) void lspStop(key);
-    conns.clear();
+    // Clear the map first so the resulting exit events read as intentional.
+    for (const key of [...conns.keys()]) {
+      dropConn(key);
+      void lspStop(key);
+    }
   });
 }
 
@@ -715,10 +737,24 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
     // Spawn the server first; this throws if it isn't installed/allowed.
     await lspStart(key, server.id, root);
     log.info("client connected", { server: server.id });
+    crashNotified.delete(key); // fresh connection — a future crash may notify again
     const handlers = new Set<(v: string) => void>();
     const unlisten = listen<string>(`lsp-${key}`, (e) => {
       tapDiagnostics(e.payload);
       handlers.forEach((h) => h(e.payload));
+    });
+    // The backend signals a dead server here. If we didn't tear it down on
+    // purpose, drop the stale connection (so the next interaction reconnects a
+    // fresh server) and tell the user once — a crashed server otherwise breaks
+    // code intelligence silently.
+    const exitUnlisten = listen(`lsp-exit-${key}`, () => {
+      if (!conns.has(key)) return; // intentional stop already removed it
+      log.warn("language server exited unexpectedly", { server: server.id });
+      dropConn(key);
+      if (!crashNotified.has(key)) {
+        crashNotified.add(key);
+        notify("error", t("lsp.serverStopped", { name: server.id }));
+      }
     });
     await unlisten; // subscription live before we send `initialize`
     const transport: Transport = {
@@ -734,7 +770,7 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
       rootUri: toUri(root),
       extensions: clientExtensions(),
     }).connect(transport);
-    return { client, unlisten };
+    return { client, unlisten, exitUnlisten };
   })();
 
   conns.set(key, p);
@@ -794,12 +830,12 @@ export const hasServer = (path: string) => serverFor(path) !== null;
 // violation), which can wedge the editor in dev.
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    for (const [key, p] of conns) {
+    for (const key of [...conns.keys()]) {
       log.debug("client disconnected", { key });
-      void p.then((c) => c.unlisten.then((u) => u())).catch(() => {});
+      dropConn(key); // unlistens both subscriptions and removes from the map
       void lspStop(key).catch(() => {});
     }
-    conns.clear();
+    crashNotified.clear();
     useDiagnostics.getState().reset();
   });
 }

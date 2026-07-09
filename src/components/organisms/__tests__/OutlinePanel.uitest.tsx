@@ -80,12 +80,20 @@ describe("OutlinePanel", () => {
     expect(current?.className).toContain("bg-selection");
   });
 
-  it("prefers language-server symbols when available", async () => {
+  it("prefers language-server symbols and replaces the heuristic ones", async () => {
     vi.mocked(extractSymbols).mockReturnValue([{ name: "heuristic", kind: "function", line: 1 }]);
     vi.mocked(lspDocumentSymbols).mockReturnValue(
       Promise.resolve([{ name: "fromServer", kind: "class", line: 2 }]),
     );
     render(<OutlinePanel />);
+
+    // The heuristic symbols show first (synchronously).
+    expect(screen.getByText("heuristic")).toBeInTheDocument();
+
+    // Once the server responds its symbols appear...
     await waitFor(() => expect(screen.getByText("fromServer")).toBeInTheDocument());
+    // ...and REPLACE the heuristic ones — they must not both be present.
+    // (A bug that appends instead of `setSymbols(syms)` replacing would fail here.)
+    expect(screen.queryByText("heuristic")).not.toBeInTheDocument();
   });
 });

@@ -24,6 +24,7 @@ import { useProject, useSettings, useEditorActions } from "../../lib/store";
 import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
 
 import { ChevronIcon } from "../atoms/icons";
+import { Button } from "../atoms/Button";
 import { useTranslation } from "react-i18next";
 
 interface Props {
@@ -82,13 +83,9 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
       <div className="grid h-full place-items-center gap-3 p-8 text-center text-sm text-muted">
         {isDelta ? t("delta.noChanges") : t("diff.noChanges")}
         {isDelta && (
-          <button
-            type="button"
-            onClick={markReviewed}
-            className="rounded-md border border-line bg-surface px-3 py-1 text-xs text-ink hover:border-accent/40"
-          >
+          <Button variant="secondary" size="sm" onClick={markReviewed}>
             {t("delta.markReviewed")}
-          </button>
+          </Button>
         )}
       </div>
     );

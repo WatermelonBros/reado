@@ -61,7 +61,13 @@
     "readProgress": "{read} di {total} file letti",
     "readError": "Impossibile leggere questa cartella — controlla i permessi o che esista ancora.",
     "markFolderRead": "Segna cartella come letta",
-    "markFolderUnread": "Segna cartella come non letta"
+    "markFolderUnread": "Segna cartella come non letta",
+    "delete": "Elimina",
+    "deleted": "Spostato nel cestino — premi Ctrl/Cmd+Z per annullare",
+    "deleteFailed": "Impossibile spostare l'elemento nel cestino."
+  },
+  "undo": {
+    "failed": "Impossibile annullare l'ultima modifica ai file."
   },
   "editor": {
     "empty": "Seleziona un file dall'albero per iniziare a leggere.",
@@ -91,7 +97,8 @@
   "symbols": {
     "goto": "Vai al simbolo nel file…",
     "gotoWorkspace": "Vai al simbolo nel progetto…",
-    "placeholder": "Vai al simbolo…"
+    "placeholder": "Vai al simbolo…",
+    "empty": "Nessun simbolo trovato."
   },
   "peek": {
     "def": "Anteprima definizione",
@@ -116,6 +123,14 @@
     "remove": "Rimuovi segnalibro",
     "toggle": "Attiva/disattiva segnalibro",
     "goto": "Vai al segnalibro…"
+  },
+  "coverage": {
+    "panel": "Copertura di lettura",
+    "filesRead": "file letti",
+    "empty": "Ancora niente di letto. Segna i file come letti man mano — Reado mappa quanto hai coperto.",
+    "noFiles": "Nessun file leggibile in questo progetto.",
+    "changed": "Modificati dopo la lettura",
+    "rootBucket": "Radice del progetto"
   },
   "sync": {
     "export": "Esporta impostazioni (copia negli appunti)",
@@ -424,15 +439,23 @@
     "openComments": "Commenti aperti"
   },
   "palette": {
-    "placeholder": "Digita un comando…"
+    "placeholder": "Digita un comando…",
+    "noResults": "Nessun comando corrispondente."
   },
   "finder": {
-    "placeholder": "Vai al file…"
+    "placeholder": "Vai al file…",
+    "empty": "Nessun file corrisponde."
   },
   "search": {
     "placeholder": "Cerca nel progetto…",
     "noResults": "Nessun risultato.",
     "replacePlaceholder": "Sostituisci…",
+    "caseSensitive": "Maiuscole/minuscole",
+    "wholeWord": "Parola intera",
+    "regex": "Espressione regolare",
+    "prev": "Corrispondenza precedente",
+    "next": "Corrispondenza successiva",
+    "replaceOne": "Sostituisci",
     "replaceAll": "Sostituisci tutto",
     "replaceConfirm": "Conferma sostituzione",
     "replaced": "Sostituito in {count} file.",
@@ -559,7 +582,8 @@
     "hint": "Imposta Reado come handler per i file di testo e di codice. Su Windows apre il selettore di sistema.",
     "done": "Reado impostata come predefinita per {count} tipi di file.",
     "settings": "Ho aperto le impostazioni App predefinite di sistema — seleziona lì Reado.",
-    "manual": "Imposta Reado come predefinita dal file manager (tasto destro sul file → Apri con)."
+    "manual": "Imposta Reado come predefinita dal file manager (tasto destro sul file → Apri con).",
+    "failed": "Impossibile impostare Reado come app predefinita."
   },
   "sc": {
     "title": "Scorciatoie da tastiera",
@@ -700,11 +724,14 @@
     "stashDrop": "Elimina",
     "discardAll": "Scarta tutte le modifiche",
     "discardAllConfirm": "Scartare tutte le modifiche del working tree (inclusi i file non tracciati)? Non è reversibile.",
-    "stashDropConfirm": "Eliminare questo stash? L'operazione è irreversibile."
+    "stashDropConfirm": "Eliminare questo stash? L'operazione è irreversibile.",
+    "sync": "Sincronizza (pull e poi push)",
+    "syncConflicts": "Sync interrotto: {count} file con conflitti da risolvere. Correggili, fai commit e sincronizza di nuovo."
   },
   "lsp": {
     "createTask": "Crea task",
-    "createTaskFromProblem": "Crea task dal problema"
+    "createTaskFromProblem": "Crea task dal problema",
+    "serverStopped": "Il language server {name} si è arrestato. L'analisi del codice riprenderà alla prossima apertura o modifica di un file di quel linguaggio."
   },
   "file": {
     "newFile": "Nuovo file",
@@ -809,8 +836,16 @@
   "common": {
     "cancel": "Annulla",
     "close": "Chiudi",
+    "dismiss": "Ignora",
     "loading": "Caricamento…",
     "error": "Qualcosa è andato storto."
+  },
+  "notice": {
+    "saveFailed": "Impossibile salvare il file.",
+    "gitFailed": "Operazione git non riuscita.",
+    "watchFailed": "Impossibile monitorare le modifiche del progetto.",
+    "indexFailed": "Impossibile aggiornare l'indice dei commenti.",
+    "actionFailed": "Non ha funzionato."
   },
   "agent": {
     "notInstalled": "{name} non è installato. Installalo per usare le funzioni AI di Reado.",
@@ -823,5 +858,14 @@
     "zoomIn": "Ingrandisci",
     "zoomOut": "Riduci",
     "fit": "Adatta"
+  },
+  "menu": {
+    "needFile": "Apri prima un file.",
+    "needSelection": "Seleziona prima del testo.",
+    "needBack": "Niente a cui tornare indietro.",
+    "needForward": "Niente a cui andare avanti.",
+    "needReopen": "Nessun editor chiuso di recente da riaprire.",
+    "needTerminal": "Apri prima un terminale.",
+    "needProblems": "Nessun problema a cui saltare."
   }
 }

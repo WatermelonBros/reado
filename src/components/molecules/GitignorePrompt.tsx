@@ -11,6 +11,7 @@ import { useComments } from "../../lib/comments";
 import { useProject, useSettings } from "../../lib/store";
 
 import { Modal } from "../atoms/Modal";
+import { Button } from "../atoms/Button";
 import { Checkbox } from "../atoms/Checkbox";
 import { useTranslation } from "react-i18next";
 
@@ -50,20 +51,12 @@ export function GitignorePrompt() {
       />
 
       <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={close}
-          className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink hover:border-line-strong"
-        >
+        <Button variant="secondary" onClick={close}>
           {t("gitignore.keep")}
-        </button>
-        <button
-          type="button"
-          onClick={add}
-          className="rounded-md border-transparent bg-accent px-3 py-2 text-sm font-semibold text-on-accent hover:brightness-110"
-        >
+        </Button>
+        <Button variant="primary" onClick={add}>
           {t("gitignore.add")}
-        </button>
+        </Button>
       </div>
     </Modal>
   );

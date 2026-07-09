@@ -17,45 +17,26 @@ const log = createLogger("settingsSync");
 
 const BUNDLE_VERSION = 1;
 
-/** The settings fields that travel between machines (everything user-facing and
- *  machine-independent). `set` and any transient fields are excluded. */
-const SETTINGS_KEYS = [
-  "theme",
-  "lightTheme",
-  "darkTheme",
-  "mode",
-  "codeFont",
-  "fontSize",
-  "lineHeight",
-  "lineNumbers",
-  "activeLine",
-  "indentGuides",
-  "bracketMatching",
-  "rulerColumn",
-  "reduceMotion",
-  "tabBar",
-  "scrollbar",
-  "cursorStyle",
-  "cursorBlink",
-  "showResolvedComments",
-  "inlineDiagnostics",
-  "excludeGlobs",
-  "restoreSession",
-  "trimTrailingWhitespace",
-  "insertFinalNewline",
-  "focusMode",
-  "wrap",
-  "stickyScroll",
-  "zoom",
-  "versionReado",
-  "gitignoreDontAsk",
-  "completionSound",
-  "autoSave",
-  "showActivityBar",
-  "showStatusBar",
-  "showBreadcrumbs",
-  "renderWhitespace",
-] as const satisfies readonly (keyof SettingsState)[];
+/**
+ * Fields that must NOT travel between machines. Everything else in `SettingsState`
+ * is machine-independent user preference and syncs automatically — so a new
+ * setting is included by default rather than being silently dropped until someone
+ * remembers to add it to a whitelist. Excluded: the store action, and machine-
+ * local state that would be wrong to carry over (the OS default-app prompt was
+ * dismissed *on this machine*). `settingsSyncCoversAllKeys` (see the test) guards
+ * this invariant so a future field can't slip through unclassified.
+ */
+export const SETTINGS_EXCLUDED: ReadonlySet<keyof SettingsState> = new Set([
+  "set",
+  "defaultAppsDismissed",
+]);
+
+/** The settings fields that travel between machines, derived from live state. */
+export function syncableKeys(s: SettingsState): (keyof SettingsState)[] {
+  return (Object.keys(s) as (keyof SettingsState)[]).filter(
+    (k) => !SETTINGS_EXCLUDED.has(k) && typeof s[k] !== "function",
+  );
+}
 
 interface Bundle {
   version: number;
@@ -66,7 +47,7 @@ interface Bundle {
 export function buildBundle(): Bundle {
   const s = useSettings.getState();
   const settings = Object.fromEntries(
-    SETTINGS_KEYS.map((k) => [k, s[k]]),
+    syncableKeys(s).map((k) => [k, s[k]]),
   ) as Partial<SettingsState>;
   return { version: BUNDLE_VERSION, settings, extensionsDisabled: useExtensions.getState().disabled };
 }

@@ -88,6 +88,7 @@ pub fn run() {
         .manage(anywhere::AnywhereState::default())
         .manage(lsp::LspState::default())
         .manage(git::BlameCache::default())
+        .manage(symbols::SymbolCache::default())
         .manage(menu::LastFocused::default())
         .on_window_event(|window, event| {
             use tauri::Manager;
@@ -124,6 +125,7 @@ pub fn run() {
             fs::write_file,
             fs::create_file,
             fs::move_path,
+            fs::trash_path,
             fs::import_paths,
             fs::resolve_import,
             fs::resolve_path,
@@ -148,6 +150,7 @@ pub fn run() {
             git::git_fetch,
             git::git_pull,
             git::git_push,
+            git::git_sync,
             git::git_stash,
             git::git_stash_list,
             git::git_stash_pop,

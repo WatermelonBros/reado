@@ -73,6 +73,21 @@ describe("useProject — tabs", () => {
     P().close("a.ts");
     expect(P().active).toBe("b.ts");
   });
+  it("moveTab reorders: before a target, to the end, and ignores no-ops", () => {
+    P().open("a.ts");
+    P().open("b.ts");
+    P().open("c.ts");
+    // Move c before a.
+    P().moveTab("c.ts", "a.ts");
+    expect(P().tabs).toEqual(["c.ts", "a.ts", "b.ts"]);
+    // Move c to the end (beforePath null).
+    P().moveTab("c.ts", null);
+    expect(P().tabs).toEqual(["a.ts", "b.ts", "c.ts"]);
+    // No-op and unknown path leave the order unchanged.
+    P().moveTab("a.ts", "a.ts");
+    P().moveTab("zzz.ts", "a.ts");
+    expect(P().tabs).toEqual(["a.ts", "b.ts", "c.ts"]);
+  });
   it("reopenClosed restores the last closed tab", () => {
     P().open("a.ts");
     P().close("a.ts");
@@ -167,7 +182,7 @@ describe("useProject — history & split", () => {
     expect(P().splitPath).toBeNull();
   });
   it("init seeds tabs/active/history from a session", () => {
-    P().init("/root", { isRepo: true, branch: "main" }, { id: "s", tabs: ["x.ts"], active: "x.ts" } as never);
+    P().init("/root", { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false }, { id: "s", tabs: ["x.ts"], active: "x.ts" } as never);
     expect(P().root).toBe("/root");
     expect(P().git.branch).toBe("main");
     expect(P().tabs).toEqual(["x.ts"]);
@@ -289,5 +304,109 @@ describe("useCursor / useRecents / useSessions", () => {
     expect(useRecents.getState().projects[0].path).toBe("/a");
     useRecents.getState().remove("/a");
     expect(useRecents.getState().projects.find((p) => p.path === "/a")).toBeUndefined();
+  });
+});
+
+describe("useSessions — save preserves per-file state", () => {
+  const S = () => useSessions.getState();
+  it("save (tabs/active) does NOT wipe scroll/cursor/expanded/split", () => {
+    // Seed a session that already carries scroll + cursor + drill-down + split.
+    useSessions.setState({
+      byRoot: {
+        "/root": {
+          tabs: ["a.ts"],
+          active: "a.ts",
+          scroll: { "a.ts": 120 },
+          cursor: { "a.ts": { line: 4, col: 2 } },
+          expanded: ["src"],
+          split: "b.ts",
+        },
+      },
+    } as never);
+    // A plain tab save (no scroll/cursor/expanded/split on the payload).
+    S().save("/root", { tabs: ["a.ts", "b.ts"], active: "b.ts" });
+    const sess = S().byRoot["/root"];
+    // Tabs/active updated…
+    expect(sess.tabs).toEqual(["a.ts", "b.ts"]);
+    expect(sess.active).toBe("b.ts");
+    // …but the preserved-via-`?? prev` fields survive (regression guard).
+    expect(sess.scroll).toEqual({ "a.ts": 120 });
+    expect(sess.cursor).toEqual({ "a.ts": { line: 4, col: 2 } });
+    expect(sess.expanded).toEqual(["src"]);
+    expect(sess.split).toBe("b.ts");
+  });
+
+  it("saveScroll updates only scroll and keeps tabs/active/cursor", () => {
+    useSessions.setState({
+      byRoot: {
+        "/root": {
+          tabs: ["a.ts"],
+          active: "a.ts",
+          scroll: { "a.ts": 10 },
+          cursor: { "a.ts": { line: 1, col: 1 } },
+        },
+      },
+    } as never);
+    S().saveScroll("/root", "b.ts", 250);
+    const sess = S().byRoot["/root"];
+    // New scroll entry merged in, existing one kept.
+    expect(sess.scroll).toEqual({ "a.ts": 10, "b.ts": 250 });
+    // Everything else untouched.
+    expect(sess.tabs).toEqual(["a.ts"]);
+    expect(sess.active).toBe("a.ts");
+    expect(sess.cursor).toEqual({ "a.ts": { line: 1, col: 1 } });
+  });
+
+  it("saveCursor merges a cursor without touching scroll", () => {
+    useSessions.setState({
+      byRoot: { "/root": { tabs: ["a.ts"], active: "a.ts", scroll: { "a.ts": 10 } } },
+    } as never);
+    S().saveCursor("/root", "a.ts", 7, 3);
+    const sess = S().byRoot["/root"];
+    expect(sess.cursor).toEqual({ "a.ts": { line: 7, col: 3 } });
+    expect(sess.scroll).toEqual({ "a.ts": 10 });
+  });
+});
+
+describe("useWorkspace — setCommentFilter (partial patch)", () => {
+  const W = () => useWorkspace.getState();
+  it("patches one field and leaves the others intact", () => {
+    useWorkspace.setState({
+      commentFilter: { view: "open", type: "all", state: "all", thisFile: false },
+    });
+    W().setCommentFilter({ type: "bug" });
+    expect(W().commentFilter).toEqual({
+      view: "open",
+      type: "bug",
+      state: "all",
+      thisFile: false,
+    });
+    // A second patch on a different field composes without resetting the first.
+    W().setCommentFilter({ thisFile: true });
+    expect(W().commentFilter).toEqual({
+      view: "open",
+      type: "bug",
+      state: "all",
+      thisFile: true,
+    });
+  });
+});
+
+describe("useProject — toggleDir (tree drill-down)", () => {
+  const P = () => useProject.getState();
+  beforeEach(() => useProject.setState({ expandedDirs: [] }));
+  it("toggling adds then removes a dir from expandedDirs", () => {
+    P().toggleDir("src");
+    expect(P().expandedDirs).toEqual(["src"]);
+    P().toggleDir("src");
+    expect(P().expandedDirs).toEqual([]);
+  });
+  it("explicit open flag is idempotent (no-op when already in that state)", () => {
+    P().toggleDir("src", true);
+    const first = P().expandedDirs;
+    P().toggleDir("src", true); // already open → no state change
+    expect(P().expandedDirs).toBe(first);
+    P().toggleDir("src", false);
+    expect(P().expandedDirs).toEqual([]);
   });
 });

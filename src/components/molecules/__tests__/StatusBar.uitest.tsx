@@ -13,9 +13,18 @@ const api = vi.hoisted(() => ({
     remote: ["origin/main"],
   })),
   gitCheckout: vi.fn(async () => {}),
-  gitInfo: vi.fn(async () => ({ isRepo: true, branch: "dev" })),
+  gitInfo: vi.fn(async () => ({ isRepo: true, branch: "dev", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false })),
 }));
 vi.mock("../../../lib/api", () => api);
+
+// The editor-command edges the status bar drives (go to line, convert line
+// endings) are no-ops without a live CodeMirror view, so we spy on them at the
+// module boundary while keeping the real `useDocInfo` store the other tests use.
+const docEdge = vi.hoisted(() => ({ goToLine: vi.fn(), convertEol: vi.fn() }));
+vi.mock("../../../lib/docInfo", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../lib/docInfo")>();
+  return { ...actual, goToLine: docEdge.goToLine, convertEol: docEdge.convertEol };
+});
 
 import { StatusBar } from "../StatusBar";
 import { useProject, useCursor, usePalette } from "../../../lib/store";
@@ -27,16 +36,17 @@ function setActiveFile() {
   useProject.setState({
     root: "/repo",
     active: "/repo/src/app/main.ts",
-    git: { isRepo: true, branch: "main" },
+    git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false },
   });
 }
 
 beforeEach(() => {
   Object.values(api).forEach((f) => f.mockClear());
+  Object.values(docEdge).forEach((f) => f.mockClear());
   useProject.setState({
     root: "/repo",
     active: null,
-    git: { isRepo: false, branch: null },
+    git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false },
   });
   useCursor.setState({ line: 1, col: 1 });
   useComments.setState({ comments: [] });
@@ -93,7 +103,9 @@ describe("StatusBar with an active file", () => {
     await userEvent.click(screen.getByTitle("status.goToLine"));
     const input = screen.getByPlaceholderText("status.goToLinePlaceholder");
     await userEvent.type(input, "42{Enter}");
-    // The popover closes after submit (no-op goToLine with no editor view).
+    // Enter parses the field and jumps the editor to that 1-based line.
+    expect(docEdge.goToLine).toHaveBeenCalledWith(42);
+    // ...and the popover closes after submit.
     expect(screen.queryByPlaceholderText("status.goToLinePlaceholder")).not.toBeInTheDocument();
   });
 
@@ -111,12 +123,15 @@ describe("StatusBar with an active file", () => {
     expect(useDocInfo.getState().indentSize).toBe(4);
   });
 
-  it("opens the line-ending popover and closes it on selecting an option", async () => {
+  it("converts the line endings when a different option is chosen", async () => {
     render(<StatusBar />);
     await userEvent.click(screen.getByTitle("status.eol"));
     // "CRLF" only exists as a popover option (the toggle shows the current "LF").
     expect(screen.getByRole("button", { name: "CRLF" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "CRLF" }));
+    // Picking a non-current option rewrites the file with those endings...
+    expect(docEdge.convertEol).toHaveBeenCalledWith("CRLF");
+    // ...and the popover closes.
     expect(screen.queryByRole("button", { name: "CRLF" })).not.toBeInTheDocument();
   });
 

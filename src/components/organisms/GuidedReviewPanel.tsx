@@ -18,8 +18,7 @@ import {
 } from "../../lib/guidedReview";
 import { useForge } from "../../lib/forge";
 import { useComments } from "../../lib/comments";
-import { dispatchToAgent, sanitizePromptText } from "../../lib/agents";
-import { composeReviewRequestPrompt } from "../../lib/review";
+import { sanitizePromptText } from "../../lib/agents";
 import { gitBranches } from "../../lib/api";
 import type {
   FileState,
@@ -28,10 +27,12 @@ import type {
   Session,
   Verdict,
 } from "../../lib/api";
+import { Button } from "../atoms/Button";
 import { TYPE_COLOR } from "../atoms/commentMeta";
 import { RouteIcon, SparkleIcon } from "../atoms/icons";
 import { Select } from "../atoms/Select";
 import { ResolveLoopBar } from "../molecules/ResolveLoopBar";
+import { Textarea } from "../atoms/Textarea";
 import { type MessageKey } from "../../i18n";
 
 /** What a new review runs over. Three are git-scoped (a concrete file set); the
@@ -198,7 +199,10 @@ function EmptyState({ root }: { root: string }) {
       const pr = useForge.getState().prs.find((p) => p.number === prNumber);
       if (pr) void useForge.getState().openPr(root, pr, objective);
     } else if (source === "prompt" && promptText.trim())
-      void dispatchToAgent(composeReviewRequestPrompt(sanitizePromptText(promptText)));
+      // A free-text request is still a full guided-review workflow: start a
+      // session scoped to the request so the agent plans a route and proposes
+      // artifacts, rather than a one-off that just scatters comments.
+      void start(root, { kind: "prompt", request: sanitizePromptText(promptText) }, objective);
   };
 
   return (
@@ -234,11 +238,11 @@ function EmptyState({ root }: { root: string }) {
       {source === "prompt" && (
         <label className="flex flex-col gap-1 text-xs text-faint">
           {t("guided.reviewPromptHint")}
-          <textarea
+          <Textarea
             value={promptText}
             onChange={(e) => setPromptText(e.target.value)}
             placeholder={t("guided.reviewPromptPlaceholder")}
-            className="h-28 resize-none rounded-md border border-line bg-surface p-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-line-strong"
+            className="h-28 resize-none p-2.5"
           />
         </label>
       )}
@@ -260,14 +264,9 @@ function EmptyState({ root }: { root: string }) {
         />
       </label>
 
-      <button
-        type="button"
-        onClick={onStart}
-        disabled={!canStart}
-        className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
-      >
+      <Button variant="primary" size="sm" onClick={onStart} disabled={!canStart}>
         {t("guided.startReview")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -582,14 +581,14 @@ function SessionView({ root, session }: { root: string; session: Session }) {
         {session.scope.kind === "pr" ? (
           <PrSubmit root={root} session={session} />
         ) : (
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             disabled={acceptedTasks.length === 0}
             onClick={() => void store().sendTasks(root, session.id)}
-            className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-40"
           >
             {t("guided.sendTasks", { count: acceptedTasks.length })}
-          </button>
+          </Button>
         )}
         <div className="flex items-center justify-between">
           {session.status !== "done" ? (
@@ -743,11 +742,11 @@ function ProposalRow({
       </div>
 
       {editing ? (
-        <textarea
+        <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={3}
-          className="mt-1 w-full resize-none rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink outline-none focus:border-accent"
+          className="mt-1 resize-none px-2 py-1 text-xs focus:border-accent"
         />
       ) : (
         <p className="mt-1 text-xs leading-snug break-words [overflow-wrap:anywhere] text-ink">

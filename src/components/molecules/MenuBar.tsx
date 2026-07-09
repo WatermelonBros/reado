@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { APP_MENUS } from "../../lib/appMenu";
-import { runMenuCommand } from "../../lib/menu";
+import { runMenuCommand, menuCommandEnabled } from "../../lib/menu";
 
 export function MenuBar() {
   const [open, setOpen] = useState<number | null>(null);
@@ -65,7 +65,8 @@ export function MenuBar() {
                     key={j}
                     type="button"
                     onClick={() => run(it.id)}
-                    className="block w-full px-3 py-1 text-left text-xs text-ink transition-colors hover:bg-surface"
+                    disabled={!menuCommandEnabled(it.id)}
+                    className="block w-full px-3 py-1 text-left text-xs text-ink transition-colors hover:bg-surface disabled:pointer-events-none disabled:opacity-40"
                   >
                     {it.label}
                   </button>

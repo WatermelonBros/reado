@@ -19,7 +19,7 @@ function setProject(over: Partial<ReturnType<typeof useProject.getState>> = {}) 
   useProject.setState({
     root: "/repo",
     active: "/repo/src/app/main.ts",
-    git: { isRepo: true, branch: "main" },
+    git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false },
     navStack: [{ path: "/repo/src/app/main.ts" }],
     navIndex: 0,
     ...over,
@@ -99,7 +99,7 @@ describe("Breadcrumb", () => {
   });
 
   it("hides git-only controls when the project is not a repo", () => {
-    setProject({ git: { isRepo: false, branch: null } });
+    setProject({ git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false } });
     render(<Breadcrumb />);
     expect(screen.queryByRole("button", { name: "blame.toggle" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "diff.toggle" })).not.toBeInTheDocument();

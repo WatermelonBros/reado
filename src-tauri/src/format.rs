@@ -161,4 +161,47 @@ mod tests {
 
         assert!(candidates_for("/x", "a.unknownext").is_empty());
     }
+
+    #[test]
+    fn orders_candidates_by_preference() {
+        // `picks_candidates_by_extension` uses `.iter().any(...)`, which is blind
+        // to order — a reversed `push` would still pass it. Pin the ORDER by
+        // index so a preference regression (Prettier before Biome, black before
+        // ruff) fails here.
+
+        // Web: Biome must come before Prettier.
+        let ts = candidates_for("/x", "a.ts");
+        assert!(
+            ts[0].program.ends_with("biome"),
+            "biome must be tried first"
+        );
+        assert!(
+            ts[1].program.ends_with("prettier"),
+            "prettier must be the fallback after biome"
+        );
+
+        // Python: ruff must precede black.
+        let py = candidates_for("/x", "a.py");
+        assert_eq!(py[0].program, "ruff", "ruff must be tried before black");
+        assert_eq!(py[1].program, "black", "black is the fallback after ruff");
+    }
+
+    #[test]
+    fn prefers_project_local_bin() {
+        // A project-local `node_modules/.bin/biome` must win over the bare global
+        // `biome` on PATH — that local-first preference is the point of
+        // `local_bin`, and the string-equality assertions below would break if it
+        // regressed to always emitting the bare program name.
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("node_modules").join(".bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("biome"), "#!/bin/sh\n").unwrap();
+        let root = dir.path().to_str().unwrap();
+
+        let ts = candidates_for(root, "a.ts");
+        let local = bin.join("biome");
+        // First candidate is the absolute project-local binary, not bare "biome".
+        assert_eq!(ts[0].program.as_str(), local.to_string_lossy().as_ref());
+        assert_ne!(ts[0].program, "biome");
+    }
 }

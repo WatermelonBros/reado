@@ -5,12 +5,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { runMenuCommand } = vi.hoisted(() => ({ runMenuCommand: vi.fn() }));
-vi.mock("../../../lib/menu", () => ({ runMenuCommand }));
+const { runMenuCommand, menuCommandEnabled } = vi.hoisted(() => ({
+  runMenuCommand: vi.fn(),
+  menuCommandEnabled: vi.fn((_id: string) => true),
+}));
+vi.mock("../../../lib/menu", () => ({ runMenuCommand, menuCommandEnabled }));
 
 import { MenuBar } from "../MenuBar";
 
-beforeEach(() => runMenuCommand.mockClear());
+beforeEach(() => {
+  runMenuCommand.mockClear();
+  menuCommandEnabled.mockReset().mockReturnValue(true);
+});
 
 describe("MenuBar", () => {
   it("renders the top-level menu labels", () => {
@@ -43,6 +49,17 @@ describe("MenuBar", () => {
     await userEvent.click(screen.getByRole("button", { name: "New File…" }));
     expect(runMenuCommand).toHaveBeenCalledWith("newFile");
     expect(screen.queryByRole("button", { name: "Open File…" })).not.toBeInTheDocument();
+  });
+
+  it("greys out (and won't dispatch) a command whose precondition isn't met", async () => {
+    // Disable "Save" only.
+    menuCommandEnabled.mockImplementation((id: string) => id !== "save");
+    render(<MenuBar />);
+    await userEvent.click(screen.getByRole("button", { name: "File" }));
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    await userEvent.click(save);
+    expect(runMenuCommand).not.toHaveBeenCalled();
   });
 
   it("hovering another label switches the open menu", async () => {

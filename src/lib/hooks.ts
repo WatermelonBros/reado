@@ -10,6 +10,7 @@ import {
   type ThemeName,
 } from "./store";
 import { useTerminals } from "./terminals";
+import { useFileUndo } from "./fileUndo";
 import { useExtensions } from "./extensions";
 import { formatDocument, nextProblem, prevProblem } from "./docInfo";
 import { useReadProgress } from "./readProgress";
@@ -235,6 +236,18 @@ export function useGlobalShortcuts(): void {
         // Toggle the sidebar.
         e.preventDefault();
         useWorkspace.getState().toggleSidebar();
+      } else if (key === "z" && !e.shiftKey) {
+        // Undo the last file operation (move / delete). The editor and text
+        // inputs own their own undo, so defer to them when focused.
+        const el = document.activeElement as HTMLElement | null;
+        const inField =
+          !!el?.closest?.(".cm-editor") ||
+          el?.tagName === "INPUT" ||
+          el?.tagName === "TEXTAREA" ||
+          !!el?.isContentEditable;
+        if (inField) return;
+        e.preventDefault();
+        void useFileUndo.getState().undo();
       } else if (key === "t" && e.shiftKey) {
         // Reopen the most recently closed tab.
         e.preventDefault();

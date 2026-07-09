@@ -4,6 +4,7 @@ import { gitRefs, type GitRefs } from "../../lib/api";
 import { useProject, useEditorActions } from "../../lib/store";
 
 import { ChevronIcon, DiffIcon, BlameIcon, SparkleIcon } from "../atoms/icons";
+import { IconButton } from "../atoms/IconButton";
 import { Select } from "../atoms/Select";
 import { useSynopsis } from "../../lib/synopsis";
 import { useTranslation } from "react-i18next";
@@ -53,26 +54,20 @@ export function Breadcrumb() {
       className="flex flex-none items-center gap-0.5 border-b border-line bg-canvas px-4 py-2 text-xs text-faint select-none"
     >
       <div className="mr-1.5 flex flex-none items-center gap-0.5">
-        <button
-          type="button"
+        <IconButton
+          label={t("nav.back")}
+          icon={<ChevronIcon className="h-[13px] w-[13px] rotate-180" />}
           onClick={goBack}
           disabled={navIndex <= 0}
-          title={t("nav.back")}
-          aria-label={t("nav.back")}
-          className="grid h-6 w-6 place-items-center rounded-md text-faint transition-colors hover:bg-surface hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
-        >
-          <ChevronIcon className="h-[13px] w-[13px] rotate-180" />
-        </button>
-        <button
-          type="button"
+          size="sm"
+        />
+        <IconButton
+          label={t("nav.forward")}
+          icon={<ChevronIcon className="h-[13px] w-[13px]" />}
           onClick={goForward}
           disabled={navIndex >= navStack.length - 1}
-          title={t("nav.forward")}
-          aria-label={t("nav.forward")}
-          className="grid h-6 w-6 place-items-center rounded-md text-faint transition-colors hover:bg-surface hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
-        >
-          <ChevronIcon className="h-[13px] w-[13px]" />
-        </button>
+          size="sm"
+        />
       </div>
 
       {segments.map((seg, i) => (
@@ -100,43 +95,30 @@ export function Breadcrumb() {
           />
         )}
         {!diffing && (
-          <button
-            type="button"
+          <IconButton
+            label={t("synopsis.open")}
+            icon={<SparkleIcon className="h-3.5 w-3.5" />}
             onClick={() => useSynopsis.getState().show(rel)}
-            title={t("synopsis.open")}
-            aria-label={t("synopsis.open")}
-            className="grid h-6 w-6 place-items-center rounded-md text-faint transition-colors hover:bg-surface hover:text-ink"
-          >
-            <SparkleIcon className="h-3.5 w-3.5" />
-          </button>
+            size="sm"
+          />
         )}
         {isRepo && !diffing && (
-          <button
-            type="button"
+          <IconButton
+            label={t("blame.toggle")}
+            icon={<BlameIcon className="h-3.5 w-3.5" weight={blame ? "duotone" : "regular"} />}
             onClick={() => setBlame(!blame)}
-            aria-pressed={blame}
-            title={t("blame.toggle")}
-            aria-label={t("blame.toggle")}
-            className={`grid h-6 w-6 place-items-center rounded-md transition-colors hover:bg-surface ${
-              blame ? "text-accent" : "text-faint hover:text-ink"
-            }`}
-          >
-            <BlameIcon className="h-3.5 w-3.5" />
-          </button>
+            active={blame}
+            size="sm"
+          />
         )}
         {isRepo && (
-          <button
-            type="button"
+          <IconButton
+            label={t("diff.toggle")}
+            icon={<DiffIcon className="h-3.5 w-3.5" weight={diffing ? "duotone" : "regular"} />}
             onClick={() => setDiffing(!diffing)}
-            aria-pressed={diffing}
-            title={t("diff.toggle")}
-            aria-label={t("diff.toggle")}
-            className={`grid h-6 w-6 place-items-center rounded-md transition-colors hover:bg-surface ${
-              diffing ? "text-accent" : "text-faint hover:text-ink"
-            }`}
-          >
-            <DiffIcon className="h-3.5 w-3.5" />
-          </button>
+            active={diffing}
+            size="sm"
+          />
         )}
       </div>
     </nav>

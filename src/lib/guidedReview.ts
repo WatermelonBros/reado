@@ -60,10 +60,12 @@ const SCOPE_LABEL: Record<ReviewScope["kind"], string> = {
   comments: "open comments",
   project: "the whole project",
   pr: "a pull/merge request",
+  prompt: "the requested review",
 };
 
 /** A short human description of a scope, for the agent's planning prompt. */
 function scopeDesc(scope: ReviewScope): string {
+  if (scope.kind === "prompt" && scope.request) return scope.request;
   if (scope.kind === "pr" && scope.pr) return `PR ${scope.pr}`;
   if (scope.kind === "branch" && scope.base) return `this branch vs ${scope.base}`;
   if ((scope.kind === "folder" || scope.kind === "files") && scope.paths?.length)

@@ -2,11 +2,19 @@
  * The Search side panel: full-text project search via ripgrep, with results
  * grouped by file. Selecting a result navigates the editor to that line.
  */
-import { useEffect, useState } from "react";
-import { searchText, replaceText, type SearchMatch } from "../../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { searchText, replaceText, type SearchMatch, type SearchOpts } from "../../lib/api";
 import { useProject, useWorkspace } from "../../lib/store";
 import { toRelative } from "../../lib/comments";
+import { Textarea } from "../atoms/Textarea";
 import { useTranslation } from "react-i18next";
+
+/** Enter searches live; Shift+Enter inserts a newline (multi-line snippets). */
+const multilineKeys = (e: React.KeyboardEvent) => {
+  if (e.key === "Enter" && !e.shiftKey) e.preventDefault();
+};
+/** Grow the box with its content, 1–6 rows. */
+const rowsFor = (text: string) => Math.min(6, Math.max(1, text.split("\n").length));
 
 // Cap the rows we actually mount. A broad query can hit the backend's 2000-match
 // cap → ~4000 DOM nodes, janking every keystroke. Render the first N (like the
@@ -43,6 +51,14 @@ export function SearchPanel() {
   const [replacement, setReplacement] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  // Search toggles (VS Code-style): case sensitive, whole word, regex.
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [wholeWord, setWholeWord] = useState(false);
+  const [regex, setRegex] = useState(false);
+  const opts = useMemo<SearchOpts>(
+    () => ({ caseSensitive, wholeWord, regex }),
+    [caseSensitive, wholeWord, regex],
+  );
 
   // Literal project-wide replace, with a confirm step (it writes files, no undo).
   const doReplace = async () => {
@@ -50,7 +66,7 @@ export function SearchPanel() {
     try {
       const n = await replaceText(root, query, replacement);
       setStatus(t("search.replaced", { count: n }));
-      setMatches(await searchText(root, query));
+      setMatches(await searchText(root, query, opts));
     } catch (e) {
       setStatus(String(e));
     }
@@ -68,7 +84,7 @@ export function SearchPanel() {
       // A slow ripgrep on a big repo shouldn't read as "no results / frozen":
       // flag the pending state so the panel can say it's searching.
       setSearching(true);
-      searchText(root, query)
+      searchText(root, query, opts)
         .then((m) => {
           setMatches(m);
           setError(null);
@@ -77,29 +93,58 @@ export function SearchPanel() {
         .finally(() => setSearching(false));
     }, 180);
     return () => clearTimeout(id);
-  }, [query, root]);
+  }, [query, root, opts]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-col gap-1.5 border-b border-line p-2">
-        <input
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setStatus(null);
-            setConfirming(false);
-          }}
-          placeholder={t("search.placeholder")}
-          spellCheck={false}
-          className="w-full rounded-md border border-line bg-canvas px-2 py-1.5 text-sm text-ink outline-none placeholder:text-faint focus:border-line-strong"
-        />
-        <div className="flex items-center gap-1.5">
-          <input
+        {/* The case / whole-word / regex toggles sit inside the input, right edge. */}
+        <div className="relative">
+          <Textarea
+            mono
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setStatus(null);
+              setConfirming(false);
+            }}
+            onKeyDown={multilineKeys}
+            rows={rowsFor(query)}
+            placeholder={t("search.placeholder")}
+            spellCheck={false}
+            className="resize-none bg-canvas py-1.5 pr-[74px] pl-2 placeholder:font-sans"
+          />
+          <div className="absolute top-1 right-1 flex items-center gap-0.5">
+            <FlagButton
+              active={caseSensitive}
+              onClick={() => setCaseSensitive((v) => !v)}
+              label="Aa"
+              title={t("search.caseSensitive")}
+            />
+            <FlagButton
+              active={wholeWord}
+              onClick={() => setWholeWord((v) => !v)}
+              label="ab"
+              title={t("search.wholeWord")}
+            />
+            <FlagButton
+              active={regex}
+              onClick={() => setRegex((v) => !v)}
+              label=".*"
+              title={t("search.regex")}
+            />
+          </div>
+        </div>
+        <div className="flex items-start gap-1.5">
+          <Textarea
+            mono
             value={replacement}
             onChange={(e) => setReplacement(e.target.value)}
+            onKeyDown={multilineKeys}
+            rows={rowsFor(replacement)}
             placeholder={t("search.replacePlaceholder")}
             spellCheck={false}
-            className="min-w-0 flex-1 rounded-md border border-line bg-canvas px-2 py-1.5 text-sm text-ink outline-none placeholder:text-faint focus:border-line-strong"
+            className="min-w-0 flex-1 resize-none bg-canvas placeholder:font-sans"
           />
           {confirming ? (
             <button
@@ -168,5 +213,35 @@ export function SearchPanel() {
         )}
       </div>
     </div>
+  );
+}
+
+/** A small square search-mode toggle (case / whole-word / regex). */
+function FlagButton({
+  active,
+  onClick,
+  label,
+  title,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  title: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={title}
+      aria-label={title}
+      className={`grid h-6 w-6 flex-none place-items-center rounded border font-mono text-[11px] font-semibold transition-colors ${
+        active
+          ? "border-accent bg-[color-mix(in_oklch,var(--accent)_18%,transparent)] text-accent"
+          : "border-line text-muted hover:bg-surface hover:text-ink"
+      }`}
+    >
+      {label}
+    </button>
   );
 }

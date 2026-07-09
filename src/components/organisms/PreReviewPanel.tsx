@@ -6,6 +6,7 @@
 import { usePreReview } from "../../lib/preReview";
 import { useProject } from "../../lib/store";
 import { SparkleIcon } from "../atoms/icons";
+import { Button } from "../atoms/Button";
 import { useTranslation } from "react-i18next";
 
 export function PreReviewPanel() {
@@ -19,15 +20,14 @@ export function PreReviewPanel() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-none items-center justify-between border-b border-line px-2 py-1.5">
-        <button
-          type="button"
+        <Button
+          size="sm"
           onClick={() => usePreReview.getState().generate(root)}
           disabled={generating}
-          className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted hover:bg-surface hover:text-ink disabled:opacity-50"
         >
           <SparkleIcon className="h-3 w-3" />
           {generating ? t("prereview.generating") : t("prereview.run")}
-        </button>
+        </Button>
       </div>
 
       {drafts.length === 0 && error ? (
@@ -52,20 +52,20 @@ export function PreReviewPanel() {
                 <p className="mt-1 text-xs text-ink">{d.body}</p>
               </button>
               <div className="mt-1.5 flex gap-2">
-                <button
-                  type="button"
+                <Button
+                  size="sm"
+                  className="bg-surface text-accent"
                   onClick={() => void usePreReview.getState().approve(root, d.id)}
-                  className="rounded-md bg-surface px-2 py-0.5 text-xs text-accent hover:text-ink"
                 >
                   {t("prereview.approve")}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  size="sm"
+                  className="text-faint"
                   onClick={() => usePreReview.getState().discard(root, d.id)}
-                  className="rounded-md px-2 py-0.5 text-xs text-faint hover:text-ink"
                 >
                   {t("prereview.discard")}
-                </button>
+                </Button>
               </div>
             </li>
           ))}

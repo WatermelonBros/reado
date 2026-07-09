@@ -22,6 +22,18 @@ pub struct GitInfo {
     pub is_repo: bool,
     /// Current branch name, or `None` when detached / not a repo.
     pub branch: Option<String>,
+    /// Commits on HEAD not yet on the upstream (how many to push). 0 with no
+    /// upstream.
+    pub ahead: u32,
+    /// Commits on the upstream not yet on HEAD (how many to pull). 0 with no
+    /// upstream.
+    pub behind: u32,
+    /// Whether any remote is configured (so fetch/pull/sync can do anything).
+    pub has_remote: bool,
+    /// Whether the current branch tracks an upstream (so ahead/behind are
+    /// meaningful; a branch with a remote but no upstream can still be published
+    /// by a first push).
+    pub has_upstream: bool,
 }
 
 fn run_git(root: &Path, args: &[&str]) -> Option<String> {
@@ -96,7 +108,36 @@ pub fn git_info(root: String) -> GitInfo {
         None
     };
 
-    GitInfo { is_repo, branch }
+    let has_remote = is_repo
+        && run_git(root, &["remote"])
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+
+    // ahead/behind vs the tracking branch. `rev-list --left-right --count
+    // @{upstream}...HEAD` prints "<behind>\t<ahead>"; it fails (→ None) when the
+    // branch has no upstream, which is how we detect `has_upstream`.
+    let (behind, ahead, has_upstream) = is_repo
+        .then(|| {
+            run_git(
+                root,
+                &["rev-list", "--left-right", "--count", "@{upstream}...HEAD"],
+            )
+        })
+        .flatten()
+        .map(|counts| {
+            let (behind, ahead) = parse_left_right(&counts);
+            (behind, ahead, true)
+        })
+        .unwrap_or((0, 0, false));
+
+    GitInfo {
+        is_repo,
+        branch,
+        ahead,
+        behind,
+        has_remote,
+        has_upstream,
+    }
 }
 
 /// Local and remote branches for the status-bar branch switcher.
@@ -426,6 +467,60 @@ pub fn git_push(root: String) -> Result<(), String> {
     run_git_checked(&root, &["push", "-u", "origin", "HEAD"])
 }
 
+/// Outcome of a sync (pull + push).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncOutcome {
+    /// Files left conflicted by the pull. Non-empty means the merge stopped and
+    /// the push was skipped: the user must resolve these and commit before
+    /// syncing again. Empty means the sync completed cleanly.
+    pub conflicted: Vec<String>,
+}
+
+/// Sync the current branch: pull, then push (VS Code's "Synchronize Changes").
+///
+/// A merge conflict during the pull is not an error — it's an expected outcome we
+/// report by returning the conflicted files so the UI can point the user at them.
+/// The push is skipped in that case (there's nothing safe to push mid-conflict).
+/// Any other pull failure (no upstream, network, unrelated histories) propagates
+/// as `Err` with git's own reason.
+#[tauri::command]
+pub fn git_sync(root: String) -> Result<SyncOutcome, String> {
+    let pull = run_git_checked(&root, &["pull"]);
+    if pull.is_err() {
+        // Distinguish a conflict (recoverable, surface the files) from a real
+        // failure (propagate). A conflict leaves `conflicted` entries in status.
+        let conflicted = conflicted_files(&root);
+        if !conflicted.is_empty() {
+            return Ok(SyncOutcome { conflicted });
+        }
+        pull?;
+    }
+    run_git_checked(&root, &["push", "-u", "origin", "HEAD"])?;
+    Ok(SyncOutcome {
+        conflicted: Vec::new(),
+    })
+}
+
+/// Parse `git rev-list --left-right --count @{u}...HEAD` output ("<behind>\t<ahead>")
+/// into `(behind, ahead)`. Left = upstream-only commits (to pull), right =
+/// HEAD-only commits (to push). Missing/garbage fields fall back to 0.
+fn parse_left_right(counts: &str) -> (u32, u32) {
+    let mut it = counts.split_whitespace();
+    let behind = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let ahead = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    (behind, ahead)
+}
+
+/// Project-relative paths currently in a merge-conflict state.
+fn conflicted_files(root: &str) -> Vec<String> {
+    git_status(root.to_string())
+        .into_iter()
+        .filter(|c| c.status == "conflicted")
+        .map(|c| c.path)
+        .collect()
+}
+
 /// One saved stash entry.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -515,6 +610,10 @@ struct CachedBlame {
 #[derive(Default)]
 pub struct BlameCache(Mutex<HashMap<String, CachedBlame>>);
 
+/// Cap the blame cache so it can't grow unbounded across a long session over
+/// many files (each entry holds one BlameLine per source line).
+const BLAME_CACHE_MAX: usize = 64;
+
 /// Per-line blame for a tracked file (`git blame --line-porcelain`). Returns an
 /// empty list when git is unavailable or the file is untracked. Lazy: only the
 /// frontend (blame mode on) calls it, and results are cached per (file, HEAD).
@@ -542,6 +641,36 @@ pub fn git_blame(cache: State<BlameCache>, root: String, file: String) -> Vec<Bl
         return Vec::new();
     };
 
+    let lines = parse_blame_porcelain(&out);
+
+    if let Ok(mut map) = cache.0.lock() {
+        // ponytail: clear-all eviction at the cap — blame recomputes lazily on the
+        // next request. A real LRU only if blame churn ever proves it matters.
+        if map.len() >= BLAME_CACHE_MAX {
+            map.clear();
+        }
+        map.insert(
+            key,
+            CachedBlame {
+                head,
+                mtime,
+                lines: lines.clone(),
+            },
+        );
+    }
+    lines
+}
+
+/// De-serialise `git blame --line-porcelain` into one `BlameLine` per source
+/// line. The porcelain groups each line as: a commit header
+/// `"<40-hex-hash> <orig-line> <final-line> [count]"`, then `author`,
+/// `author-time`, `summary` (and other) fields, terminated by the `\t<content>`
+/// line — that terminator is what emits a `BlameLine`. Header fields carry
+/// forward across lines that share a commit (git omits them after the first).
+/// The hash is abbreviated to 8 chars; a header whose first token isn't ≥8 hex
+/// digits is ignored, keeping the previous commit's fields. Pure so it can be
+/// unit-tested without spawning git.
+fn parse_blame_porcelain(out: &str) -> Vec<BlameLine> {
     let mut lines = Vec::new();
     let (mut hash, mut author, mut summary) = (String::new(), String::new(), String::new());
     let (mut time, mut final_line) = (0i64, 0u32);
@@ -575,17 +704,6 @@ pub fn git_blame(cache: State<BlameCache>, root: String, file: String) -> Vec<Bl
             }
         }
     }
-
-    if let Ok(mut map) = cache.0.lock() {
-        map.insert(
-            key,
-            CachedBlame {
-                head,
-                mtime,
-                lines: lines.clone(),
-            },
-        );
-    }
     lines
 }
 
@@ -601,6 +719,17 @@ mod tests {
         assert!(msg.contains("divergent branches"), "got: {msg}");
         assert!(!msg.contains("[new branch]"), "fetch noise leaked: {msg}");
         assert!(!msg.contains("-> origin/"), "fetch noise leaked: {msg}");
+    }
+
+    #[test]
+    fn left_right_counts_are_behind_then_ahead() {
+        // git prints "<behind>\t<ahead>": 2 to pull, 3 to push.
+        assert_eq!(parse_left_right("2\t3"), (2, 3));
+        // Space-separated works too; up-to-date is (0, 0).
+        assert_eq!(parse_left_right("0 0"), (0, 0));
+        // Garbage / empty degrades to zeros rather than panicking.
+        assert_eq!(parse_left_right(""), (0, 0));
+        assert_eq!(parse_left_right("x"), (0, 0));
     }
 
     #[test]
@@ -668,6 +797,74 @@ mod tests {
         assert!(!untracked[0].staged);
 
         assert!(expand_status_line("").is_empty());
+    }
+
+    #[test]
+    fn parses_diff_hunk_headers() {
+        // Added block: start 5, count 3 → [5, 7].
+        assert_eq!(parse_diff_hunks("@@ -1,0 +5,3 @@"), vec![[5, 7]]);
+        // Omitted count defaults to 1: `+2` → [2, 2].
+        assert_eq!(parse_diff_hunks("@@ -1 +2 @@"), vec![[2, 2]]);
+        // Pure deletion (count 0 on the head side) is skipped.
+        assert!(parse_diff_hunks("@@ -3,2 +4,0 @@").is_empty());
+
+        // Multiple hunks in one diff body, interleaved with content lines.
+        let diff = "\
+diff --git a/f b/f
+--- a/f
++++ b/f
+@@ -1,0 +5,3 @@
++added
++added
++added
+@@ -10,1 +20,1 @@ fn ctx()
+-old
++new
+@@ -30,2 +40,0 @@
+-gone
+-gone";
+        assert_eq!(parse_diff_hunks(diff), vec![[5, 7], [20, 20]]);
+
+        // Malformed headers are ignored: no `@@` prefix, no `+` token, and a
+        // non-numeric start all yield nothing.
+        assert!(parse_diff_hunks("not a hunk header").is_empty());
+        assert!(parse_diff_hunks("@@ -1,2 nope @@").is_empty());
+        assert!(parse_diff_hunks("@@ -1 +abc @@").is_empty());
+    }
+
+    #[test]
+    fn parses_blame_porcelain() {
+        // Two source lines, both from one commit: the header + author/
+        // author-time/summary fields appear once, then each `\t<content>` line
+        // terminates a BlameLine (git omits the repeated fields for line 2, so
+        // they must carry forward).
+        let out = "\
+0a1b2c3d4e5f60718293a4b5c6d7e8f901234567 1 1 2
+author Ada Lovelace
+author-mail <ada@example.com>
+author-time 1700000000
+author-tz +0000
+summary Add the analytical engine
+filename src/engine.rs
+\tfirst line of content
+0a1b2c3d4e5f60718293a4b5c6d7e8f901234567 2 2
+\tsecond line of content";
+        let lines = parse_blame_porcelain(out);
+        assert_eq!(lines.len(), 2);
+
+        assert_eq!(lines[0].hash, "0a1b2c3d");
+        assert_eq!(lines[0].hash.len(), 8);
+        assert_eq!(lines[0].author, "Ada Lovelace");
+        assert_eq!(lines[0].time, 1_700_000_000);
+        assert_eq!(lines[0].summary, "Add the analytical engine");
+        assert_eq!(lines[0].line, 1);
+
+        // Line 2 reuses the carried-forward commit fields, with its own line no.
+        assert_eq!(lines[1].hash, "0a1b2c3d");
+        assert_eq!(lines[1].author, "Ada Lovelace");
+        assert_eq!(lines[1].time, 1_700_000_000);
+        assert_eq!(lines[1].summary, "Add the analytical engine");
+        assert_eq!(lines[1].line, 2);
     }
 }
 
@@ -793,8 +990,18 @@ pub fn git_diff_lines(root: String, file: String, base: String, head: String) ->
         _ => return Vec::new(),
     };
     let text = String::from_utf8_lossy(&output.stdout);
+    parse_diff_hunks(&text)
+}
+
+/// Parse the head-side changed-line ranges out of a `git diff --unified=0` body.
+/// Reads each unified-diff hunk header `@@ -a,b +c,d @@ …` and keeps the `+c,d`
+/// (head) side: `[start, start + count - 1]`, 1-based and inclusive. A missing
+/// count defaults to 1 (`@@ -1 +2 @@` → `[2, 2]`); a zero count is a pure
+/// deletion and is skipped; malformed headers are ignored. Pure so it can be
+/// unit-tested without spawning git.
+fn parse_diff_hunks(diff: &str) -> Vec<[u32; 2]> {
     let mut ranges = Vec::new();
-    for line in text.lines() {
+    for line in diff.lines() {
         // Hunk header: `@@ -a,b +c,d @@ …`. The `+c,d` is the head-side range.
         let Some(rest) = line.strip_prefix("@@") else {
             continue;

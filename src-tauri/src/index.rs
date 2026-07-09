@@ -92,30 +92,84 @@ pub fn rebuild_index(root: String) -> Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use reado_core::{create_comment, CommentKind, CommentType, Context, NewComment, Scope};
+    use reado_core::{
+        create_comment, reanchor_file, set_comment_state, CommentKind, CommentState, CommentType,
+        Context, NewComment, Scope,
+    };
+
+    /// Convenience: create a Range-scoped comment and return its id.
+    fn seed(
+        root: &str,
+        file: &str,
+        comment_type: CommentType,
+        kind: CommentKind,
+        start_line: u32,
+        end_line: u32,
+        body: &str,
+    ) -> String {
+        create_comment(
+            root,
+            NewComment {
+                file: file.into(),
+                scope: Scope::Range,
+                start_line,
+                end_line,
+                comment_type,
+                kind,
+                body: body.into(),
+                context: Context::default(),
+            },
+            "user",
+            None,
+        )
+        .unwrap()
+        .comment
+        .meta
+        .id
+    }
 
     #[test]
     fn rebuilds_from_markdown_without_loss() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().to_str().unwrap();
-        for i in 0..3 {
-            create_comment(
-                root,
-                NewComment {
-                    file: format!("src/f{i}.rs"),
-                    scope: Scope::Range,
-                    start_line: 1,
-                    end_line: 1,
-                    comment_type: CommentType::Bug,
-                    kind: CommentKind::Task,
-                    body: format!("issue {i}"),
-                    context: Context::default(),
-                },
-                "user",
-                None,
-            )
-            .unwrap();
-        }
+
+        // Seed three comments with DISTINCT column values so a mapping bug in
+        // `rebuild` (a column swap, a wrong `{:?}` conversion, start/end aliased)
+        // can't hide behind a bare COUNT(*): different files, different types,
+        // non-degenerate line ranges, plus one archived and one orphaned row.
+        let bug = seed(
+            root,
+            "src/alpha.rs",
+            CommentType::Bug,
+            CommentKind::Task,
+            10,
+            20,
+            "alpha bug",
+        );
+        let refactor = seed(
+            root,
+            "src/beta.rs",
+            CommentType::Refactor,
+            CommentKind::Note,
+            5,
+            5,
+            "beta refactor",
+        );
+        let note = seed(
+            root,
+            "src/gone.rs",
+            CommentType::Note,
+            CommentKind::Task,
+            3,
+            4,
+            "gamma note",
+        );
+
+        // Archive one (Done → moves to archive/, so its `archived` column is 1).
+        set_comment_state(root, &refactor, CommentState::Done).unwrap();
+        // Orphan one: reanchoring against a file that isn't on disk can't relocate
+        // the anchor, so the comment is flagged orphan (its `orphan` column is 1).
+        reanchor_file(root, "src/gone.rs").unwrap();
 
         // First build.
         assert_eq!(rebuild(root).unwrap(), 3);
@@ -129,5 +183,74 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM comments", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 3);
+
+        // The active, non-orphan Bug row: assert every mapped column against its
+        // source. start != end proves those two columns aren't swapped/aliased.
+        let (typ, file, body, start, end, orphan, archived): (
+            String,
+            String,
+            String,
+            i64,
+            i64,
+            i64,
+            i64,
+        ) = conn
+            .query_row(
+                "SELECT type, file, body, start_line, end_line, orphan, archived \
+                 FROM comments WHERE id = ?1",
+                [&bug],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(typ, "bug"); // format!("{:?}", ..).to_lowercase()
+        assert_eq!(file, "src/alpha.rs"); // not swapped with body/type
+        assert_eq!(body, "alpha bug");
+        assert_eq!(start, 10);
+        assert_eq!(end, 20);
+        assert_eq!(orphan, 0);
+        assert_eq!(archived, 0);
+
+        // The archived Refactor row: its own type/file, and archived = 1.
+        let (typ, file, archived): (String, String, i64) = conn
+            .query_row(
+                "SELECT type, file, archived FROM comments WHERE id = ?1",
+                [&refactor],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(typ, "refactor");
+        assert_eq!(file, "src/beta.rs");
+        assert_eq!(archived, 1);
+
+        // The orphaned Note row: its own type, and orphan = 1.
+        let (typ, orphan): (String, i64) = conn
+            .query_row(
+                "SELECT type, orphan FROM comments WHERE id = ?1",
+                [&note],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(typ, "note");
+        assert_eq!(orphan, 1);
+    }
+
+    #[test]
+    fn returns_zero_when_reado_missing() {
+        // No `.reado/` directory at all → the `!reado.exists()` guard returns
+        // Ok(0) and never creates an index file.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        assert_eq!(rebuild(root).unwrap(), 0);
+        assert!(!index_path(root).exists());
     }
 }

@@ -312,6 +312,7 @@ export type Tool =
   | "tours"
   | "prereview"
   | "guidedreview"
+  | "coverage"
   | "extensions";
 
 interface WorkspaceState {
@@ -342,6 +343,10 @@ interface WorkspaceState {
   /** Last search-panel query, so leaving and returning doesn't lose it. */
   searchQuery: string;
   setSearchQuery: (q: string) => void;
+  /** User's custom activity-bar order (tool ids). Tools not listed keep their
+   *  natural order after the listed ones. Empty = default order. */
+  toolOrder: Tool[];
+  setToolOrder: (order: Tool[]) => void;
 }
 
 /** Tool sidebar state (which side panel is shown), persisted per user. */
@@ -363,14 +368,23 @@ export const useWorkspace = create<WorkspaceState>()(
       docsOpen: false,
       toggleDocs: (open) => set((s) => ({ docsOpen: open ?? !s.docsOpen })),
       sidebarWidth: 264,
-      // Clamp so the panel stays usable and never crowds out the editor.
+      // Clamp so the panel stays usable and never crowds out the editor. `px` is a
+      // layout pixel; convert the viewport width by the interface zoom so the cap
+      // is right at zoom ≠ 1.
       setSidebarWidth: (px) =>
-        set({ sidebarWidth: Math.max(180, Math.min(px, window.innerWidth - 360)) }),
+        set({
+          sidebarWidth: Math.max(
+            180,
+            Math.min(px, window.innerWidth / (useSettings.getState().zoom || 1) - 360),
+          ),
+        }),
       commentFilter: { view: "open", type: "all", state: "all", thisFile: false },
       setCommentFilter: (patch) =>
         set((s) => ({ commentFilter: { ...s.commentFilter, ...patch } })),
       searchQuery: "",
       setSearchQuery: (q) => set({ searchQuery: q }),
+      toolOrder: [],
+      setToolOrder: (order) => set({ toolOrder: order }),
     }),
     {
       name: "reado.workspace",
@@ -379,6 +393,7 @@ export const useWorkspace = create<WorkspaceState>()(
         sidebarWidth: s.sidebarWidth,
         commentFilter: s.commentFilter,
         searchQuery: s.searchQuery,
+        toolOrder: s.toolOrder,
       }),
     },
   ),
@@ -551,13 +566,16 @@ interface ProjectState {
   closeToRight: (path: string) => void;
   /** Close all tabs. */
   closeAll: () => void;
+  /** Reorder an open tab: move `path` to just before `beforePath` (or to the end
+   *  when `beforePath` is null). Drag-and-drop in the tab strip. */
+  moveTab: (path: string, beforePath: string | null) => void;
   setActive: (path: string) => void;
   setShowHidden: (show: boolean) => void;
 }
 
 export const useProject = create<ProjectState>((set) => ({
   root: "",
-  git: { isRepo: false, branch: null },
+  git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false },
   tabs: [],
   active: null,
   showHidden: false,
@@ -694,6 +712,15 @@ export const useProject = create<ProjectState>((set) => ({
       return { tabs, active };
     }),
   closeAll: () => set({ tabs: [], active: null }),
+  moveTab: (path, beforePath) =>
+    set((s) => {
+      if (path === beforePath) return s;
+      const without = s.tabs.filter((t) => t !== path);
+      if (without.length === s.tabs.length) return s; // path not open
+      const at = beforePath === null ? without.length : without.indexOf(beforePath);
+      const idx = at < 0 ? without.length : at;
+      return { tabs: [...without.slice(0, idx), path, ...without.slice(idx)] };
+    }),
   renamePath: (from, to) =>
     set((s) => ({
       tabs: s.tabs.map((t) => (t === from ? to : t)),

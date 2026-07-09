@@ -2,8 +2,17 @@
  * One shared right-click menu, so every context menu in Reado (file tree, tabs,
  * editor) looks and behaves identically: same surface, same dismissal (outside
  * click / Escape / scroll / blur), kept inside the viewport.
+ *
+ * Rendered through a portal to `document.body` so it escapes the interface-zoom
+ * layer. That layer applies `transform: scale(var(--app-zoom))`, and *any*
+ * transform (even `scale(1)`) makes the element a containing block for `fixed`
+ * descendants — so a menu rendered inside it is positioned relative to that box
+ * (offset by the title bar, and scaled at zoom ≠ 1) instead of the viewport, i.e.
+ * not where the pointer clicked. At the body level, `fixed` is viewport-relative
+ * again and `clientX/clientY` land exactly under the cursor.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface ContextMenuItem {
   label: string;
@@ -91,7 +100,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <ul
       ref={ref}
       role="menu"
@@ -123,6 +132,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
           </button>
         </li>
       ))}
-    </ul>
+    </ul>,
+    document.body,
   );
 }

@@ -20,6 +20,7 @@ import { useTerminals } from "../../lib/terminals";
 import { GitBranchIcon, MessageIcon, TerminalIcon, DeviceIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
 import { mod } from "../../lib/shortcuts";
+import { Input } from "../atoms/Input";
 
 /** Path relative to the project root, with forward slashes. */
 function relativePath(root: string, path: string | null): string | null {
@@ -162,17 +163,24 @@ export function StatusBar() {
             </button>
             {menu === "goto" && (
               <Popover onClose={() => setMenu(null)}>
-                <input
+                <Input
+                  variant="plain"
                   autoFocus
                   value={gotoValue}
                   inputMode="numeric"
                   onChange={(e) => setGotoValue(e.target.value.replace(/[^0-9]/g, ""))}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") submitGoto();
+                    if (e.key === "Enter") {
+                      // Prevent the Enter from reaching the editor once goToLine
+                      // refocuses it — otherwise it inserts a newline (shifting
+                      // the target line by one and marking the file dirty).
+                      e.preventDefault();
+                      submitGoto();
+                    }
                   }}
                   placeholder={t("status.goToLinePlaceholder")}
                   aria-label={t("status.goToLinePlaceholder")}
-                  className="block w-[160px] bg-transparent px-2.5 py-1 text-sm text-ink outline-none placeholder:text-faint"
+                  className="block w-[160px]"
                 />
               </Popover>
             )}

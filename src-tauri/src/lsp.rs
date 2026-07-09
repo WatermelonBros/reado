@@ -44,6 +44,21 @@ struct Server {
     stdin: ChildStdin,
 }
 
+/// Cap a single stderr line before it reaches the log — a server can emit huge
+/// lines (stack traces, JSON blobs) and the log shouldn't carry them whole.
+const MAX_STDERR_LINE: usize = 2000;
+
+/// Truncate `line` to `MAX_STDERR_LINE` chars (on a char boundary), appending an
+/// ellipsis marker when cut, so an oversized stderr line can't bloat the log.
+fn truncate_stderr(line: &str) -> String {
+    let trimmed = line.trim_end();
+    if trimmed.chars().count() <= MAX_STDERR_LINE {
+        return trimmed.to_string();
+    }
+    let cut: String = trimmed.chars().take(MAX_STDERR_LINE).collect();
+    format!("{cut}… (truncated)")
+}
+
 #[derive(Default)]
 pub struct LspState(Mutex<HashMap<String, Server>>);
 
@@ -127,7 +142,9 @@ pub fn lsp_start(
         .current_dir(&cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        // Capture stderr (was discarded) so a failing/crashing server leaves a
+        // diagnostic trail in the log instead of failing blind.
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| {
             crate::log::error(
@@ -148,9 +165,30 @@ pub fn lsp_start(
     let event = format!("lsp-{id}");
     let exit_id = id.clone();
 
+    // Drain stderr on its own thread so a chatty server never stalls stdout, and
+    // each line lands in the log (truncated) under the LSP scope.
+    if let Some(stderr) = child.stderr.take() {
+        let err_id = id.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines().map_while(Result::ok) {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                crate::log::debug(
+                    "lsp",
+                    "server stderr",
+                    serde_json::json!({ "id": err_id.as_str(), "line": truncate_stderr(&line) }),
+                );
+            }
+        });
+    }
+
     std::thread::spawn(move || {
         // Inner closure so the early `return`s on EOF/error land here and we can
-        // log the server's exit exactly once.
+        // log the server's exit exactly once. The pump gets its own AppHandle
+        // clone so the outer scope keeps one to emit the exit event afterwards.
+        let pump_app = app.clone();
         let pump = move || {
             let mut reader = BufReader::new(stdout);
             loop {
@@ -177,10 +215,13 @@ pub fn lsp_start(
                 if reader.read_exact(&mut buf).is_err() {
                     return;
                 }
-                let _ = app.emit(&event, String::from_utf8_lossy(&buf).into_owned());
+                let _ = pump_app.emit(&event, String::from_utf8_lossy(&buf).into_owned());
             }
         };
         pump();
+        // The output stream ended → the process is gone. Signal the frontend so
+        // it can drop the dead connection and recover, then log the exit once.
+        let _ = app.emit(&format!("lsp-exit-{exit_id}"), ());
         crate::log::info("lsp", "server exited", serde_json::json!({ "id": exit_id }));
     });
 
@@ -219,5 +260,29 @@ pub fn kill_all(state: &LspState) {
         for (_, mut server) in map.drain() {
             let _ = server.child.kill();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_stderr_line_is_untouched_but_trimmed() {
+        assert_eq!(truncate_stderr("boom\r\n"), "boom");
+    }
+
+    #[test]
+    fn long_stderr_line_is_truncated_with_marker() {
+        let line = "x".repeat(MAX_STDERR_LINE + 500);
+        let out = truncate_stderr(&line);
+        assert!(out.ends_with("… (truncated)"));
+        assert_eq!(out.chars().filter(|&c| c == 'x').count(), MAX_STDERR_LINE);
+    }
+
+    #[test]
+    fn unknown_server_has_no_command() {
+        assert!(server_command("cobol").is_none());
+        assert!(server_command("rust").is_some());
     }
 }

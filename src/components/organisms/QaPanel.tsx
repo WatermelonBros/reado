@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { useQa } from "../../lib/qa";
 import { useProject } from "../../lib/store";
 import { CloseIcon } from "../atoms/icons";
+import { IconButton } from "../atoms/IconButton";
 import { useTranslation } from "react-i18next";
 
 export function QaPanel() {
@@ -54,15 +55,13 @@ export function QaPanel() {
                   {n.line}
                 </span>
               </button>
-              <button
-                type="button"
-                aria-label={t("qa.remove")}
-                title={t("qa.remove")}
+              <IconButton
+                size="sm"
+                label={t("qa.remove")}
                 onClick={() => useQa.getState().remove(root, n.id)}
-                className="grid h-6 w-6 flex-none place-items-center text-faint opacity-0 transition-opacity group-hover/qa:opacity-100 group-focus-within/qa:opacity-100 focus-visible:opacity-100 hover:text-ink"
-              >
-                <CloseIcon className="h-3 w-3" />
-              </button>
+                icon={<CloseIcon className="h-3 w-3" />}
+                className="opacity-0 transition-opacity group-hover/qa:opacity-100 group-focus-within/qa:opacity-100 focus-visible:opacity-100"
+              />
             </div>
           ))}
         </li>

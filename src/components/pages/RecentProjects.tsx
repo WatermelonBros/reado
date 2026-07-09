@@ -6,6 +6,7 @@ import { useRecents } from "../../lib/store";
 import { openProjectHere, pickFolderAndOpen } from "../../lib/window";
 
 import { FolderOpenIcon, CloseIcon } from "../atoms/icons";
+import { IconButton } from "../atoms/IconButton";
 import { useTranslation } from "react-i18next";
 
 export function RecentProjects() {
@@ -81,14 +82,12 @@ export function RecentProjects() {
                       {p.path}
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    title={t("recents.remove")} aria-label={t("recents.remove")}
+                  <IconButton
+                    label={t("recents.remove")}
+                    icon={<CloseIcon className="h-[14px] w-[14px]" />}
                     onClick={() => remove(p.path)}
-                    className="grid w-[34px] place-items-center text-faint opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-ink"
-                  >
-                    <CloseIcon className="h-[14px] w-[14px]" />
-                  </button>
+                    className="h-full w-[34px] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+                  />
                 </li>
               ))}
             </ul>

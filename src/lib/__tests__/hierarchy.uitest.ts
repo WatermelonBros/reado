@@ -6,6 +6,12 @@ import type { HierNode } from "../lsp";
 const node = (name: string): HierNode =>
   ({ name } as unknown as HierNode);
 
+// Snapshot the store's create() defaults captured at import time — BEFORE the
+// beforeEach below overwrites them. Zustand's setState replaces the state object
+// (it doesn't mutate this one), so this reference keeps hierarchy.ts's real
+// initial values and would catch a changed default (e.g. mode: "type").
+const createDefaults = useHierarchy.getState();
+
 beforeEach(() =>
   useHierarchy.setState({
     mode: "call",
@@ -19,7 +25,10 @@ beforeEach(() =>
 
 describe("useHierarchy", () => {
   it("has sensible defaults", () => {
-    const s = useHierarchy.getState();
+    // Assert the module's real create() defaults (the import-time snapshot), not
+    // the state the beforeEach reset writes — so this fails if hierarchy.ts's
+    // defaults change.
+    const s = createDefaults;
     expect(s.mode).toBe("call");
     expect(s.direction).toBe("incoming");
     expect(s.root).toBeNull();

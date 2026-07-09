@@ -6,7 +6,7 @@
  * platform-appropriate thing) and surfaces the outcome as a notice.
  */
 import { setDefaultHandler } from "./api";
-import { useNotice } from "./notice";
+import { notify, notifyError } from "./notice";
 import { t } from "../i18n";
 
 /** Text/source extensions Reado offers to become the default handler for. */
@@ -27,11 +27,10 @@ export const TEXT_EXTENSIONS = [
 export async function makeDefaultApp(): Promise<void> {
   try {
     const res = await setDefaultHandler(TEXT_EXTENSIONS);
-    const notice = useNotice.getState();
-    if (res.kind === "set") notice.show("info", t("defaultApp.done", { count: res.count }));
-    else if (res.kind === "settings") notice.show("info", t("defaultApp.settings"));
-    else notice.show("info", t("defaultApp.manual"));
+    if (res.kind === "set") notify("info", t("defaultApp.done", { count: res.count }));
+    else if (res.kind === "settings") notify("info", t("defaultApp.settings"));
+    else notify("info", t("defaultApp.manual"));
   } catch (e) {
-    useNotice.getState().show("error", String(e));
+    notifyError("defaults", t("defaultApp.failed"), e);
   }
 }

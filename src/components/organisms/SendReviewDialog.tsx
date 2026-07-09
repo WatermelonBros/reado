@@ -11,6 +11,7 @@ import { useResolveLoop } from "../../lib/resolveLoop";
 
 import { TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
 import { Modal } from "../atoms/Modal";
+import { Button } from "../atoms/Button";
 import { Checkbox } from "../atoms/Checkbox";
 import { Select } from "../atoms/Select";
 import { useTranslation } from "react-i18next";
@@ -98,21 +99,10 @@ export function SendReviewDialog({ open, onClose }: { open: boolean; onClose: ()
       </ul>
 
       <footer className="flex flex-none items-center justify-end gap-2 border-t border-line px-5 py-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-md px-3 py-1.5 text-sm text-muted hover:text-ink"
-        >
-          {t("common.cancel")}
-        </button>
-        <button
-          type="button"
-          onClick={send}
-          disabled={selected.length === 0}
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
-        >
+        <Button onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant="primary" onClick={send} disabled={selected.length === 0}>
           {t("review.send", { count: selected.length })}
-        </button>
+        </Button>
       </footer>
     </Modal>
   );

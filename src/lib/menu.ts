@@ -56,6 +56,10 @@ import { launchAgent, dispatchToAgent, clearTerminal, restartTerminal } from "./
 import { composeReviewPrompt } from "./review";
 import { useComments, openCount } from "./comments";
 import { closeProject, openInNewWindow, pickFolderAndOpen, openFileDialog } from "./window";
+import { notify } from "./notice";
+import { useDocInfo } from "./docInfo";
+import { useDiagnostics } from "./diagnostics";
+import { t, type MessageKey } from "../i18n";
 
 const WEBSITE = "https://reado.watermelon-studio.it";
 const DISCORD = "https://discord.gg/HHqT9ucXn4";
@@ -68,9 +72,84 @@ const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.roun
 const nudgeZoom = (delta: number) =>
   useSettings.getState().set({ zoom: clampZoom(useSettings.getState().zoom + delta) });
 
+// Which context a menu command needs to do anything. Ids not listed are always
+// available. Mirrors the command-palette `when:` gating so the menu, the menu
+// bar and the palette agree on what's applicable.
+type MenuCond = "file" | "selection" | "back" | "forward" | "reopen" | "split" | "terminal" | "problems";
+
+const MENU_PRECOND: Record<string, MenuCond> = {
+  // Need an open editor.
+  save: "file", saveAs: "file", revert: "file", format: "file", closeEditor: "file",
+  gotoLine: "file", find: "file", "edit:replace": "file",
+  "edit:toggleComment": "file", "edit:toggleBlockComment": "file", "palette:symbols": "file",
+  gotodef: "file", "go:peek": "file", "go:typedef": "file", "go:impl": "file",
+  "go:references": "file", "go:callHierarchy": "file", "go:typeHierarchy": "file",
+  "go:bracket": "file", "go:lastEdit": "file", "go:nextTab": "file", "go:prevTab": "file",
+  "sel:expand": "file", "sel:shrink": "file", "sel:addNext": "file", "sel:allOccurrences": "file",
+  "sel:cursorAbove": "file", "sel:cursorBelow": "file", "sel:lineEnds": "file", "sel:duplicate": "file",
+  "sel:copyUp": "file", "sel:copyDown": "file", "sel:moveUp": "file", "sel:moveDown": "file",
+  // Need a text selection specifically.
+  "sel:explain": "selection", "sel:ask": "selection",
+  // Navigation / history / layout.
+  "go:back": "back", "go:forward": "forward", reopenClosed: "reopen", "view:split": "split",
+  // Need a terminal / a diagnostic to jump to.
+  "terminal:clear": "terminal", "terminal:restart": "terminal", "terminal:split": "terminal",
+  "go:nextProblem": "problems", "go:prevProblem": "problems",
+};
+
+/** The message shown when a command is invoked without its precondition. */
+const MENU_COND_MSG: Record<MenuCond, MessageKey> = {
+  file: "menu.needFile",
+  selection: "menu.needSelection",
+  back: "menu.needBack",
+  forward: "menu.needForward",
+  reopen: "menu.needReopen",
+  split: "menu.needFile",
+  terminal: "menu.needTerminal",
+  problems: "menu.needProblems",
+};
+
+function menuCondMet(cond: MenuCond): boolean {
+  const project = useProject.getState();
+  switch (cond) {
+    case "file":
+      return !!project.active;
+    case "selection": {
+      const v = useDocInfo.getState().view;
+      return !!v && !v.state.selection.main.empty;
+    }
+    case "back":
+      return project.navIndex > 0;
+    case "forward":
+      return project.navIndex < project.navStack.length - 1;
+    case "reopen":
+      return project.closedTabs.length > 0;
+    case "split":
+      return !!project.active || !!project.splitPath;
+    case "terminal":
+      return useTerminals.getState().sessions.length > 0;
+    case "problems":
+      return Object.keys(useDiagnostics.getState().byFile).length > 0;
+  }
+}
+
+/** Whether a menu command can act in the current context (drives both the greyed
+ *  state in the rendered menu bar and the notice-instead-of-no-op in the handler). */
+export function menuCommandEnabled(id: string): boolean {
+  const cond = MENU_PRECOND[id];
+  return !cond || menuCondMet(cond);
+}
+
 /** Run an app-menu command by id — shared by the native menu (forwarded as a
  *  `menu` event) and the rendered Win/Linux menu bar in the title bar. */
 export function runMenuCommand(id: string): void {
+    // A command whose precondition isn't met would silently do nothing (the
+    // native macOS menu can't be greyed from here) — tell the user why instead.
+    const cond = MENU_PRECOND[id];
+    if (cond && !menuCondMet(cond)) {
+      notify("info", t(MENU_COND_MSG[cond]));
+      return;
+    }
     const palette = usePalette.getState();
     const project = useProject.getState();
     const workspace = useWorkspace.getState();
@@ -357,6 +436,12 @@ export function runMenuCommand(id: string): void {
         break;
       case "terminal:sendReview": {
         const count = openCount(useComments.getState().comments);
+        // Mirror the Comments/Terminal buttons, which disable at zero: sending a
+        // review prompt with no open tasks would produce a meaningless request.
+        if (count === 0) {
+          notify("info", t("terminal.noTasks"));
+          break;
+        }
         void dispatchToAgent(composeReviewPrompt(count));
         break;
       }

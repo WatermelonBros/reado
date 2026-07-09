@@ -41,6 +41,10 @@ pub enum ScopeKind {
     Project,
     /// A hosted pull/merge request (supplied by the pull-request-review adapter).
     Pr,
+    /// A free-text review request: the user describes what to review and the
+    /// planner works out the relevant files itself (the `request` field carries
+    /// the description). Still a full guided-review session, not a one-off.
+    Prompt,
 }
 
 /// The optional focus that shapes the LLM's attention.
@@ -133,6 +137,9 @@ pub struct ReviewScope {
     /// Free-form ref for a PR/MR scope (e.g. `#123`), set by the forge adapter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr: Option<String>,
+    /// The user's free-text request for a `prompt` scope (what to review).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<String>,
 }
 
 /// One ordered step in the proposed route, ranked by the planner.
@@ -595,6 +602,7 @@ mod tests {
             base: None,
             paths: vec![],
             pr: None,
+            request: None,
         }
     }
 
@@ -609,6 +617,42 @@ mod tests {
             Some("claude-code".into()),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn prompt_scope_persists_its_request() {
+        // A free-text review request is a real session scope (not a one-off): the
+        // request round-trips through the on-disk session, and a scope without a
+        // request (older sessions) still deserializes.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        let s = create_session(
+            root,
+            NewSession {
+                title: "Review as requested".into(),
+                scope: ReviewScope {
+                    kind: ScopeKind::Prompt,
+                    base: None,
+                    paths: vec![],
+                    pr: None,
+                    request: Some("evaluate the test suite".into()),
+                },
+                objective: None,
+            },
+            Some("claude-code".into()),
+        )
+        .unwrap();
+        let got = get_session(root, &s.id).unwrap();
+        assert_eq!(got.scope.kind, ScopeKind::Prompt);
+        assert_eq!(
+            got.scope.request.as_deref(),
+            Some("evaluate the test suite")
+        );
+
+        // A legacy scope JSON with no `request` field still parses.
+        let legacy: ReviewScope = serde_json::from_str(r#"{"kind":"prompt"}"#).unwrap();
+        assert_eq!(legacy.kind, ScopeKind::Prompt);
+        assert!(legacy.request.is_none());
     }
 
     #[test]

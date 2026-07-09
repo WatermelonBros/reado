@@ -27,6 +27,20 @@ export type FileContent =
 export interface GitInfo {
   isRepo: boolean;
   branch: string | null;
+  /** Commits on HEAD not yet on the upstream (how many to push). */
+  ahead: number;
+  /** Commits on the upstream not yet on HEAD (how many to pull). */
+  behind: number;
+  /** Whether any remote is configured. */
+  hasRemote: boolean;
+  /** Whether the current branch tracks an upstream. */
+  hasUpstream: boolean;
+}
+
+/** Result of a sync (pull + push). */
+export interface SyncOutcome {
+  /** Files left conflicted by the pull; non-empty means the push was skipped. */
+  conflicted: string[];
 }
 
 export interface SearchMatch {
@@ -81,6 +95,11 @@ export const createFile = (root: string, path: string) =>
 /** Move/rename a file or folder within the project (internal drag-and-drop). */
 export const movePath = (root: string, from: string, to: string) =>
   invoke<void>("move_path", { root, from, to });
+
+/** Delete a path into the project's own trash (`.reado/.trash/`), reversibly.
+ * Returns the absolute trashed path so it can be moved back on undo. */
+export const trashPath = (root: string, path: string) =>
+  invoke<string>("trash_path", { root, path });
 
 /** Copy external files/folders into a project folder (drag-and-drop from outside). */
 export const importPaths = (root: string, sources: string[], destDir: string) =>
@@ -158,6 +177,9 @@ export const gitPull = (root: string) => invoke<void>("git_pull", { root });
 /** Push the current branch (sets upstream to origin if needed). */
 export const gitPush = (root: string) => invoke<void>("git_push", { root });
 
+/** Sync: pull then push. Resolves with the conflicted files (empty = clean). */
+export const gitSync = (root: string) => invoke<SyncOutcome>("git_sync", { root });
+
 export interface StashEntry {
   index: number;
   message: string;
@@ -226,13 +248,24 @@ export const gitBlame = (root: string, file: string) =>
   invoke<BlameLine[]>("git_blame", { root, file });
 
 /** Full-text search across the project via ripgrep. */
-export const searchText = (root: string, query: string) =>
-  invoke<SearchMatch[]>("search_text", { root, query, exclude: excludeGlobs() });
+/** Global-search toggles, mirroring VS Code's Aa / whole-word / .* buttons. */
+export type SearchOpts = { caseSensitive: boolean; wholeWord: boolean; regex: boolean };
+const DEFAULT_SEARCH_OPTS: SearchOpts = { caseSensitive: false, wholeWord: false, regex: false };
+
+export const searchText = (root: string, query: string, opts: SearchOpts = DEFAULT_SEARCH_OPTS) =>
+  invoke<SearchMatch[]>("search_text", {
+    root,
+    query,
+    exclude: excludeGlobs(),
+    caseSensitive: opts.caseSensitive,
+    wholeWord: opts.wholeWord,
+    regex: opts.regex,
+  });
 
 /** Replace every literal occurrence of `query` across the project. Returns the
  * number of files changed. */
 export const replaceText = (root: string, query: string, replacement: string) =>
-  invoke<number>("replace_text", { root, query, replacement });
+  invoke<number>("replace_text", { root, query, replacement, exclude: excludeGlobs() });
 
 export interface Definition {
   path: string;
@@ -409,7 +442,8 @@ export type ScopeKind =
   | "files"
   | "comments"
   | "project"
-  | "pr";
+  | "pr"
+  | "prompt";
 
 export type Objective =
   | "bug_risk"
@@ -462,6 +496,8 @@ export interface ReviewScope {
   base?: string;
   paths?: string[];
   pr?: string;
+  /** The user's free-text request for a `prompt` scope (what to review). */
+  request?: string;
 }
 
 export interface RouteEntry {

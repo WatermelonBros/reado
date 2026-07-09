@@ -10,7 +10,7 @@
  * it (internal), or drop files from outside the app onto a folder to copy them
  * in. The tree re-lists itself when files change on disk (`treeNonce`).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listDir, listFiles, movePath, importPaths, type DirEntry } from "../../lib/api";
@@ -28,10 +28,12 @@ import {
   SparkleIcon,
   LayoutIcon,
   DeltaIcon,
+  TrashIcon,
 } from "../atoms/icons";
 import { TreeCommentDialog, type CommentTarget } from "../organisms/TreeCommentDialog";
 import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
+import { useFileUndo, trashAndRecord } from "../../lib/fileUndo";
 import { useTranslation } from "react-i18next";
 
 type Ctx = (entry: DirEntry | null, e: React.MouseEvent) => void;
@@ -55,12 +57,20 @@ const countPrefix = (items: Iterable<string>, prefix: string) => {
   return n;
 };
 
-const DRAG_TYPE = "application/reado-path";
 const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 const sep = (p: string) => (p.includes("\\") ? "\\" : "/");
 const parentOf = (p: string) => p.slice(0, p.lastIndexOf(sep(p)));
 /** Where a row drops into: a folder takes its own path, a file its parent dir. */
 const dropDir = (entry: DirEntry) => (entry.isDir ? entry.path : parentOf(entry.path));
+
+/** Pointer-drag reorder/move context. HTML5 drag doesn't fire in the Tauri
+ *  webview (the OS drop handler owns it), and it also mis-hit-tests under interface
+ *  zoom; raw pointer events with `elementFromPoint` are correct at any zoom. */
+const DragCtx = createContext<{
+  onRowPointerDown: (path: string) => (e: React.PointerEvent) => void;
+  draggingPath: string | null;
+  overDir: string | null;
+}>({ onRowPointerDown: () => () => {}, draggingPath: null, overDir: null });
 
 export function FileTree() {
   const root = useProject((s) => s.root);
@@ -90,6 +100,7 @@ export function FileTree() {
       try {
         await movePath(root, from, to);
         useProject.getState().renamePath(from, to);
+        useFileUndo.getState().record({ kind: "move", from, to });
         useProject.getState().bumpTree();
       } catch {
         /* refused (e.g. name clash) — leave the tree as-is */
@@ -97,6 +108,58 @@ export function FileTree() {
     },
     [root],
   );
+
+  // Pointer-based drag to move a file/folder into another folder. Press a row,
+  // move past a small threshold, and release over a destination folder.
+  const [draggingPath, setDraggingPath] = useState<string | null>(null);
+  const [overDir, setOverDir] = useState<string | null>(null);
+  const dragStart = useRef<{ path: string; x: number; y: number } | null>(null);
+
+  const onRowPointerDown = useCallback(
+    (path: string) => (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      dragStart.current = { path, x: e.clientX, y: e.clientY };
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const destAt = (x: number, y: number) =>
+      document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-dir]")?.getAttribute("data-dir") ??
+      null;
+    const onPointerMove = (e: PointerEvent) => {
+      const s = dragStart.current;
+      if (!s) return;
+      if (!draggingPath) {
+        if (Math.abs(e.clientX - s.x) + Math.abs(e.clientY - s.y) < 5) return;
+        setDraggingPath(s.path);
+      }
+      setOverDir(destAt(e.clientX, e.clientY));
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      const s = dragStart.current;
+      dragStart.current = null;
+      const wasDragging = draggingPath;
+      setDraggingPath(null);
+      setOverDir(null);
+      if (!s || !wasDragging) return;
+      // Swallow the trailing click so releasing a drag doesn't also open the file.
+      const stopClick = (ev: Event) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        window.removeEventListener("click", stopClick, true);
+      };
+      window.addEventListener("click", stopClick, true);
+      const dest = destAt(e.clientX, e.clientY);
+      if (dest) void move(s.path, dest);
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [draggingPath, move]);
 
   // External drag-and-drop: OS file drops are delivered by Tauri (not HTML5),
   // with a physical-pixel position. Resolve the folder under the cursor and copy
@@ -182,32 +245,32 @@ export function FileTree() {
               },
             ]
           : []),
-        ...(menu.entry && menu.entry.isDir
-          ? [
-              {
-                label: t("tree.markFolderRead"),
-                onSelect: () => {
-                  const folderRel = toRelative(root, menu.entry!.path);
-                  const files = useProjectFiles
-                    .getState()
-                    .files.filter((f) => f.startsWith(folderRel + "/"));
-                  useReadProgress.getState().markMany(root, files, true);
-                  setMenu(null);
-                },
-              },
-              {
-                label: t("tree.markFolderUnread"),
-                onSelect: () => {
-                  const folderRel = toRelative(root, menu.entry!.path);
-                  const files = useProjectFiles
-                    .getState()
-                    .files.filter((f) => f.startsWith(folderRel + "/"));
-                  useReadProgress.getState().markMany(root, files, false);
-                  setMenu(null);
-                },
-              },
-            ]
-          : []),
+        ...(() => {
+          if (!menu.entry || !menu.entry.isDir) return [];
+          // Only offer the direction that would actually change something: a
+          // folder with everything already read shouldn't offer "mark read", an
+          // all-unread (or empty) folder shouldn't offer "mark unread".
+          const folderRel = toRelative(root, menu.entry.path);
+          const files = useProjectFiles
+            .getState()
+            .files.filter((f) => f.startsWith(folderRel + "/"));
+          if (files.length === 0) return [];
+          const read = useReadProgress.getState().read;
+          const someUnread = files.some((f) => !read.has(f));
+          const someRead = files.some((f) => read.has(f));
+          const mark = (value: boolean) => {
+            useReadProgress.getState().markMany(root, files, value);
+            setMenu(null);
+          };
+          return [
+            ...(someUnread
+              ? [{ label: t("tree.markFolderRead"), onSelect: () => mark(true) }]
+              : []),
+            ...(someRead
+              ? [{ label: t("tree.markFolderUnread"), onSelect: () => mark(false) }]
+              : []),
+          ];
+        })(),
         ...(menu.entry && !menu.entry.isDir && /\.svg$/i.test(menu.entry.path)
           ? [
               {
@@ -236,6 +299,20 @@ export function FileTree() {
               },
             ]
           : []),
+        ...(menu.entry
+          ? [
+              {
+                label: t("tree.delete"),
+                icon: <TrashIcon className="h-3.5 w-3.5" />,
+                danger: true,
+                separatorBefore: true,
+                onSelect: () => {
+                  void trashAndRecord(menu.entry!.path);
+                  setMenu(null);
+                },
+              },
+            ]
+          : []),
         {
           label: t("tree.commentProject"),
           icon: <MessageIcon className="h-3.5 w-3.5" />,
@@ -245,6 +322,7 @@ export function FileTree() {
     : [];
 
   return (
+    <DragCtx.Provider value={{ onRowPointerDown, draggingPath, overDir }}>
     <div className="flex h-full flex-col overflow-hidden">
       <div
         ref={containerRef}
@@ -273,6 +351,7 @@ export function FileTree() {
       <TreeCommentDialog target={target} onClose={() => setTarget(null)} />
       <AuditDialog target={audit} onClose={() => setAudit(null)} />
     </div>
+    </DragCtx.Provider>
   );
 }
 
@@ -370,7 +449,7 @@ function TreeNode({
   onContext: Ctx;
   onMove: (from: string, destDir: string) => void;
 }) {
-  const [over, setOver] = useState(false);
+  const { onRowPointerDown, draggingPath, overDir } = useContext(DragCtx);
   const rowRef = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation();
   const open = useProject((s) => s.open);
@@ -419,7 +498,9 @@ function TreeNode({
     else open(entry.path);
   }, [entry, open, relPath]);
 
-  const dragging = (e: React.DragEvent) => e.dataTransfer.types.includes(DRAG_TYPE);
+  const isDragged = draggingPath === entry.path;
+  // Highlight the destination folder row (the one files would move into).
+  const isDropTarget = draggingPath !== null && entry.isDir && entry.path === overDir;
 
   const reviewDelta = () => {
     open(entry.path);
@@ -433,30 +514,19 @@ function TreeNode({
           may not nest inside another button. */}
       <div
         className={`flex items-stretch ${
-          over ? "bg-selection" : isActive ? "bg-selection" : "hover:bg-surface"
-        }`}
+          isDropTarget
+            ? "bg-[color-mix(in_oklch,var(--accent)_16%,transparent)]"
+            : isActive
+              ? "bg-selection"
+              : "hover:bg-surface"
+        } ${isDragged ? "opacity-40" : ""}`}
       >
         <button
           ref={rowRef}
           type="button"
           style={indent(depth)}
           data-dir={dropDir(entry)}
-          draggable
-          onDragStart={(e) => e.dataTransfer.setData(DRAG_TYPE, entry.path)}
-          onDragOver={(e) => {
-            if (!dragging(e)) return;
-            e.preventDefault();
-            setOver(true);
-          }}
-          onDragLeave={() => setOver(false)}
-          onDrop={(e) => {
-            setOver(false);
-            if (!dragging(e)) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const from = e.dataTransfer.getData(DRAG_TYPE);
-            if (from) onMove(from, dropDir(entry));
-          }}
+          onPointerDown={onRowPointerDown(entry.path)}
           onClick={onClick}
           onContextMenu={(e) => onContext(entry, e)}
           role="treeitem"

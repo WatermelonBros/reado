@@ -279,12 +279,20 @@ pub fn read_file(root: String, path: String, as_text: Option<bool>) -> Result<Fi
         }
     }
 
+    // Reject oversized files by metadata *before* reading — a multi-GB file must
+    // never be slurped into memory just to be classified as too large below.
+    if metadata.len() > MAX_TEXT_BYTES {
+        return Ok(FileContent::Binary {
+            size: metadata.len(),
+        });
+    }
+
     let bytes = std::fs::read(&path)?;
     // A NUL byte in the first 8 KiB is a reliable "this is binary" signal.
     let probe = &bytes[..bytes.len().min(8192)];
     let looks_binary = probe.contains(&0);
 
-    if looks_binary || metadata.len() > MAX_TEXT_BYTES {
+    if looks_binary {
         return Ok(FileContent::Binary {
             size: metadata.len(),
         });
@@ -368,6 +376,32 @@ pub fn move_path(root: String, from: String, to: String) -> Result<()> {
         serde_json::json!({ "from": src.to_string_lossy(), "to": dest.to_string_lossy() }),
     );
     Ok(())
+}
+
+/// Delete a file/folder by moving it into the project's own trash
+/// (`.reado/.trash/`), so the removal is reversible (Cmd/Ctrl+Z restores it by
+/// moving it back). Returns the absolute trashed path. Confined to the root.
+#[tauri::command]
+pub fn trash_path(root: String, path: String) -> Result<String> {
+    let root = PathBuf::from(&root);
+    let src = ensure_within(&root, &PathBuf::from(&path))?;
+    let name = src.file_name().ok_or(Error::PathEscapesRoot)?;
+    let trash = root.join(".reado").join(".trash");
+    std::fs::create_dir_all(&trash)?;
+    // A monotonic-ish prefix keeps same-named deletions from clashing; unique_dest
+    // is the final guard.
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let dest = unique_dest(&trash.join(format!("{stamp}__{}", name.to_string_lossy())));
+    std::fs::rename(&src, &dest)?;
+    crate::log::info(
+        "fs",
+        "path trashed",
+        serde_json::json!({ "from": src.to_string_lossy(), "to": dest.to_string_lossy() }),
+    );
+    Ok(dest.to_string_lossy().into_owned())
 }
 
 /// Copy external files/directories (absolute OS paths) into `dest_dir` inside the
@@ -478,7 +512,7 @@ pub fn resolve_path(root: String, spec: String) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::base64_encode;
+    use super::{base64_encode, FileContent, MAX_TEXT_BYTES};
 
     #[test]
     fn move_import_and_root_confinement() {
@@ -545,6 +579,62 @@ mod tests {
         assert!(filtered.contains(&"keep.txt".to_string()));
         // Blank/empty patterns are ignored, not errors.
         assert!(names(vec!["".into(), "  ".into()]).contains(&"src".to_string()));
+    }
+
+    #[test]
+    fn read_file_classifies_text_binary_and_image() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+
+        // Plain UTF-8 text → Text with the exact content.
+        fs::write(root.join("hello.txt"), "hello world\n").unwrap();
+        match super::read_file(s(root.into()), s(root.join("hello.txt")), None).unwrap() {
+            FileContent::Text { text } => assert_eq!(text, "hello world\n"),
+            other => panic!("expected Text, got {other:?}"),
+        }
+
+        // A NUL byte in the first 8 KiB → Binary.
+        fs::write(root.join("blob.dat"), b"abc\0def").unwrap();
+        match super::read_file(s(root.into()), s(root.join("blob.dat")), None).unwrap() {
+            FileContent::Binary { size } => assert_eq!(size, 7),
+            other => panic!("expected Binary, got {other:?}"),
+        }
+
+        // Image extension → data URL (mime keyed off the extension, not the bytes).
+        fs::write(root.join("pic.png"), b"\x89PNG\r\n\x1a\n").unwrap();
+        match super::read_file(s(root.into()), s(root.join("pic.png")), None).unwrap() {
+            FileContent::Image { data_url } => {
+                assert!(data_url.starts_with("data:image/png;base64,"));
+            }
+            other => panic!("expected Image, got {other:?}"),
+        }
+
+        // `as_text = Some(true)` decodes an image-renderable format as source text.
+        match super::read_file(s(root.into()), s(root.join("pic.png")), Some(true)).unwrap() {
+            // The bytes aren't valid UTF-8, so it falls through to Binary — the
+            // point is that the image data-URL branch was bypassed.
+            FileContent::Binary { .. } => {}
+            other => panic!("expected Binary (image branch skipped), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_file_rejects_oversized_by_size() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+
+        // One byte over the eager-read cap → Binary { size } straight from metadata,
+        // without decoding the whole file.
+        let size = MAX_TEXT_BYTES + 1;
+        fs::write(root.join("big.txt"), vec![b'a'; size as usize]).unwrap();
+        match super::read_file(s(root.into()), s(root.join("big.txt")), None).unwrap() {
+            FileContent::Binary { size: reported } => assert_eq!(reported, size),
+            other => panic!("expected Binary by size, got {other:?}"),
+        }
     }
 
     #[test]

@@ -8,6 +8,8 @@ import { useTours } from "../../lib/tours";
 import { useProject } from "../../lib/store";
 import { prompt } from "../../lib/prompt";
 import { PlusIcon, SparkleIcon, CloseIcon, ChevronIcon } from "../atoms/icons";
+import { Button } from "../atoms/Button";
+import { IconButton } from "../atoms/IconButton";
 import { useTranslation } from "react-i18next";
 
 export function ToursPanel() {
@@ -29,21 +31,17 @@ export function ToursPanel() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-none items-center gap-1 border-b border-line px-2 py-1.5">
-        <button
-          type="button"
-          onClick={newTour}
-          className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted hover:bg-surface hover:text-ink"
-        >
+        <Button variant="ghost" size="sm" onClick={newTour}>
           <PlusIcon className="h-3 w-3" /> {t("tours.new")}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => useTours.getState().generate(root)}
           disabled={generating}
-          className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted hover:bg-surface hover:text-ink disabled:opacity-50"
         >
           <SparkleIcon className="h-3 w-3" /> {generating ? t("tours.generating") : t("tours.generate")}
-        </button>
+        </Button>
       </div>
 
       {tours.length === 0 ? (
@@ -75,15 +73,13 @@ export function ToursPanel() {
                 >
                   {t("tours.start")}
                 </button>
-                <button
-                  type="button"
+                <IconButton
+                  size="sm"
+                  label={t("tours.removeTour")}
                   onClick={() => useTours.getState().removeTour(root, tour.id)}
-                  aria-label={t("tours.removeTour")}
-                  title={t("tours.removeTour")}
-                  className="grid h-6 w-6 flex-none place-items-center text-faint opacity-0 transition-opacity group-hover/t:opacity-100 group-focus-within/t:opacity-100 focus-visible:opacity-100 hover:text-ink"
-                >
-                  <CloseIcon className="h-3 w-3" />
-                </button>
+                  icon={<CloseIcon className="h-3 w-3" />}
+                  className="opacity-0 transition-opacity group-hover/t:opacity-100 group-focus-within/t:opacity-100 focus-visible:opacity-100"
+                />
               </div>
               {expanded === tour.id && (
                 <div className="pb-1">
@@ -141,29 +137,25 @@ export function TourBar() {
         {running.index + 1}/{tour.steps.length}
       </span>
       <span className="min-w-0 flex-1 truncate text-xs text-ink">{step?.note}</span>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => useTours.getState().go(-1)}
         disabled={running.index === 0}
-        className="flex-none rounded-md px-2 py-0.5 text-xs text-muted hover:bg-surface hover:text-ink disabled:opacity-40"
       >
         {t("tours.prev")}
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => useTours.getState().go(1)}
         disabled={running.index >= tour.steps.length - 1}
-        className="flex-none rounded-md px-2 py-0.5 text-xs text-muted hover:bg-surface hover:text-ink disabled:opacity-40"
       >
         {t("tours.next")}
-      </button>
-      <button
-        type="button"
-        onClick={() => useTours.getState().stop()}
-        className="flex-none rounded-md px-2 py-0.5 text-xs text-muted hover:bg-surface hover:text-ink"
-      >
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => useTours.getState().stop()}>
         {t("tours.exit")}
-      </button>
+      </Button>
     </div>
   );
 }

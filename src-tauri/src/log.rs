@@ -512,15 +512,104 @@ mod tests {
 
     #[test]
     fn record_is_single_line_json() {
+        // CONSTRAINT: `init` installs a *process-global* logger through a
+        // `OnceLock`, so the first test in the run to call it wins and every
+        // later call is a no-op that returns the original path. That makes the
+        // active file's location order-dependent across tests: do NOT assume the
+        // write lands in *our* tempdir. Instead read back from the path `init`
+        // actually resolved to (its return value), which keeps this test correct
+        // regardless of which test initialised the global logger first.
+        //
+        // The default level/enabled loaded at first init are `info`/enabled (no
+        // persisted config yet), so a LEVEL_INFO record is always written; the
+        // config round-trip test only writes the config *file* and never mutates
+        // the runtime level/enabled, so it can't suppress this write either.
         let dir = tempfile::tempdir().unwrap();
-        init(dir.path().to_path_buf(), None);
+        let path = init(dir.path().to_path_buf(), None);
         write(LEVEL_INFO, "test", "line one\nline two", json!({ "n": 1 }));
-        let contents = fs::read_to_string(dir.path().join(ACTIVE_FILE)).unwrap();
-        let lines: Vec<&str> = contents.lines().collect();
-        assert_eq!(lines.len(), 1);
-        let parsed: Value = serde_json::from_str(lines[0]).unwrap();
+        let contents = fs::read_to_string(&path).unwrap();
+        // The record must be exactly one line even though the msg had a newline.
+        let last = contents.lines().next_back().unwrap();
+        let parsed: Value = serde_json::from_str(last).unwrap();
         assert_eq!(parsed["level"], json!("info"));
         assert_eq!(parsed["target"], json!("test"));
         assert_eq!(parsed["fields"]["n"], json!(1));
+        // The msg's embedded newline is preserved *inside* the JSON string (real
+        // '\n' after parsing) yet the record still occupies a single physical
+        // line — that is the framing guarantee this test exists to protect.
+        assert!(parsed["msg"].as_str().unwrap().contains('\n'));
+    }
+
+    #[test]
+    fn roll_shifts_archives_and_caps_at_max() {
+        // Exercises `Sink::roll` directly (the reason the sink is hand-rolled and
+        // otherwise untested). A fresh `Sink` over a tempdir is rolled more times
+        // than we keep archives, tagging each active file so both the shift order
+        // (newest → .1) and the cap (nothing past MAX_ARCHIVES) can be asserted.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(ACTIVE_FILE);
+        let mut sink = Sink {
+            dir: dir.path().to_path_buf(),
+            path: path.clone(),
+            file: open_append(&path).ok(),
+        };
+
+        let rolls = MAX_ARCHIVES + 2;
+        for gen in 0..rolls {
+            sink.append(format!("gen {gen}\n").as_bytes());
+            sink.roll();
+        }
+
+        // Exactly MAX_ARCHIVES archives survive; older ones were deleted.
+        for n in 1..=MAX_ARCHIVES {
+            assert!(sink.archive_path(n).exists(), "archive .{n} should exist");
+        }
+        assert!(
+            !sink.archive_path(MAX_ARCHIVES + 1).exists(),
+            "nothing past MAX_ARCHIVES may be kept"
+        );
+
+        // Shift order: .1 holds the most recent generation, .2 the one before it.
+        let last = rolls - 1;
+        let a1 = fs::read_to_string(sink.archive_path(1)).unwrap();
+        let a2 = fs::read_to_string(sink.archive_path(2)).unwrap();
+        assert!(a1.contains(&format!("gen {last}")), ".1 must be newest");
+        assert!(
+            a2.contains(&format!("gen {}", last - 1)),
+            ".2 must be second-newest"
+        );
+
+        // The active file was reopened fresh (empty) after the final roll.
+        assert_eq!(fs::read_to_string(&path).unwrap(), "");
+    }
+
+    #[test]
+    fn persisted_config_round_trips() {
+        // `write_persisted_config` targets the *global* logger's directory, and
+        // `read_persisted_config` reads a directory we pass. To round-trip through
+        // both regardless of which tempdir the OnceLock logger actually points at,
+        // ensure a logger exists, write, then read back from the logger's own
+        // directory (derived from `current_path`), not our local tempdir.
+        let dir = tempfile::tempdir().unwrap();
+        init(dir.path().to_path_buf(), None);
+
+        // The active logger may be one another test installed first, whose tempdir
+        // could already have been cleaned up. Recreate that directory before
+        // persisting so `write_persisted_config`'s `fs::write` can't silently fail
+        // — this keeps the round-trip order-independent under parallel tests.
+        let active = current_path().expect("logger initialised");
+        let cfg_dir = Path::new(&active).parent().unwrap().to_path_buf();
+        let _ = fs::create_dir_all(&cfg_dir);
+
+        write_persisted_config(false, LEVEL_DEBUG);
+        let (enabled, level) = read_persisted_config(&cfg_dir);
+        assert!(!enabled);
+        assert_eq!(level, LEVEL_DEBUG);
+
+        // Round-trip a different pairing to prove the mapping isn't hard-coded.
+        write_persisted_config(true, LEVEL_WARN);
+        let (enabled, level) = read_persisted_config(&cfg_dir);
+        assert!(enabled);
+        assert_eq!(level, LEVEL_WARN);
     }
 }

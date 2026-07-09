@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useProject } from "../../lib/store";
 import { CloseIcon } from "../atoms/icons";
+import { IconButton } from "../atoms/IconButton";
 import { useTranslation } from "react-i18next";
 
 export function BookmarksPanel() {
@@ -54,15 +55,13 @@ export function BookmarksPanel() {
                   {b.line}
                 </span>
               </button>
-              <button
-                type="button"
-                aria-label={t("bookmarks.remove")}
-                title={t("bookmarks.remove")}
+              <IconButton
+                size="sm"
+                label={t("bookmarks.remove")}
                 onClick={() => useBookmarks.getState().remove(root, b.path, b.line)}
-                className="grid h-6 w-6 flex-none place-items-center text-faint opacity-0 transition-opacity group-hover/bm:opacity-100 group-focus-within/bm:opacity-100 focus-visible:opacity-100 hover:text-ink"
-              >
-                <CloseIcon className="h-3 w-3" />
-              </button>
+                icon={<CloseIcon className="h-3 w-3" />}
+                className="opacity-0 transition-opacity group-hover/bm:opacity-100 group-focus-within/bm:opacity-100 focus-visible:opacity-100"
+              />
             </div>
           ))}
         </li>

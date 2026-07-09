@@ -9,6 +9,8 @@ import { useMemo, useState } from "react";
 import { useSpecs, type SpecGroup } from "../../lib/specs";
 import { useProject } from "../../lib/store";
 import { SearchIcon, FetchIcon, ChevronIcon, CollapseAllIcon } from "../atoms/icons";
+import { Input } from "../atoms/Input";
+import { IconButton } from "../atoms/IconButton";
 import { useTranslation } from "react-i18next";
 
 /** Display label without the markdown extension (proposal.md → proposal). */
@@ -53,37 +55,28 @@ export function SpecsPanel() {
       <div className="flex flex-none items-center gap-1.5 border-b border-line px-2 py-2">
         <div className="relative flex min-w-0 flex-1 items-center">
           <SearchIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-faint" />
-          <input
-            type="text"
+          <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("specs.search")}
             aria-label={t("specs.search")}
-            className="min-w-0 flex-1 rounded-md border border-line bg-canvas py-1 pr-2 pl-7 text-sm text-ink outline-none placeholder:text-faint focus:border-line-strong"
+            className="min-w-0 flex-1 bg-canvas py-1 pr-2 pl-7"
           />
         </div>
-        <button
-          type="button"
+        <IconButton
+          label={t(anyExpanded ? "specs.collapseAll" : "specs.expandAll")}
           onClick={() =>
             anyExpanded
               ? useSpecs.getState().collapseAll()
               : useSpecs.getState().expandAll(allKeys)
           }
-          title={t(anyExpanded ? "specs.collapseAll" : "specs.expandAll")}
-          aria-label={t(anyExpanded ? "specs.collapseAll" : "specs.expandAll")}
-          className="grid h-7 w-7 flex-none place-items-center rounded-md text-faint transition-colors hover:bg-surface hover:text-ink"
-        >
-          <CollapseAllIcon className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
+          icon={<CollapseAllIcon className="h-4 w-4" />}
+        />
+        <IconButton
+          label={t("specs.refresh")}
           onClick={() => void useSpecs.getState().load(root)}
-          title={t("specs.refresh")}
-          aria-label={t("specs.refresh")}
-          className="grid h-7 w-7 flex-none place-items-center rounded-md text-faint transition-colors hover:bg-surface hover:text-ink"
-        >
-          <FetchIcon className="h-4 w-4" />
-        </button>
+          icon={<FetchIcon className="h-4 w-4" />}
+        />
       </div>
 
       {filtered.length === 0 ? (

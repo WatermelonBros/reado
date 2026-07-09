@@ -9,7 +9,7 @@
 import { launchAgent } from "../../lib/agents";
 import { agentInstalled } from "../../lib/api";
 import { useTerminals } from "../../lib/terminals";
-import { useProject } from "../../lib/store";
+import { useProject, useSettings } from "../../lib/store";
 import { useComments, toRelative } from "../../lib/comments";
 import {
   useEffect,
@@ -23,6 +23,8 @@ import { Terminal } from "../organisms/Terminal";
 import { SendReviewDialog } from "../organisms/SendReviewDialog";
 import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
+import { Badge } from "../atoms/Badge";
+import { IconButton } from "../atoms/IconButton";
 import { useTranslation } from "react-i18next";
 import {
   PlusIcon,
@@ -165,11 +167,17 @@ export function TerminalPanel() {
       active ? { path: toRelative(root, active), isDir: false } : { path: ".", isDir: true },
     );
 
-  // Resize the whole panel by dragging its inner edge.
+  // Resize the whole panel by dragging its inner edge. The pointer deltas are in
+  // viewport (visual) pixels, but the panel width/height are layout pixels inside
+  // the interface-zoom transform — so divide by the zoom to convert, otherwise the
+  // panel resizes by the wrong amount at zoom ≠ 1.
   const startResize = (e: ReactPointerEvent) => {
     e.preventDefault();
+    const zoom = useSettings.getState().zoom || 1;
     const onMove = (ev: PointerEvent) =>
-      isRight ? setWidth(window.innerWidth - ev.clientX) : setHeight(window.innerHeight - ev.clientY);
+      isRight
+        ? setWidth((window.innerWidth - ev.clientX) / zoom)
+        : setHeight((window.innerHeight - ev.clientY) / zoom);
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
@@ -252,9 +260,7 @@ export function TerminalPanel() {
               >
                 <span>{titleOf(g.paneIds[0])}</span>
                 {g.paneIds.length > 1 && (
-                  <span className="grid h-4 min-w-4 place-items-center rounded-full bg-overlay px-1 text-[10px] text-faint">
-                    {g.paneIds.length}
-                  </span>
+                  <Badge tone="neutral">{g.paneIds.length}</Badge>
                 )}
               </button>
               <button
@@ -270,15 +276,13 @@ export function TerminalPanel() {
               </button>
             </div>
           ))}
-          <button
-            type="button"
-            aria-label={t("terminal.new")}
-            title={t("terminal.new")}
+          <IconButton
+            label={t("terminal.new")}
+            icon={<PlusIcon className="h-3.5 w-3.5" />}
             onClick={() => add()}
-            className="ml-1 grid h-6 w-6 flex-none place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-          </button>
+            size="sm"
+            className="ml-1"
+          />
         </div>
 
         {/* Send review (collapses to icon-only when narrow). */}
@@ -292,9 +296,7 @@ export function TerminalPanel() {
           <SendIcon className="h-3.5 w-3.5" />
           {!compact && t("terminal.sendReview")}
           {openTaskCount > 0 && (
-            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-[color-mix(in_oklch,var(--accent-contrast)_25%,transparent)] px-1 text-[10px]">
-              {openTaskCount}
-            </span>
+            <Badge tone="soft">{openTaskCount}</Badge>
           )}
         </button>
         <button
@@ -309,27 +311,23 @@ export function TerminalPanel() {
 
         {/* Layout cluster: split + orientation. */}
         <span className="mx-0.5 h-4 w-px flex-none bg-line" />
-        <button
-          type="button"
-          aria-label={t("terminal.split")}
-          title={t("terminal.split")}
+        <IconButton
+          label={t("terminal.split")}
+          icon={<SplitIcon className="h-3.5 w-3.5" />}
           onClick={() => split()}
-          className="grid h-6 w-6 flex-none place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
-        >
-          <SplitIcon className="h-3.5 w-3.5" />
-        </button>
+          size="sm"
+        />
         {multi && activeGroup && (
-          <button
-            type="button"
-            aria-label={t("terminal.orientation")}
-            title={t("terminal.orientation")}
+          <IconButton
+            label={t("terminal.orientation")}
+            icon={
+              <SplitIcon
+                className={`h-3.5 w-3.5 ${activeGroup.dir === "column" ? "rotate-90" : ""}`}
+              />
+            }
             onClick={() => setGroupDir(activeGroup.id)}
-            className="grid h-6 w-6 flex-none place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
-          >
-            <SplitIcon
-              className={`h-3.5 w-3.5 ${activeGroup.dir === "column" ? "rotate-90" : ""}`}
-            />
-          </button>
+            size="sm"
+          />
         )}
 
         {/* Agent launchers: icon-only, the only spot of brand colour. */}
@@ -434,25 +432,19 @@ export function TerminalPanel() {
           <OpenCodeIcon className="h-4 w-4" />
         </button>
         <span className="mx-0.5 h-4 w-px flex-none bg-line" />
-        <button
-          type="button"
-          aria-label={t("terminal.move")}
-          title={isRight ? t("terminal.moveBottom") : t("terminal.moveRight")}
+        {/* Show the target layout (what clicking will do), matching the tooltip. */}
+        <IconButton
+          label={isRight ? t("terminal.moveBottom") : t("terminal.moveRight")}
+          icon={<LayoutIcon className={`h-3.5 w-3.5 ${isRight ? "rotate-90" : ""}`} />}
           onClick={togglePosition}
-          className="grid h-6 w-6 flex-none place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
-        >
-          {/* Show the target layout (what clicking will do), matching the tooltip. */}
-          <LayoutIcon className={`h-3.5 w-3.5 ${isRight ? "rotate-90" : ""}`} />
-        </button>
-        <button
-          type="button"
-          aria-label={t("terminal.hide")}
-          title={t("terminal.hide")}
+          size="sm"
+        />
+        <IconButton
+          label={t("terminal.hide")}
+          icon={<CloseIcon className="h-3.5 w-3.5" />}
           onClick={() => toggle(false)}
-          className="grid h-6 w-6 flex-none place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
-        >
-          <CloseIcon className="h-3.5 w-3.5" />
-        </button>
+          size="sm"
+        />
       </div>
 
       {/* Pane area. Every pane stays mounted; only the active group's panes are

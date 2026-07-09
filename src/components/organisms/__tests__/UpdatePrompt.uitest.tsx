@@ -86,9 +86,25 @@ describe("UpdatePrompt", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("styles an error toast distinctly", () => {
+  it("styles an error toast distinctly from an info toast", () => {
+    // Error tone: the marker colour + the strong border.
     useUpdate.setState({ toast: { kind: "error", text: "Boom" } });
+    const { unmount } = render(<UpdatePrompt />);
+    const errorToast = screen.getByRole("status");
+    expect(errorToast).toHaveTextContent("Boom");
+    expect(errorToast.className).toContain("text-marker");
+    expect(errorToast.className).toContain("border-line-strong");
+    expect(errorToast.className).not.toContain("text-ink");
+    unmount();
+
+    // Info tone: the neutral ink colour, never the error marker / strong border.
+    // (An error↔info regression flips exactly these classes, so it fails here.)
+    useUpdate.setState({ toast: { kind: "info", text: "Up to date" } });
     render(<UpdatePrompt />);
-    expect(screen.getByRole("status")).toHaveTextContent("Boom");
+    const infoToast = screen.getByRole("status");
+    expect(infoToast).toHaveTextContent("Up to date");
+    expect(infoToast.className).toContain("text-ink");
+    expect(infoToast.className).not.toContain("text-marker");
+    expect(infoToast.className).not.toContain("border-line-strong");
   });
 });

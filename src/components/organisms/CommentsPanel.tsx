@@ -16,6 +16,8 @@ import { Select } from "../atoms/Select";
 import { Checkbox } from "../atoms/Checkbox";
 import { SegmentedControl } from "../atoms/SegmentedControl";
 import { SendIcon, SparkleIcon } from "../atoms/icons";
+import { Badge } from "../atoms/Badge";
+import { Button } from "../atoms/Button";
 import { SendReviewDialog } from "./SendReviewDialog";
 import { AuditDialog, type AuditTarget } from "./AuditDialog";
 import { useTranslation } from "react-i18next";
@@ -210,30 +212,30 @@ export function CommentsPanel() {
 
       {/* Ask an agent to review the open tasks or audit the code into comments. */}
       <div className="flex flex-none gap-2 border-t border-line p-2">
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
+          className="flex-1"
           onClick={() => setReviewOpen(true)}
           disabled={openTasks === 0}
           title={openTasks === 0 ? t("terminal.noTasks") : t("terminal.sendReview")}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-accent px-2 py-1.5 text-xs font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-40"
         >
           <SendIcon className="h-3.5 w-3.5" />
           {t("comments.review")}
           {openTasks > 0 && (
-            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-[color-mix(in_oklch,var(--accent-contrast)_25%,transparent)] px-1 text-[10px]">
-              {openTasks}
-            </span>
+            <Badge tone="soft">{openTasks}</Badge>
           )}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="flex-1"
           onClick={() => setAuditTarget(auditScope())}
           title={active ? t("tree.audit") : t("comments.auditProject")}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs text-ink transition-colors hover:border-line-strong"
         >
           <SparkleIcon className="h-3.5 w-3.5" />
           {t("comments.audit")}
-        </button>
+        </Button>
       </div>
 
       <SendReviewDialog open={reviewOpen} onClose={() => setReviewOpen(false)} />

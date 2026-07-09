@@ -21,8 +21,12 @@ import { useProject, useSettings } from "../../lib/store";
 import { xtermTheme, xtermFontFamily } from "../../lib/xtermTheme";
 import { useTranslation } from "react-i18next";
 import { SearchIcon, ChevronIcon, CloseIcon } from "../atoms/icons";
+import { Input } from "../atoms/Input";
 
 const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+/** Terminal font size at 100% interface zoom (multiplied by the zoom factor). */
+const BASE_FONT_SIZE = 13;
 
 // A file path printed in output, with an optional :line:col or (line,col) suffix.
 // Requires a real extension so we don't underline arbitrary words.
@@ -67,7 +71,10 @@ export function Terminal({ id, cwd, active }: Props) {
     const term = new XTerm({
       theme: xtermTheme(),
       fontFamily: useSettings.getState().codeFont || xtermFontFamily(),
-      fontSize: 13,
+      // The interface zoom is applied to the terminal via the font size (and the
+      // host is counter-scaled below), not the ancestor CSS transform — so xterm's
+      // mouse→cell mapping stays correct and selection/copy land on the right cell.
+      fontSize: BASE_FONT_SIZE * (useSettings.getState().zoom || 1),
       lineHeight: 1.2,
       cursorBlink: true,
       allowProposedApi: true,
@@ -240,6 +247,18 @@ export function Terminal({ id, cwd, active }: Props) {
     requestAnimationFrame(syncSize);
   }, [codeFont, syncSize]);
 
+  // Interface zoom drives the terminal font size (not a CSS transform), and the
+  // host is counter-scaled in the JSX so the terminal has no net scale — keeping
+  // xterm's coordinate mapping (selection, links) correct at any zoom. Re-fit so
+  // the cols/rows track the new cell size.
+  const zoom = useSettings((s) => s.zoom) || 1;
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontSize = BASE_FONT_SIZE * zoom;
+    requestAnimationFrame(syncSize);
+  }, [zoom, syncSize]);
+
   const find = (q: string, back = false) => {
     if (!q) return;
     if (back) searchRef.current?.findPrevious(q);
@@ -256,7 +275,8 @@ export function Terminal({ id, cwd, active }: Props) {
       {query !== null && (
         <div className="absolute top-2 right-3 z-30 flex items-center gap-1 rounded-md border border-line-strong bg-overlay px-1.5 py-1 shadow-[var(--shadow)]">
           <SearchIcon className="h-3.5 w-3.5 flex-none text-faint" />
-          <input
+          <Input
+            variant="plain"
             autoFocus
             value={query}
             onChange={(e) => {
@@ -268,7 +288,7 @@ export function Terminal({ id, cwd, active }: Props) {
               if (e.key === "Escape") closeSearch();
             }}
             placeholder={t("terminal.search")}
-            className="w-44 bg-transparent text-sm text-ink outline-none placeholder:text-faint"
+            className="w-44 px-0 py-0"
           />
           <button
             type="button"
@@ -296,7 +316,18 @@ export function Terminal({ id, cwd, active }: Props) {
           </button>
         </div>
       )}
-      <div ref={hostRef} className="h-full w-full" />
+      {/* Counter-scale the terminal so it carries NO net interface-zoom transform.
+          The ancestor scales everything by `zoom`; we scale the host by `1/zoom`
+          (net 1) and size it at `zoom×` so it still fills the panel. xterm then
+          maps mouse coordinates in an untransformed space — selection, copy and
+          clickable links land on the right cell — while the font size (set above)
+          keeps it visually in step with the zoomed UI. At zoom 1 this is a no-op. */}
+      <div
+        className="absolute top-0 left-0 origin-top-left"
+        style={{ transform: `scale(${1 / zoom})`, width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
+      >
+        <div ref={hostRef} className="h-full w-full" />
+      </div>
     </div>
   );
 }

@@ -19,6 +19,8 @@ import {
   gitFetch,
   gitPull,
   gitPush,
+  gitSync,
+  gitInfo,
   gitCreateBranch,
   gitStash,
   gitStashList,
@@ -31,7 +33,11 @@ import {
 } from "../../lib/api";
 import { useProject, useEditorActions } from "../../lib/store";
 import { useTerminals } from "../../lib/terminals";
+import { notify } from "../../lib/notice";
 import { composeCommitPrompt } from "../../lib/review";
+import { Textarea } from "../atoms/Textarea";
+import { Input } from "../atoms/Input";
+import { IconButton } from "../atoms/IconButton";
 
 import {
   PlusIcon,
@@ -41,6 +47,7 @@ import {
   FetchIcon,
   PullIcon,
   PushIcon,
+  SyncIcon,
   StashIcon,
   MoreIcon,
   GitBranchIcon,
@@ -67,6 +74,8 @@ const dirname = (p: string) => {
 export function GitPanel() {
   const root = useProject((s) => s.root);
   const open = useProject((s) => s.open);
+  const git = useProject((s) => s.git);
+  const setGit = useProject((s) => s.setGit);
   const setDiffing = useEditorActions((s) => s.setDiffing);
   const activeTerminal = useTerminals((s) => s.activeId);
   const addTerminal = useTerminals((s) => s.add);
@@ -101,6 +110,12 @@ export function GitPanel() {
       .catch(() => setStashes([]));
   }, [root]);
 
+  // Refresh ahead/behind/remote after a repo op so the push/sync affordances
+  // reflect the new state (a commit adds to `ahead`, a push clears it).
+  const refreshInfo = useCallback(() => {
+    gitInfo(root).then(setGit).catch(() => {});
+  }, [root, setGit]);
+
   useEffect(() => {
     refresh();
     // Keep the view fresh as the tree changes (cheap, debounced by interval).
@@ -125,13 +140,16 @@ export function GitPanel() {
   const act = (p: Promise<unknown>) => {
     setBusy(true);
     setError(null);
-    p.then(refresh)
+    p.then(() => {
+      refresh();
+      refreshInfo();
+    })
       .catch((e) => setError(String(e)))
       .finally(() => setBusy(false));
   };
 
-  // Repo-level op (fetch/pull/push/stash/…): refresh both status and stashes,
-  // close the menu, and surface git's stderr on failure.
+  // Repo-level op (fetch/pull/push/stash/…): refresh status, stashes and
+  // ahead/behind, close the menu, and surface git's stderr on failure.
   const runRepo = (p: Promise<unknown>) => {
     setBusy(true);
     setError(null);
@@ -139,7 +157,27 @@ export function GitPanel() {
     p.then(() => {
       refresh();
       refreshStashes();
+      refreshInfo();
     })
+      .catch((e) => setError(String(e)))
+      .finally(() => setBusy(false));
+  };
+
+  // Sync = pull then push. A conflict isn't an error: the backend reports the
+  // conflicted files (which then show in the list) and we point the user at them.
+  const sync = () => {
+    setBusy(true);
+    setError(null);
+    setMenuOpen(false);
+    gitSync(root)
+      .then((res) => {
+        refresh();
+        refreshStashes();
+        refreshInfo();
+        if (res.conflicted.length > 0) {
+          notify("info", t("git.syncConflicts", { count: res.conflicted.length }));
+        }
+      })
       .catch((e) => setError(String(e)))
       .finally(() => setBusy(false));
   };
@@ -284,30 +322,62 @@ export function GitPanel() {
     onClick,
     label,
     Icon,
+    disabled,
   }: {
     onClick: () => void;
     label: string;
     Icon: typeof PlusIcon;
+    disabled?: boolean;
   }) => (
-    <button
-      type="button"
+    <IconButton
       onClick={onClick}
-      disabled={busy}
-      title={label}
-      aria-label={label}
-      className="grid h-7 w-7 place-items-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-ink disabled:opacity-40"
-    >
-      <Icon className="h-4 w-4" />
-    </button>
+      disabled={busy || disabled}
+      label={label}
+      icon={<Icon className="h-4 w-4" />}
+    />
   );
+
+  // Remote affordances: what can each action actually do right now?
+  const { ahead, behind, hasRemote, hasUpstream } = git;
+  const canPush = hasRemote && (!hasUpstream || ahead > 0);
+  const canSync = hasRemote && (ahead > 0 || behind > 0 || hasUpstream);
+  // Tooltip that spells out the pending counts, e.g. "Sync (↓2 ↑1)".
+  const counts = [behind > 0 ? `↓${behind}` : "", ahead > 0 ? `↑${ahead}` : ""]
+    .filter(Boolean)
+    .join(" ");
+  const syncLabel = counts ? `${t("git.sync")} (${counts})` : t("git.sync");
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Repo toolbar: fetch / pull / push, plus a "more" menu */}
       <div className="relative flex flex-none items-center gap-0.5 border-b border-line px-2 py-1.5">
-        <ToolButton onClick={() => runRepo(gitFetch(root))} label={t("git.fetch")} Icon={FetchIcon} />
-        <ToolButton onClick={() => runRepo(gitPull(root))} label={t("git.pull")} Icon={PullIcon} />
-        <ToolButton onClick={() => runRepo(gitPush(root))} label={t("git.push")} Icon={PushIcon} />
+        <ToolButton
+          onClick={sync}
+          label={syncLabel}
+          Icon={SyncIcon}
+          disabled={!canSync}
+        />
+        {counts && (
+          <span className="mr-0.5 font-mono text-[11px] text-muted tabular-nums">{counts}</span>
+        )}
+        <ToolButton
+          onClick={() => runRepo(gitFetch(root))}
+          label={t("git.fetch")}
+          Icon={FetchIcon}
+          disabled={!hasRemote}
+        />
+        <ToolButton
+          onClick={() => runRepo(gitPull(root))}
+          label={t("git.pull")}
+          Icon={PullIcon}
+          disabled={!hasRemote}
+        />
+        <ToolButton
+          onClick={() => runRepo(gitPush(root))}
+          label={t("git.push")}
+          Icon={PushIcon}
+          disabled={!canPush}
+        />
         <div ref={dotsRef} className="ml-auto">
           <ToolButton
             onClick={() => {
@@ -347,7 +417,8 @@ export function GitPanel() {
                 <button
                   type="button"
                   onClick={() => runRepo(gitStash(root, "", false))}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                  disabled={changes.length === 0}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface disabled:opacity-40"
                 >
                   <StashIcon className="h-3.5 w-3.5 text-muted" />
                   {t("git.stash")}
@@ -355,7 +426,8 @@ export function GitPanel() {
                 <button
                   type="button"
                   onClick={() => runRepo(gitStash(root, "", true))}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                  disabled={changes.length === 0}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface disabled:opacity-40"
                 >
                   <StashIcon className="h-3.5 w-3.5 text-muted" />
                   {t("git.stashUntracked")}
@@ -445,7 +517,8 @@ export function GitPanel() {
       {/* New-branch inline input */}
       {branchName !== null && (
         <div className="flex flex-none items-center gap-1 border-b border-line px-2 py-1.5">
-          <input
+          <Input
+            variant="filled"
             autoFocus
             value={branchName}
             onChange={(e) => setBranchName(e.target.value)}
@@ -454,16 +527,14 @@ export function GitPanel() {
               if (e.key === "Escape") setBranchName(null);
             }}
             placeholder={t("git.newBranchPlaceholder")}
-            className="min-w-0 flex-1 rounded-md bg-surface px-2 py-1 text-sm text-ink outline-none placeholder:text-faint"
+            className="min-w-0 flex-1 px-2"
           />
-          <button
-            type="button"
+          <IconButton
+            size="sm"
             onClick={() => setBranchName(null)}
-            title={t("common.cancel")}
-            className="grid h-6 w-6 flex-none place-items-center rounded text-muted hover:text-ink"
-          >
-            <CloseIcon className="h-3.5 w-3.5" />
-          </button>
+            label={t("common.cancel")}
+            icon={<CloseIcon className="h-3.5 w-3.5" />}
+          />
         </div>
       )}
 
@@ -500,15 +571,14 @@ export function GitPanel() {
 
       {/* Commit box */}
       <div className="flex-none border-b border-line p-2">
-        <textarea
+        <Textarea
+          variant="filled"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) commit();
-          }}
+          onSubmit={commit}
           placeholder={t("git.commitPlaceholder")}
           rows={1}
-          className="block max-h-32 min-h-8 w-full resize-y rounded-md bg-surface px-2 py-1.5 text-sm text-ink outline-none placeholder:text-faint"
+          className="max-h-32 min-h-8"
         />
         <button
           type="button"

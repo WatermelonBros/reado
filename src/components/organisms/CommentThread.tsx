@@ -23,9 +23,12 @@ import {
 } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
 import { Checkbox } from "../atoms/Checkbox";
+import { Button } from "../atoms/Button";
+import { IconButton } from "../atoms/IconButton";
 import { CloseIcon, SendIcon } from "../atoms/icons";
 import { dispatchToAgent } from "../../lib/agents";
 import { composeSingleTaskPrompt } from "../../lib/review";
+import { Textarea } from "../atoms/Textarea";
 import { useTranslation } from "react-i18next";
 
 const fmtTime = (ms: number) =>
@@ -115,24 +118,19 @@ export function CommentThread({ comment, top, onClose }: Props) {
         />
         <span className="ml-auto font-mono text-xs text-faint">{lineLabel}</span>
         {comment.kind === "task" && comment.state !== "done" && (
-          <button
-            type="button"
+          <IconButton
+            size="sm"
+            label={t("terminal.sendReview")}
             onClick={sendToAgent}
-            title={t("terminal.sendReview")}
-            aria-label={t("terminal.sendReview")}
-            className="grid h-6 w-6 place-items-center rounded-sm text-muted hover:bg-surface hover:text-accent"
-          >
-            <SendIcon className="h-3.5 w-3.5" />
-          </button>
+            icon={<SendIcon className="h-3.5 w-3.5" />}
+          />
         )}
-        <button
-          type="button"
-          title={t("settings.close")} aria-label={t("settings.close")}
+        <IconButton
+          size="sm"
+          label={t("settings.close")}
           onClick={onClose}
-          className="grid h-6 w-6 place-items-center rounded-sm text-muted hover:bg-surface hover:text-ink"
-        >
-          <CloseIcon className="h-3.5 w-3.5" />
-        </button>
+          icon={<CloseIcon className="h-3.5 w-3.5" />}
+        />
       </div>
 
       {comment.orphan && (
@@ -173,31 +171,22 @@ export function CommentThread({ comment, top, onClose }: Props) {
             </div>
             {i === 0 && editDraft !== null ? (
               <div>
-                <textarea
+                <Textarea
+                  variant="filled"
                   autoFocus
                   value={editDraft}
                   onChange={(e) => setEditDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") setEditDraft(null);
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveEdit();
-                  }}
-                  className="block max-h-40 min-h-16 w-full resize-y rounded-md bg-surface px-2 py-1.5 text-sm text-ink outline-none"
+                  onSubmit={saveEdit}
+                  onCancel={() => setEditDraft(null)}
+                  className="max-h-40 min-h-16"
                 />
                 <div className="mt-1 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditDraft(null)}
-                    className="rounded-md px-2 py-1 text-xs text-muted hover:text-ink"
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => setEditDraft(null)}>
                     {t("common.cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveEdit}
-                    className="rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-on-accent hover:brightness-110"
-                  >
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={saveEdit}>
                     {t("editor.save")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
@@ -211,14 +200,13 @@ export function CommentThread({ comment, top, onClose }: Props) {
 
       {/* Footer: reply + task/note + delete. */}
       <div className="border-t border-line p-2">
-        <textarea
+        <Textarea
+          variant="filled"
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendReply();
-          }}
+          onSubmit={sendReply}
           placeholder={t("comment.replyPlaceholder")}
-          className="block max-h-32 min-h-9 w-full resize-y rounded-md bg-surface px-2 py-1.5 text-sm text-ink outline-none placeholder:text-faint"
+          className="max-h-32 min-h-9"
         />
         <div className="mt-2 flex items-center justify-between">
           <Checkbox
@@ -231,38 +219,26 @@ export function CommentThread({ comment, top, onClose }: Props) {
             {confirmingDelete ? (
               <>
                 <span className="text-xs text-muted">{t("comment.deleteConfirm")}</span>
-                <button
-                  type="button"
-                  onClick={() => remove(comment.id)}
-                  className="rounded-md px-2 py-1 text-xs font-semibold text-marker hover:bg-surface"
-                >
+                <Button variant="danger" size="sm" onClick={() => remove(comment.id)}>
                   {t("comment.delete")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  className="rounded-md px-2 py-1 text-xs text-muted hover:text-ink"
-                >
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
                   {t("common.cancel")}
-                </button>
+                </Button>
               </>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(true)}
-                  className="rounded-md px-2 py-1 text-xs text-muted hover:text-ink"
-                >
+                <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(true)}>
                   {t("comment.delete")}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={sendReply}
                   disabled={!replyText.trim()}
-                  className="rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
                 >
                   {t("comment.reply")}
-                </button>
+                </Button>
               </>
             )}
           </div>

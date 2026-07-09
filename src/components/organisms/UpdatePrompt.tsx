@@ -9,6 +9,8 @@ import remarkGfm from "remark-gfm";
 import { useUpdate } from "../../lib/update";
 
 import { Modal } from "../atoms/Modal";
+import { Button } from "../atoms/Button";
+import { IconButton } from "../atoms/IconButton";
 import { CloseIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
 
@@ -37,15 +39,12 @@ export function UpdatePrompt() {
       >
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <h2 className="m-0 text-sm font-semibold text-ink">{t("update.title")}</h2>
-          <button
-            type="button"
-            title={t("update.later")} aria-label={t("update.later")}
+          <IconButton
+            label={t("update.later")}
+            icon={<CloseIcon />}
             onClick={dismiss}
             disabled={installing}
-            className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink disabled:opacity-40"
-          >
-            <CloseIcon />
-          </button>
+          />
         </div>
 
         <div className="px-4 py-3">
@@ -58,22 +57,12 @@ export function UpdatePrompt() {
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-line px-4 py-2.5">
-          <button
-            type="button"
-            onClick={dismiss}
-            disabled={installing}
-            className="rounded-md px-2.5 py-1.5 text-xs text-muted hover:text-ink disabled:opacity-40"
-          >
+          <Button size="sm" onClick={dismiss} disabled={installing}>
             {t("update.later")}
-          </button>
-          <button
-            type="button"
-            onClick={() => void install()}
-            disabled={installing}
-            className="rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-on-accent hover:brightness-110 disabled:opacity-60"
-          >
+          </Button>
+          <Button size="sm" variant="primary" onClick={() => void install()} disabled={installing}>
             {installing ? t("update.installing") : t("update.install")}
-          </button>
+          </Button>
         </div>
       </Modal>
 

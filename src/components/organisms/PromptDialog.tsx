@@ -5,6 +5,8 @@
 import { useEffect, useRef } from "react";
 import { usePrompt } from "../../lib/prompt";
 import { Modal } from "../atoms/Modal";
+import { Input } from "../atoms/Input";
+import { Button } from "../atoms/Button";
 import { useTranslation } from "react-i18next";
 
 export function PromptDialog() {
@@ -26,7 +28,7 @@ export function PromptDialog() {
       className="w-[min(440px,92vw)] p-4"
     >
       <h2 className="mb-2 text-sm font-medium text-ink">{title}</h2>
-      <input
+      <Input
         ref={inputRef}
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -35,24 +37,15 @@ export function PromptDialog() {
           if (e.key === "Escape") cancel();
         }}
         placeholder={placeholder}
-        className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-faint"
+        className="py-1.5"
       />
       <div className="mt-3 flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={cancel}
-          className="rounded-md px-2.5 py-1.5 text-xs text-muted hover:text-ink"
-        >
+        <Button variant="ghost" size="sm" onClick={cancel}>
           {t("common.cancel")}
-        </button>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!value.trim()}
-          className="rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
-        >
+        </Button>
+        <Button variant="primary" size="sm" onClick={submit} disabled={!value.trim()}>
           {confirmLabel}
-        </button>
+        </Button>
       </div>
     </Modal>
   );

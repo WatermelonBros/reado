@@ -59,6 +59,7 @@ import { toRelative } from "../../lib/comments";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
+import { Input } from "../atoms/Input";
 
 interface Row {
   /** Primary line. */
@@ -67,6 +68,10 @@ interface Row {
   detail?: string;
   /** Optional keyboard-shortcut chip shown on the right. */
   hint?: string;
+  /** Precondition: when `false` the command is hidden (its action would be a
+   *  no-op or nonsensical in the current context — e.g. "comment on selection"
+   *  with nothing selected). Undefined means always shown. */
+  when?: boolean;
   run: () => void;
 }
 
@@ -300,6 +305,29 @@ export function Palette() {
               ? "bookmarks.panel"
               : "search.placeholder";
 
+  // What to show when there are no rows: a per-mode empty state instead of a
+  // blank box. `search`/`commands` only speak up once you've typed (an empty
+  // query isn't "no results", it's "start typing"); the list modes always guide.
+  const typed = query.trim().length >= (mode === "search" ? 2 : 1);
+  const emptyMessage: string | null =
+    mode === "search"
+      ? typed
+        ? t("search.noResults")
+        : null
+      : mode === "commands"
+        ? typed
+          ? t("palette.noResults")
+          : null
+        : mode === "files"
+          ? t("finder.empty")
+          : mode === "symbols" || mode === "wsymbols"
+            ? t("symbols.empty")
+            : mode === "recents"
+              ? t("recents.empty")
+              : mode === "bookmarks"
+                ? t("bookmarks.empty")
+                : null;
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       close();
@@ -326,14 +354,15 @@ export function Palette() {
         onMouseDown={(e) => e.stopPropagation()}
         className="animate-rise flex max-h-[60vh] w-[min(640px,92vw)] flex-col overflow-hidden rounded-lg border border-line-strong bg-overlay shadow-[var(--shadow)]"
       >
-        <input
+        <Input
+          variant="plain"
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={t(placeholderKey)}
           spellCheck={false}
-          className="w-full border-b border-line bg-transparent px-5 py-4 text-lg text-ink outline-none placeholder:text-faint"
+          className="rounded-none border-b border-line px-5 py-4 text-lg"
         />
         {searchError ? (
           <div className="px-5 py-4 text-sm text-marker">
@@ -342,11 +371,7 @@ export function Palette() {
               : searchError}
           </div>
         ) : rows.length === 0 ? (
-          <div className="px-5 py-4 text-sm text-faint">
-            {mode === "search" && query.trim().length >= 2
-              ? t("search.noResults")
-              : null}
-          </div>
+          <div className="px-5 py-4 text-sm text-faint">{emptyMessage}</div>
         ) : (
           <ul role="listbox" className="m-0 list-none overflow-y-auto p-2">
             {rows.slice(0, 300).map((row, i) => (
@@ -419,19 +444,34 @@ function commandRows(
     openDocs,
   }: CommandCtx,
 ): Row[] {
+  // Context flags: gate each command on its precondition so the palette only
+  // lists what's actually applicable here (a "comment on selection" with nothing
+  // selected, or "clear terminal" with no terminal, is just noise).
+  const hasFile = !!project.active;
+  const view = useDocInfo.getState().view;
+  const hasSelection = !!view && !view.state.selection.main.empty;
+  const isRepo = project.git.isRepo;
+  const hasTerminal = useTerminals.getState().sessions.length > 0;
+  const canBack = project.navIndex > 0;
+  const canForward = project.navIndex < project.navStack.length - 1;
+  const hasClosed = project.closedTabs.length > 0;
+  const canSplit = hasFile || !!project.splitPath;
+  const hasBookmarks = useBookmarks.getState().bookmarks.length > 0;
+
   const rows: Row[] = [
-    { label: t("comment.new"), hint: `${mod}⇧M`, run: requestCompose },
-    { label: t("editor.explain"), run: requestExplain },
+    { label: t("comment.new"), hint: `${mod}⇧M`, when: hasSelection, run: requestCompose },
+    { label: t("editor.explain"), when: hasSelection, run: requestExplain },
     {
       label: t("qa.ask"),
+      when: hasSelection,
       run: () => {
         void askAboutSelection();
         close();
       },
     },
-    { label: t("peek.def"), run: requestPeek },
-    { label: t("editor.goToBracket"), run: goToBracket },
-    { label: t("editor.lastEdit"), run: gotoLastEdit },
+    { label: t("peek.def"), when: hasFile, run: requestPeek },
+    { label: t("editor.goToBracket"), when: hasFile, run: goToBracket },
+    { label: t("editor.lastEdit"), when: hasFile, run: gotoLastEdit },
     {
       label: t("onboarding.open"),
       run: () => {
@@ -448,6 +488,7 @@ function commandRows(
     },
     {
       label: t("prereview.run"),
+      when: isRepo,
       run: () => {
         usePreReview.getState().generate(project.root);
         useWorkspace.getState().selectTool("prereview");
@@ -456,6 +497,7 @@ function commandRows(
     },
     {
       label: t("guided.cmd.start"),
+      when: isRepo,
       run: () => {
         void useGuidedReview.getState().start(project.root, { kind: "diff" }, "bug_risk");
         useWorkspace.getState().selectTool("guidedreview");
@@ -494,6 +536,7 @@ function commandRows(
     },
     {
       label: t("hier.showCall"),
+      when: hasFile,
       run: () => {
         showCallHierarchy();
         close();
@@ -501,20 +544,26 @@ function commandRows(
     },
     {
       label: t("hier.showType"),
+      when: hasFile,
       run: () => {
         showTypeHierarchy();
         close();
       },
     },
-    { label: t("editor.cursorsLineEnds"), run: addCursorsToLineEnds },
+    { label: t("editor.cursorsLineEnds"), when: hasFile, run: addCursorsToLineEnds },
     {
       label: t("bookmarks.toggle"),
+      when: hasFile,
       run: () => {
         toggleBookmarkAtCursor();
         close();
       },
     },
-    { label: t("bookmarks.goto"), run: () => usePalette.getState().open("bookmarks") },
+    {
+      label: t("bookmarks.goto"),
+      when: hasBookmarks,
+      run: () => usePalette.getState().open("bookmarks"),
+    },
     {
       label: t("sync.export"),
       run: () => {
@@ -529,10 +578,10 @@ function commandRows(
         close();
       },
     },
-    { label: t("editor.format"), hint: `${shift}${alt}F`, run: () => void formatDocument() },
-    { label: t("terminal.clear"), run: clearTerminal },
-    { label: t("terminal.restart"), run: restartTerminal },
-    { label: t("symbols.goto"), hint: `${mod}⇧O`, run: () => open("symbols") },
+    { label: t("editor.format"), hint: `${shift}${alt}F`, when: hasFile, run: () => void formatDocument() },
+    { label: t("terminal.clear"), when: hasTerminal, run: clearTerminal },
+    { label: t("terminal.restart"), when: hasTerminal, run: restartTerminal },
+    { label: t("symbols.goto"), hint: `${mod}⇧O`, when: hasFile, run: () => open("symbols") },
     { label: t("symbols.gotoWorkspace"), hint: `${mod}T`, run: () => open("wsymbols") },
     { label: t("graph.title"), run: openGraph },
     { label: t("kb.title"), run: openDocs },
@@ -568,6 +617,7 @@ function commandRows(
         project.active && useReadProgress.getState().read.has(toRelative(project.root, project.active))
           ? t("tree.markUnread")
           : t("tree.markRead"),
+      when: hasFile,
       run: () => {
         if (!project.active) return;
         const rel = toRelative(project.root, project.active);
@@ -579,11 +629,12 @@ function commandRows(
       label: `${t("tree.showHidden")}: ${project.showHidden ? "on" : "off"}`,
       run: () => project.setShowHidden(!project.showHidden),
     },
-    { label: t("nav.back"), hint: `${alt}←`, run: () => useProject.getState().goBack() },
-    { label: t("nav.forward"), hint: `${alt}→`, run: () => useProject.getState().goForward() },
+    { label: t("nav.back"), hint: `${alt}←`, when: canBack, run: () => useProject.getState().goBack() },
+    { label: t("nav.forward"), hint: `${alt}→`, when: canForward, run: () => useProject.getState().goForward() },
     {
       label: t("tabs.reopen"),
       hint: `${mod}⇧T`,
+      when: hasClosed,
       run: () => useProject.getState().reopenClosed(),
     },
     {
@@ -591,10 +642,11 @@ function commandRows(
       hint: `${mod}B`,
       run: () => useWorkspace.getState().toggleSidebar(),
     },
-    { label: t("terminal.move"), run: () => useTerminals.getState().togglePosition() },
+    { label: t("terminal.move"), when: hasTerminal, run: () => useTerminals.getState().togglePosition() },
     {
       label: t("split.toggle"),
       hint: `${mod}\\`,
+      when: canSplit,
       run: () => {
         const p = useProject.getState();
         if (p.splitPath) p.closeSplit();
@@ -612,5 +664,7 @@ function commandRows(
       run: () => settings.set({ theme, mode: "manual" }),
     });
   }
-  return rows;
+  // Drop commands whose precondition isn't met, so the palette lists only what's
+  // actually applicable in the current context.
+  return rows.filter((r) => r.when !== false);
 }

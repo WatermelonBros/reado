@@ -61,7 +61,13 @@
     "readProgress": "{read} of {total} files read",
     "readError": "Couldn't read this folder — check permissions or that it still exists.",
     "markFolderRead": "Mark folder read",
-    "markFolderUnread": "Mark folder unread"
+    "markFolderUnread": "Mark folder unread",
+    "delete": "Delete",
+    "deleted": "Moved to trash — press Ctrl/Cmd+Z to undo",
+    "deleteFailed": "Couldn't move that to the trash."
+  },
+  "undo": {
+    "failed": "Couldn't undo the last file change."
   },
   "editor": {
     "empty": "Select a file from the tree to start reading.",
@@ -91,7 +97,8 @@
   "symbols": {
     "goto": "Go to Symbol in File…",
     "gotoWorkspace": "Go to Symbol in Project…",
-    "placeholder": "Go to symbol…"
+    "placeholder": "Go to symbol…",
+    "empty": "No symbols found."
   },
   "peek": {
     "def": "Peek Definition",
@@ -116,6 +123,14 @@
     "remove": "Remove bookmark",
     "toggle": "Toggle bookmark",
     "goto": "Go to bookmark…"
+  },
+  "coverage": {
+    "panel": "Reading coverage",
+    "filesRead": "files read",
+    "empty": "Nothing read yet. Mark files read as you go — Reado maps how far you've got.",
+    "noFiles": "No readable files in this project.",
+    "changed": "Changed since read",
+    "rootBucket": "Project root"
   },
   "sync": {
     "export": "Export settings (copy to clipboard)",
@@ -424,15 +439,23 @@
     "openComments": "Open comments"
   },
   "palette": {
-    "placeholder": "Type a command…"
+    "placeholder": "Type a command…",
+    "noResults": "No matching commands."
   },
   "finder": {
-    "placeholder": "Go to file…"
+    "placeholder": "Go to file…",
+    "empty": "No files match."
   },
   "search": {
     "placeholder": "Search in project…",
     "noResults": "No matches.",
     "replacePlaceholder": "Replace…",
+    "caseSensitive": "Match case",
+    "wholeWord": "Match whole word",
+    "regex": "Use regular expression",
+    "prev": "Previous match",
+    "next": "Next match",
+    "replaceOne": "Replace",
     "replaceAll": "Replace all",
     "replaceConfirm": "Confirm replace",
     "replaced": "Replaced in {count} file(s).",
@@ -559,7 +582,8 @@
     "hint": "Sets Reado as the handler for text and source files. On Windows this opens the system chooser.",
     "done": "Reado set as the default for {count} file types.",
     "settings": "Opened the system default-apps settings — pick Reado there.",
-    "manual": "Set Reado as the default from your file manager (right-click a file → Open with)."
+    "manual": "Set Reado as the default from your file manager (right-click a file → Open with).",
+    "failed": "Couldn't set Reado as the default app."
   },
   "sc": {
     "title": "Keyboard Shortcuts",
@@ -700,11 +724,14 @@
     "stashDrop": "Drop",
     "discardAll": "Discard all changes",
     "discardAllConfirm": "Discard all working-tree changes (including untracked files)? This cannot be undone.",
-    "stashDropConfirm": "Drop this stash? This cannot be undone."
+    "stashDropConfirm": "Drop this stash? This cannot be undone.",
+    "sync": "Sync (pull, then push)",
+    "syncConflicts": "Sync stopped: {count} file(s) have conflicts to resolve. Fix them, commit, then sync again."
   },
   "lsp": {
     "createTask": "Create task",
-    "createTaskFromProblem": "Create task from problem"
+    "createTaskFromProblem": "Create task from problem",
+    "serverStopped": "The {name} language server stopped. Code intelligence will resume when you next open or edit a file of that language."
   },
   "file": {
     "newFile": "New file",
@@ -809,8 +836,16 @@
   "common": {
     "cancel": "Cancel",
     "close": "Close",
+    "dismiss": "Dismiss",
     "loading": "Loading…",
     "error": "Something went wrong."
+  },
+  "notice": {
+    "saveFailed": "Couldn't save the file.",
+    "gitFailed": "The git operation failed.",
+    "watchFailed": "Couldn't watch the project for changes.",
+    "indexFailed": "Couldn't update the comment index.",
+    "actionFailed": "That didn't work."
   },
   "agent": {
     "notInstalled": "{name} isn't installed. Install it to use Reado's AI features.",
@@ -823,5 +858,14 @@
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "fit": "Fit"
+  },
+  "menu": {
+    "needFile": "Open a file first.",
+    "needSelection": "Select some text first.",
+    "needBack": "Nothing to go back to.",
+    "needForward": "Nothing to go forward to.",
+    "needReopen": "No recently closed editors to reopen.",
+    "needTerminal": "Open a terminal first.",
+    "needProblems": "No problems to jump to."
   }
 }

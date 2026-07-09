@@ -13,6 +13,7 @@ import { type MessageKey } from "../../i18n";
 import { COMMENT_TYPES, TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
 import { Checkbox } from "../atoms/Checkbox";
 import { Select } from "../atoms/Select";
+import { Textarea } from "../atoms/Textarea";
 import { useTranslation } from "react-i18next";
 
 interface Props {
@@ -124,16 +125,15 @@ export function CommentComposer({
         </div>
       </div>
 
-      <textarea
+      <Textarea
+        variant="plain"
         autoFocus
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
-        }}
+        onSubmit={save}
+        onCancel={onClose}
         placeholder={t("comment.bodyPlaceholder")}
-        className="block max-h-60 min-h-20 w-full resize-y bg-transparent px-3 py-2 text-sm text-ink outline-none placeholder:text-faint"
+        className="max-h-60 min-h-20 px-3 py-2"
       />
 
       <div className="flex items-center justify-between border-t border-line px-3 py-2">

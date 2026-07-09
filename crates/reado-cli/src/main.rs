@@ -416,6 +416,7 @@ fn session(
                     base: base.clone(),
                     paths: paths.clone(),
                     pr: None,
+                    request: None,
                 },
                 objective: objective.map(|o| o.into()),
             };
@@ -633,6 +634,7 @@ fn default_title(kind: ScopeKind, paths: &[String]) -> String {
         ScopeKind::Comments => "Review open comments".into(),
         ScopeKind::Project => "Review the project".into(),
         ScopeKind::Pr => "Review the pull request".into(),
+        ScopeKind::Prompt => "Review as requested".into(),
     }
 }
 

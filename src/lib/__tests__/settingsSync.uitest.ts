@@ -14,6 +14,8 @@ import {
   applyBundle,
   exportSettings,
   importSettings,
+  syncableKeys,
+  SETTINGS_EXCLUDED,
 } from "../settingsSync";
 import { useSettings } from "../store";
 import { useExtensions } from "../extensions";
@@ -36,6 +38,19 @@ describe("buildBundle", () => {
     expect(b.extensionsDisabled).toEqual(["ext.a", "ext.b"]);
     // must NOT leak the store's `set` function or project-local state
     expect("set" in b.settings).toBe(false);
+    expect("defaultAppsDismissed" in b.settings).toBe(false);
+  });
+
+  // Drift guard: every settings field is either syncable or deliberately excluded.
+  // A new field added to the store must be classified in one place or fail here,
+  // so a preference can never be silently dropped from the sync bundle again.
+  it("classifies every settings field as syncable or excluded", () => {
+    const s = useSettings.getState();
+    const synced = new Set(syncableKeys(s));
+    for (const key of Object.keys(s) as (keyof typeof s)[]) {
+      const classified = synced.has(key) || SETTINGS_EXCLUDED.has(key);
+      expect(classified, `settings field "${String(key)}" is unclassified`).toBe(true);
+    }
   });
 });
 

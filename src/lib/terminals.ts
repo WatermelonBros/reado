@@ -15,6 +15,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { createLogger } from "./logger";
+import { useSettings } from "./store";
 
 const log = createLogger("terminals");
 
@@ -104,10 +105,18 @@ export const useTerminals = create<TerminalsState>()(
   lastAgent: null,
   open: false,
   height: 280,
-  // Clamp so the panel can't swallow the whole window or vanish.
-  setHeight: (px) => set({ height: Math.max(120, Math.min(px, window.innerHeight - 160)) }),
+  // Clamp so the panel can't swallow the whole window or vanish. `px` is a layout
+  // pixel; convert the viewport size by the interface zoom so the cap is right at
+  // zoom ≠ 1.
+  setHeight: (px) =>
+    set({
+      height: Math.max(120, Math.min(px, window.innerHeight / (useSettings.getState().zoom || 1) - 160)),
+    }),
   width: 480,
-  setWidth: (px) => set({ width: Math.max(240, Math.min(px, window.innerWidth - 360)) }),
+  setWidth: (px) =>
+    set({
+      width: Math.max(240, Math.min(px, window.innerWidth / (useSettings.getState().zoom || 1) - 360)),
+    }),
   position: "bottom",
   togglePosition: () =>
     set((s) => ({ position: s.position === "bottom" ? "right" : "bottom" })),

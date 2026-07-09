@@ -20,6 +20,8 @@ import { listDocs, type DocItem } from "../../lib/knowledge";
 
 import { COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
+import { Input } from "../atoms/Input";
+import { IconButton } from "../atoms/IconButton";
 import { CloseIcon, DocsIcon, SpecsIcon, MessageIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -208,21 +210,19 @@ export function DocsView() {
       >
         <header className="flex flex-none items-center gap-3 border-b border-line px-5 py-3">
           <h2 className="m-0 text-sm font-medium">{t("kb.title")}</h2>
-          <input
+          <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("kb.search")}
             aria-label={t("kb.search")}
-            className="ml-2 w-48 rounded-md border border-line bg-surface px-2.5 py-1 text-sm text-ink outline-none placeholder:text-faint focus:border-line-strong"
+            className="ml-2 w-48"
           />
-          <button
-            type="button"
-            title={t("settings.close")} aria-label={t("settings.close")}
+          <IconButton
+            label={t("settings.close")}
             onClick={() => close(false)}
-            className="ml-auto grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink"
-          >
-            <CloseIcon />
-          </button>
+            className="ml-auto"
+            icon={<CloseIcon />}
+          />
         </header>
 
         <div className="flex min-h-0 flex-1">

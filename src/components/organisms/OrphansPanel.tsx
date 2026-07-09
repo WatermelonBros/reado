@@ -8,6 +8,7 @@ import { useComments } from "../../lib/comments";
 import { useProject } from "../../lib/store";
 
 import { TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
+import { Button } from "../atoms/Button";
 import { useTranslation } from "react-i18next";
 
 export function OrphansPanel() {
@@ -49,13 +50,9 @@ export function OrphansPanel() {
               {c.context.snippet}
             </pre>
           )}
-          <button
-            type="button"
-            onClick={() => reanchor(c)}
-            className="rounded-md border border-line bg-surface px-2.5 py-1 text-xs text-ink transition-colors hover:border-line-strong"
-          >
+          <Button variant="secondary" size="sm" onClick={() => reanchor(c)}>
             {t("orphans.reanchor")}
-          </button>
+          </Button>
         </li>
       ))}
     </ul>

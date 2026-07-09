@@ -22,6 +22,10 @@ import { Select } from "../atoms/Select";
 import { Drawer } from "../atoms/Drawer";
 import { Checkbox } from "../atoms/Checkbox";
 import { SegmentedControl } from "../atoms/SegmentedControl";
+import { Textarea } from "../atoms/Textarea";
+import { Input } from "../atoms/Input";
+import { Button } from "../atoms/Button";
+import { IconButton } from "../atoms/IconButton";
 import { CloseIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -60,15 +64,11 @@ export function Settings() {
     >
       <header className="flex flex-none items-center justify-between border-b border-line px-6 py-4">
         <h2 className="m-0 text-lg font-semibold">{t("settings.title")}</h2>
-        <button
-          type="button"
-          title={t("settings.close")}
-          aria-label={t("settings.close")}
+        <IconButton
+          label={t("settings.close")}
+          icon={<CloseIcon />}
           onClick={() => toggle(false)}
-          className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink"
-        >
-          <CloseIcon />
-        </button>
+        />
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -469,14 +469,15 @@ function ExcludeGlobs({ value, onCommit }: { value: string[]; onCommit: (g: stri
     );
   return (
     <Field label={t("settings.exclude")}>
-      <textarea
+      <Textarea
+        mono
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         rows={4}
         spellCheck={false}
         placeholder={"node_modules\ndist\n*.log"}
-        className="w-full resize-y rounded-md border border-line bg-canvas px-2 py-1.5 font-mono text-xs text-ink outline-none focus:border-line-strong"
+        className="bg-canvas text-xs"
       />
       <span className="text-xs leading-relaxed text-faint">{t("settings.excludeHint")}</span>
     </Field>
@@ -525,13 +526,9 @@ function DefaultApp() {
   const { t } = useTranslation();
   return (
     <Section title={t("defaultApp.title")}>
-      <button
-        type="button"
-        onClick={() => void makeDefaultApp()}
-        className="self-start rounded-md border border-line px-2.5 py-1.5 text-sm text-ink hover:bg-surface"
-      >
+      <Button variant="secondary" onClick={() => void makeDefaultApp()} className="self-start">
         {t("defaultApp.set")}
-      </button>
+      </Button>
       <p className="text-xs leading-relaxed text-faint">{t("defaultApp.hint")}</p>
     </Section>
   );
@@ -572,22 +569,20 @@ function LoggingSettings() {
       {/* The log-file cluster reads as one unit: buttons, its path, and the note. */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => path && void revealItemInDir(path).catch(() => {})}
             disabled={!path}
-            className="rounded-md border border-line px-2.5 py-1.5 text-sm text-ink hover:bg-surface disabled:opacity-50"
           >
             {t("settings.logReveal")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => path && void navigator.clipboard.writeText(path).catch(() => {})}
             disabled={!path}
-            className="rounded-md border border-line px-2.5 py-1.5 text-sm text-ink hover:bg-surface disabled:opacity-50"
           >
             {t("settings.logCopyPath")}
-          </button>
+          </Button>
         </div>
         {path && <p className="break-all text-xs leading-relaxed text-faint">{path}</p>}
         <p className="text-xs leading-relaxed text-faint">{t("settings.logHint")}</p>
@@ -624,14 +619,9 @@ function CliInstall() {
   return (
     <Section title={t("settings.cli")}>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={run}
-          disabled={busy}
-          className="rounded-md border border-line px-2.5 py-1.5 text-sm text-ink hover:bg-surface disabled:opacity-50"
-        >
+        <Button variant="secondary" onClick={run} disabled={busy}>
           {installed ? t("settings.cliReinstall") : t("settings.cliInstall")}
-        </button>
+        </Button>
         {installed && !result && <span className="text-xs text-faint">{t("settings.cliInstalled")}</span>}
       </div>
       <p className="text-xs leading-relaxed text-faint">{t("settings.cliHint")}</p>
@@ -659,30 +649,22 @@ function AppVersion() {
         Reado {version ? `v${version}` : "—"}
       </span>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => {
             usePalette.getState().toggleSettings(false);
             useTourGuide.getState().run();
           }}
-          className="rounded-md border border-line px-2 py-1 text-muted hover:border-line-strong hover:text-ink"
         >
           {t("tour.replay")}
-        </button>
-        <button
-          type="button"
-          onClick={() => usePalette.getState().toggleShortcuts(true)}
-          className="rounded-md border border-line px-2 py-1 text-muted hover:border-line-strong hover:text-ink"
-        >
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => usePalette.getState().toggleShortcuts(true)}>
           {t("settings.shortcuts")}
-        </button>
-        <button
-          type="button"
-          onClick={() => checkForUpdates(true)}
-          className="rounded-md border border-line px-2 py-1 text-muted hover:border-line-strong hover:text-ink"
-        >
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => checkForUpdates(true)}>
           {t("settings.checkUpdates")}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -758,7 +740,7 @@ function NumberField({
   };
   return (
     <Field label={label}>
-      <input
+      <Input
         type="number"
         value={draft}
         min={min}
@@ -767,7 +749,7 @@ function NumberField({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-        className="w-full rounded-md border border-line bg-canvas px-2 py-1.5 text-sm text-ink outline-none focus:border-line-strong"
+        className="bg-canvas px-2 py-1.5"
       />
       {hint && <span className="text-xs leading-relaxed text-faint">{hint}</span>}
     </Field>

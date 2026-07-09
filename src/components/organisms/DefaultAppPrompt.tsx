@@ -10,6 +10,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSettings } from "../../lib/store";
 import { makeDefaultApp } from "../../lib/defaults";
 import { Modal } from "../atoms/Modal";
+import { Button } from "../atoms/Button";
 import { Checkbox } from "../atoms/Checkbox";
 import { SparkleIcon } from "../atoms/icons";
 import { useTranslation } from "react-i18next";
@@ -55,23 +56,18 @@ export function DefaultAppPrompt() {
           className="text-sm text-muted"
         />
         <div className="mt-1 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => close(false)}
-            className="rounded-md border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-line-strong hover:text-ink"
-          >
+          <Button variant="secondary" onClick={() => close(false)}>
             {t("defaultApp.later")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
             onClick={() => {
               void makeDefaultApp();
               close(true);
             }}
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent transition-opacity hover:opacity-90"
           >
             {t("defaultApp.set")}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

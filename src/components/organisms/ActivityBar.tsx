@@ -6,6 +6,8 @@
  * sits at the bottom. New tools (Git, Orphans, Graph, History) slot in here as
  * their capabilities land.
  */
+import { useRef } from "react";
+import { usePointerReorder, useFlip } from "../../lib/pointerReorder";
 import { useWorkspace, usePalette, useProject, type Tool } from "../../lib/store";
 import { useComments, openCount } from "../../lib/comments";
 import { useSpecs } from "../../lib/specs";
@@ -37,7 +39,9 @@ import {
   SparkleIcon,
   RouteIcon,
   TourIcon,
+  CoverageIcon,
 } from "../atoms/icons";
+import { Badge } from "../atoms/Badge";
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
 
@@ -52,6 +56,8 @@ const BASE_TOOLS: ToolDef[] = [
 export function ActivityBar() {
   const tool = useWorkspace((s) => s.tool);
   const selectTool = useWorkspace((s) => s.selectTool);
+  const toolOrder = useWorkspace((s) => s.toolOrder);
+  const setToolOrder = useWorkspace((s) => s.setToolOrder);
   const toggleGraph = useWorkspace((s) => s.toggleGraph);
   const toggleDocs = useWorkspace((s) => s.toggleDocs);
   const toggleSettings = usePalette((s) => s.toggleSettings);
@@ -79,6 +85,8 @@ export function ActivityBar() {
     // The guided-review cockpit is always available — its empty state teaches how
     // to start a session, which is one of the feature's entry points.
     { id: "guidedreview", labelKey: "guided.panel", Icon: RouteIcon },
+    // Reading coverage is core to the read-first mission — always available.
+    { id: "coverage", labelKey: "coverage.panel", Icon: CoverageIcon },
     ...(isRepo
       ? [{ id: "git" as Tool, labelKey: "git.panel" as MessageKey, Icon: GitBranchIcon }]
       : []),
@@ -123,13 +131,40 @@ export function ActivityBar() {
               ? guidedOpen
               : 0;
 
+  // Apply the user's custom order: listed tools first (in that order), the rest
+  // keep their natural order after (sort is stable). Drag reorders the list.
+  const rank = new Map(toolOrder.map((id, i) => [id, i]));
+  const orderedTools = [...tools].sort(
+    (a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity),
+  );
+
+  const reorder = (from: Tool, to: Tool, after: boolean) => {
+    if (from === to) return;
+    const ids = orderedTools.map((x) => x.id).filter((id) => id !== from);
+    const at = ids.indexOf(to) + (after ? 1 : 0);
+    ids.splice(at, 0, from);
+    // Keep any previously-ordered tool that isn't currently shown at the end.
+    const hidden = toolOrder.filter((id) => !ids.includes(id));
+    setToolOrder([...ids, ...hidden]);
+  };
+
+  // Pointer-based drag-to-reorder (HTML5 DnD is hijacked by Tauri's OS drop).
+  const { dragging, over, onPointerDown } = usePointerReorder("y", (from, to, after) =>
+    reorder(from as Tool, to as Tool, after),
+  );
+  const railRef = useRef<HTMLDivElement>(null);
+  useFlip(railRef, orderedTools.map((x) => x.id).join(" "));
+
   // One shared accent bar that slides to the active tool (button pitch = 44px:
   // h-10 (40px) + gap-1 (4px)).
-  const activeIndex = tools.findIndex((x) => x.id === tool);
+  const activeIndex = orderedTools.findIndex((x) => x.id === tool);
 
   return (
     <nav className="flex h-full w-12 flex-none flex-col items-center border-r border-line bg-surface py-2">
-      <div className="relative flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        ref={railRef}
+        className="relative flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         <span
           aria-hidden="true"
           className="absolute left-0 h-7 w-0.5 rounded-full bg-accent transition-[top,opacity] duration-200 ease-out"
@@ -138,7 +173,7 @@ export function ActivityBar() {
             opacity: activeIndex >= 0 ? 1 : 0,
           }}
         />
-        {tools.map(({ id, labelKey, Icon }) => {
+        {orderedTools.map(({ id, labelKey, Icon }) => {
           const active = tool === id;
           const badge = badgeFor(id);
           return (
@@ -146,19 +181,33 @@ export function ActivityBar() {
               key={id}
               type="button"
               data-tour={id}
+              data-reorder-id={id}
+              onPointerDown={onPointerDown(id)}
               onClick={() => selectTool(id)}
               title={t(labelKey)}
               aria-label={t(labelKey)}
               aria-pressed={active}
               className={`relative grid h-10 w-10 place-items-center transition-colors ${
-                active ? "text-ink" : "text-faint hover:text-muted"
-              }`}
+                active ? "text-accent" : "text-faint hover:text-muted"
+              } ${dragging === id ? "opacity-40" : ""}`}
             >
-              <Icon className="h-[18px] w-[18px]" />
+              {over?.id === id && (
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none absolute inset-x-1 z-10 h-0.5 bg-accent ${
+                    over.after ? "bottom-0" : "top-0"
+                  }`}
+                />
+              )}
+              {/* Active tool: primary colour + duotone for a clear, calm accent. */}
+              <Icon className="h-[18px] w-[18px]" weight={active ? "duotone" : "regular"} />
               {badge > 0 && (
-                <span className="absolute top-1 right-1.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-marker px-1 text-[9px] font-bold text-on-accent">
+                <Badge
+                  tone="marker"
+                  className="absolute top-1 right-1.5 h-3.5 min-w-3.5 text-[9px] font-bold"
+                >
                   {badge}
-                </span>
+                </Badge>
               )}
             </button>
           );
