@@ -11,6 +11,32 @@ commit.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-07-11
+
+The 1.0 milestone. This release reworks the launcher into a context-aware,
+keyboard-first entry point — an onboarding on first run, a calm reading-desk
+utility once you have recent projects.
+
+### Added
+- The launcher is now keyboard-first: **⌘/Ctrl+O** opens a folder from anywhere,
+  and **↑/↓** move through the recent projects with **Enter** to open the
+  highlighted one (the "open folder" actions show the shortcut).
+
+### Changed
+- The launcher now adapts to context. On first run it's an onboarding — wordmark,
+  tagline, a prominent "open folder" action and the three-step teaching. Once you
+  have recent projects it becomes a calm, left-aligned utility: the recent list
+  leads, "open folder" drops to a quiet secondary action, and the tagline, hint
+  and teaching (all redundant for a returning user) step aside. Recent paths are
+  abbreviated with `~` for your home directory (the full path stays in the tooltip).
+- The launcher wordmark gained an accent text-caret and a quiet tagline sub-mark,
+  the content settles in with a subtle staggered entrance (honouring reduced
+  motion), and each recent row now carries a chevron so it reads as openable.
+
+### Fixed
+- The remove (✕) button on a recent project is now vertically centred in its row
+  instead of pinned to the top.
+
 ## [0.19.0] — 2026-07-09
 
 A correctness-and-polish release: Git Sync with conflict reporting, VS Code-style
@@ -389,7 +415,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/WatermelonBros/reado/compare/v0.19.0...v1.0.0
 [0.19.0]: https://github.com/WatermelonBros/reado/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/WatermelonBros/reado/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/WatermelonBros/reado/releases/tag/v0.17.0
