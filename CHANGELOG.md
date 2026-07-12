@@ -11,6 +11,36 @@ commit.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-07-12
+
+### Added
+- **In-app browser preview.** A dockable pane renders your running dev server
+  right next to the editor, so you review a front-end without leaving Reado. It
+  auto-detects the live dev-server port (reading `package.json`'s dev/start
+  script and framework defaults, then common fallbacks) and reloads when a server
+  you started *after* opening the pane comes up. Toolbar has back/forward/reload,
+  an editable URL bar, detach-to-window, and close.
+- **Device emulation & zoom.** Preset viewports (Mobile / Tablet / Laptop) or a
+  custom W×H, plus a page-zoom control (10–300%, with **Fit**) so you can preview
+  a 4K layout on a 1080p screen.
+- **Built-in inspector.** Console, Network, Elements, and Application tabs docked
+  at the bottom or the right of the pane (draggable to resize). Network rows open
+  a Chrome-style detail view (request/response headers, payload, pretty-printed
+  JSON); Elements renders the live DOM as real HTML with hover-to-highlight;
+  Application edits cookies and local/session storage. Right-clicking the page
+  offers Reload / Copy / Paste / Inspect.
+- **Agent access to the preview (MCP).** With agent access on (the default), the
+  `reado mcp` server exposes `browser_*` tools so the terminal agent sees and
+  drives *the same* preview you do — read the console/network/errors, evaluate JS,
+  inspect the DOM and animations, click/hover/type/scroll, navigate (confined to
+  localhost and your allowlist), and capture a frame. Reado wires `reado mcp` into
+  the installed agents' config on project open, so it's ready with no manual step.
+
+### Fixed
+- The MCP mirror files are cleared when the preview pane closes, so the agent's
+  tools correctly report "no preview pane running" again instead of serving stale
+  console/network data.
+
 ## [1.0.0] — 2026-07-11
 
 The 1.0 milestone. This release reworks the launcher into a context-aware,
@@ -415,7 +445,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/WatermelonBros/reado/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/WatermelonBros/reado/compare/v0.19.0...v1.0.0
 [0.19.0]: https://github.com/WatermelonBros/reado/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/WatermelonBros/reado/compare/v0.17.0...v0.18.0
