@@ -10,7 +10,10 @@
 //! DOM, input) will be layered on later via `eval` + a scoped data-back channel;
 //! this module is just the pane's lifecycle and placement.
 
-use tauri::{Manager, PhysicalPosition, PhysicalSize, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
+use tauri::{
+    Manager, PhysicalPosition, PhysicalSize, Runtime, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Window,
+};
 
 /// Capture bridge, injected before every page load (runs in the isolated page).
 /// It buffers `console.*`, uncaught errors/rejections, and `fetch`/`XHR` activity
@@ -97,7 +100,9 @@ fn preview_label<R: Runtime>(window: &Window<R>) -> String {
 /// sub-webview), so it manages its own cursor and never fights the main webview's
 /// tracking areas — which was the source of the cursor flicker.
 fn find_preview<R: Runtime>(window: &Window<R>) -> Option<WebviewWindow<R>> {
-    window.app_handle().get_webview_window(&preview_label(window))
+    window
+        .app_handle()
+        .get_webview_window(&preview_label(window))
 }
 
 /// Convert a pane rect (logical px, relative to the host window's content area)
@@ -201,7 +206,11 @@ pub fn preview_detect_urls(root: String, current: Option<String>) -> Vec<String>
     if let Some(pkg) = &pkg {
         // Explicit `--port`/`-p`/`PORT=` in the dev (or start) script wins.
         for key in ["dev", "start"] {
-            if let Some(script) = pkg.get("scripts").and_then(|s| s.get(key)).and_then(|v| v.as_str()) {
+            if let Some(script) = pkg
+                .get("scripts")
+                .and_then(|s| s.get(key))
+                .and_then(|v| v.as_str())
+            {
                 if let Some(p) = explicit_port(script) {
                     ports.push(p);
                 }
@@ -210,7 +219,9 @@ pub fn preview_detect_urls(root: String, current: Option<String>) -> Vec<String>
         ports.extend(framework_ports(pkg));
     }
     // Common fallbacks after the project-specific guesses.
-    ports.extend([5173, 5174, 5175, 5176, 3000, 3001, 4321, 4200, 8080, 8000, 4173, 5500]);
+    ports.extend([
+        5173, 5174, 5175, 5176, 3000, 3001, 4321, 4200, 8080, 8000, 4173, 5500,
+    ]);
     // Dedup, preserving order.
     let mut seen = std::collections::HashSet::new();
     ports.retain(|p| seen.insert(*p));
@@ -220,7 +231,11 @@ pub fn preview_detect_urls(root: String, current: Option<String>) -> Vec<String>
     let live: Vec<String> = ports
         .into_iter()
         .filter(|&p| {
-            TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], p)), Duration::from_millis(80)).is_ok()
+            TcpStream::connect_timeout(
+                &SocketAddr::from(([127, 0, 0, 1], p)),
+                Duration::from_millis(80),
+            )
+            .is_ok()
         })
         .map(|p| format!("http://localhost:{p}"))
         .collect();
@@ -232,7 +247,10 @@ pub fn preview_detect_urls(root: String, current: Option<String>) -> Vec<String>
 fn explicit_port(script: &str) -> Option<u16> {
     let toks: Vec<&str> = script.split_whitespace().collect();
     for (i, t) in toks.iter().enumerate() {
-        if let Some(v) = t.strip_prefix("--port=").or_else(|| t.strip_prefix("PORT=")) {
+        if let Some(v) = t
+            .strip_prefix("--port=")
+            .or_else(|| t.strip_prefix("PORT="))
+        {
             if let Ok(p) = v.parse() {
                 return Some(p);
             }
@@ -293,7 +311,12 @@ pub fn preview_persist_state(root: String, console: String, network: String) -> 
 #[tauri::command]
 pub fn preview_clear_state(root: String) -> Result<(), String> {
     let dir = std::path::Path::new(&root).join(".reado");
-    for f in ["preview-console.json", "preview-network.json", "preview-cmd.json", "preview-result.json"] {
+    for f in [
+        "preview-console.json",
+        "preview-network.json",
+        "preview-cmd.json",
+        "preview-result.json",
+    ] {
         let _ = std::fs::remove_file(dir.join(f));
     }
     Ok(())
@@ -323,7 +346,10 @@ pub fn preview_capture_frame<R: Runtime>(
     let mut buf = std::io::Cursor::new(Vec::new());
     img.write_to(&mut buf, xcap::image::ImageFormat::Png)
         .map_err(|e| e.to_string())?;
-    Ok(format!("data:image/png;base64,{}", crate::fs::base64_encode(buf.get_ref())))
+    Ok(format!(
+        "data:image/png;base64,{}",
+        crate::fs::base64_encode(buf.get_ref())
+    ))
 }
 
 /// Control-channel queue (desktop↔`reado mcp`), file-based to reuse the pane's
@@ -331,7 +357,12 @@ pub fn preview_capture_frame<R: Runtime>(
 /// the pane executes it and writes `.reado/preview-result.json` `{id, ok, result}`.
 #[tauri::command]
 pub fn preview_take_cmd(root: String) -> Option<String> {
-    std::fs::read_to_string(std::path::Path::new(&root).join(".reado").join("preview-cmd.json")).ok()
+    std::fs::read_to_string(
+        std::path::Path::new(&root)
+            .join(".reado")
+            .join("preview-cmd.json"),
+    )
+    .ok()
 }
 
 #[tauri::command]
@@ -474,9 +505,7 @@ mod tests {
 
     #[test]
     fn framework_ports_are_inferred_from_deps() {
-        let pkg = |dep: &str| {
-            serde_json::json!({ "dependencies": { dep: "1.0.0" } })
-        };
+        let pkg = |dep: &str| serde_json::json!({ "dependencies": { dep: "1.0.0" } });
         assert_eq!(framework_ports(&pkg("next")), vec![3000, 3001, 3002]);
         assert_eq!(framework_ports(&pkg("vite")), vec![5173, 5174, 5175, 5176]);
         assert_eq!(framework_ports(&pkg("@angular/core")), vec![4200]);
@@ -499,8 +528,14 @@ mod tests {
         let root = dir.path().to_str().unwrap().to_string();
         preview_persist_state(root.clone(), "[1]".into(), "[2]".into()).unwrap();
         let reado = dir.path().join(".reado");
-        assert_eq!(std::fs::read_to_string(reado.join("preview-console.json")).unwrap(), "[1]");
-        assert_eq!(std::fs::read_to_string(reado.join("preview-network.json")).unwrap(), "[2]");
+        assert_eq!(
+            std::fs::read_to_string(reado.join("preview-console.json")).unwrap(),
+            "[1]"
+        );
+        assert_eq!(
+            std::fs::read_to_string(reado.join("preview-network.json")).unwrap(),
+            "[2]"
+        );
 
         // A stale control result must be swept too, so the next agent read is clean.
         std::fs::write(reado.join("preview-result.json"), "{}").unwrap();

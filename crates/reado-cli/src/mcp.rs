@@ -163,20 +163,32 @@ fn send_command(root: &str, op: &str, arg: &str) -> Result<String, (i64, String)
         .unwrap_or(0)
         .to_string();
     let cmd = serde_json::json!({ "id": id, "op": op, "arg": arg });
-    std::fs::write(dir.join("preview-cmd.json"), cmd.to_string()).map_err(|e| (-32603, e.to_string()))?;
+    std::fs::write(dir.join("preview-cmd.json"), cmd.to_string())
+        .map_err(|e| (-32603, e.to_string()))?;
     let result_path = dir.join("preview-result.json");
     for _ in 0..60 {
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let Ok(s) = std::fs::read_to_string(&result_path) else { continue };
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else { continue };
+        let Ok(s) = std::fs::read_to_string(&result_path) else {
+            continue;
+        };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else {
+            continue;
+        };
         if v.get("id").and_then(|i| i.as_str()) != Some(id.as_str()) {
             continue;
         }
         let ok = v.get("ok").and_then(|o| o.as_bool()).unwrap_or(false);
-        let res = v.get("result").and_then(|r| r.as_str()).unwrap_or("").to_string();
+        let res = v
+            .get("result")
+            .and_then(|r| r.as_str())
+            .unwrap_or("")
+            .to_string();
         return if ok { Ok(res) } else { Err((-32603, res)) };
     }
-    Err((-32603, "no preview pane running (open the browser preview and enable agent access)".into()))
+    Err((
+        -32603,
+        "no preview pane running (open the browser preview and enable agent access)".into(),
+    ))
 }
 
 /// JS-quote a string for safe embedding in an eval expression.
@@ -184,7 +196,11 @@ fn jsq(s: &str) -> String {
     serde_json::to_string(s).unwrap_or_else(|_| "\"\"".into())
 }
 
-fn call_tool(root: &str, name: &str, args: Option<&serde_json::Value>) -> Result<String, (i64, String)> {
+fn call_tool(
+    root: &str,
+    name: &str,
+    args: Option<&serde_json::Value>,
+) -> Result<String, (i64, String)> {
     // The mirror file's *presence* means a preview is live (it's written every tick
     // while agent access is on). An absent file → no preview; a present `[]` →
     // preview live but nothing captured yet.
@@ -196,8 +212,17 @@ fn call_tool(root: &str, name: &str, args: Option<&serde_json::Value>) -> Result
             read_json_file(root, file)
         }
     };
-    let sarg = |k: &str| args.and_then(|a| a.get(k)).and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let narg = |k: &str| args.and_then(|a| a.get(k)).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let sarg = |k: &str| {
+        args.and_then(|a| a.get(k))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    let narg = |k: &str| {
+        args.and_then(|a| a.get(k))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+    };
     match name {
         "browser_console" => Ok(read("preview-console.json")),
         "browser_network" => Ok(read("preview-network.json")),
@@ -292,11 +317,23 @@ mod tests {
             .map(|t| t["name"].as_str().unwrap())
             .collect();
         for expected in [
-            "browser_console", "browser_network", "browser_errors", "browser_eval",
-            "browser_navigate", "browser_dom", "browser_animation", "browser_click",
-            "browser_hover", "browser_type", "browser_scroll", "browser_frame",
+            "browser_console",
+            "browser_network",
+            "browser_errors",
+            "browser_eval",
+            "browser_navigate",
+            "browser_dom",
+            "browser_animation",
+            "browser_click",
+            "browser_hover",
+            "browser_type",
+            "browser_scroll",
+            "browser_frame",
         ] {
-            assert!(names.contains(&expected), "missing tool {expected} in {names:?}");
+            assert!(
+                names.contains(&expected),
+                "missing tool {expected} in {names:?}"
+            );
         }
         assert_eq!(names.len(), 12);
     }
@@ -312,7 +349,11 @@ mod tests {
     #[test]
     fn present_mirror_returns_its_contents() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(reado(&dir).join("preview-console.json"), r#"[{"level":"log"}]"#).unwrap();
+        std::fs::write(
+            reado(&dir).join("preview-console.json"),
+            r#"[{"level":"log"}]"#,
+        )
+        .unwrap();
         let out = call_tool(&root_str(&dir), "browser_console", None).unwrap();
         assert!(out.contains("\"level\":\"log\""), "got: {out}");
     }
@@ -327,13 +368,20 @@ mod tests {
         .unwrap();
         let out = call_tool(&root_str(&dir), "browser_errors", None).unwrap();
         assert!(out.contains("boom"), "error should surface: {out}");
-        assert!(!out.contains("\"ok\""), "non-errors must be filtered: {out}");
+        assert!(
+            !out.contains("\"ok\""),
+            "non-errors must be filtered: {out}"
+        );
     }
 
     #[test]
     fn errors_tool_reports_clean_when_no_errors() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(reado(&dir).join("preview-console.json"), r#"[{"level":"warn"}]"#).unwrap();
+        std::fs::write(
+            reado(&dir).join("preview-console.json"),
+            r#"[{"level":"warn"}]"#,
+        )
+        .unwrap();
         let out = call_tool(&root_str(&dir), "browser_errors", None).unwrap();
         assert_eq!(out, "No errors captured.");
     }
@@ -371,8 +419,12 @@ mod tests {
             let cmd_path = reado_dir.join("preview-cmd.json");
             for _ in 0..100 {
                 std::thread::sleep(std::time::Duration::from_millis(20));
-                let Ok(s) = std::fs::read_to_string(&cmd_path) else { continue };
-                let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else { continue };
+                let Ok(s) = std::fs::read_to_string(&cmd_path) else {
+                    continue;
+                };
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else {
+                    continue;
+                };
                 let id = v["id"].as_str().unwrap().to_string();
                 let out = serde_json::json!({ "id": id, "ok": true, "result": "42" });
                 std::fs::write(reado_dir.join("preview-result.json"), out.to_string()).unwrap();
@@ -393,10 +445,15 @@ mod tests {
             let cmd_path = reado_dir.join("preview-cmd.json");
             for _ in 0..100 {
                 std::thread::sleep(std::time::Duration::from_millis(20));
-                let Ok(s) = std::fs::read_to_string(&cmd_path) else { continue };
-                let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else { continue };
+                let Ok(s) = std::fs::read_to_string(&cmd_path) else {
+                    continue;
+                };
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else {
+                    continue;
+                };
                 let id = v["id"].as_str().unwrap().to_string();
-                let out = serde_json::json!({ "id": id, "ok": false, "result": "origin not allowed" });
+                let out =
+                    serde_json::json!({ "id": id, "ok": false, "result": "origin not allowed" });
                 std::fs::write(reado_dir.join("preview-result.json"), out.to_string()).unwrap();
                 return;
             }
@@ -417,8 +474,12 @@ mod tests {
             let cmd_path = reado_dir.join("preview-cmd.json");
             for _ in 0..100 {
                 std::thread::sleep(std::time::Duration::from_millis(20));
-                let Ok(s) = std::fs::read_to_string(&cmd_path) else { continue };
-                let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else { continue };
+                let Ok(s) = std::fs::read_to_string(&cmd_path) else {
+                    continue;
+                };
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else {
+                    continue;
+                };
                 let id = v["id"].as_str().unwrap().to_string();
                 let out = serde_json::json!({ "id": id, "ok": true, "result": "data:image/png;base64,AAAA" });
                 std::fs::write(reado_dir.join("preview-result.json"), out.to_string()).unwrap();
