@@ -66,17 +66,21 @@ export function UpdatePrompt() {
         </div>
       </Modal>
 
-      {/* Indicator: available but dismissed. */}
+      {/* Indicator: available but dismissed. Sits in the title bar's right end —
+          the wrapper is the bar's height (h-9) so the pill is vertically centered
+          in it regardless of the pill's own height. */}
       {update && dismissed && !open && (
-        <button
-          type="button"
-          onClick={reopen}
-          title={t("update.available", { version: version ?? "" })}
-          className="animate-fade fixed top-3 right-3 z-[105] inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-overlay px-2.5 py-1 text-xs font-medium text-ink shadow-[var(--shadow)] hover:bg-surface"
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-          {t("update.indicator")}
-        </button>
+        <div className="pointer-events-none fixed top-0 right-3 z-[105] flex h-9 items-center">
+          <button
+            type="button"
+            onClick={reopen}
+            title={t("update.available", { version: version ?? "" })}
+            className="animate-fade pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-overlay px-2.5 py-1 text-xs font-medium text-ink shadow-[var(--shadow)] hover:bg-surface"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+            {t("update.indicator")}
+          </button>
+        </div>
       )}
 
       {/* Toast: up-to-date / error. */}
