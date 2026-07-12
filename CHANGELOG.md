@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-07-12
+
 ### Fixed
 - The Linux build no longer pulls in PipeWire (via the `xcap` window-capture crate),
   which failed to build in CI and would have tied the binary to pipewire at runtime.
@@ -470,7 +472,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/WatermelonBros/reado/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/WatermelonBros/reado/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/WatermelonBros/reado/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/WatermelonBros/reado/compare/v0.19.0...v1.0.0
