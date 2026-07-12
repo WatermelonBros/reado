@@ -22,6 +22,7 @@ mod lsp;
 mod menu;
 mod proc;
 mod progress;
+mod preview;
 mod pty;
 mod search;
 mod sessions;
@@ -226,6 +227,23 @@ pub fn run() {
             proc::agent_installed,
             fileopen::drain_open_targets,
             defaults::set_default_handler,
+            preview::preview_open,
+            preview::preview_set_bounds,
+            preview::preview_navigate,
+            preview::preview_close,
+            preview::preview_eval,
+            preview::preview_detect_urls,
+            preview::preview_persist_state,
+            preview::preview_clear_state,
+            preview::preview_take_cmd,
+            preview::preview_put_result,
+            preview::preview_capture_frame,
+            preview::preview_set_zoom,
+            preview::preview_set_visible,
+            preview::preview_detach,
+            preview::preview_back,
+            preview::preview_forward,
+            preview::preview_reload,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")

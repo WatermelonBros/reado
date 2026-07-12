@@ -807,3 +807,57 @@ export const anywhereClearProject = (id: string) =>
 /** Publish the recent-projects list so a phone can open one on the desktop. */
 export const anywhereSetRecents = (recents: { path: string; name: string }[]) =>
   invoke<void>("anywhere_set_recents", { recents });
+
+// ---- In-app browser preview (multiwebview) --------------------------------
+// The preview page is a native webview parked over a DOM placeholder; the
+// frontend reports the placeholder's pixel rect so the two stay aligned.
+
+/** Open (or navigate + reposition) the preview webview over the given rect. */
+export const previewOpen = (url: string, x: number, y: number, w: number, h: number) =>
+  invoke<void>("preview_open", { url, x, y, w, h });
+
+/** Keep the preview parked over the pane as the layout resizes. */
+export const previewSetBounds = (x: number, y: number, w: number, h: number) =>
+  invoke<void>("preview_set_bounds", { x, y, w, h });
+
+/** Navigate the open preview to a new URL (URL bar / agent). */
+export const previewNavigate = (url: string) =>
+  invoke<void>("preview_navigate", { url });
+
+/** Close the preview pane (remove its webview). */
+export const previewClose = () => invoke<void>("preview_close");
+
+/** Run JS in the preview page and get its JSON result (drain bridge, query DOM). */
+export const previewEval = (js: string) => invoke<string>("preview_eval", { js });
+
+/** Live dev-server URLs, ordered by the open project's framework/config. */
+export const previewDetectUrls = (root: string, current?: string) =>
+  invoke<string[]>("preview_detect_urls", { root, current: current ?? null });
+
+/** Mirror the drained console/network snapshots to `.reado/` for the MCP server. */
+export const previewPersistState = (root: string, consoleJson: string, networkJson: string) =>
+  invoke<void>("preview_persist_state", { root, console: consoleJson, network: networkJson });
+
+/** Remove the `.reado/` mirror + control files when the pane closes, so the agent's
+ *  tools report "no preview pane running" again. */
+export const previewClearState = (root: string) => invoke<void>("preview_clear_state", { root });
+
+/** Control-channel queue: read the agent's pending command / write its result. */
+export const previewTakeCmd = (root: string) => invoke<string | null>("preview_take_cmd", { root });
+export const previewPutResult = (root: string, result: string) =>
+  invoke<void>("preview_put_result", { root, result });
+/** Detach the preview into its own window. */
+export const previewDetach = (url: string) => invoke<void>("preview_detach", { url });
+/** Capture the preview region as a PNG data URL (OS-level window capture). */
+export const previewCaptureFrame = (x: number, y: number, w: number, h: number) =>
+  invoke<string>("preview_capture_frame", { x, y, w, h });
+
+/** Set the preview page zoom (scale content to fit big viewports into the pane). */
+export const previewSetZoom = (factor: number) => invoke<void>("preview_set_zoom", { factor });
+
+/** Show/hide the preview window (hidden while a Reado overlay covers the pane). */
+export const previewSetVisible = (visible: boolean) => invoke<void>("preview_set_visible", { visible });
+
+export const previewBack = () => invoke<void>("preview_back");
+export const previewForward = () => invoke<void>("preview_forward");
+export const previewReload = () => invoke<void>("preview_reload");

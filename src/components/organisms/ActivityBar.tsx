@@ -21,7 +21,7 @@ import { useGuidedReview, openProposals } from "../../lib/guidedReview";
 import { type MessageKey } from "../../i18n";
 import { useTranslation } from "react-i18next";
 import {
-  FilesIcon,
+  FolderIcon,
   SearchIcon,
   MessageIcon,
   GitBranchIcon,
@@ -46,7 +46,7 @@ import { Badge } from "../atoms/Badge";
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
 
 const BASE_TOOLS: ToolDef[] = [
-  { id: "files", labelKey: "files.panel", Icon: FilesIcon },
+  { id: "files", labelKey: "files.panel", Icon: FolderIcon },
   { id: "search", labelKey: "search.placeholder", Icon: SearchIcon },
   { id: "comments", labelKey: "comments.panel", Icon: MessageIcon },
   { id: "outline", labelKey: "outline.panel", Icon: OutlineIcon },

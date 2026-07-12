@@ -26,6 +26,13 @@ import {
   MagnifyingGlassIcon as MagnifyingGlass,
   GearSixIcon as GearSix,
   XIcon as X,
+  ArrowSquareOutIcon as ArrowSquareOut,
+  CodeIcon as Code,
+  DevicesIcon as Devices,
+  BrowserIcon as Browser,
+  CrosshairIcon as Crosshair,
+  DotsThreeVerticalIcon as DotsThreeVertical,
+  RobotIcon as Robot,
   FolderIcon as Folder,
   FolderOpenIcon as FolderOpen,
   GitBranchIcon as GitBranch,
@@ -120,6 +127,7 @@ export const MoreIcon = wrap(DotsThree);
 export const SearchIcon = wrap(MagnifyingGlass);
 export const SettingsIcon = wrap(GearSix);
 export const CloseIcon = wrap(X);
+export const FolderIcon = wrap(Folder);
 export const FolderOpenIcon = wrap(FolderOpen);
 export const GitBranchIcon = wrap(GitBranch);
 export const FilesIcon = wrap(Files);
@@ -137,6 +145,13 @@ export const RouteIcon = wrap(Signpost);
 export const SwapIcon = wrap(Swap);
 export const SplitIcon = wrap(SquareSplitHorizontal);
 export const LayoutIcon = wrap(Layout);
+export const DetachIcon = wrap(ArrowSquareOut);
+export const CodeIcon = wrap(Code);
+export const DevicesIcon = wrap(Devices);
+export const BrowserIcon = wrap(Browser);
+export const CrosshairIcon = wrap(Crosshair);
+export const MoreVerticalIcon = wrap(DotsThreeVertical);
+export const RobotIcon = wrap(Robot);
 export const PlusIcon = wrap(Plus);
 export const BlameIcon = wrap(Fingerprint);
 export const OutlineIcon = wrap(ListBullets);
@@ -149,6 +164,7 @@ export const HierarchyIcon = wrap(TreeStructure);
 export const BookmarkIcon = wrap(BookmarkSimple);
 export const ProblemsIcon = wrap(Warning);
 export const TrashIcon = wrap(Trash);
+export const WarningIcon = wrap(Warning);
 export const DiscardIcon = wrap(ArrowCounterClockwise);
 export const MessageIcon = wrap(ChatCircle);
 

@@ -17,7 +17,8 @@ import {
 } from "../../lib/docInfo";
 import { useTerminals } from "../../lib/terminals";
 
-import { GitBranchIcon, MessageIcon, TerminalIcon, DeviceIcon } from "../atoms/icons";
+import { GitBranchIcon, MessageIcon, TerminalIcon, DeviceIcon, BrowserIcon } from "../atoms/icons";
+import { usePreview } from "../../lib/preview";
 import { useTranslation } from "react-i18next";
 import { mod } from "../../lib/shortcuts";
 import { Input } from "../atoms/Input";
@@ -86,6 +87,7 @@ export function StatusBar() {
   const root = useProject((s) => s.root);
   const active = useProject((s) => s.active);
   const git = useProject((s) => s.git);
+  const previewOpen = usePreview((s) => s.open);
   const { line, col } = useCursor();
   const eol = useDocInfo((s) => s.eol);
   const indentKind = useDocInfo((s) => s.indentKind);
@@ -189,6 +191,18 @@ export function StatusBar() {
       </div>
 
       <div className="flex flex-none items-center gap-1">
+        <button
+          type="button"
+          onClick={() => {
+            const p = usePreview.getState();
+            if (p.open) p.close();
+            else p.openPane();
+          }}
+          title={t("preview.open")}
+          className={`${ITEM} ${previewOpen ? "text-accent" : ""}`}
+        >
+          <BrowserIcon className="h-3.5 w-3.5" />
+        </button>
         {active && (
           <>
             <div className="relative">

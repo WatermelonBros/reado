@@ -23,7 +23,7 @@ tempfile = "3"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 # Signed auto-updates (checks an update endpoint, verifies the signature).
@@ -71,6 +71,8 @@ local-ip-address = "0.6"
 # Stream/Sink helpers for the WebSocket terminal bridge.
 futures-util = "0.3"
 tauri-plugin-clipboard-manager = "2.3.2"
+# Cross-platform OS-window pixel capture for the preview frame tool.
+xcap = { version = "0.9", features = ["image"] }
 
 # Signal the PTY's process group on close so dev servers don't orphan (Unix only).
 [target.'cfg(unix)'.dependencies]

@@ -28,6 +28,7 @@ import {
 } from "../../lib/store";
 import { openProjectHere } from "../../lib/window";
 import { useTerminals } from "../../lib/terminals";
+import { usePreview } from "../../lib/preview";
 import { mod, alt, shift } from "../../lib/shortcuts";
 import { checkForUpdates } from "../../lib/updater";
 import {
@@ -476,6 +477,23 @@ function commandRows(
       label: t("onboarding.open"),
       run: () => {
         useOnboarding.getState().show();
+        close();
+      },
+    },
+    {
+      label: t("preview.toggle"),
+      run: () => {
+        const p = usePreview.getState();
+        if (p.open) p.close();
+        else p.openPane();
+        close();
+      },
+    },
+    {
+      label: t("preview.agentAccess"),
+      run: () => {
+        const p = usePreview.getState();
+        p.setAgentAccess(!p.agentAccess);
         close();
       },
     },

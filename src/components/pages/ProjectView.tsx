@@ -14,6 +14,7 @@ import {
   listFiles,
   anywhereSetProject,
   anywhereClearProject,
+  previewClose,
   type Objective,
 } from "../../lib/api";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -44,6 +45,7 @@ import { ToursPanel, TourBar } from "../organisms/ToursPanel";
 import { PreReviewPanel } from "../organisms/PreReviewPanel";
 import { GuidedReviewPanel } from "../organisms/GuidedReviewPanel";
 import { CoveragePanel } from "../organisms/CoveragePanel";
+import { BrowserPanel } from "../organisms/BrowserPanel";
 import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
@@ -60,6 +62,8 @@ import { KnowledgeGraph } from "../organisms/KnowledgeGraph";
 import { DocsView } from "../organisms/DocsView";
 import { TerminalPanel } from "../organisms/TerminalPanel";
 import { useTerminals } from "../../lib/terminals";
+import { usePreview } from "../../lib/preview";
+import { ensureMcp } from "../../lib/mcp";
 import { EyeIcon, EyeOffIcon, CloseIcon, SwapIcon, CollapseAllIcon } from "../atoms/icons";
 import { IconButton } from "../atoms/IconButton";
 import { useTranslation } from "react-i18next";
@@ -327,6 +331,20 @@ export function ProjectView({ root }: { root: string }) {
   const showBreadcrumbs = useSettings((s) => s.showBreadcrumbs);
   const terminalOpen = useTerminals((s) => s.open);
   const terminalPosition = useTerminals((s) => s.position);
+  const browserOpen = usePreview((s) => s.open);
+
+  // A native preview webview can outlive a full frontend reload (dev HMR, or any
+  // reload); if the pane isn't open when the workspace mounts, close the orphan so
+  // it can't sit on top of the UI.
+  useEffect(() => {
+    if (!usePreview.getState().open) void previewClose();
+  }, []);
+
+  // Ensure the terminal agent can reach Reado's MCP server: wire `reado mcp` into
+  // the project's agent config on open (idempotent, non-clobbering).
+  useEffect(() => {
+    void ensureMcp(root);
+  }, [root]);
   const closeSplit = useProject((s) => s.closeSplit);
   const swapSplit = useProject((s) => s.swapSplit);
   const readCount = useReadProgress((s) => s.read.size);
@@ -533,6 +551,7 @@ export function ProjectView({ root }: { root: string }) {
               </div>
             </div>
           )}
+          {browserOpen && <BrowserPanel />}
           {terminalOpen && terminalPosition === "right" && <TerminalPanel />}
         </div>
         {terminalOpen && terminalPosition === "bottom" && <TerminalPanel />}

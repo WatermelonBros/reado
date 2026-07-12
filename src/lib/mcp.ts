@@ -97,30 +97,49 @@ const TARGETS: McpTarget[] = [
   },
 ];
 
-/** Wire Reado's MCP server into the config of every installed agent (falling back
- *  to Claude Code's `.mcp.json` when none is detected, so it's ready to use). */
-export async function enableMcp(root: string): Promise<void> {
-  const detected = await Promise.all(
-    TARGETS.map((tgt) => agentInstalled(tgt.bin).catch(() => false)),
-  );
-  const installed = TARGETS.filter((_, i) => detected[i]);
-  const toWrite = installed.length ? installed : [TARGETS[0]];
-
+/** Write Reado's MCP server into each target's config. Non-clobbering (skips a
+ *  config it can't parse) and idempotent (skips a write when already present).
+ *  Returns the labels actually (re)written. */
+async function writeMcpConfigs(root: string, targets: McpTarget[]): Promise<string[]> {
+  // read_file/write_file resolve the path against the process CWD, not the root,
+  // so a relative path silently fails to write — always pass an absolute path.
+  const abs = (p: string) => `${root.replace(/[\\/]+$/, "")}/${p}`;
   const written: string[] = [];
-  for (const tgt of toWrite) {
-    const existing = await readFile(root, tgt.path)
+  for (const tgt of targets) {
+    const path = abs(tgt.path);
+    const existing = await readFile(root, path)
       .then((c) => (c.kind === "text" ? c.text : ""))
       .catch(() => null);
     const next = tgt.merge(existing);
-    if (next == null) continue; // unparseable existing config — leave it alone
-    await createFile(root, tgt.path).catch(() => {}); // ensure parent dirs + file
-    await writeFile(root, tgt.path, next).catch(() => {});
+    if (next == null || next === existing) continue; // unparseable or already there
+    await createFile(root, path).catch(() => {}); // ensure parent dirs + file
+    await writeFile(root, path, next).catch(() => {});
     written.push(tgt.label);
   }
+  return written;
+}
 
-  if (!written.length) {
-    await ask(t("mcp.parseError"), { title: t("mcp.title"), kind: "error" });
-    return;
-  }
-  await ask(t("mcp.enabled", { agents: written.join(", ") }), { title: t("mcp.title") });
+/** Detect installed agents, falling back to Claude Code when none is found. */
+async function mcpTargets(): Promise<McpTarget[]> {
+  const detected = await Promise.all(TARGETS.map((t) => agentInstalled(t.bin).catch(() => false)));
+  const installed = TARGETS.filter((_, i) => detected[i]);
+  return installed.length ? installed : [TARGETS[0]];
+}
+
+/** Silently ensure `reado mcp` is wired for the installed agents — called on
+ *  project open so the agent always has it, with no manual step. Idempotent, so
+ *  it's a no-op once the config is in place. */
+export async function ensureMcp(root: string): Promise<void> {
+  if (!root) return;
+  await writeMcpConfigs(root, await mcpTargets()).catch(() => {});
+}
+
+/** Wire Reado's MCP server into the config of every installed agent (falling back
+ *  to Claude Code's `.mcp.json` when none is detected, so it's ready to use). */
+export async function enableMcp(root: string): Promise<void> {
+  const targets = await mcpTargets();
+  const written = await writeMcpConfigs(root, targets);
+  // writeMcpConfigs skips configs already correct; treat those as success too.
+  const labels = written.length ? written : targets.map((tgt) => tgt.label);
+  await ask(t("mcp.enabled", { agents: labels.join(", ") }), { title: t("mcp.title") });
 }
