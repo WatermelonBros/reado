@@ -11,14 +11,24 @@ commit.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-07-12
+
 ### Added
 - **Dockable panels (magnetic layout).** The terminal and the browser preview can
   now sit **side-by-side or stacked** in the bottom or right dock, resized freely
   (drag the area edge or the splitter between panels) and rearranged by dragging a
-  panel's dock tab (onto another panel to stack, onto its body to split) or via the
-  panel's **⋯ menu** (Dock right / Dock bottom / Stack). The arrangement persists
-  and a **Reset layout** returns to the default. The default matches the previous
-  layout, so nothing moves until you rearrange it.
+  panel's dock tab (onto another panel to stack, onto its body to split — the drop
+  target highlights as you go) or via the panel's **⋯ menu** (Dock right / Dock
+  bottom / Stack). The arrangement persists and a **Reset layout** returns to the
+  default. The default matches the previous layout, so nothing moves until you
+  rearrange it.
+- **Detachable console.** The browser's inspector (Console / Network / Elements /
+  Application) can be **detached into its own dock panel** — put the console beside
+  the terminal, or anywhere — and folded back into the browser when you're done.
+
+### Fixed
+- The "update available" badge is now vertically centred in the title bar instead
+  of sitting low in it.
 
 ## [1.1.0] — 2026-07-12
 
@@ -454,7 +464,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/WatermelonBros/reado/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/WatermelonBros/reado/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/WatermelonBros/reado/compare/v0.19.0...v1.0.0
 [0.19.0]: https://github.com/WatermelonBros/reado/compare/v0.18.0...v0.19.0
