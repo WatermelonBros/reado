@@ -45,7 +45,7 @@ import { ToursPanel, TourBar } from "../organisms/ToursPanel";
 import { PreReviewPanel } from "../organisms/PreReviewPanel";
 import { GuidedReviewPanel } from "../organisms/GuidedReviewPanel";
 import { CoveragePanel } from "../organisms/CoveragePanel";
-import { BrowserPanel } from "../organisms/BrowserPanel";
+import { DockRegion } from "../organisms/DockRegion";
 import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
@@ -60,8 +60,6 @@ import { StatusBar } from "../molecules/StatusBar";
 import { GitignorePrompt } from "../molecules/GitignorePrompt";
 import { KnowledgeGraph } from "../organisms/KnowledgeGraph";
 import { DocsView } from "../organisms/DocsView";
-import { TerminalPanel } from "../organisms/TerminalPanel";
-import { useTerminals } from "../../lib/terminals";
 import { usePreview } from "../../lib/preview";
 import { ensureMcp } from "../../lib/mcp";
 import { EyeIcon, EyeOffIcon, CloseIcon, SwapIcon, CollapseAllIcon } from "../atoms/icons";
@@ -329,10 +327,6 @@ export function ProjectView({ root }: { root: string }) {
   const [railHover, setRailHover] = useState(false);
   const showStatusBar = useSettings((s) => s.showStatusBar);
   const showBreadcrumbs = useSettings((s) => s.showBreadcrumbs);
-  const terminalOpen = useTerminals((s) => s.open);
-  const terminalPosition = useTerminals((s) => s.position);
-  const browserOpen = usePreview((s) => s.open);
-
   // A native preview webview can outlive a full frontend reload (dev HMR, or any
   // reload); if the pane isn't open when the workspace mounts, close the orphan so
   // it can't sit on top of the UI.
@@ -551,10 +545,9 @@ export function ProjectView({ root }: { root: string }) {
               </div>
             </div>
           )}
-          {browserOpen && <BrowserPanel />}
-          {terminalOpen && terminalPosition === "right" && <TerminalPanel />}
+          <DockRegion area="right" />
         </div>
-        {terminalOpen && terminalPosition === "bottom" && <TerminalPanel />}
+        <DockRegion area="bottom" />
       </main>
       <GitignorePrompt />
       {graphOpen && <KnowledgeGraph />}

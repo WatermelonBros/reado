@@ -49,7 +49,7 @@ const OPENCODE_GREY = "#656363";
 // Below this panel width the labelled buttons collapse to icon-only.
 const COMPACT_WIDTH = 560;
 
-export function TerminalPanel() {
+export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
   const sessions = useTerminals((s) => s.sessions);
   const activeId = useTerminals((s) => s.activeId);
   const groups = useTerminals((s) => s.groups);
@@ -223,20 +223,27 @@ export function TerminalPanel() {
   return (
     <div
       ref={rootRef}
-      className={`relative flex flex-none flex-col bg-canvas ${
-        isRight ? "h-full border-l border-line" : "border-t border-line"
-      }`}
-      style={isRight ? { width } : { height }}
+      className={
+        docked
+          ? "relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas"
+          : `relative flex flex-none flex-col bg-canvas ${
+              isRight ? "h-full border-l border-line" : "border-t border-line"
+            }`
+      }
+      style={docked ? undefined : isRight ? { width } : { height }}
     >
-      {/* Resize handle straddling the inner border. */}
-      <div
-        onPointerDown={startResize}
-        className={
-          isRight
-            ? "absolute top-0 bottom-0 -left-1 z-10 w-2 cursor-col-resize"
-            : "absolute -top-1 right-0 left-0 z-10 h-2 cursor-row-resize"
-        }
-      />
+      {/* Resize handle straddling the inner border (self-sized mode only; docked,
+          the dock owns the splitters). */}
+      {!docked && (
+        <div
+          onPointerDown={startResize}
+          className={
+            isRight
+              ? "absolute top-0 bottom-0 -left-1 z-10 w-2 cursor-col-resize"
+              : "absolute -top-1 right-0 left-0 z-10 h-2 cursor-row-resize"
+          }
+        />
+      )}
 
       {/* Tab bar. */}
       <div className="flex h-9 flex-none items-center gap-1 border-b border-line pr-2 pl-1">
@@ -432,13 +439,16 @@ export function TerminalPanel() {
           <OpenCodeIcon className="h-4 w-4" />
         </button>
         <span className="mx-0.5 h-4 w-px flex-none bg-line" />
-        {/* Show the target layout (what clicking will do), matching the tooltip. */}
-        <IconButton
-          label={isRight ? t("terminal.moveBottom") : t("terminal.moveRight")}
-          icon={<LayoutIcon className={`h-3.5 w-3.5 ${isRight ? "rotate-90" : ""}`} />}
-          onClick={togglePosition}
-          size="sm"
-        />
+        {/* Position toggle only in self-sized mode; docked, the dock's move menu
+            owns placement (bottom/right/stack). */}
+        {!docked && (
+          <IconButton
+            label={isRight ? t("terminal.moveBottom") : t("terminal.moveRight")}
+            icon={<LayoutIcon className={`h-3.5 w-3.5 ${isRight ? "rotate-90" : ""}`} />}
+            onClick={togglePosition}
+            size="sm"
+          />
+        )}
         <IconButton
           label={t("terminal.hide")}
           icon={<CloseIcon className="h-3.5 w-3.5" />}

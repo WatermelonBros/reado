@@ -402,6 +402,16 @@
     "swap": "Scambia pannelli",
     "openSide": "Apri di fianco"
   },
+  "dock": {
+    "terminal": "Terminale",
+    "browser": "Browser",
+    "menu": "Opzioni pannello",
+    "moveRight": "Aggancia a destra",
+    "moveBottom": "Aggancia in basso",
+    "stackWith": "Impila con {{panel}}",
+    "close": "Chiudi pannello",
+    "reset": "Ripristina layout"
+  },
   "preview": {
     "toggle": "Attiva/disattiva anteprima browser",
     "url": "URL anteprima",

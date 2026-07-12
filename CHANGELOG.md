@@ -11,6 +11,15 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **Dockable panels (magnetic layout).** The terminal and the browser preview can
+  now sit **side-by-side or stacked** in the bottom or right dock, resized freely
+  (drag the area edge or the splitter between panels) and rearranged by dragging a
+  panel's dock tab (onto another panel to stack, onto its body to split) or via the
+  panel's **⋯ menu** (Dock right / Dock bottom / Stack). The arrangement persists
+  and a **Reset layout** returns to the default. The default matches the previous
+  layout, so nothing moves until you rearrange it.
+
 ## [1.1.0] — 2026-07-12
 
 ### Added
