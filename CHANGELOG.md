@@ -11,6 +11,12 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+- The Linux build no longer pulls in PipeWire (via the `xcap` window-capture crate),
+  which failed to build in CI and would have tied the binary to pipewire at runtime.
+  The browser preview's frame-capture tool (`browser_frame`) is disabled on Linux as
+  a result; every other browser tool (DOM, console, network, eval) works there.
+
 ## [1.2.0] — 2026-07-12
 
 ### Added

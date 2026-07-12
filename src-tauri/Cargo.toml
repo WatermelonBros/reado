@@ -71,12 +71,18 @@ local-ip-address = "0.6"
 # Stream/Sink helpers for the WebSocket terminal bridge.
 futures-util = "0.3"
 tauri-plugin-clipboard-manager = "2.3.2"
-# Cross-platform OS-window pixel capture for the preview frame tool.
-xcap = { version = "0.9", features = ["image"] }
 
 # Signal the PTY's process group on close so dev servers don't orphan (Unix only).
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# OS-window pixel capture for the preview `browser_frame` tool. Off on Linux: xcap
+# there pulls in PipeWire (libspa-sys), which needs system dev libs to build and
+# ties the binary to pipewire at runtime — too heavy for one optional MCP tool, so
+# `preview_capture_frame` degrades to an error on Linux (the agent still has DOM /
+# console / network / eval).
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+xcap = { version = "0.9", features = ["image"] }
 
 # macOS Launch Services FFI, for "make Reado the default app for text files".
 [target.'cfg(target_os = "macos")'.dependencies]

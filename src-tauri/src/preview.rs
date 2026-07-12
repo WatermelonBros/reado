@@ -327,6 +327,7 @@ pub fn preview_clear_state(root: String) -> Result<(), String> {
 /// macOS title is intentionally blank. Physical px = logical × scale factor.
 /// ponytail: if the crop is offset on a platform, tune here — it's a coordinate
 /// mapping, not a model change.
+#[cfg(not(target_os = "linux"))]
 #[tauri::command]
 pub fn preview_capture_frame<R: Runtime>(
     _window: Window<R>,
@@ -350,6 +351,20 @@ pub fn preview_capture_frame<R: Runtime>(
         "data:image/png;base64,{}",
         crate::fs::base64_encode(buf.get_ref())
     ))
+}
+
+/// Linux: window capture (xcap) would drag in PipeWire, so the frame tool is not
+/// built there. The rest of the browser tools (DOM/console/network/eval) work.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn preview_capture_frame<R: Runtime>(
+    _window: Window<R>,
+    _x: f64,
+    _y: f64,
+    _w: f64,
+    _h: f64,
+) -> Result<String, String> {
+    Err("frame capture is not available on Linux".into())
 }
 
 /// Control-channel queue (desktop↔`reado mcp`), file-based to reuse the pane's
