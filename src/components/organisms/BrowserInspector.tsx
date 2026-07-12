@@ -23,7 +23,9 @@ import {
   CrosshairIcon,
   WarningIcon,
   MoreVerticalIcon,
+  DetachIcon,
 } from "../atoms/icons";
+import { useLayout } from "../../lib/layout";
 
 type StoreKind = "cookie" | "local" | "session";
 interface DomNode { tag: string; attrs: [string, string][]; text: string; n: number; kids: DomNode[] }
@@ -60,7 +62,7 @@ function sendErrorToAgent(l: LogEntry): void {
   void dispatchToAgent(parts.filter(Boolean).join("\n"));
 }
 
-export function BrowserInspector() {
+export function BrowserInspector({ docked = false }: { docked?: boolean } = {}) {
   const { t } = useTranslation();
   const logs = usePreview((s) => s.logs);
   const net = usePreview((s) => s.net);
@@ -70,6 +72,16 @@ export function BrowserInspector() {
   const setInspectRequest = usePreview((s) => s.setInspectRequest);
   const inspectorPos = usePreview((s) => s.inspectorPos);
   const setInspectorPos = usePreview((s) => s.setInspectorPos);
+  // Pop the console out into the layout as its own dock panel (placed beside the
+  // terminal), or fold it back into the browser pane.
+  const detachInspector = () => {
+    usePreview.getState().setInspectorDetached(true);
+    useLayout.getState().move("inspector", "bottom", { split: true });
+  };
+  const attachInspector = () => {
+    usePreview.getState().setInspectorDetached(false);
+    useLayout.getState().remove("inspector");
+  };
   const [tab, setTab] = useState<"console" | "network" | "application" | "elements">("console");
   const [dom, setDom] = useState<DomNode | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["0", "0.0", "0.1"]));
@@ -233,7 +245,14 @@ export function BrowserInspector() {
     ...(tab === "console" || tab === "network"
       ? [{ key: "clear", label: t("inspector.clear"), icon: <TrashIcon className="h-3.5 w-3.5" />, onClick: clearAll }]
       : []),
-    { key: "dock", label: t("inspector.dock"), icon: <LayoutIcon className={`h-3.5 w-3.5 ${inspectorPos === "right" ? "rotate-90" : ""}`} />, onClick: () => setInspectorPos(inspectorPos === "bottom" ? "right" : "bottom") },
+    // Detached: it's a standalone dock panel → offer re-attach (its position is
+    // owned by the dock). Nested: offer the bottom/right toggle + detach.
+    ...(docked
+      ? [{ key: "attach", label: t("inspector.attach"), icon: <DetachIcon className="h-3.5 w-3.5" />, onClick: attachInspector }]
+      : [
+          { key: "dock", label: t("inspector.dock"), icon: <LayoutIcon className={`h-3.5 w-3.5 ${inspectorPos === "right" ? "rotate-90" : ""}`} />, onClick: () => setInspectorPos(inspectorPos === "bottom" ? "right" : "bottom") },
+          { key: "detach", label: t("inspector.detach"), icon: <DetachIcon className="h-3.5 w-3.5" />, onClick: detachInspector },
+        ]),
   ];
 
   return (

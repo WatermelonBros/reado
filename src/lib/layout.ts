@@ -24,6 +24,14 @@ export const AREAS: DockArea[] = ["left", "right", "bottom"];
 /** A stable panel identity. v1: `"terminal"` and `"browser"`. */
 export type PanelId = string;
 
+/** A live drop target during a drag: an area + (for a group) its id, and whether
+ *  dropping there stacks (into the group) or splits (a new group / empty area). */
+export interface DropTarget {
+  area: DockArea;
+  groupId: string | null;
+  zone: "stack" | "split";
+}
+
 export interface Group {
   id: string;
   tabs: PanelId[];
@@ -156,6 +164,11 @@ interface LayoutStore {
    *  dock regions so a drag from the bottom can drop on the right and vice-versa. */
   dragging: PanelId | null;
   setDragging: (panel: PanelId | null) => void;
+  /** The dock target under the pointer during a drag (which area/group, and whether
+   *  it would stack or split), or null. Global so the highlight shows in whichever
+   *  region the pointer is over — the drag can cross from the bottom to the right. */
+  dropTarget: DropTarget | null;
+  setDropTarget: (t: DropTarget | null) => void;
   /** A dock menu is open — transient. The browser's native child window sits above
    *  the DOM, so the preview hides while this (or a drag) is active, keeping the
    *  menu and drop targets visible. */
@@ -176,6 +189,8 @@ export const useLayout = create<LayoutStore>()(
       seq: 1,
       dragging: null,
       setDragging: (panel) => set({ dragging: panel }),
+      dropTarget: null,
+      setDropTarget: (t) => set({ dropTarget: t }),
       menuOpen: false,
       setMenuOpen: (open) => set({ menuOpen: open }),
       move: (panel, area, opts) => {

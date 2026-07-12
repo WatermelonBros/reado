@@ -73,6 +73,27 @@ describe("movePanel", () => {
   });
 });
 
+describe("a detached console alongside terminal and browser", () => {
+  it("docks the inspector as its own panel without disturbing the others", () => {
+    // Detaching the console = placing an "inspector" panel in the bottom, beside
+    // the terminal. All three then live in distinct groups.
+    const l = mv(defaultLayout(), "inspector", "bottom", { split: true });
+    expect(findPanel(l, "terminal")).toEqual({ area: "bottom", groupId: "g-terminal" });
+    expect(findPanel(l, "inspector")).toEqual({ area: "bottom", groupId: "g-inspector-bottom" });
+    expect(findPanel(l, "browser")).toEqual({ area: "right", groupId: "g-browser" });
+    expect(panelsInArea(l, "bottom")).toEqual(["terminal", "inspector"]);
+  });
+
+  it("can stack the console onto the terminal as a tab", () => {
+    let l = mv(defaultLayout(), "inspector", "bottom", { split: true });
+    const termGroup = findPanel(l, "terminal")!.groupId;
+    l = mv(l, "inspector", "bottom", { targetGroupId: termGroup });
+    const g = l.areas.bottom.groups.find((x) => x.id === termGroup)!;
+    expect(g.tabs).toEqual(["terminal", "inspector"]);
+    expect(l.areas.bottom.groups).toHaveLength(1); // the inspector's own group was pruned
+  });
+});
+
 describe("removePanel", () => {
   it("removes the panel and prunes the emptied group", () => {
     const l = removePanel(defaultLayout(), "terminal");

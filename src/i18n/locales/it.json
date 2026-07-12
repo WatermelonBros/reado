@@ -405,12 +405,16 @@
   "dock": {
     "terminal": "Terminale",
     "browser": "Browser",
+    "inspector": "Console",
     "menu": "Opzioni pannello",
     "moveRight": "Aggancia a destra",
     "moveBottom": "Aggancia in basso",
-    "stackWith": "Impila con {{panel}}",
+    "stackWith": "Impila con {panel}",
     "close": "Chiudi pannello",
-    "reset": "Ripristina layout"
+    "reset": "Ripristina layout",
+    "stack": "Impila",
+    "split": "Affianca",
+    "dropHere": "Rilascia per agganciare"
   },
   "preview": {
     "toggle": "Attiva/disattiva anteprima browser",
@@ -450,6 +454,8 @@
     "pick": "Seleziona",
     "more": "Altro",
     "dock": "Ancora sotto / a destra",
+    "detach": "Stacca come pannello",
+    "attach": "Riaggancia al browser",
     "cookies": "Cookie",
     "localStorage": "Local Storage",
     "sessionStorage": "Session Storage",

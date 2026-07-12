@@ -56,6 +56,9 @@ interface PreviewState {
   /** Where the inspector docks, and its size (height if bottom, width if right). */
   inspectorPos: "bottom" | "right";
   inspectorSize: number;
+  /** Detached: the inspector is a standalone dockable panel (in the layout) instead
+   *  of nested inside the browser pane. */
+  inspectorDetached: boolean;
   /** A right-click "inspect" from the page: child-index path to reveal in Elements. */
   inspectRequest: number[] | null;
   /** Mirror captured console/network to `.reado/` and run the agent's commands, so
@@ -81,6 +84,7 @@ interface PreviewState {
   toggleInspector: () => void;
   setInspectorPos: (p: "bottom" | "right") => void;
   setInspectorSize: (n: number) => void;
+  setInspectorDetached: (d: boolean) => void;
   setInspectRequest: (p: number[] | null) => void;
   setAgentAccess: (on: boolean) => void;
   addAllowedOrigin: (origin: string) => void;
@@ -102,6 +106,7 @@ export const usePreview = create<PreviewState>()(
       inspector: false,
       inspectorPos: "bottom",
       inspectorSize: 240,
+      inspectorDetached: false,
       inspectRequest: null,
       agentAccess: true,
       allowlist: [],
@@ -115,6 +120,7 @@ export const usePreview = create<PreviewState>()(
       toggleInspector: () => set((s) => ({ inspector: !s.inspector })),
       setInspectorPos: (p) => set({ inspectorPos: p }),
       setInspectorSize: (n) => set({ inspectorSize: Math.max(120, n) }),
+      setInspectorDetached: (inspectorDetached) => set({ inspectorDetached }),
       setInspectRequest: (p) => set({ inspectRequest: p }),
       setAgentAccess: (on) => set({ agentAccess: on }),
       addAllowedOrigin: (origin) =>
@@ -140,6 +146,7 @@ export const usePreview = create<PreviewState>()(
         paneWidth: s.paneWidth,
         inspectorPos: s.inspectorPos,
         inspectorSize: s.inspectorSize,
+        inspectorDetached: s.inspectorDetached,
       }),
     },
   ),

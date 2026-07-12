@@ -61,6 +61,7 @@ import { GitignorePrompt } from "../molecules/GitignorePrompt";
 import { KnowledgeGraph } from "../organisms/KnowledgeGraph";
 import { DocsView } from "../organisms/DocsView";
 import { usePreview } from "../../lib/preview";
+import { useLayout, findPanel } from "../../lib/layout";
 import { ensureMcp } from "../../lib/mcp";
 import { EyeIcon, EyeOffIcon, CloseIcon, SwapIcon, CollapseAllIcon } from "../atoms/icons";
 import { IconButton } from "../atoms/IconButton";
@@ -339,6 +340,16 @@ export function ProjectView({ root }: { root: string }) {
   useEffect(() => {
     void ensureMcp(root);
   }, [root]);
+
+  // Self-heal: if the console is on and detached but not placed anywhere in the
+  // layout (e.g. persisted stores drifted, or a reset), dock it so it can't vanish.
+  const inspectorOn = usePreview((s) => s.inspector);
+  const inspectorDetached = usePreview((s) => s.inspectorDetached);
+  useEffect(() => {
+    if (inspectorOn && inspectorDetached && !findPanel(useLayout.getState().layout, "inspector")) {
+      useLayout.getState().move("inspector", "bottom", { split: true });
+    }
+  }, [inspectorOn, inspectorDetached]);
   const closeSplit = useProject((s) => s.closeSplit);
   const swapSplit = useProject((s) => s.swapSplit);
   const readCount = useReadProgress((s) => s.read.size);

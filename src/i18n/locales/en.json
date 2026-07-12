@@ -405,12 +405,16 @@
   "dock": {
     "terminal": "Terminal",
     "browser": "Browser",
+    "inspector": "Console",
     "menu": "Panel options",
     "moveRight": "Dock to the right",
     "moveBottom": "Dock to the bottom",
-    "stackWith": "Stack with {{panel}}",
+    "stackWith": "Stack with {panel}",
     "close": "Close panel",
-    "reset": "Reset layout"
+    "reset": "Reset layout",
+    "stack": "Stack",
+    "split": "Beside",
+    "dropHere": "Drop to dock here"
   },
   "preview": {
     "toggle": "Toggle browser preview",
@@ -450,6 +454,8 @@
     "pick": "Pick",
     "more": "More",
     "dock": "Dock bottom / right",
+    "detach": "Detach as a panel",
+    "attach": "Attach to the browser",
     "cookies": "Cookies",
     "localStorage": "Local Storage",
     "sessionStorage": "Session Storage",
