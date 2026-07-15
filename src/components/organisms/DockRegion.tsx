@@ -30,6 +30,8 @@ import {
 import { TerminalPanel } from "./TerminalPanel";
 import { BrowserPanel } from "./BrowserPanel";
 import { BrowserInspector } from "./BrowserInspector";
+import { ReasoningPanel } from "./ReasoningPanel";
+import { useReasoning } from "../../lib/reasoning";
 import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
 import { MoreVerticalIcon } from "../atoms/icons";
 import { type MessageKey } from "../../i18n";
@@ -38,12 +40,14 @@ const PANEL_LABEL: Record<PanelId, MessageKey> = {
   terminal: "dock.terminal",
   browser: "dock.browser",
   inspector: "dock.inspector",
+  reasoning: "dock.reasoning",
 };
 
 function renderPanel(id: PanelId) {
   if (id === "terminal") return <TerminalPanel docked />;
   if (id === "browser") return <BrowserPanel docked />;
   if (id === "inspector") return <BrowserInspector docked />;
+  if (id === "reasoning") return <ReasoningPanel docked />;
   return null;
 }
 
@@ -59,6 +63,7 @@ function closePanel(id: PanelId) {
     if (p.inspector) p.toggleInspector();
     useLayout.getState().remove("inspector");
   }
+  if (id === "reasoning") useReasoning.getState().close();
 }
 
 /** Resolve the dock target under a screen point by walking up from the element
@@ -89,8 +94,17 @@ export function DockRegion({ area }: { area: DockArea }) {
   const browserOpen = usePreview((s) => s.open);
   // The console shows as a dock panel only when it's both on and detached.
   const inspectorOpen = usePreview((s) => s.inspector && s.inspectorDetached);
+  const reasoningOpen = useReasoning((s) => s.open);
   const isOpen = (id: PanelId) =>
-    id === "terminal" ? terminalOpen : id === "browser" ? browserOpen : id === "inspector" ? inspectorOpen : false;
+    id === "terminal"
+      ? terminalOpen
+      : id === "browser"
+        ? browserOpen
+        : id === "inspector"
+          ? inspectorOpen
+          : id === "reasoning"
+            ? reasoningOpen
+            : false;
 
   const regionRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; panel: PanelId } | null>(null);

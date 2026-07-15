@@ -72,6 +72,16 @@ enum Command {
         #[command(subcommand)]
         action: ReviewCmd,
     },
+    /// Narrate one line of reasoning for the human watching in Reado — a
+    /// non-obvious decision, an ordering, or an assumption you're relying on.
+    /// Appended to `.reado/reasoning.jsonl`; Reado's reasoning panel tails it live.
+    Thought {
+        /// The reasoning, in one human sentence — the "why", not the "what".
+        text: String,
+        /// A tag for styling: note | decision | assumption | plan.
+        #[arg(long, default_value = "note")]
+        kind: String,
+    },
     /// Run a Model Context Protocol server (stdio) exposing the project's
     /// comments, tasks, reading progress, and bookmarks as read-only resources.
     Mcp,
@@ -387,8 +397,34 @@ fn run(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::Kb { action } => kb(cli, &root, action)?,
         Command::Session { action } => session(cli, &root, &agent, action)?,
         Command::Review { action } => review(cli, &root, &agent, action)?,
+        Command::Thought { text, kind } => thought(&root, &agent, text, kind)?,
         Command::Mcp => mcp::serve(&root)?,
     }
+    Ok(())
+}
+
+/// Append one reasoning line to `.reado/reasoning.jsonl` (creating `.reado/` if
+/// needed). The agent's live narration channel: Reado's watcher sees the write,
+/// emits `reasoning-changed`, and the reasoning panel re-reads the file.
+fn thought(
+    root: &str,
+    agent: &str,
+    text: &str,
+    kind: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::Write;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let line = serde_json::json!({ "ts": ts, "kind": kind, "text": text, "agent": agent });
+    let dir = std::path::Path::new(root).join(".reado");
+    std::fs::create_dir_all(&dir)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("reasoning.jsonl"))?;
+    writeln!(f, "{}", serde_json::to_string(&line)?)?;
     Ok(())
 }
 

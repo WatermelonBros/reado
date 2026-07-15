@@ -61,6 +61,13 @@ fn is_session_store(path: &Path) -> bool {
     s.contains("/.reado/sessions/")
 }
 
+/// True if `path` is the agent's live reasoning feed. A change means the agent
+/// (via `reado thought`) narrated another decision — reload the reasoning panel.
+fn is_reasoning_store(path: &Path) -> bool {
+    let s = path.to_string_lossy().replace('\\', "/");
+    s.ends_with("/.reado/reasoning.jsonl")
+}
+
 /// True if `path` is the repo's `.git/HEAD` (rewritten when the branch changes).
 fn is_git_head(path: &Path) -> bool {
     let s = path.to_string_lossy().replace('\\', "/");
@@ -175,6 +182,7 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                 Err(RecvTimeoutError::Timeout) => {
                     let mut comments_dirty = false;
                     let mut sessions_dirty = false;
+                    let mut reasoning_dirty = false;
 
                     // Reunite a delete+create into a rename: if exactly one removed
                     // file carried comments and exactly one file was created in this
@@ -237,6 +245,11 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                             sessions_dirty = true;
                             continue;
                         }
+                        // The agent narrated a reasoning line via `reado thought`.
+                        if is_reasoning_store(&path) {
+                            reasoning_dirty = true;
+                            continue;
+                        }
                         // `.git/HEAD` is rewritten on `git checkout`, so a change
                         // there means the branch switched (even from the terminal);
                         // tell the UI to refresh git state. `.git/` is otherwise
@@ -262,6 +275,9 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                     }
                     if sessions_dirty {
                         let _ = app.emit("sessions-changed", ());
+                    }
+                    if reasoning_dirty {
+                        let _ = app.emit("reasoning-changed", ());
                     }
                 }
                 Err(RecvTimeoutError::Disconnected) => break,

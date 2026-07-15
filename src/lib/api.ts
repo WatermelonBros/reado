@@ -556,6 +556,20 @@ export interface NewSession {
 export const gitChangedFiles = (root: string, base?: string) =>
   invoke<string[]>("git_changed_files", { root, base });
 
+/** One line of the agent's live reasoning feed (`.reado/reasoning.jsonl`). */
+export interface Thought {
+  ts: number;
+  kind: string;
+  text: string;
+  agent?: string;
+}
+
+export const reasoningRead = (root: string) =>
+  invoke<Thought[]>("reasoning_read", { root });
+
+export const reasoningClear = (root: string) =>
+  invoke<void>("reasoning_clear", { root });
+
 export const sessionCreate = (root: string, input: NewSession) =>
   invoke<Session>("session_create", { root, input });
 

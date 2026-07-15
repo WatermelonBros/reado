@@ -406,6 +406,7 @@
     "terminal": "Terminale",
     "browser": "Browser",
     "inspector": "Console",
+    "reasoning": "Ragionamento",
     "menu": "Opzioni pannello",
     "moveRight": "Aggancia a destra",
     "moveBottom": "Aggancia in basso",
@@ -415,6 +416,11 @@
     "stack": "Impila",
     "split": "Affianca",
     "dropHere": "Rilascia per agganciare"
+  },
+  "reasoning": {
+    "title": "Ragionamento",
+    "clear": "Svuota feed",
+    "empty": "Il ragionamento dell'agente comparirà qui mentre lavora."
   },
   "preview": {
     "toggle": "Attiva/disattiva anteprima browser",
