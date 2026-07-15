@@ -7,6 +7,8 @@ import { listen } from "@tauri-apps/api/event";
 import { agentInstalled, ptyDefaultShell, ptyWrite, submitToTerminal } from "./api";
 import { useTerminals } from "./terminals";
 import { useNotice } from "./notice";
+import { useProject } from "./store";
+import { syncClaudeTheme } from "./claudeTheme";
 
 export type Agent = "claude-code" | "codex" | "copilot" | "gemini" | "opencode";
 type ShellFamily = "cmd" | "powershell" | "posix";
@@ -103,6 +105,9 @@ export async function launchAgent(agent: Agent, bin: string): Promise<void> {
   const term = useTerminals.getState();
   const id = term.activeId ?? term.add();
   const shell = await ptyDefaultShell().catch(() => null);
+  // Match Claude Code's theme to Reado's before it boots, so it doesn't render
+  // its dark scheme (white text) on our light terminal.
+  if (agent === "claude-code") await syncClaudeTheme(useProject.getState().root).catch(() => {});
   submitToTerminal(id, agentLaunchCommand(shellFamily(shell), agent, bin), 0);
   useTerminals.getState().markAgent(id, agent);
 }
@@ -234,6 +239,7 @@ export async function dispatchToAgent(prompt: string): Promise<void> {
   // Never launch-and-paste into a shell where the agent binary is missing.
   if (!(await ensureAgentInstalled(AGENT_BIN[agent]))) return;
   const shell = await ptyDefaultShell().catch(() => null);
+  if (agent === "claude-code") await syncClaudeTheme(useProject.getState().root).catch(() => {});
   submitToTerminal(id, agentLaunchCommand(shellFamily(shell), agent, AGENT_BIN[agent]), 0);
   useTerminals.getState().markAgent(id, agent);
   // Wait until the agent is booted and idle at its prompt, then send.
