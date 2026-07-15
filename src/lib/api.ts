@@ -329,13 +329,17 @@ export const formatFile = (root: string, path: string, content: string) =>
 export type CommentType = "bug" | "refactor" | "performance" | "question" | "note";
 export type CommentState = "open" | "in-progress" | "done" | "discarded";
 export type CommentKind = "task" | "note";
-export type Scope = "range" | "file" | "project";
+export type Scope = "range" | "file" | "project" | "web";
 
 export interface Anchor {
   file: string;
   scope: Scope;
   startLine: number;
   endLine: number;
+  /** `scope: "web"` design comments: the page URL and click point (document coords). */
+  url?: string;
+  x?: number;
+  y?: number;
 }
 
 export interface Context {
@@ -383,6 +387,10 @@ export interface NewComment {
   kind: CommentKind;
   body: string;
   context: Context;
+  /** `scope: "web"`: the page URL and click point (document coords). */
+  url?: string;
+  x?: number;
+  y?: number;
 }
 
 export interface CreateResult {

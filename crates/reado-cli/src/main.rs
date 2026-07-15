@@ -924,6 +924,9 @@ fn comment(
                 },
                 body: body.clone(),
                 context: Default::default(),
+                url: None,
+                x: None,
+                y: None,
             };
             let res = core::create_comment(root, input, "agent", Some(agent.to_string()))?;
             report(cli, &res.comment, "added");
@@ -974,6 +977,12 @@ fn anchor_label(c: &Comment) -> String {
         Scope::Range => format!("{}:{}", c.meta.anchor.file, c.meta.anchor.start_line),
         Scope::File => c.meta.anchor.file.clone(),
         Scope::Project => "(project)".to_string(),
+        Scope::Web => c
+            .meta
+            .anchor
+            .url
+            .clone()
+            .unwrap_or_else(|| "(web)".to_string()),
     }
 }
 

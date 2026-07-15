@@ -416,6 +416,12 @@
     "split": "Beside",
     "dropHere": "Drop to dock here"
   },
+  "browserComment": {
+    "at": "Comment on {url}",
+    "placeholder": "What about this spot? (⌘/Ctrl+Enter to save)",
+    "save": "Comment",
+    "cancel": "Cancel"
+  },
   "preview": {
     "toggle": "Toggle browser preview",
     "url": "Preview URL",

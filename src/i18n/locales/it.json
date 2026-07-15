@@ -416,6 +416,12 @@
     "split": "Affianca",
     "dropHere": "Rilascia per agganciare"
   },
+  "browserComment": {
+    "at": "Commento su {url}",
+    "placeholder": "Cosa non va qui? (⌘/Ctrl+Invio per salvare)",
+    "save": "Commenta",
+    "cancel": "Annulla"
+  },
   "preview": {
     "toggle": "Attiva/disattiva anteprima browser",
     "url": "URL anteprima",
