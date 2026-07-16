@@ -423,10 +423,8 @@
     "empty": "Il ragionamento dell'agente comparirà qui mentre lavora."
   },
   "browserComment": {
-    "at": "Commento su {url}",
-    "placeholder": "Cosa non va qui? (⌘/Ctrl+Invio per salvare)",
-    "save": "Commenta",
-    "cancel": "Annulla"
+    "showMarks": "Mostra i marker dei commenti",
+    "hideMarks": "Nascondi i marker dei commenti"
   },
   "preview": {
     "toggle": "Attiva/disattiva anteprima browser",

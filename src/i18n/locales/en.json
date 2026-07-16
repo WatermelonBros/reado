@@ -423,10 +423,8 @@
     "empty": "The agent's reasoning will appear here as it works."
   },
   "browserComment": {
-    "at": "Comment on {url}",
-    "placeholder": "What about this spot? (⌘/Ctrl+Enter to save)",
-    "save": "Comment",
-    "cancel": "Cancel"
+    "showMarks": "Show comment markers",
+    "hideMarks": "Hide comment markers"
   },
   "preview": {
     "toggle": "Toggle browser preview",
