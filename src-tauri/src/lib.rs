@@ -24,6 +24,7 @@ mod preview;
 mod proc;
 mod progress;
 mod pty;
+mod reasoning;
 mod search;
 mod sessions;
 mod symbols;
@@ -176,6 +177,8 @@ pub fn run() {
             annotations::write_project_config,
             annotations::reanchor_file,
             annotations::set_anchor,
+            reasoning::reasoning_read,
+            reasoning::reasoning_clear,
             sessions::session_create,
             sessions::session_list,
             sessions::session_get,

@@ -50,6 +50,7 @@ import { useSpecs } from "../../lib/specs";
 import { useTours } from "../../lib/tours";
 import { usePreReview } from "../../lib/preReview";
 import { useGuidedReview } from "../../lib/guidedReview";
+import { useReasoning } from "../../lib/reasoning";
 import { useResolveLoop } from "../../lib/resolveLoop";
 import { useBookmarks } from "../../lib/bookmarks";
 import { useQa } from "../../lib/qa";
@@ -302,6 +303,11 @@ export function ProjectView({ root }: { root: string }) {
       listen("sessions-changed", () => {
         useGuidedReview.getState().load(root);
       }),
+      // The agent narrated a reasoning line via `reado thought` — refresh the
+      // live reasoning feed docked beside the terminal.
+      listen("reasoning-changed", () => {
+        useReasoning.getState().load(root);
+      }),
       // The branch changed on disk (e.g. `git checkout` in the terminal) — refresh
       // git state so the status bar shows the real branch.
       listen("git-changed", () => {
@@ -339,6 +345,11 @@ export function ProjectView({ root }: { root: string }) {
   // the project's agent config on open (idempotent, non-clobbering).
   useEffect(() => {
     void ensureMcp(root);
+  }, [root]);
+
+  // Load any existing reasoning feed on open (a run from before this session).
+  useEffect(() => {
+    void useReasoning.getState().load(root);
   }, [root]);
 
   // Self-heal: if the console is on and detached but not placed anywhere in the
