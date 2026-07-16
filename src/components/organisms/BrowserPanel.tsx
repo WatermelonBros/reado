@@ -36,6 +36,7 @@ import {
   previewDetach,
   previewCaptureFrame,
   createComment,
+  type Comment,
 } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { IconButton } from "../atoms/IconButton";
@@ -52,6 +53,27 @@ function sameDoc(a: string, b: string): boolean {
   } catch {
     return a === b;
   }
+}
+
+/** Inject the rich comment card into the page over the live webview (author, type,
+ *  messages, reply, resolve). Reado formats the labels; the in-page bridge renders
+ *  them and reports reply/resolve back through its drain buffer. */
+function injectCommentBox(c: Comment): void {
+  const box = {
+    id: c.id,
+    x: c.anchor.x ?? 0,
+    y: c.anchor.y ?? 0,
+    type: c.type,
+    resolved: c.state === "done",
+    messages: c.messages.map((m) => ({
+      who: m.agent ?? m.author,
+      when: new Date(m.createdAt).toLocaleString(),
+      body: m.body,
+    })),
+  };
+  void previewEval(
+    `window.__readoBridge&&window.__readoBridge.showComment(${JSON.stringify(box)})`,
+  ).catch(() => {});
 }
 
 /** Add a scheme if the user typed a bare host, so `previewNavigate` gets a URL. */
@@ -96,6 +118,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     usePalette((s) => s.mode !== null || s.settingsOpen || s.shortcutsOpen || s.anywhereOpen) ||
     useWorkspace((s) => s.graphOpen || s.docsOpen) ||
     useLayout((s) => s.dragging !== null || s.menuOpen);
+  // Re-park the webview when the dock layout changes (a splitter drag resizes the
+  // pane; the ResizeObserver can miss the settled size mid-drag).
+  const dockLayout = useLayout((s) => s.layout);
   const { t } = useTranslation();
   const bodyRef = useRef<HTMLDivElement>(null);
   const openedRef = useRef(false);
@@ -123,6 +148,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               net?: NetEntry[];
               inspect?: number[];
               commentAt?: { x: number; y: number; url: string; text: string } | null;
+              openComment?: string | null;
+              commentReply?: { id: string; text: string } | null;
+              commentResolve?: string | null;
             } | null)
           : null;
         if (data) {
@@ -148,6 +176,28 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               x: c.x,
               y: c.y,
             }).catch(() => {});
+          }
+          // A page dot was clicked → show its comment card over the live page.
+          if (data.openComment) {
+            const c = useComments.getState().comments.find((x) => x.id === data.openComment);
+            if (c) injectCommentBox(c);
+          }
+          // Reply typed in the in-page card → post it, then re-render the card.
+          if (data.commentReply) {
+            const { id, text } = data.commentReply;
+            void useComments
+              .getState()
+              .reply(id, text)
+              .then(() => {
+                const c = useComments.getState().comments.find((x) => x.id === id);
+                if (c) injectCommentBox(c);
+              })
+              .catch(() => {});
+          }
+          // Resolve clicked in the card → mark done and dismiss the card.
+          if (data.commentResolve) {
+            void useComments.getState().setState(data.commentResolve, "done").catch(() => {});
+            void previewEval("window.__readoBridge&&window.__readoBridge.closeComment()").catch(() => {});
           }
           const logs = data.logs ?? [];
           const net = data.net ?? [];
@@ -303,7 +353,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // on-screen rect (what the child window needs) does move.
   useEffect(() => {
     syncBounds();
-  }, [device, paneWidth, zoom, browserZoom, inspectorSize, inspectorPos, syncBounds]);
+  }, [device, paneWidth, zoom, browserZoom, inspectorSize, inspectorPos, dockLayout, syncBounds]);
 
   // Drag the inspector's edge to resize it (height when docked bottom, width right).
   const startInspectorResize = (e: React.PointerEvent) => {
@@ -324,9 +374,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     window.addEventListener("pointerup", onUp);
   };
 
-  // Hide the preview while a Reado overlay is open (a native window can't sit
-  // under the DOM), and show it again when they close. Design comments no longer
-  // hide it — the composer and dots are injected *into* the page.
+  // Hide the preview only while a Reado DOM overlay is open (a native window can't
+  // sit under the DOM). Design comments never hide it — dots, the composer, and
+  // the comment card are all injected *into* the page over the live webview.
   useEffect(() => {
     void previewSetVisible(!overlayOpen);
   }, [overlayOpen]);
@@ -336,8 +386,8 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // is re-injected on load, so a short settle delay lets the page lay out first.
   useEffect(() => {
     const list = comments
-      .filter((c) => c.anchor.scope === "web" && c.anchor.url && sameDoc(c.anchor.url, url))
-      .map((c) => ({ id: c.id, x: c.anchor.x ?? 0, y: c.anchor.y ?? 0, text: c.messages[0]?.body ?? "" }));
+      .filter((c) => c.anchor.scope === "web" && c.state !== "done" && c.anchor.url && sameDoc(c.anchor.url, url))
+      .map((c) => ({ id: c.id, x: c.anchor.x ?? 0, y: c.anchor.y ?? 0 }));
     const js = `window.__readoBridge&&window.__readoBridge.marks(${JSON.stringify(list)},${showMarks})`;
     const t = setTimeout(() => void previewEval(js).catch(() => {}), 500);
     return () => clearTimeout(t);
