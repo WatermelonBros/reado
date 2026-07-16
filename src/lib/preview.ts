@@ -61,6 +61,8 @@ interface PreviewState {
   inspectorDetached: boolean;
   /** A right-click "inspect" from the page: child-index path to reveal in Elements. */
   inspectRequest: number[] | null;
+  /** A design comment to reveal: navigate to `url`, then drop a marker at (x,y). */
+  pinRequest: { url: string; x: number; y: number; text: string } | null;
   /** Mirror captured console/network to `.reado/` and run the agent's commands, so
    *  the terminal agent can see and drive the preview. On by default; the toggle
    *  lets the user cut it off. */
@@ -86,6 +88,7 @@ interface PreviewState {
   setInspectorSize: (n: number) => void;
   setInspectorDetached: (d: boolean) => void;
   setInspectRequest: (p: number[] | null) => void;
+  setPinRequest: (p: { url: string; x: number; y: number; text: string } | null) => void;
   setAgentAccess: (on: boolean) => void;
   addAllowedOrigin: (origin: string) => void;
   setDevice: (d: { w: number; h: number; label: string } | null) => void;
@@ -108,6 +111,7 @@ export const usePreview = create<PreviewState>()(
       inspectorSize: 240,
       inspectorDetached: false,
       inspectRequest: null,
+      pinRequest: null,
       agentAccess: true,
       allowlist: [],
       device: null,
@@ -122,6 +126,7 @@ export const usePreview = create<PreviewState>()(
       setInspectorSize: (n) => set({ inspectorSize: Math.max(120, n) }),
       setInspectorDetached: (inspectorDetached) => set({ inspectorDetached }),
       setInspectRequest: (p) => set({ inspectRequest: p }),
+      setPinRequest: (p) => set({ pinRequest: p }),
       setAgentAccess: (on) => set({ agentAccess: on }),
       addAllowedOrigin: (origin) =>
         set((s) => (s.allowlist.includes(origin) ? s : { allowlist: [...s.allowlist, origin] })),

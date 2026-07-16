@@ -964,6 +964,9 @@ async fn comments_post(
         kind: b.kind.unwrap_or(CommentKind::Task),
         body: b.body,
         context: Default::default(),
+        url: None,
+        x: None,
+        y: None,
     };
     let created = core::create_comment(&root, new, "phone", None)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

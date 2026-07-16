@@ -91,6 +91,9 @@ pub enum Scope {
     Range,
     File,
     Project,
+    /// A design comment anchored to a point on a live browser page (url + x/y),
+    /// not to code. `file`/line fields are unused; see `Anchor::url`/`x`/`y`.
+    Web,
 }
 
 /// Where a comment lives in the code (an external overlay — never in the file).
@@ -108,6 +111,14 @@ pub struct Anchor {
     pub start_line: u32,
     #[serde(default, alias = "end_line")]
     pub end_line: u32,
+    /// For `Scope::Web`: the page URL and the click point in document
+    /// coordinates. Absent (and skipped in the `.md`) for code anchors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y: Option<f64>,
 }
 
 /// Adaptive snapshot of the anchored code, used to re-locate the anchor after
@@ -193,6 +204,13 @@ pub struct NewComment {
     pub body: String,
     #[serde(default)]
     pub context: Context,
+    /// For `Scope::Web`: page URL and click point (document coordinates).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y: Option<f64>,
 }
 
 /// Result of creating a comment.
@@ -437,6 +455,9 @@ pub fn create_comment(
             scope: input.scope,
             start_line: input.start_line,
             end_line: input.end_line,
+            url: input.url,
+            x: input.x,
+            y: input.y,
         },
         context,
         links: Vec::new(),
@@ -642,6 +663,9 @@ pub fn upsert_host_comment(
                     scope: if line > 0 { Scope::Range } else { Scope::File },
                     start_line: line,
                     end_line: line,
+                    url: None,
+                    x: None,
+                    y: None,
                 },
                 context: Context::default(),
                 links: Vec::new(),
@@ -1015,6 +1039,9 @@ mod tests {
                 scope: Scope::Range,
                 start_line: 10,
                 end_line: 12,
+                url: None,
+                x: None,
+                y: None,
             },
             context: Context::default(),
             links: vec![],
@@ -1146,6 +1173,9 @@ mod tests {
             kind: CommentKind::Task,
             body: body.into(),
             context: Context::default(),
+            url: None,
+            x: None,
+            y: None,
         }
     }
 

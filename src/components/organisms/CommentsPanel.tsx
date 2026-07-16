@@ -10,6 +10,7 @@ import type { Comment, CommentState, CommentType } from "../../lib/api";
 import { useComments, toRelative } from "../../lib/comments";
 import { useProject, useEditorActions, useWorkspace } from "../../lib/store";
 import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
+import { usePreview } from "../../lib/preview";
 
 import { COMMENT_STATES, COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
 import { Select } from "../atoms/Select";
@@ -80,8 +81,19 @@ export function CommentsPanel() {
   );
 
   const jump = (c: Comment) => {
-    if (c.anchor.scope === "range") open(`${root}/${c.anchor.file}`, c.anchor.startLine);
-    else if (c.anchor.file) open(`${root}/${c.anchor.file}`);
+    if (c.anchor.scope === "web" && c.anchor.url) {
+      // Design comment: reveal it in the browser (navigate + marker at x,y).
+      usePreview.getState().setPinRequest({
+        url: c.anchor.url,
+        x: c.anchor.x ?? 0,
+        y: c.anchor.y ?? 0,
+        text: c.messages[0]?.body ?? "",
+      });
+    } else if (c.anchor.scope === "range") {
+      open(`${root}/${c.anchor.file}`, c.anchor.startLine);
+    } else if (c.anchor.file) {
+      open(`${root}/${c.anchor.file}`);
+    }
     if (view === "open") setActive(c.id);
   };
 

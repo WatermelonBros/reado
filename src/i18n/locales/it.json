@@ -422,6 +422,12 @@
     "clear": "Svuota feed",
     "empty": "Il ragionamento dell'agente comparirà qui mentre lavora."
   },
+  "browserComment": {
+    "at": "Commento su {url}",
+    "placeholder": "Cosa non va qui? (⌘/Ctrl+Invio per salvare)",
+    "save": "Commenta",
+    "cancel": "Annulla"
+  },
   "preview": {
     "toggle": "Attiva/disattiva anteprima browser",
     "url": "URL anteprima",
