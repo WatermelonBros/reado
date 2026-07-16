@@ -123,6 +123,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               net?: NetEntry[];
               inspect?: number[];
               commentAt?: { x: number; y: number; url: string; text: string } | null;
+              openComment?: string | null;
             } | null)
           : null;
         if (data) {
@@ -148,6 +149,11 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               x: c.x,
               y: c.y,
             }).catch(() => {});
+          }
+          // A page dot was clicked → open its thread in the real Comments panel.
+          if (data.openComment) {
+            useWorkspace.getState().selectTool("comments");
+            useComments.getState().setActive(data.openComment);
           }
           const logs = data.logs ?? [];
           const net = data.net ?? [];
@@ -337,7 +343,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   useEffect(() => {
     const list = comments
       .filter((c) => c.anchor.scope === "web" && c.anchor.url && sameDoc(c.anchor.url, url))
-      .map((c) => ({ x: c.anchor.x ?? 0, y: c.anchor.y ?? 0, text: c.messages[0]?.body ?? "" }));
+      .map((c) => ({ id: c.id, x: c.anchor.x ?? 0, y: c.anchor.y ?? 0, text: c.messages[0]?.body ?? "" }));
     const js = `window.__readoBridge&&window.__readoBridge.marks(${JSON.stringify(list)},${showMarks})`;
     const t = setTimeout(() => void previewEval(js).catch(() => {}), 500);
     return () => clearTimeout(t);
