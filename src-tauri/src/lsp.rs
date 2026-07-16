@@ -76,7 +76,15 @@ fn server_command(server: &str) -> Option<(&'static str, Vec<&'static str>)> {
         "bash" => Some(("bash-language-server", vec!["start"])),
         "csharp" => Some(("csharp-ls", vec![])),
         "java" => Some(("jdtls", vec![])),
-        "kotlin" => Some(("kotlin-language-server", vec![])),
+        // Prefer JetBrains' official kotlin-lsp (far stronger analysis and
+        // go-to-definition) when it's on PATH; fall back to the older, weaker
+        // fwcd kotlin-language-server otherwise. Expose the official launcher as
+        // `kotlin-lsp` on PATH to opt in.
+        "kotlin" => Some(if on_path("kotlin-lsp") {
+            ("kotlin-lsp", vec!["--stdio"])
+        } else {
+            ("kotlin-language-server", vec![])
+        }),
         "scala" => Some(("metals", vec![])),
         "ruby" => Some(("ruby-lsp", vec![])),
         "php" => Some(("intelephense", vec!["--stdio"])),
