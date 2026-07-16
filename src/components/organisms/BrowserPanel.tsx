@@ -110,10 +110,8 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   const root = useProject((s) => s.root);
   const pinRequest = usePreview((s) => s.pinRequest);
   const setPinRequest = usePreview((s) => s.setPinRequest);
-  // Design comments live in the normal store; we draw a dot per comment on the
-  // page it belongs to. `showMarks` toggles the whole layer.
-  const comments = useComments((s) => s.comments);
-  const paneOpen = usePreview((s) => s.open);
+  // Design-comment dots are injected from the drain tick (it reads the store
+  // fresh), so no reactive selector is needed here — just the toggle state.
   const [showMarks, setShowMarks] = useState(true);
   // Reado's overlays (palette, settings, dialogs, graph/docs) render in the DOM,
   // which a native child window would cover — hide the preview while any is open.
@@ -131,6 +129,10 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   const openedRef = useRef(false);
   const lastCmdId = useRef("");
   const lastNetSig = useRef("");
+  // The last comment-marker set applied to the page, so the drain tick re-injects
+  // only when it changes (or when the page reloaded and dropped the layer).
+  const lastMarksSig = useRef("");
+  const showMarksRef = useRef(true);
   // Last console+network snapshot mirrored to `.reado/`, so we write only on change.
   const lastPersisted = useRef("");
   const lastBounds = useRef({ x: 0, y: 0, w: 0, h: 0, z: 1 });
@@ -138,6 +140,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   const manualUrl = useRef(false);
   // Whether the current URL responded last check → reload on a dead→live transition.
   const wasLive = useRef(false);
+  showMarksRef.current = showMarks;
 
   // The single drain of the page's capture bridge: pull console/network, feed the
   // store (→ inspector + send-to-agent), and mirror to `.reado/` for the MCP.
@@ -159,6 +162,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               commentType?: { id: string; type: CommentType } | null;
               commentKind?: { id: string; kind: CommentKind } | null;
               commentEdit?: { id: string; text: string } | null;
+              hasMarks?: boolean;
             } | null)
           : null;
         if (data) {
@@ -220,6 +224,25 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
           if (data.commentType) patchAndReopen(data.commentType.id, { type: data.commentType.type });
           if (data.commentKind) patchAndReopen(data.commentKind.id, { kind: data.commentKind.kind });
           if (data.commentEdit) patchAndReopen(data.commentEdit.id, { body: data.commentEdit.text });
+          // Keep the comment dots on the page: re-inject when the set changes, or
+          // when the page reloaded and dropped the layer (data.hasMarks == false).
+          const webList = useComments
+            .getState()
+            .comments.filter(
+              (c) =>
+                c.anchor.scope === "web" &&
+                c.state !== "done" &&
+                c.anchor.url &&
+                sameDoc(c.anchor.url, usePreview.getState().url),
+            )
+            .map((c) => ({ id: c.id, x: c.anchor.x ?? 0, y: c.anchor.y ?? 0 }));
+          const marksSig = `${showMarksRef.current}|${webList.map((m) => m.id).join(",")}`;
+          if (marksSig !== lastMarksSig.current || !data.hasMarks) {
+            lastMarksSig.current = marksSig;
+            void previewEval(
+              `window.__readoBridge&&window.__readoBridge.marks(${JSON.stringify(webList)},${showMarksRef.current})`,
+            ).catch(() => {});
+          }
           const logs = data.logs ?? [];
           const net = data.net ?? [];
           if (logs.length) appendLogs(logs);
@@ -356,7 +379,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     openAt(usePreview.getState().url);
     const el = bodyRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(syncBounds);
+    // If the webview isn't up yet (bounds were 0 at mount, e.g. on reopen), create
+    // it once the placeholder has a real size; otherwise just re-park it.
+    const ro = new ResizeObserver(() => {
+      if (openedRef.current) syncBounds();
+      else openAt(usePreview.getState().url);
+    });
     ro.observe(el);
     return () => {
       ro.disconnect();
@@ -402,25 +430,6 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     void previewSetVisible(!overlayOpen);
   }, [overlayOpen]);
 
-  // Draw a dot per design comment belonging to the current page (and toggle the
-  // whole layer). Re-runs on navigation (url) and when comments change; the bridge
-  // is re-injected on load, so a short settle delay lets the page lay out first.
-  useEffect(() => {
-    if (!paneOpen) return;
-    const list = comments
-      .filter((c) => c.anchor.scope === "web" && c.state !== "done" && c.anchor.url && sameDoc(c.anchor.url, url))
-      .map((c) => ({ id: c.id, x: c.anchor.x ?? 0, y: c.anchor.y ?? 0 }));
-    const js = `window.__readoBridge&&window.__readoBridge.marks(${JSON.stringify(list)},${showMarks})`;
-    const inject = () => void previewEval(js).catch(() => {});
-    // Two tries: the bridge/page may not be ready on first open (the reason a
-    // manual toggle "fixed" it), so a later retry catches a slow load.
-    const t1 = setTimeout(inject, 600);
-    const t2 = setTimeout(inject, 1600);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [comments, url, showMarks, paneOpen]);
 
   // A comment was clicked in the list → navigate there and drop the marker.
   useEffect(() => {

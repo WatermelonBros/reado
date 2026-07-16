@@ -24,7 +24,7 @@ const BRIDGE: &str = r#"(function(){
   var B = window.__readoBridge = { logs: [], net: [], _id: 0 };
   // Console is drained (cleared each poll); network is a persistent snapshot so
   // request/response bodies (which resolve async) can fill in and be inspected.
-  B.drain = function(){ var l=B.logs, ip=B.inspectPath, ca=B.commentAt, oc=B.openComment, cr=B.commentReply, cs=B.commentResolve, ct=B.commentType, ck=B.commentKind, ce=B.commentEdit; B.logs=[]; B.inspectPath=null; B.commentAt=null; B.openComment=null; B.commentReply=null; B.commentResolve=null; B.commentType=null; B.commentKind=null; B.commentEdit=null; return {logs:l, net:B.net.slice(-300), inspect:ip, commentAt:ca||null, openComment:oc||null, commentReply:cr||null, commentResolve:cs||null, commentType:ct||null, commentKind:ck||null, commentEdit:ce||null}; };
+  B.drain = function(){ var l=B.logs, ip=B.inspectPath, ca=B.commentAt, oc=B.openComment, cr=B.commentReply, cs=B.commentResolve, ct=B.commentType, ck=B.commentKind, ce=B.commentEdit; B.logs=[]; B.inspectPath=null; B.commentAt=null; B.openComment=null; B.commentReply=null; B.commentResolve=null; B.commentType=null; B.commentKind=null; B.commentEdit=null; return {logs:l, net:B.net.slice(-300), inspect:ip, commentAt:ca||null, openComment:oc||null, commentReply:cr||null, commentResolve:cs||null, commentType:ct||null, commentKind:ck||null, commentEdit:ce||null, hasMarks:!!document.getElementById('__readoMarks')}; };
   B.clear = function(){ B.logs=[]; B.net=[]; };
   // Elements highlight: draw an overlay over the element at the given child-index
   // path (from documentElement), like Chrome's hover highlight.
