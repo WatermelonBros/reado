@@ -61,8 +61,8 @@ interface PreviewState {
   inspectorDetached: boolean;
   /** A right-click "inspect" from the page: child-index path to reveal in Elements. */
   inspectRequest: number[] | null;
-  /** A design comment to reveal: navigate to `url`, then drop a marker at (x,y). */
-  pinRequest: { url: string; x: number; y: number; text: string } | null;
+  /** A design comment to reveal: navigate to `url`, then open its card at (x,y). */
+  pinRequest: { url: string; x: number; y: number; id: string } | null;
   /** Mirror captured console/network to `.reado/` and run the agent's commands, so
    *  the terminal agent can see and drive the preview. On by default; the toggle
    *  lets the user cut it off. */
@@ -88,7 +88,7 @@ interface PreviewState {
   setInspectorSize: (n: number) => void;
   setInspectorDetached: (d: boolean) => void;
   setInspectRequest: (p: number[] | null) => void;
-  setPinRequest: (p: { url: string; x: number; y: number; text: string } | null) => void;
+  setPinRequest: (p: { url: string; x: number; y: number; id: string } | null) => void;
   setAgentAccess: (on: boolean) => void;
   addAllowedOrigin: (origin: string) => void;
   setDevice: (d: { w: number; h: number; label: string } | null) => void;

@@ -82,12 +82,12 @@ export function CommentsPanel() {
 
   const jump = (c: Comment) => {
     if (c.anchor.scope === "web" && c.anchor.url) {
-      // Design comment: reveal it in the browser (navigate + marker at x,y).
+      // Design comment: reveal it in the browser (navigate + open its card at x,y).
       usePreview.getState().setPinRequest({
         url: c.anchor.url,
         x: c.anchor.x ?? 0,
         y: c.anchor.y ?? 0,
-        text: c.messages[0]?.body ?? "",
+        id: c.id,
       });
     } else if (c.anchor.scope === "range") {
       open(`${root}/${c.anchor.file}`, c.anchor.startLine);

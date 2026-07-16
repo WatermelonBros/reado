@@ -147,8 +147,15 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   useEffect(() => {
     let alive = true;
     const tick = async () => {
+      let raw: string | null = null;
       try {
-        const raw = await previewEval("window.__readoBridge ? window.__readoBridge.drain() : null");
+        raw = await previewEval("window.__readoBridge ? window.__readoBridge.drain() : null");
+      } catch (e) {
+        // The webview vanished while the pane is open (a close/reopen race). The URL
+        // is still valid, so recreate it rather than making the user hit Enter.
+        if (String(e).includes("no preview")) openAt(usePreview.getState().url);
+      }
+      try {
         if (!alive) return;
         const data = raw
           ? (JSON.parse(raw) as {
@@ -330,6 +337,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       alive = false;
       window.clearInterval(id);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [root, appendLogs, setNet]);
 
   // The pane rect for the child window: centred at the chosen device size (scaled
@@ -431,10 +439,10 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   }, [overlayOpen]);
 
 
-  // A comment was clicked in the list → navigate there and drop the marker.
+  // A comment was clicked in the list → navigate there and open its card.
   useEffect(() => {
     if (!pinRequest) return;
-    const { url, x, y, text } = pinRequest;
+    const { url, id } = pinRequest;
     let cancelled = false;
     void (async () => {
       usePreview.getState().openPane(url);
@@ -442,15 +450,13 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
         await previewNavigate(url);
         usePreview.getState().setUrl(url);
       } catch {
-        /* navigation blocked/failed — still try to pin the current page */
+        /* navigation blocked/failed — still try to open the card on the current page */
       }
-      // ponytail: fixed settle delay before injecting the marker; a load-event
-      // handshake would be tighter if pages routinely outrun it.
+      // ponytail: fixed settle delay before the page (and its bridge) are ready.
       await new Promise((r) => setTimeout(r, 900));
       if (cancelled) return;
-      await previewEval(
-        `window.__readoBridge&&window.__readoBridge.pin(${x},${y},${JSON.stringify(text)})`,
-      ).catch(() => {});
+      const c = useComments.getState().comments.find((x) => x.id === id);
+      if (c) injectCommentBox(c);
     })();
     setPinRequest(null);
     return () => {
