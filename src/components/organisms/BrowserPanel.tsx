@@ -37,6 +37,9 @@ import {
   previewCaptureFrame,
   createComment,
   type Comment,
+  type CommentType,
+  type CommentKind,
+  type CommentPatch,
 } from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { IconButton } from "../atoms/IconButton";
@@ -64,6 +67,7 @@ function injectCommentBox(c: Comment): void {
     x: c.anchor.x ?? 0,
     y: c.anchor.y ?? 0,
     type: c.type,
+    kind: c.kind,
     resolved: c.state === "done",
     messages: c.messages.map((m) => ({
       who: m.agent ?? m.author,
@@ -151,6 +155,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               openComment?: string | null;
               commentReply?: { id: string; text: string } | null;
               commentResolve?: string | null;
+              commentType?: { id: string; type: CommentType } | null;
+              commentKind?: { id: string; kind: CommentKind } | null;
+              commentEdit?: { id: string; text: string } | null;
             } | null)
           : null;
         if (data) {
@@ -199,6 +206,19 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
             void useComments.getState().setState(data.commentResolve, "done").catch(() => {});
             void previewEval("window.__readoBridge&&window.__readoBridge.closeComment()").catch(() => {});
           }
+          // Type / kind / edit changed in the card → patch it, then re-render.
+          const patchAndReopen = (id: string, p: CommentPatch) =>
+            void useComments
+              .getState()
+              .patch(id, p)
+              .then(() => {
+                const c = useComments.getState().comments.find((x) => x.id === id);
+                if (c) injectCommentBox(c);
+              })
+              .catch(() => {});
+          if (data.commentType) patchAndReopen(data.commentType.id, { type: data.commentType.type });
+          if (data.commentKind) patchAndReopen(data.commentKind.id, { kind: data.commentKind.kind });
+          if (data.commentEdit) patchAndReopen(data.commentEdit.id, { body: data.commentEdit.text });
           const logs = data.logs ?? [];
           const net = data.net ?? [];
           if (logs.length) appendLogs(logs);
