@@ -8,7 +8,7 @@
  * tooltip text (via the Ark-based `Tooltip`). A toggle passes `active` (rendered
  * accent-tinted, `aria-pressed`); a destructive action passes `danger`.
  */
-import { type ButtonHTMLAttributes, type ReactNode } from "react";
+import { type ButtonHTMLAttributes, type ReactNode, isValidElement, cloneElement } from "react";
 import { Tooltip } from "./Tooltip";
 import { cn } from "../../lib/cn";
 
@@ -48,6 +48,12 @@ export function IconButton({
     : active
       ? "text-accent hover:bg-overlay"
       : "text-faint hover:bg-overlay hover:text-ink";
+  // Active toggles read as "primary colour + duotone" (the app's accent language,
+  // matching the activity bar) — render the Phosphor glyph duotone when on.
+  const glyph =
+    active && isValidElement(icon)
+      ? cloneElement(icon as React.ReactElement<{ weight?: string }>, { weight: "duotone" })
+      : icon;
   return (
     <Tooltip label={label} placement={tooltipPlacement}>
       <button
@@ -65,7 +71,7 @@ export function IconButton({
         )}
         {...rest}
       >
-        {icon}
+        {glyph}
       </button>
     </Tooltip>
   );

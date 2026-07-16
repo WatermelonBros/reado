@@ -113,6 +113,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // Design comments live in the normal store; we draw a dot per comment on the
   // page it belongs to. `showMarks` toggles the whole layer.
   const comments = useComments((s) => s.comments);
+  const paneOpen = usePreview((s) => s.open);
   const [showMarks, setShowMarks] = useState(true);
   // Reado's overlays (palette, settings, dialogs, graph/docs) render in the DOM,
   // which a native child window would cover — hide the preview while any is open.
@@ -405,13 +406,21 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // whole layer). Re-runs on navigation (url) and when comments change; the bridge
   // is re-injected on load, so a short settle delay lets the page lay out first.
   useEffect(() => {
+    if (!paneOpen) return;
     const list = comments
       .filter((c) => c.anchor.scope === "web" && c.state !== "done" && c.anchor.url && sameDoc(c.anchor.url, url))
       .map((c) => ({ id: c.id, x: c.anchor.x ?? 0, y: c.anchor.y ?? 0 }));
     const js = `window.__readoBridge&&window.__readoBridge.marks(${JSON.stringify(list)},${showMarks})`;
-    const t = setTimeout(() => void previewEval(js).catch(() => {}), 500);
-    return () => clearTimeout(t);
-  }, [comments, url, showMarks]);
+    const inject = () => void previewEval(js).catch(() => {});
+    // Two tries: the bridge/page may not be ready on first open (the reason a
+    // manual toggle "fixed" it), so a later retry catches a slow load.
+    const t1 = setTimeout(inject, 600);
+    const t2 = setTimeout(inject, 1600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [comments, url, showMarks, paneOpen]);
 
   // A comment was clicked in the list → navigate there and drop the marker.
   useEffect(() => {
