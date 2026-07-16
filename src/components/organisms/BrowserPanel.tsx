@@ -123,7 +123,6 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               net?: NetEntry[];
               inspect?: number[];
               commentAt?: { x: number; y: number; url: string; text: string } | null;
-              openComment?: string | null;
             } | null)
           : null;
         if (data) {
@@ -149,11 +148,6 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               x: c.x,
               y: c.y,
             }).catch(() => {});
-          }
-          // A page dot was clicked → open its thread in the real Comments panel.
-          if (data.openComment) {
-            useWorkspace.getState().selectTool("comments");
-            useComments.getState().setActive(data.openComment);
           }
           const logs = data.logs ?? [];
           const net = data.net ?? [];
