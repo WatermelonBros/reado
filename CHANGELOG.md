@@ -11,6 +11,27 @@ commit.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-07-17
+
+### Added
+- **Browser design comments** — right-click anywhere in the browser preview to
+  leave a comment pinned to that spot (page URL + position). Design comments live
+  in the Comments panel; a red dot marks each on its page, and clicking it opens
+  an in-place card to read, reply, re-type, edit, and resolve. A toolbar toggle
+  shows or hides the dots.
+- **Agent reasoning panel** — a live feed of the agent's decisions and
+  assumptions, docked beside the terminal, written by the agent through the new
+  `reado thought` command.
+
+### Changed
+- **Kotlin** — prefer JetBrains' official `kotlin-lsp` over the older
+  `kotlin-language-server` when it's installed, for stronger go-to-definition.
+
+### Fixed
+- **Terminal** — Claude Code now launches with a theme matching Reado's, so it no
+  longer renders white-on-white on the light interface theme.
+- Toggled-on toolbar icons render duotone, matching the activity bar's accent.
+
 ## [1.2.1] — 2026-07-12
 
 ### Fixed
@@ -472,7 +493,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/WatermelonBros/reado/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/WatermelonBros/reado/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/WatermelonBros/reado/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/WatermelonBros/reado/compare/v1.0.0...v1.1.0
