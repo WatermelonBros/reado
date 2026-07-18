@@ -21,6 +21,12 @@ describe("RenderedMarkdown", () => {
     expect(screen.getByRole("cell", { name: "1" })).toBeInTheDocument();
   });
 
+  it("renders LaTeX math (remark-math + rehype-katex)", () => {
+    const { container } = render(<RenderedMarkdown text={"Euler: $e^{i\\pi}+1=0$"} />);
+    // KaTeX wraps rendered math in a `.katex` element.
+    expect(container.querySelector(".katex")).toBeInTheDocument();
+  });
+
   it("renders an empty document without crashing", () => {
     const { container } = render(<RenderedMarkdown text="" />);
     expect(container.querySelector(".prose-reado")).toBeInTheDocument();

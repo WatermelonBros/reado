@@ -11,6 +11,10 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **LaTeX math in the Markdown preview** — inline `$…$` and block `$$…$$` math is
+  rendered with KaTeX (fonts bundled locally).
+
 ## [1.3.0] — 2026-07-17
 
 ### Added

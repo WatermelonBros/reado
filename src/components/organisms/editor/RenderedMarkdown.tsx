@@ -1,7 +1,6 @@
 import { memo } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { markdownRehype } from "../../../lib/markdown";
+import { markdownRemark, markdownRehype } from "../../../lib/markdown";
 
 /** Rendered markdown preview, memoized so it only re-parses when the document
  *  text (or reading width) changes — react-markdown parses synchronously, so an
@@ -13,7 +12,7 @@ export const RenderedMarkdown = memo(function RenderedMarkdown({ text }: { text:
     // regardless (this is typography, not the old code reading-width toggle).
     <div className="prose-reado mx-auto h-full w-full max-w-[72ch] overflow-y-auto p-8">
 
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={markdownRehype}>
+      <ReactMarkdown remarkPlugins={markdownRemark} rehypePlugins={markdownRehype}>
         {text}
       </ReactMarkdown>
     </div>

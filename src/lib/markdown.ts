@@ -10,7 +10,12 @@
  */
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import rehypeKatex from "rehype-katex";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import type { Options } from "react-markdown";
+// KaTeX styles + fonts (bundled from 'self', so the desktop CSP allows them).
+import "katex/dist/katex.min.css";
 
 const attrs = defaultSchema.attributes ?? {};
 const schema = {
@@ -24,5 +29,15 @@ const schema = {
   },
 };
 
-/** Rehype plugins for rendering untrusted markdown with faithful, safe HTML. */
-export const markdownRehype: Options["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, schema]];
+/** Remark plugins: GitHub-flavoured markdown + `$…$`/`$$…$$` math parsing. */
+export const markdownRemark: Options["remarkPlugins"] = [remarkGfm, remarkMath];
+
+/** Rehype plugins for rendering untrusted markdown with faithful, safe HTML.
+ *  `rehype-katex` runs *after* sanitize: the `<span class="math">` placeholders
+ *  survive sanitizing (className is allowed), then KaTeX renders them from the
+ *  TeX source — its own output needn't be re-sanitized as it isn't user HTML. */
+export const markdownRehype: Options["rehypePlugins"] = [
+  rehypeRaw,
+  [rehypeSanitize, schema],
+  rehypeKatex,
+];
