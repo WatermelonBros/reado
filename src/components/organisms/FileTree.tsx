@@ -13,6 +13,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { listDir, listFiles, movePath, importPaths, type DirEntry } from "../../lib/api";
 import { useProject, useEditorActions, useSettings } from "../../lib/store";
 import { useTextView } from "../../lib/textView";
@@ -294,6 +295,23 @@ export function FileTree() {
                 onSelect: () => {
                   useTextView.getState().openAsText(menu.entry!.path);
                   open(menu.entry!.path);
+                  setMenu(null);
+                },
+              },
+            ]
+          : []),
+        ...(menu.entry
+          ? [
+              {
+                label: t("tree.reveal", {
+                  app: /win/i.test(navigator.userAgent)
+                    ? "Explorer"
+                    : /mac|iphone|ipad/i.test(navigator.userAgent)
+                      ? "Finder"
+                      : t("tree.fileManager"),
+                }),
+                onSelect: () => {
+                  void revealItemInDir(menu.entry!.path);
                   setMenu(null);
                 },
               },

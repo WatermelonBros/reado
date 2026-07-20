@@ -56,6 +56,8 @@
     "commentProject": "Commenta il progetto",
     "openAsText": "Apri come testo",
     "editSource": "Modifica sorgente",
+    "reveal": "Mostra in {app}",
+    "fileManager": "gestore file",
     "problems_one": "{count} problema",
     "problems_other": "{count} problemi",
     "readProgress": "{read} di {total} file letti",
