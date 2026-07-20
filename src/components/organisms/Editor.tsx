@@ -31,6 +31,7 @@ import {
 import { Welcome } from "../molecules/Welcome";
 import { DiffView } from "../organisms/DiffView";
 import { ImageView } from "../organisms/ImageView";
+import { PdfView } from "../organisms/PdfView";
 import { DocsIcon, EditIcon } from "../atoms/icons";
 import { Badge } from "../atoms/Badge";
 import { useTranslation } from "react-i18next";
@@ -191,6 +192,9 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
 
   if (content.kind === "image") {
     return <ImageView dataUrl={content.dataUrl} name={active} />;
+  }
+  if (content.kind === "pdf") {
+    return <PdfView dataUrl={content.dataUrl} name={active} />;
   }
   if (content.kind === "binary") {
     return (

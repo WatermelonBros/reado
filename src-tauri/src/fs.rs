@@ -189,6 +189,11 @@ pub enum FileContent {
         #[serde(rename = "dataUrl")]
         data_url: String,
     },
+    /// A PDF, returned as a `data:` URL for the in-app pdf.js viewer.
+    Pdf {
+        #[serde(rename = "dataUrl")]
+        data_url: String,
+    },
     /// Binary, non-image file — rendered as an unsupported-preview placeholder.
     Binary { size: u64 },
 }
@@ -275,6 +280,25 @@ pub fn read_file(root: String, path: String, as_text: Option<bool>) -> Result<Fi
             let encoded = base64_encode(&bytes);
             return Ok(FileContent::Image {
                 data_url: format!("data:{mime};base64,{encoded}"),
+            });
+        }
+        // PDFs render in the in-app pdf.js viewer — hand back the bytes as a data
+        // URL, like images, but cap the size so a giant PDF isn't slurped whole.
+        let is_pdf = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+        if is_pdf {
+            const MAX_PDF_BYTES: u64 = 64 * 1024 * 1024;
+            if metadata.len() > MAX_PDF_BYTES {
+                return Ok(FileContent::Binary {
+                    size: metadata.len(),
+                });
+            }
+            let bytes = std::fs::read(&path)?;
+            let encoded = base64_encode(&bytes);
+            return Ok(FileContent::Pdf {
+                data_url: format!("data:application/pdf;base64,{encoded}"),
             });
         }
     }

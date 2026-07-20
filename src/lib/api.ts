@@ -22,6 +22,7 @@ export interface DirEntry {
 export type FileContent =
   | { kind: "text"; text: string }
   | { kind: "image"; dataUrl: string }
+  | { kind: "pdf"; dataUrl: string }
   | { kind: "binary"; size: number };
 
 export interface GitInfo {
