@@ -59,9 +59,12 @@ What works today:
 - A knowledge base unifying the project's **docs**, **specs** (OpenSpec /
   speckit), and the **notes** captured while reading, with full-text search and
   a knowledge graph linking comments, files, specs and docs.
-- A `reado` CLI — the stable contract the agents use to read and resolve tasks
-  (and to consult the knowledge base). **The AI loop needs it installed** — the
-  agents reach Reado only through this CLI.
+- An **MCP server** and a **`reado` CLI** — how agents reach Reado. The MCP
+  server (auto-wired into each agent) exposes your tasks, comments, reading
+  progress and bookmarks as read-only context, plus `browser_*` tools to inspect
+  and drive the in-app browser preview; the CLI is how the agent *acts* —
+  resolving tasks, consulting the knowledge base, proposing review artifacts.
+  Both are the same `reado` binary, which **must be on the agent's `PATH`**.
 
 ## The AI loop
 
@@ -70,17 +73,20 @@ Reado's core loop is **read → annotate → AI-resolve**:
 1. You read code and leave comments. Comments flagged as **tasks** are the work
    list; **notes** stay out of the agent's way.
 2. Open the terminal (`Cmd/Ctrl+J`), launch **Claude**, **Codex** or **Copilot**,
-   then click **Send review**. Reado injects a prompt asking the agent to fetch
-   and resolve your tasks through the `reado` CLI.
-3. The agent reads tasks with `reado task list`, makes the changes, and marks
-   each `reado task done <id>` (or `reado task fail <id> "<reason>"`). Reado's
-   watcher reflects the result live, and resolved comments move to history.
+   then click **Send review**. Reado injects a prompt pointing the agent at your
+   open tasks.
+3. The agent reads your tasks and comments — from the `reado://tasks` and
+   `reado://comments` MCP resources, or `reado task list` — makes the changes,
+   and marks each done with `reado task done <id>` (or `reado task fail <id>
+   "<reason>"`). Reado's watcher reflects the result live, and resolved comments
+   move to history.
 
-The `reado` CLI is the stable contract — the on-disk format can evolve without
-breaking the agents, and the agents read and resolve tasks **only** through it,
-so it must be on the agent's `PATH` for the AI loop to work. The packaged app
-bundles the CLI: install it from **Settings → Command-line tool** (links `reado`
-into `~/.local/bin`, VS Code style). From a source checkout, build and link it
+The `reado` binary is the stable contract — the on-disk format can evolve without
+breaking the agents. It serves both the **MCP server** (`reado mcp`, auto-wired
+into each agent's config on project open) and the **CLI** the agent calls, so it
+must be on the agent's `PATH` for the AI loop to work. The packaged app bundles
+it: install from **Settings → Command-line tool** (links `reado` into
+`~/.local/bin`, VS Code style). From a source checkout, build and link it
 directly:
 
 ```bash
@@ -88,10 +94,12 @@ scripts/install-cli.sh           # builds release + links into ~/.local/bin
 reado --help
 ```
 
-Contract: `reado task list|show|done|fail|link`,
+Actions (CLI): `reado task list|show|done|fail|link`,
 `reado comment add|reply|search`, and `reado kb list|show|search` (to consult
-the docs and specs before resolving). Agent identity comes from `$READO_AGENT`
-(Reado sets it when launching an agent).
+the docs and specs before resolving). Context (MCP): the `reado://tasks`,
+`reado://comments`, `reado://reading-progress` and `reado://bookmarks` resources,
+plus `browser_*` tools for the in-app preview. Agent identity comes from
+`$READO_AGENT` (Reado sets it when launching an agent).
 
 An agent plugin in [`plugin/`](plugin/) teaches Claude Code (and Codex, via
 `AGENTS.md`) this contract so the agent resolves tasks correctly. See
