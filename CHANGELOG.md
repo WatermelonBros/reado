@@ -11,7 +11,14 @@ commit.
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-21
+
 ### Added
+- **In-app PDF viewer** — open a `.pdf` to read it inside Reado, rendered with
+  pdf.js (offline, no external viewer). Includes zoom controls (fit-to-width and
+  magnify, crisp on HiDPI displays).
+- **Reveal in Finder** — right-click a file or folder in the tree to reveal it in
+  the OS file manager (Finder / Explorer / file manager).
 - **LaTeX math in the Markdown preview** — inline `$…$` and block `$$…$$` math is
   rendered with KaTeX (fonts bundled locally).
 
@@ -497,7 +504,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/WatermelonBros/reado/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/WatermelonBros/reado/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/WatermelonBros/reado/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/WatermelonBros/reado/compare/v1.1.0...v1.2.0
