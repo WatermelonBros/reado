@@ -96,6 +96,11 @@
     "saveError": "Impossibile salvare — il file potrebbe essere in sola lettura o il disco pieno.",
     "unsaved": "Modifiche non salvate"
   },
+  "pdf": {
+    "zoomIn": "Ingrandisci",
+    "zoomOut": "Riduci",
+    "zoomReset": "Adatta alla larghezza"
+  },
   "symbols": {
     "goto": "Vai al simbolo nel file…",
     "gotoWorkspace": "Vai al simbolo nel progetto…",

@@ -96,6 +96,11 @@
     "saveError": "Couldn't save — the file may be read-only or the disk full.",
     "unsaved": "Unsaved changes"
   },
+  "pdf": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomReset": "Fit width"
+  },
   "symbols": {
     "goto": "Go to Symbol in File…",
     "gotoWorkspace": "Go to Symbol in Project…",
