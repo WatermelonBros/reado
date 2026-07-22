@@ -255,10 +255,12 @@ pub(crate) fn now_millis() -> u64 {
 
 /// Generate a unique id with the given prefix (e.g. `c` for comments, `s` for
 /// sessions, `p` for proposals). The counter is shared so ids never collide
-/// within a process even at the same millisecond.
+/// within a process even at the same millisecond; the pid is mixed in so two
+/// separate processes (CLI + desktop, or two CLI invocations) that hit the same
+/// millisecond can't both mint `c_<T>_0` and clobber each other's comment file.
 pub(crate) fn gen_id(prefix: &str) -> String {
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{prefix}_{:x}_{:x}", now_millis(), n)
+    format!("{prefix}_{:x}_{:x}_{:x}", now_millis(), std::process::id(), n)
 }
 
 fn new_id() -> String {
@@ -385,7 +387,16 @@ fn read_comment(path: &Path, archived: bool) -> Result<Comment> {
 fn write_comment(dir: &Path, meta: &CommentMeta, messages: &[Message]) -> Result<()> {
     std::fs::create_dir_all(dir)?;
     let path = dir.join(format!("{}.md", meta.id));
-    std::fs::write(path, to_markdown(meta, messages)?)?;
+    // Atomic write (mirrors session::save): a plain `std::fs::write` leaves the
+    // file empty/partial during its O_TRUNC+write window, so a concurrent reader
+    // (the watcher's rename detection, or a UI reload on comments-changed) would
+    // read torn markdown, fail front-matter parsing, and silently drop the
+    // comment. Write a hidden sibling temp file, then rename it into place
+    // (atomic on the same volume). The `.` prefix and `.tmp` extension keep it
+    // out of `list_dir` (which only reads `*.md`).
+    let tmp = dir.join(format!(".{}.md.tmp", meta.id));
+    std::fs::write(&tmp, to_markdown(meta, messages)?)?;
+    std::fs::rename(&tmp, &path)?;
     Ok(())
 }
 
@@ -602,12 +613,16 @@ pub fn set_comment_state(root: &str, id: &str, state: CommentState) -> Result<Co
 
     let should_archive = state == CommentState::Done;
     if should_archive != archived {
-        std::fs::remove_file(&path)?;
+        // Write the new location first, then remove the old one. Removing first
+        // and then failing the write (target dir unwritable, crash/kill between
+        // the calls) would lose the comment from both stores; write-then-delete
+        // at worst leaves a recoverable duplicate.
         write_comment(
             &dir_for(root, should_archive),
             &comment.meta,
             &comment.messages,
         )?;
+        std::fs::remove_file(&path)?;
         comment.archived = should_archive;
     } else {
         write_comment(&dir_for(root, archived), &comment.meta, &comment.messages)?;
@@ -695,12 +710,14 @@ pub fn upsert_host_comment(
     };
     meta.updated_at = now;
 
-    // Place the file in the right store, moving it if resolution changed.
+    // Place the file in the right store, moving it if resolution changed. Write
+    // the new location first, then remove the old one — remove-then-write would
+    // lose the comment from both stores if the write failed.
+    write_comment(&dir_for(root, want_done), &meta, &messages)?;
     if was_archived != want_done {
         let old = dir_for(root, was_archived).join(format!("{}.md", meta.id));
         let _ = std::fs::remove_file(old);
     }
-    write_comment(&dir_for(root, want_done), &meta, &messages)?;
     Ok(Comment {
         meta,
         messages,
@@ -784,7 +801,7 @@ pub fn extract_context(content: &str, start: u32, end: u32) -> Context {
     let lines: Vec<&str> = content.lines().collect();
     let n = lines.len();
     let s = (start.max(1) as usize) - 1;
-    let e = ((end.max(start) as usize) - 1).min(n.saturating_sub(1));
+    let e = ((end.max(start).max(1) as usize) - 1).min(n.saturating_sub(1));
     if s >= n {
         return Context::default();
     }

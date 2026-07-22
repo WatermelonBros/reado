@@ -11,7 +11,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, RecvTimeoutError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use notify::event::{ModifyKind, RenameMode};
@@ -21,6 +21,14 @@ use tauri::{AppHandle, Emitter};
 
 /// Debounce window: changes are coalesced over this quiet period before firing.
 const DEBOUNCE: Duration = Duration::from_millis(250);
+
+/// Maximum time a coalescing window may stay open. Under sustained sub-DEBOUNCE
+/// churn (a build, bulk checkout, or formatter touching many files) the quiet
+/// period never elapses, so without this cap `created`/`removed`/`pending` would
+/// grow unbounded and the delete+create rename heuristic (which needs exactly
+/// one removed + one created) could never fire — orphaning a renamed file's
+/// comments. Forcing a flush after this long keeps the window bounded.
+const MAX_COALESCE: Duration = Duration::from_millis(1000);
 
 /// Payload for the `file-changed` event: a project-relative, forward-slashed path.
 #[derive(Clone, Serialize)]
@@ -110,9 +118,20 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
         // reports a rename) can be reunited into a comment move instead of orphan.
         let mut created: HashSet<PathBuf> = HashSet::new();
         let mut removed: HashSet<PathBuf> = HashSet::new();
+        // When the current coalescing window opened. Used to cap it at
+        // MAX_COALESCE so continuous churn can't keep resetting the DEBOUNCE
+        // timer forever and starve the flush.
+        let mut window_start: Option<Instant> = None;
 
         loop {
-            match rx.recv_timeout(DEBOUNCE) {
+            // Normally wait a full quiet period, but never let the window exceed
+            // MAX_COALESCE: shrink the timeout to the remaining budget so a busy
+            // period still flushes instead of accumulating unbounded state.
+            let timeout = match window_start {
+                Some(start) => DEBOUNCE.min(MAX_COALESCE.saturating_sub(start.elapsed())),
+                None => DEBOUNCE,
+            };
+            match rx.recv_timeout(timeout) {
                 Ok(Ok(event)) => {
                     // A rename that reports both endpoints (Linux/inotify) lets us
                     // move a file's comments instead of orphaning them.
@@ -151,6 +170,9 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                         EventKind::Modify(ModifyKind::Name(_)) => Side::Unknown,
                         _ => Side::Other,
                     };
+                    // Open the coalescing window on the first event since the
+                    // last flush, so MAX_COALESCE is measured from here.
+                    window_start.get_or_insert_with(Instant::now);
                     for path in event.paths {
                         match side {
                             Side::Create => {
@@ -230,6 +252,8 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                     }
                     created.clear();
                     removed.clear();
+                    // Window flushed; the next event opens a fresh one.
+                    window_start = None;
 
                     for path in pending.drain() {
                         // Changes under .reado/comments|archive mean an agent (via
