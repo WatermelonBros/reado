@@ -10,17 +10,19 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::fs::base64_encode;
 
 /// A live terminal session: the PTY master (for resize), its writer, and child.
 struct Session {
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    /// Behind its own lock so a write can release the global registry lock first
+    /// — a PTY whose input buffer is full must not block every other terminal.
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     child: Box<dyn Child + Send + Sync>,
     /// The window that owns this session, so closing that window can reap its
     /// PTYs (a webview teardown won't reliably run the React unmount cleanup).
@@ -116,10 +118,25 @@ pub fn pty_spawn(
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
-    // Stream output until EOF, then signal exit.
+    // Register the session before the reader thread runs, so a child that exits
+    // immediately can't race its own cleanup (remove + reap, below) against this
+    // insert and leave a stale session behind.
+    state.0.lock().unwrap().insert(
+        id.clone(),
+        Session {
+            master: pair.master,
+            writer: Arc::new(Mutex::new(writer)),
+            child,
+            window: window.label().to_string(),
+        },
+    );
+
+    // Stream output until EOF, then signal exit and drop/reap the session so its
+    // PTY fds and (on Unix) the child's zombie don't linger when the shell exits
+    // on its own.
     let output_event = format!("pty-output-{id}");
     let exit_event = format!("pty-exit-{id}");
-    let exit_id = id.clone();
+    let exit_id = id;
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
         loop {
@@ -127,6 +144,12 @@ pub fn pty_spawn(
                 Ok(0) | Err(_) => {
                     crate::log::info("pty", "child exited", serde_json::json!({ "id": exit_id }));
                     let _ = app.emit(&exit_event, ());
+                    // Bind out of the guard so the registry lock is released
+                    // before the (blocking) wait().
+                    let removed = app.state::<PtyState>().0.lock().unwrap().remove(&exit_id);
+                    if let Some(mut session) = removed {
+                        let _ = session.child.wait();
+                    }
                     break;
                 }
                 Ok(n) => {
@@ -136,28 +159,23 @@ pub fn pty_spawn(
         }
     });
 
-    state.0.lock().unwrap().insert(
-        id,
-        Session {
-            master: pair.master,
-            writer,
-            child,
-            window: window.label().to_string(),
-        },
-    );
     Ok(())
 }
 
 /// Forward user input (keystrokes / injected text) to a session.
 #[tauri::command]
 pub fn pty_write(state: State<PtyState>, id: String, data: String) -> Result<(), String> {
-    if let Some(session) = state.0.lock().unwrap().get_mut(&id) {
-        session
-            .writer
-            .write_all(data.as_bytes())
-            .map_err(|e| e.to_string())?;
-        let _ = session.writer.flush();
-    }
+    // Grab the writer handle under the registry lock, then drop that lock before
+    // writing: the PTY master is blocking, so a full input buffer (a paused or
+    // non-reading TUI) must not stall every other terminal — nor app exit, which
+    // contends on this same lock.
+    let writer = match state.0.lock().unwrap().get(&id) {
+        Some(session) => Arc::clone(&session.writer),
+        None => return Ok(()),
+    };
+    let mut writer = writer.lock().unwrap();
+    writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+    let _ = writer.flush();
     Ok(())
 }
 

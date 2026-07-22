@@ -143,7 +143,16 @@ export function Terminal({ id, cwd, active }: Props) {
         /* container not measured yet */
       }
       lastSize.current = { rows: term.rows, cols: term.cols };
-      await ptySpawn(id, cwd, term.rows, term.cols).catch(() => {});
+      try {
+        await ptySpawn(id, cwd, term.rows, term.cols);
+      } catch {
+        // No backend session was created (bad $SHELL, invalid cwd, openpty
+        // failure…). Surface it instead of leaving a silent dead pane, and don't
+        // wire input/listeners to a PTY that isn't there.
+        term.write("\r\n\x1b[31m[failed to start terminal]\x1b[0m\r\n");
+        return;
+      }
+      if (disposed) return;
 
       unlisten.push(
         await listen<string>(`pty-output-${id}`, (e) => term.write(decode(e.payload))),
