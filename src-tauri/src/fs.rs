@@ -25,7 +25,7 @@ pub struct DirEntry {
 }
 
 /// Reject paths that resolve outside `root` (defends against `..` traversal).
-fn ensure_within(root: &Path, target: &Path) -> Result<PathBuf> {
+pub(crate) fn ensure_within(root: &Path, target: &Path) -> Result<PathBuf> {
     let root = root.canonicalize()?;
     let target = target.canonicalize()?;
     if target.starts_with(&root) {
@@ -249,6 +249,18 @@ pub fn write_file(root: String, path: String, content: String) -> Result<()> {
 pub fn create_file(root: String, path: String) -> Result<String> {
     let root = PathBuf::from(&root);
     let target = root.join(&path);
+    // Confine *before* creating any directories: canonicalize the nearest
+    // existing ancestor of the target and reject anything that resolves outside
+    // root, so a `..`-escaping path can't leave directories behind outside the
+    // project as a side effect of the create_dir_all below.
+    let canon_root = root.canonicalize()?;
+    let anchor = target
+        .ancestors()
+        .find(|p| p.exists())
+        .ok_or(Error::PathEscapesRoot)?;
+    if !anchor.canonicalize()?.starts_with(&canon_root) {
+        return Err(Error::PathEscapesRoot);
+    }
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -276,6 +288,14 @@ pub fn read_file(root: String, path: String, as_text: Option<bool>) -> Result<Fi
     // `as_text` forces source decoding for image-renderable formats (e.g. SVG).
     if as_text != Some(true) {
         if let Some(mime) = image_mime(&path) {
+            // Cap by metadata *before* reading so a giant image (e.g. a multi-GB
+            // .svg/.bmp) isn't slurped whole and base64-expanded into memory.
+            const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
+            if metadata.len() > MAX_IMAGE_BYTES {
+                return Ok(FileContent::Binary {
+                    size: metadata.len(),
+                });
+            }
             let bytes = std::fs::read(&path)?;
             let encoded = base64_encode(&bytes);
             return Ok(FileContent::Image {

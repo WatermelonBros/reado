@@ -103,7 +103,9 @@ pub fn git_info(root: String) -> GitInfo {
         .unwrap_or(false);
 
     let branch = if is_repo {
-        run_git(root, &["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| !b.is_empty())
+        // A detached HEAD yields the literal "HEAD"; report it as `None` (no
+        // branch), matching git_branches and the documented contract.
+        run_git(root, &["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| !b.is_empty() && b != "HEAD")
     } else {
         None
     };
@@ -276,8 +278,19 @@ fn expand_status_line(line: &str) -> Vec<GitChange> {
 #[tauri::command]
 pub fn git_status(root: String) -> Vec<GitChange> {
     // `-uall` lists individual untracked files instead of collapsing an
-    // untracked directory to a single folder entry.
-    let Some(out) = run_git_raw(Path::new(&root), &["status", "--porcelain", "-uall"]) else {
+    // untracked directory to a single folder entry. `-c core.quotepath=false`
+    // stops git from octal-escaping non-ASCII bytes (e.g. `na\303\257ve.rs`),
+    // so the paths we hand to git_stage/unstage/discard match the real files.
+    let Some(out) = run_git_raw(
+        Path::new(&root),
+        &[
+            "-c",
+            "core.quotepath=false",
+            "status",
+            "--porcelain",
+            "-uall",
+        ],
+    ) else {
         return Vec::new();
     };
     out.lines().flat_map(expand_status_line).collect()
@@ -406,7 +419,11 @@ pub fn git_unstage_all(root: String) -> Result<(), String> {
 #[tauri::command]
 pub fn git_discard(root: String, path: String, untracked: bool) -> Result<(), String> {
     if untracked {
+        // Confine the deletion to the project root: an untracked `path` that
+        // escapes (`../…`) or is absolute must never let remove_dir_all wipe
+        // files outside the repo. Reuse the same confinement guard as fs.rs.
         let full = Path::new(&root).join(&path);
+        let full = crate::fs::ensure_within(Path::new(&root), &full).map_err(|e| e.to_string())?;
         if full.is_dir() {
             std::fs::remove_dir_all(&full).map_err(|e| e.to_string())
         } else {
