@@ -28,7 +28,12 @@ pub fn serve(root: &str) -> Result<(), Box<dyn std::error::Error>> {
     let stdin = std::io::stdin();
     let mut out = std::io::stdout();
     for line in stdin.lock().lines() {
-        let line = line?;
+        // A non-UTF-8 byte on stdin yields Err here; skip that frame instead of
+        // tearing down the whole server (and the agent's connection), mirroring
+        // the malformed-JSON handling below.
+        let Ok(line) = line else {
+            continue;
+        };
         if line.trim().is_empty() {
             continue;
         }

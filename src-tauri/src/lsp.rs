@@ -10,7 +10,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Stdio};
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::proc::on_path;
 
@@ -47,6 +47,13 @@ struct Server {
 /// Cap a single stderr line before it reaches the log — a server can emit huge
 /// lines (stack traces, JSON blobs) and the log shouldn't carry them whole.
 const MAX_STDERR_LINE: usize = 2000;
+
+/// Upper bound on a single LSP message body. A wedged/hostile server can send a
+/// bogus `Content-Length` (e.g. 99999999999999); allocating that blindly aborts
+/// the app or panics with 'capacity overflow'. Anything larger than this is
+/// treated as a protocol error that ends the pump gracefully. 64 MiB is far above
+/// any legitimate response (big completion / semantic-token payloads included).
+const MAX_LSP_MESSAGE: usize = 64 * 1024 * 1024;
 
 /// Truncate `line` to `MAX_STDERR_LINE` chars (on a char boundary), appending an
 /// ellipsis marker when cut, so an oversized stderr line can't bloat the log.
@@ -115,8 +122,15 @@ pub fn lsp_start(
     server: String,
     cwd: String,
 ) -> Result<(), String> {
+    // Hold the map lock across the whole check-and-reserve: two concurrent starts
+    // for the same id (e.g. two windows on one project) must not both spawn a
+    // server — the second insert would overwrite and leak the first child. A
+    // second call blocks here until the first inserts, then sees the entry below
+    // and reuses it. The exit reaper also takes this lock, so the freshly inserted
+    // entry can't be removed before it exists.
+    let mut map = state.0.lock().unwrap();
     // Already running for this id — reuse.
-    if state.0.lock().unwrap().contains_key(&id) {
+    if map.contains_key(&id) {
         return Ok(());
     }
     let (command, base_args) = server_command(&server).ok_or_else(|| {
@@ -178,8 +192,19 @@ pub fn lsp_start(
     if let Some(stderr) = child.stderr.take() {
         let err_id = id.clone();
         std::thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines().map_while(Result::ok) {
+            let mut reader = BufReader::new(stderr);
+            // Drain byte-wise (not `.lines()`): a single non-UTF-8 byte must not
+            // end the drain, or the server's stderr pipe fills, its next write()
+            // blocks, and it wedges with stdout starved and no exit event. Lossy
+            // decode logs the invalid line instead of dropping the whole stream.
+            let mut raw = Vec::new();
+            loop {
+                raw.clear();
+                match reader.read_until(b'\n', &mut raw) {
+                    Ok(0) | Err(_) => break, // EOF or pipe error → stop draining
+                    Ok(_) => {}
+                }
+                let line = String::from_utf8_lossy(&raw);
                 if line.trim().is_empty() {
                     continue;
                 }
@@ -219,6 +244,18 @@ pub fn lsp_start(
                 if len == 0 {
                     continue;
                 }
+                // Guard against a bogus/hostile Content-Length before allocating:
+                // `vec![0u8; len]` on a wild value aborts the app or panics, and a
+                // panic here would skip the exit-emit below. Ending the pump
+                // gracefully lets the frontend learn the server is gone.
+                if len > MAX_LSP_MESSAGE {
+                    crate::log::error(
+                        "lsp",
+                        "content-length exceeds cap; ending pump",
+                        serde_json::json!({ "event": event.as_str(), "len": len, "cap": MAX_LSP_MESSAGE }),
+                    );
+                    return;
+                }
                 let mut buf = vec![0u8; len];
                 if reader.read_exact(&mut buf).is_err() {
                     return;
@@ -227,13 +264,20 @@ pub fn lsp_start(
             }
         };
         pump();
-        // The output stream ended → the process is gone. Signal the frontend so
-        // it can drop the dead connection and recover, then log the exit once.
+        // The output stream ended → the process is gone. Drop the now-dead entry
+        // from the map (so the next lsp_start re-spawns instead of reusing a dead
+        // pipe) and reap the child to avoid a zombie. If lsp_stop already removed
+        // it, `remove` is a no-op and the child was reaped there.
+        if let Some(mut server) = app.state::<LspState>().0.lock().unwrap().remove(&exit_id) {
+            let _ = server.child.wait();
+        }
+        // Signal the frontend so it can drop the dead connection and recover, then
+        // log the exit once.
         let _ = app.emit(&format!("lsp-exit-{exit_id}"), ());
         crate::log::info("lsp", "server exited", serde_json::json!({ "id": exit_id }));
     });
 
-    state.0.lock().unwrap().insert(id, Server { child, stdin });
+    map.insert(id, Server { child, stdin });
     Ok(())
 }
 
@@ -258,6 +302,8 @@ pub fn lsp_stop(state: State<LspState>, id: String) -> Result<(), String> {
     if let Some(mut server) = state.0.lock().unwrap().remove(&id) {
         crate::log::info("lsp", "server stopped", serde_json::json!({ "id": id }));
         let _ = server.child.kill();
+        // Reap the killed child so it doesn't linger as a <defunct> zombie.
+        let _ = server.child.wait();
     }
     Ok(())
 }
@@ -267,6 +313,7 @@ pub fn kill_all(state: &LspState) {
     if let Ok(mut map) = state.0.lock() {
         for (_, mut server) in map.drain() {
             let _ = server.child.kill();
+            let _ = server.child.wait();
         }
     }
 }

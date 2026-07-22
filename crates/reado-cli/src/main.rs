@@ -424,7 +424,12 @@ fn thought(
         .create(true)
         .append(true)
         .open(dir.join("reasoning.jsonl"))?;
-    writeln!(f, "{}", serde_json::to_string(&line)?)?;
+    // Build the whole record (including the trailing newline) and write it in a
+    // single O_APPEND write, so concurrent `reado thought` processes can't
+    // interleave a record and its newline into a corrupt, unparseable JSONL line.
+    let mut record = serde_json::to_string(&line)?;
+    record.push('\n');
+    f.write_all(record.as_bytes())?;
     Ok(())
 }
 
