@@ -943,7 +943,8 @@
   "imageView": {
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
-    "fit": "Fit"
+    "fit": "Fit",
+    "failed": "This image couldn't be displayed — the file may be corrupt or in an unsupported format."
   },
   "menu": {
     "needFile": "Open a file first.",

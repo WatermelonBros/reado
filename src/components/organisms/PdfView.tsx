@@ -44,7 +44,13 @@ export const PdfView = memo(function PdfView({ dataUrl }: { dataUrl: string; nam
     void (async () => {
       try {
         doc = await pdfjs.getDocument({ data: dataUrlToBytes(dataUrl) }).promise;
-        if (cancelled) return;
+        // If the effect was torn down while getDocument was in flight, the
+        // cleanup closure already ran with doc===null and destroyed nothing —
+        // so the body owns destroying the doc it just created, or it leaks.
+        if (cancelled) {
+          await doc.destroy();
+          return;
+        }
         const avail = host.clientWidth || 800;
         const dpr = window.devicePixelRatio || 1;
         for (let i = 1; i <= doc.numPages; i++) {

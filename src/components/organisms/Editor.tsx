@@ -146,15 +146,20 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   // unless the user has unsaved manual edits in progress.
   useEffect(() => {
     if (!active) return;
+    let cancelled = false;
     const rel = toRelative(root, active);
     const un = listen<{ file: string }>("file-changed", (e) => {
       // In PR mode the shown bytes come from the ref, not disk — ignore writes.
       if (e.payload.file !== rel || useEditorActions.getState().dirty || prRef) return;
       readFile(root, active, forceText.has(active))
-        .then((c) => setLoaded({ path: active, content: c }))
+        // Guard staleness: if the user switched files while this read was in
+        // flight, applying it would strand the editor on the loading placeholder
+        // (loaded.path !== the new active), so drop it — like the main load.
+        .then((c) => !cancelled && setLoaded({ path: active, content: c }))
         .catch(() => {});
     });
     return () => {
+      cancelled = true;
       // Swallow a rejecting unlisten (Tauri's listener map can already be gone
       // on a fast file switch / StrictMode double-effect) so it never escapes as
       // an unhandled rejection.

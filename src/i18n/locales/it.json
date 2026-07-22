@@ -943,7 +943,8 @@
   "imageView": {
     "zoomIn": "Ingrandisci",
     "zoomOut": "Riduci",
-    "fit": "Adatta"
+    "fit": "Adatta",
+    "failed": "Impossibile visualizzare questa immagine — il file potrebbe essere danneggiato o in un formato non supportato."
   },
   "menu": {
     "needFile": "Apri prima un file.",
