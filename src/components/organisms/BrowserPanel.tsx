@@ -35,7 +35,6 @@ import {
   previewPutResult,
   previewDetach,
   previewCaptureFrame,
-  createComment,
   type Comment,
   type CommentType,
   type CommentKind,
@@ -117,10 +116,15 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // which a native child window would cover — hide the preview while any is open.
   // A dock drag or open dock menu counts too: hide the preview so drop targets and
   // the menu (both DOM) stay visible above the native window.
-  const overlayOpen =
-    usePalette((s) => s.mode !== null || s.settingsOpen || s.shortcutsOpen || s.anywhereOpen) ||
-    useWorkspace((s) => s.graphOpen || s.docsOpen) ||
-    useLayout((s) => s.dragging !== null || s.menuOpen);
+  // Read each store into its own unconditional hook call, then OR the booleans —
+  // ORing the hooks directly would short-circuit and skip later hook calls (a
+  // Rules-of-Hooks violation) the moment an earlier overlay opens.
+  const paletteOverlay = usePalette(
+    (s) => s.mode !== null || s.settingsOpen || s.shortcutsOpen || s.anywhereOpen,
+  );
+  const workspaceOverlay = useWorkspace((s) => s.graphOpen || s.docsOpen);
+  const layoutOverlay = useLayout((s) => s.dragging !== null || s.menuOpen);
+  const overlayOpen = paletteOverlay || workspaceOverlay || layoutOverlay;
   // Re-park the webview when the dock layout changes (a splitter drag resizes the
   // pane; the ResizeObserver can miss the settled size mid-drag).
   const dockLayout = useLayout((s) => s.layout);
@@ -138,6 +142,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   const lastBounds = useRef({ x: 0, y: 0, w: 0, h: 0, z: 1 });
   // The user took control of the URL bar → stop auto-switching to detected servers.
   const manualUrl = useRef(false);
+  // The URL input is focused (being edited) → don't auto-switch, or the key={url}
+  // remount would discard the user's in-progress typing.
+  const urlFocused = useRef(false);
   // Whether the current URL responded last check → reload on a dead→live transition.
   const wasLive = useRef(false);
   showMarksRef.current = showMarks;
@@ -180,21 +187,30 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
             if (!s2.inspector) s2.toggleInspector();
           }
           // The in-page "Comment here" composer was saved → create the design comment.
+          // Route through the store so the list updates synchronously (dots draw,
+          // an immediate open finds it) and firstComment can drive the gitignore prompt.
           if (data.commentAt?.text) {
             const c = data.commentAt;
-            void createComment(root, {
-              file: "",
-              scope: "web",
-              startLine: 0,
-              endLine: 0,
-              type: "note",
-              kind: "note",
-              body: c.text,
-              context: { snippet: "", before: "", after: "" },
-              url: c.url,
-              x: c.x,
-              y: c.y,
-            }).catch(() => {});
+            void useComments
+              .getState()
+              .create({
+                file: "",
+                scope: "web",
+                startLine: 0,
+                endLine: 0,
+                type: "note",
+                kind: "note",
+                body: c.text,
+                context: { snippet: "", before: "", after: "" },
+                url: c.url,
+                x: c.x,
+                y: c.y,
+              })
+              .then(({ firstComment }) => {
+                if (firstComment && !useSettings.getState().gitignoreDontAsk)
+                  useComments.getState().setGitignorePrompt(true);
+              })
+              .catch(() => {});
           }
           // A page dot was clicked → show its comment card over the live page.
           if (data.openComment) {
@@ -219,6 +235,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
             void previewEval("window.__readoBridge&&window.__readoBridge.closeComment()").catch(() => {});
           }
           // Type / kind / edit changed in the card → patch it, then re-render.
+          // Coalesce fields destined for the same comment into a single patch:
+          // separate read-modify-write calls (backend rewrites the whole comment)
+          // would race and drop a field (last write wins).
           const patchAndReopen = (id: string, p: CommentPatch) =>
             void useComments
               .getState()
@@ -228,9 +247,23 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
                 if (c) injectCommentBox(c);
               })
               .catch(() => {});
-          if (data.commentType) patchAndReopen(data.commentType.id, { type: data.commentType.type });
-          if (data.commentKind) patchAndReopen(data.commentKind.id, { kind: data.commentKind.kind });
-          if (data.commentEdit) patchAndReopen(data.commentEdit.id, { body: data.commentEdit.text });
+          const patches = new Map<string, CommentPatch>();
+          if (data.commentType)
+            patches.set(data.commentType.id, {
+              ...patches.get(data.commentType.id),
+              type: data.commentType.type,
+            });
+          if (data.commentKind)
+            patches.set(data.commentKind.id, {
+              ...patches.get(data.commentKind.id),
+              kind: data.commentKind.kind,
+            });
+          if (data.commentEdit)
+            patches.set(data.commentEdit.id, {
+              ...patches.get(data.commentEdit.id),
+              body: data.commentEdit.text,
+            });
+          for (const [id, p] of patches) patchAndReopen(id, p);
           // Keep the comment dots on the page: re-inject when the set changes, or
           // when the page reloaded and dropped the layer (data.hasMarks == false).
           const webList = useComments
@@ -243,7 +276,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
                 sameDoc(c.anchor.url, usePreview.getState().url),
             )
             .map((c) => ({ id: c.id, x: c.anchor.x ?? 0, y: c.anchor.y ?? 0 }));
-          const marksSig = `${showMarksRef.current}|${webList.map((m) => m.id).join(",")}`;
+          const marksSig = `${showMarksRef.current}|${webList
+            .map((m) => `${m.id}:${m.x}:${m.y}`)
+            .join(",")}`;
           if (marksSig !== lastMarksSig.current || !data.hasMarks) {
             lastMarksSig.current = marksSig;
             void previewEval(
@@ -457,8 +492,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       if (cancelled) return;
       const c = useComments.getState().comments.find((x) => x.id === id);
       if (c) injectCommentBox(c);
+      // Clear the request only after the injection finishes. Clearing it
+      // synchronously here would re-run this effect (dep changed to null) and its
+      // cleanup would set cancelled=true before the 900ms settle, so the card was
+      // never injected. A fresh list click sets a new {url,id} object → re-fires.
+      setPinRequest(null);
     })();
-    setPinRequest(null);
     return () => {
       cancelled = true;
     };
@@ -540,8 +579,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
         wasLive.current = true;
       } else {
         wasLive.current = false;
-        // Auto-pick a detected server only while the user hasn't taken the wheel.
-        if (!manualUrl.current && live.length) {
+        // Auto-pick a detected server only while the user hasn't taken the wheel
+        // and isn't mid-edit in the URL bar (a remount would drop their typing).
+        if (!manualUrl.current && !urlFocused.current && live.length) {
           usePreview.getState().setUrl(live[0]);
           openAt(live[0]);
         }
@@ -610,6 +650,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
         <input
           key={url}
           defaultValue={url}
+          onFocus={() => {
+            urlFocused.current = true;
+          }}
+          onBlur={() => {
+            urlFocused.current = false;
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") go((e.target as HTMLInputElement).value);
           }}
