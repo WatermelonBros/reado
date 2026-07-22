@@ -17,6 +17,9 @@ interface ReasoningStore {
   open: boolean;
   /** Already auto-revealed this run — so closing it doesn't re-pop on the next line. */
   revealed: boolean;
+  /** The project this feed belongs to — guards stale, out-of-order reads and
+   *  re-arms the auto-reveal on a project switch. */
+  root: string;
   thoughts: Thought[];
   load: (root: string) => Promise<void>;
   clear: (root: string) => Promise<void>;
@@ -35,9 +38,15 @@ function ensurePlaced() {
 export const useReasoning = create<ReasoningStore>((set, get) => ({
   open: false,
   revealed: false,
+  root: "",
   thoughts: [],
   load: async (root) => {
+    // A project switch: drop the previous feed and re-arm the auto-reveal so the
+    // new project's first thought pops the panel again.
+    if (get().root !== root) set({ root, thoughts: [], revealed: false });
     const thoughts = await reasoningRead(root).catch(() => []);
+    // Guard against a stale read landing after the project changed.
+    if (get().root !== root) return;
     set({ thoughts });
     // First thought of a run pops the panel open beside the terminal, once.
     if (thoughts.length > 0 && !get().revealed) {

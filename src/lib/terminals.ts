@@ -167,7 +167,7 @@ export const useTerminals = create<TerminalsState>()(
         sessions,
         groups,
         agentTerminals: s.agentTerminals.filter((t) => t !== id),
-        ...resolveActive(s, groups, id),
+        ...resolveActive(s, groups, new Set([id])),
       };
     });
   },
@@ -208,7 +208,7 @@ export const useTerminals = create<TerminalsState>()(
         sessions,
         groups,
         agentTerminals: s.agentTerminals.filter((t) => !gone.has(t)),
-        ...resolveActive(s, groups, s.activeId ?? ""),
+        ...resolveActive(s, groups, gone),
       };
     }),
 
@@ -274,11 +274,14 @@ export const useTerminals = create<TerminalsState>()(
   ),
 );
 
-/** After removing pane(s), recompute the focused pane / active group / open flag. */
+/** After removing pane(s), recompute the focused pane / active group / open flag.
+ *  `removed` is the set of pane ids that were actually removed, so focus is only
+ *  relocated when the focused pane was genuinely one of them (not just because an
+ *  unrelated group was closed while the focused pane survived). */
 function resolveActive(
   prev: { activeId: string | null; activeGroupId: string | null; open: boolean },
   groups: TermGroup[],
-  removedId: string,
+  removed: Set<string>,
 ): { activeId: string | null; activeGroupId: string | null; open: boolean } {
   let activeGroupId = prev.activeGroupId;
   let activeId = prev.activeId;
@@ -289,7 +292,7 @@ function resolveActive(
   // Keep the focused pane if it survived and belongs to the active group;
   // otherwise focus the active group's last pane.
   const active = groups.find((g) => g.id === activeGroupId);
-  if (!activeId || activeId === removedId || !active?.paneIds.includes(activeId)) {
+  if (!activeId || removed.has(activeId) || !active?.paneIds.includes(activeId)) {
     activeId = active?.paneIds[active.paneIds.length - 1] ?? null;
   }
   return { activeId, activeGroupId, open: groups.length > 0 && prev.open };

@@ -37,22 +37,44 @@ export function effectiveThemeMode(): "light" | "dark" {
 export async function syncClaudeTheme(root: string): Promise<void> {
   if (!root) return;
   const path = `${root.replace(/[\\/]+$/, "")}/.claude/settings.local.json`;
-  const existing = await readFile(root, path)
-    .then((c) => (c.kind === "text" ? c.text : ""))
-    .catch(() => "");
+  // Distinguish "no file yet" from "read failed": a transient read rejection
+  // (I/O blip, permission, or another Claude Code instance's brief unlink window
+  // during a write-temp+rename) must NOT be treated as an empty file, or we'd
+  // overwrite real settings (permissions, env, hooks) with a bare {theme}.
   let obj: Record<string, unknown> = {};
-  if (existing.trim()) {
-    try {
-      const parsed = JSON.parse(existing);
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return;
-      obj = parsed as Record<string, unknown>;
-    } catch {
-      return; // present but not JSON we understand — leave the user's file alone
+  let absent = false;
+  try {
+    const content = await readFile(root, path);
+    if (content.kind !== "text") return; // present but not text — leave it alone
+    if (content.text.trim()) {
+      try {
+        const parsed = JSON.parse(content.text);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return;
+        obj = parsed as Record<string, unknown>;
+      } catch {
+        return; // present but not JSON we understand — leave the user's file alone
+      }
     }
+  } catch {
+    // The read failed for some reason. It's only safe to write when the file is
+    // genuinely absent — confirm that below via createFile (which errors if the
+    // file already exists), so an unreadable-but-present file is never clobbered.
+    absent = true;
   }
   const theme = effectiveThemeMode();
   if (obj.theme === theme) return;
   obj.theme = theme;
+  if (absent) {
+    // Only proceed if we can freshly create the file; any failure means it exists
+    // (or its dir is unwritable) — either way, don't clobber.
+    try {
+      await createFile(root, path);
+    } catch {
+      return;
+    }
+    await writeFile(root, path, `${JSON.stringify(obj, null, 2)}\n`).catch(() => {});
+    return;
+  }
   await createFile(root, path).catch(() => {});
   await writeFile(root, path, `${JSON.stringify(obj, null, 2)}\n`).catch(() => {});
 }

@@ -114,6 +114,9 @@ export function openProposals(s: Session | null): Proposal[] {
 }
 
 interface GuidedReviewState {
+  /** The project these sessions belong to — guards against stale, out-of-order
+   *  loads landing in the wrong project after a rapid switch. */
+  root: string;
   sessions: Session[];
   currentId: string | null;
   /** True while the agent is planning or reviewing (a prompt is in flight). */
@@ -153,12 +156,19 @@ function replace(list: Session[], s: Session): Session[] {
 }
 
 export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
+  root: "",
   sessions: [],
   currentId: null,
   busy: false,
 
   load: async (root) => {
+    // Record which project this load is for before the await; the existing merge
+    // below recomputes currentId, so a switch is handled without pre-clearing.
+    if (get().root !== root) set({ root });
     const sessions = (await sessionList(root).catch(() => [])).map(norm);
+    // Guard against a stale load if the project changed while this was in flight,
+    // so a slow load from the previous project can't overwrite the new one's list.
+    if (get().root !== root) return;
     set((st) => ({
       sessions,
       currentId:
@@ -170,7 +180,7 @@ export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
 
   refresh: async (root, id) => {
     const s = await sessionGet(root, id).catch(() => null);
-    if (s) set((st) => ({ sessions: replace(st.sessions, norm(s)) }));
+    if (s && get().root === root) set((st) => ({ sessions: replace(st.sessions, norm(s)) }));
   },
 
   select: (id) => set({ currentId: id }),

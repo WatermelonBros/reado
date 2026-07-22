@@ -129,8 +129,12 @@ export const useComments = create<CommentsState>((set, get) => ({
   },
 
   create: async (input) => {
-    const { comment, firstComment } = await createComment(get().root, input);
-    set((s) => ({ comments: [...s.comments, comment] }));
+    // Capture the root before the await and gate the append on it, so a comment
+    // created in the previous project can't be injected into a new one after a
+    // rapid project switch.
+    const root = get().root;
+    const { comment, firstComment } = await createComment(root, input);
+    if (get().root === root) set((s) => ({ comments: [...s.comments, comment] }));
     return { comment, firstComment };
   },
 
