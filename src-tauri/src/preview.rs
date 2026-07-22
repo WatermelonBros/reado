@@ -43,7 +43,7 @@ const BRIDGE: &str = r#"(function(){
   B.composeClose = function(){ var b=document.getElementById('__readoCompose'); if(b) b.remove(); };
   // Rich comment card over the live page: author/type/messages + reply + resolve.
   // A transparent full-page backdrop closes it; reply/resolve report back via drain.
-  B.showComment = function(c){ B.closeComment(); var TC={bug:'#ff5c5c',refactor:'#c084fc',performance:'#f59e0b',question:'#38bdf8',note:'#94a3b8'}; var TYPES=['bug','refactor','performance','question','note']; var back=document.createElement('div'); back.id='__readoCommentBack'; back.style.cssText='position:fixed;inset:0;z-index:2147483644;background:transparent'; back.onmousedown=function(e){ if(e.target===back) B.closeComment(); }; var card=document.createElement('div'); card.style.cssText='position:absolute;left:'+(c.x+14)+'px;top:'+c.y+'px;width:330px;box-sizing:border-box;background:#1b1f27;color:#e6e9ef;border:1px solid #3a4150;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);font:13px -apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden'; var chips=''; TYPES.forEach(function(tp){ var on=tp===c.type; chips+='<button data-type="'+tp+'" style="border:1px solid '+(on?TC[tp]:'#333a47')+';background:'+(on?TC[tp]+'22':'transparent')+';color:'+(on?TC[tp]:'#9aa3b2')+';border-radius:999px;padding:2px 8px;font-size:11px;cursor:pointer;text-transform:capitalize">'+tp+'</button>'; }); var kindRow='<button id="__rcTask" style="border:0;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;background:'+(c.kind==='task'?'#3b82f6':'#2b313c')+';color:#fff">Task</button><button id="__rcNote" style="border:0;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;background:'+(c.kind==='note'?'#3b82f6':'#2b313c')+';color:#fff">Note</button>'; var head='<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid #2b313c">'+chips+'<span style="flex:1"></span>'+kindRow+'<span id="__rcClose" style="cursor:pointer;color:#9aa3b2;padding:0 4px">x</span></div>'; var msgs='<div style="max-height:200px;overflow:auto;padding:10px 12px">'; (c.messages||[]).forEach(function(m,i){ var eb=(i===0)?'<span class="__rcEdit" style="cursor:pointer;color:#6b7280;font-size:11px;margin-left:6px">edit</span>':''; msgs+='<div style="margin-bottom:10px"><div style="font-size:11px;color:#9aa3b2;margin-bottom:2px"><b style="color:#cbd3e1">'+B.esc(m.who)+'</b> &middot; '+B.esc(m.when)+eb+'</div><div class="__rcBody" style="white-space:pre-wrap;word-break:break-word;line-height:1.4">'+B.esc(m.body)+'</div></div>'; }); msgs+='</div>'; var foot='<div style="padding:8px 12px;border-top:1px solid #2b313c;display:flex;gap:6px"><input id="__rcReply" placeholder="Reply..." style="flex:1;min-width:0;background:#12151b;color:#e6e9ef;border:1px solid #3a4150;border-radius:6px;padding:6px 8px;font:13px -apple-system;outline:none"><button id="__rcSend" style="border:0;border-radius:6px;background:#3b82f6;color:#fff;padding:0 12px;cursor:pointer">Send</button>'+(c.resolved?'':'<button id="__rcResolve" style="border:0;border-radius:6px;background:#22331f;color:#4ade80;padding:0 10px;cursor:pointer">Resolve</button>')+'</div>'; card.innerHTML=head+msgs+foot; back.appendChild(card); (document.body||document.documentElement).appendChild(back); card.querySelectorAll('button[data-type]').forEach(function(btn){ btn.onmousedown=function(e){ e.preventDefault(); B.commentType={id:c.id, type:btn.getAttribute('data-type')}; }; }); document.getElementById('__rcTask').onmousedown=function(e){ e.preventDefault(); B.commentKind={id:c.id, kind:'task'}; }; document.getElementById('__rcNote').onmousedown=function(e){ e.preventDefault(); B.commentKind={id:c.id, kind:'note'}; }; document.getElementById('__rcClose').onmousedown=function(e){ e.preventDefault(); B.closeComment(); }; var inp=document.getElementById('__rcReply'); function doSend(){ var v=inp.value.trim(); if(v){ B.commentReply={id:c.id, text:v}; inp.value=''; } } document.getElementById('__rcSend').onmousedown=function(e){ e.preventDefault(); doSend(); }; inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); doSend(); } if(e.key==='Escape'){ B.closeComment(); } }); var rz=document.getElementById('__rcResolve'); if(rz) rz.onmousedown=function(e){ e.preventDefault(); B.commentResolve=c.id; }; var ed=card.querySelector('.__rcEdit'); if(ed){ ed.onmousedown=function(e){ e.preventDefault(); var bodyEl=card.querySelector('.__rcBody'); var ta=document.createElement('textarea'); ta.value=(c.messages[0]&&c.messages[0].body)||''; ta.style.cssText='width:100%;box-sizing:border-box;min-height:54px;background:#12151b;color:#e6e9ef;border:1px solid #3a4150;border-radius:6px;padding:6px;font:13px -apple-system;outline:none'; bodyEl.replaceWith(ta); ta.focus(); ta.addEventListener('keydown',function(ev){ if(ev.key==='Enter'&&(ev.metaKey||ev.ctrlKey)){ ev.preventDefault(); var v=ta.value.trim(); if(v) B.commentEdit={id:c.id, text:v}; } if(ev.key==='Escape'){ B.showComment(c); } }); }; } setTimeout(function(){ inp.focus(); },0); };
+  B.showComment = function(c){ B.closeComment(); var TC={bug:'#ff5c5c',refactor:'#c084fc',performance:'#f59e0b',question:'#38bdf8',note:'#94a3b8'}; var TYPES=['bug','refactor','performance','question','note']; var back=document.createElement('div'); back.id='__readoCommentBack'; back.style.cssText='position:fixed;inset:0;z-index:2147483644;background:transparent'; back.onmousedown=function(e){ if(e.target===back) B.closeComment(); }; var card=document.createElement('div'); card.style.cssText='position:absolute;left:'+(c.x+14-(window.scrollX||0))+'px;top:'+(c.y-(window.scrollY||0))+'px;width:330px;box-sizing:border-box;background:#1b1f27;color:#e6e9ef;border:1px solid #3a4150;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);font:13px -apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden'; var chips=''; TYPES.forEach(function(tp){ var on=tp===c.type; chips+='<button data-type="'+tp+'" style="border:1px solid '+(on?TC[tp]:'#333a47')+';background:'+(on?TC[tp]+'22':'transparent')+';color:'+(on?TC[tp]:'#9aa3b2')+';border-radius:999px;padding:2px 8px;font-size:11px;cursor:pointer;text-transform:capitalize">'+tp+'</button>'; }); var kindRow='<button id="__rcTask" style="border:0;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;background:'+(c.kind==='task'?'#3b82f6':'#2b313c')+';color:#fff">Task</button><button id="__rcNote" style="border:0;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;background:'+(c.kind==='note'?'#3b82f6':'#2b313c')+';color:#fff">Note</button>'; var head='<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid #2b313c">'+chips+'<span style="flex:1"></span>'+kindRow+'<span id="__rcClose" style="cursor:pointer;color:#9aa3b2;padding:0 4px">x</span></div>'; var msgs='<div style="max-height:200px;overflow:auto;padding:10px 12px">'; (c.messages||[]).forEach(function(m,i){ var eb=(i===0)?'<span class="__rcEdit" style="cursor:pointer;color:#6b7280;font-size:11px;margin-left:6px">edit</span>':''; msgs+='<div style="margin-bottom:10px"><div style="font-size:11px;color:#9aa3b2;margin-bottom:2px"><b style="color:#cbd3e1">'+B.esc(m.who)+'</b> &middot; '+B.esc(m.when)+eb+'</div><div class="__rcBody" style="white-space:pre-wrap;word-break:break-word;line-height:1.4">'+B.esc(m.body)+'</div></div>'; }); msgs+='</div>'; var foot='<div style="padding:8px 12px;border-top:1px solid #2b313c;display:flex;gap:6px"><input id="__rcReply" placeholder="Reply..." style="flex:1;min-width:0;background:#12151b;color:#e6e9ef;border:1px solid #3a4150;border-radius:6px;padding:6px 8px;font:13px -apple-system;outline:none"><button id="__rcSend" style="border:0;border-radius:6px;background:#3b82f6;color:#fff;padding:0 12px;cursor:pointer">Send</button>'+(c.resolved?'':'<button id="__rcResolve" style="border:0;border-radius:6px;background:#22331f;color:#4ade80;padding:0 10px;cursor:pointer">Resolve</button>')+'</div>'; card.innerHTML=head+msgs+foot; back.appendChild(card); (document.body||document.documentElement).appendChild(back); card.querySelectorAll('button[data-type]').forEach(function(btn){ btn.onmousedown=function(e){ e.preventDefault(); B.commentType={id:c.id, type:btn.getAttribute('data-type')}; }; }); document.getElementById('__rcTask').onmousedown=function(e){ e.preventDefault(); B.commentKind={id:c.id, kind:'task'}; }; document.getElementById('__rcNote').onmousedown=function(e){ e.preventDefault(); B.commentKind={id:c.id, kind:'note'}; }; document.getElementById('__rcClose').onmousedown=function(e){ e.preventDefault(); B.closeComment(); }; var inp=document.getElementById('__rcReply'); function doSend(){ var v=inp.value.trim(); if(v){ B.commentReply={id:c.id, text:v}; inp.value=''; } } document.getElementById('__rcSend').onmousedown=function(e){ e.preventDefault(); doSend(); }; inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); doSend(); } if(e.key==='Escape'){ B.closeComment(); } }); var rz=document.getElementById('__rcResolve'); if(rz) rz.onmousedown=function(e){ e.preventDefault(); B.commentResolve=c.id; }; var ed=card.querySelector('.__rcEdit'); if(ed){ ed.onmousedown=function(e){ e.preventDefault(); var bodyEl=card.querySelector('.__rcBody'); var ta=document.createElement('textarea'); ta.value=(c.messages[0]&&c.messages[0].body)||''; ta.style.cssText='width:100%;box-sizing:border-box;min-height:54px;background:#12151b;color:#e6e9ef;border:1px solid #3a4150;border-radius:6px;padding:6px;font:13px -apple-system;outline:none'; bodyEl.replaceWith(ta); ta.focus(); ta.addEventListener('keydown',function(ev){ if(ev.key==='Enter'&&(ev.metaKey||ev.ctrlKey)){ ev.preventDefault(); var v=ta.value.trim(); if(v) B.commentEdit={id:c.id, text:v}; } if(ev.key==='Escape'){ B.showComment(c); } }); }; } setTimeout(function(){ inp.focus(); },0); };
   B.closeComment = function(){ var b=document.getElementById('__readoCommentBack'); if(b) b.remove(); };
   function pathOf(el){ var path=[]; while(el && el!==document.documentElement){ var p=el.parentNode; if(!p||!p.children) break; path.unshift([].indexOf.call(p.children, el)); el=p; } return path; }
   // Pick mode: hover the page to highlight, click to select the node in Reado's tree.
@@ -112,6 +112,13 @@ fn preview_label<R: Runtime>(window: &Window<R>) -> String {
     format!("preview::{}", window.label())
 }
 
+/// The preview child window's OS title, made unique per host window so a
+/// multi-window session can capture the *caller's* own preview by title rather
+/// than grabbing whichever window the OS enumerates first.
+fn preview_window_title<R: Runtime>(window: &Window<R>) -> String {
+    format!("reado-preview::{}", window.label())
+}
+
 /// The preview is a **borderless child window** parented to the host window (not a
 /// sub-webview), so it manages its own cursor and never fights the main webview's
 /// tracking areas — which was the source of the cursor flicker.
@@ -165,7 +172,7 @@ pub fn preview_open<R: Runtime>(
         preview_label(&window),
         WebviewUrl::External(parsed),
     )
-    .title("reado-preview")
+    .title(preview_window_title(&window))
     .decorations(false)
     .shadow(false)
     .skip_taskbar(true)
@@ -310,6 +317,16 @@ fn framework_ports(pkg: &serde_json::Value) -> Vec<u16> {
     }
 }
 
+/// Write `content` to `path` atomically: fill a sibling temp file, then rename it
+/// over the target. The `reado` CLI polls these files, so a plain truncate-then-
+/// write would let a concurrent reader observe an empty/partial document; rename
+/// is atomic on the same filesystem, so readers only ever see old or new, whole.
+fn atomic_write(path: &std::path::Path, content: &str) -> std::io::Result<()> {
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, content)?;
+    std::fs::rename(&tmp, path)
+}
+
 /// Persist the drained console + network snapshots under the project's `.reado/`
 /// so the `reado mcp` server can expose them to the agent as read-only resources.
 /// One writer (BrowserPanel) owns the drain; this just mirrors it to disk.
@@ -317,8 +334,8 @@ fn framework_ports(pkg: &serde_json::Value) -> Vec<u16> {
 pub fn preview_persist_state(root: String, console: String, network: String) -> Result<(), String> {
     let dir = std::path::Path::new(&root).join(".reado");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("preview-console.json"), console).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("preview-network.json"), network).map_err(|e| e.to_string())?;
+    atomic_write(&dir.join("preview-console.json"), &console).map_err(|e| e.to_string())?;
+    atomic_write(&dir.join("preview-network.json"), &network).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -346,18 +363,19 @@ pub fn preview_clear_state(root: String) -> Result<(), String> {
 #[cfg(not(target_os = "linux"))]
 #[tauri::command]
 pub fn preview_capture_frame<R: Runtime>(
-    _window: Window<R>,
+    window: Window<R>,
     _x: f64,
     _y: f64,
     _w: f64,
     _h: f64,
 ) -> Result<String, String> {
-    // The preview is now its own window titled "reado-preview" — capture it whole,
-    // no cropping needed.
+    // The preview is its own window, titled uniquely per host window — capture the
+    // caller's own preview (not another project window's) whole, no cropping needed.
+    let want = preview_window_title(&window);
     let xw = xcap::Window::all()
         .map_err(|e| e.to_string())?
         .into_iter()
-        .find(|xw| xw.title().map(|tt| tt == "reado-preview").unwrap_or(false))
+        .find(|xw| xw.title().map(|tt| tt == want).unwrap_or(false))
         .ok_or("no preview pane running")?;
     let img = xw.capture_image().map_err(|e| e.to_string())?;
     let mut buf = std::io::Cursor::new(Vec::new());
@@ -400,7 +418,7 @@ pub fn preview_take_cmd(root: String) -> Option<String> {
 pub fn preview_put_result(root: String, result: String) -> Result<(), String> {
     let dir = std::path::Path::new(&root).join(".reado");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("preview-result.json"), result).map_err(|e| e.to_string())
+    atomic_write(&dir.join("preview-result.json"), &result).map_err(|e| e.to_string())
 }
 
 /// Detach the preview into its own window (e.g. a second monitor): close the
