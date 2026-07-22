@@ -337,6 +337,7 @@ pub fn get_session(root: &str, id: &str) -> Result<Session> {
 
 /// Read-modify-write a session, stamping `updated_at`.
 fn mutate(root: &str, id: &str, f: impl FnOnce(&mut Session)) -> Result<Session> {
+    let _lock = crate::ReadoLock::acquire(root)?;
     let mut session = get_session(root, id)?;
     f(&mut session);
     session.updated_at = now_millis();

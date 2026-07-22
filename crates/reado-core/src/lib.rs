@@ -237,6 +237,30 @@ pub struct CommentPatch {
 fn reado_dir(root: &str) -> PathBuf {
     Path::new(root).join(".reado")
 }
+
+/// Advisory cross-process lock over `.reado`, held for the duration of a
+/// read-modify-write so two `reado` processes (or the desktop + a CLI) can't
+/// interleave and lose an update. The flock is released when the file is dropped
+/// at the end of the calling function. Every mutation is a leaf (none calls
+/// another), so acquiring per-function can't deadlock.
+pub(crate) struct ReadoLock {
+    _file: std::fs::File,
+}
+
+impl ReadoLock {
+    pub(crate) fn acquire(root: &str) -> Result<Self> {
+        use fs2::FileExt;
+        let dir = reado_dir(root);
+        std::fs::create_dir_all(&dir)?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(dir.join(".lock"))?;
+        file.lock_exclusive()?;
+        Ok(ReadoLock { _file: file })
+    }
+}
 fn comments_dir(root: &str) -> PathBuf {
     reado_dir(root).join("comments")
 }
@@ -530,6 +554,7 @@ pub fn search_comments(root: &str, query: &str) -> Vec<Comment> {
 
 /// Update a comment's metadata and/or root message body.
 pub fn update_comment(root: &str, id: &str, patch: CommentPatch) -> Result<Comment> {
+    let _lock = ReadoLock::acquire(root)?;
     let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
     let mut comment = read_comment(&path, archived)?;
     if let Some(v) = patch.comment_type {
@@ -559,6 +584,7 @@ pub fn add_reply(
     agent: Option<String>,
     body: String,
 ) -> Result<Comment> {
+    let _lock = ReadoLock::acquire(root)?;
     let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
     let mut comment = read_comment(&path, archived)?;
     comment.messages.push(Message {
@@ -575,6 +601,7 @@ pub fn add_reply(
 /// Add a manual link from comment `id` to `target` (bidirectional is the
 /// caller's choice; here we record one direction). Idempotent.
 pub fn link_comments(root: &str, id: &str, target: &str) -> Result<Comment> {
+    let _lock = ReadoLock::acquire(root)?;
     let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
     let mut comment = read_comment(&path, archived)?;
     if !comment.meta.links.iter().any(|l| l == target) {
@@ -588,6 +615,7 @@ pub fn link_comments(root: &str, id: &str, target: &str) -> Result<Comment> {
 /// Manually re-anchor a comment to a new file/range (used to resolve orphans).
 /// Recomputes the context snapshot from the file and clears the orphan flag.
 pub fn set_anchor(root: &str, id: &str, file: &str, start: u32, end: u32) -> Result<Comment> {
+    let _lock = ReadoLock::acquire(root)?;
     let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
     let mut comment = read_comment(&path, archived)?;
     comment.meta.anchor.file = file.to_string();
@@ -606,6 +634,7 @@ pub fn set_anchor(root: &str, id: &str, file: &str, start: u32, end: u32) -> Res
 /// Set a comment's state. Transitioning to `done` archives the file
 /// (`comments/` → `archive/`); leaving `done` restores it.
 pub fn set_comment_state(root: &str, id: &str, state: CommentState) -> Result<Comment> {
+    let _lock = ReadoLock::acquire(root)?;
     let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
     let mut comment = read_comment(&path, archived)?;
     comment.meta.state = state;
@@ -646,6 +675,7 @@ pub fn upsert_host_comment(
     body: String,
     resolved: bool,
 ) -> Result<Comment> {
+    let _lock = ReadoLock::acquire(root)?;
     let existing = list_comments(root)
         .into_iter()
         .chain(list_archived(root))
@@ -1194,6 +1224,34 @@ mod tests {
             x: None,
             y: None,
         }
+    }
+
+    // Regression: concurrent read-modify-write on the same comment must not lose
+    // updates. Without the `.reado` advisory lock, N threads each read M messages,
+    // append one, and write M+1 — the last writer wins and replies are lost.
+    #[test]
+    fn concurrent_add_reply_does_not_lose_updates() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap().to_string();
+        let id = create_comment(&root, note("a.rs", "hi"), "user", None)
+            .unwrap()
+            .comment
+            .meta
+            .id;
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let root = root.clone();
+                let id = id.clone();
+                std::thread::spawn(move || {
+                    add_reply(&root, &id, "user", None, format!("reply {i}")).unwrap();
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        // Root message + all 8 replies survive (none dropped by the race).
+        assert_eq!(get_comment(&root, &id).unwrap().messages.len(), 9);
     }
 
     #[test]
