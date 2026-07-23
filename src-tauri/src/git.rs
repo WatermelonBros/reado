@@ -105,7 +105,8 @@ pub fn git_info(root: String) -> GitInfo {
     let branch = if is_repo {
         // A detached HEAD yields the literal "HEAD"; report it as `None` (no
         // branch), matching git_branches and the documented contract.
-        run_git(root, &["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| !b.is_empty() && b != "HEAD")
+        run_git(root, &["rev-parse", "--abbrev-ref", "HEAD"])
+            .filter(|b| !b.is_empty() && b != "HEAD")
     } else {
         None
     };

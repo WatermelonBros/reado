@@ -174,7 +174,9 @@ pub fn pty_write(state: State<PtyState>, id: String, data: String) -> Result<(),
         None => return Ok(()),
     };
     let mut writer = writer.lock().unwrap();
-    writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+    writer
+        .write_all(data.as_bytes())
+        .map_err(|e| e.to_string())?;
     let _ = writer.flush();
     Ok(())
 }

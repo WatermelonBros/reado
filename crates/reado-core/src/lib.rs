@@ -284,7 +284,12 @@ pub(crate) fn now_millis() -> u64 {
 /// millisecond can't both mint `c_<T>_0` and clobber each other's comment file.
 pub(crate) fn gen_id(prefix: &str) -> String {
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{prefix}_{:x}_{:x}_{:x}", now_millis(), std::process::id(), n)
+    format!(
+        "{prefix}_{:x}_{:x}_{:x}",
+        now_millis(),
+        std::process::id(),
+        n
+    )
 }
 
 fn new_id() -> String {
