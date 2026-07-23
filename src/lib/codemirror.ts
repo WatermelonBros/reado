@@ -15,8 +15,10 @@ import { tags as t } from "@lezer/highlight";
 
 /** Maps Lezer highlight tags to Reado's semantic syntax colours. */
 const highlightStyle = HighlightStyle.define([
-  // 1. Control-flow keywords — most salient.
-  { tag: [t.controlKeyword, t.moduleKeyword], color: "var(--syn-control)" },
+  // 1. Control-flow keywords — most salient. Bold is a redundant, non-colour cue
+  // (survives colour-vision deficiency / grayscale) and doubles as the
+  // eye-tracking "beacon" for control flow.
+  { tag: [t.controlKeyword, t.moduleKeyword], color: "var(--syn-control)", fontWeight: "600" },
   // 2. Other keywords / storage.
   {
     tag: [t.keyword, t.modifier, t.operatorKeyword, t.definitionKeyword],

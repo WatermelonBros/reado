@@ -4,9 +4,11 @@
  * Every colour is authored in OKLCH (perceptually uniform, CSS-native) per the
  * methodology in `.impeccable.md` and `docs/research/color-theory-for-reading.md`:
  *   - desaturated bases (dark is gray-blue, never #000; light is warm off-white)
- *   - <=6 semantic syntax colours, ordered by eye-tracking salience
+ *   - <=6 semantic syntax colours, ordered by eye-tracking salience, and separated
+ *     on LIGHTNESS as well as hue (so roles survive grayscale + colour-vision
+ *     deficiency); control-flow also carries a redundant bold cue in the editor
  *   - the same semantic role keeps the same hue across themes; lightness/chroma
- *     are tuned per mode to clear the WCAG AA floor in both
+ *     are tuned per mode to clear WCAG AA and a healthy APCA Lc in both
  *   - the comment-annotation marker lives OUTSIDE the syntax palette (its own hue)
  *
  * Themes are selected by `data-theme` on <html>. `reado-dark` is the default.
@@ -59,7 +61,7 @@
   --bg-overlay: oklch(0.27 0.022 250);
   --border: oklch(0.32 0.02 250);
   --border-strong: oklch(0.42 0.02 250);
-  --text: oklch(0.8 0.012 250);
+  --text: oklch(0.87 0.012 250); /* 12.2:1 on --bg; APCA Lc 80 (was Lc 66 at 0.8) */
   --text-muted: oklch(0.62 0.012 250);
   --text-faint: oklch(0.62 0.012 250); /* 4.97:1 on --bg, 4.52:1 on --bg-elevated */
 
@@ -67,14 +69,16 @@
   /* Dark contrast text on the medium-light accent (button labels). */
   --accent-contrast: oklch(0.2 0.02 260); /* 7.8:1 on --accent */
 
-  /* Syntax palette (priority order). */
-  --syn-control: oklch(0.74 0.12 330);
-  --syn-keyword: oklch(0.74 0.11 260);
-  --syn-definition: oklch(0.8 0.11 95);
-  --syn-string: oklch(0.76 0.11 150);
-  --syn-number: oklch(0.76 0.12 55);
-  --syn-comment: oklch(0.61 0.02 250); /* 4.78:1 on --bg */
-  --syn-punctuation: oklch(0.66 0.012 250);
+  /* Syntax palette (priority order). Staggered on lightness — not just hue — so
+     roles stay distinct in grayscale and under colour-vision deficiency (worst
+     red-green pair ~ΔE 8, was ~ΔE 3); control-flow is bold in the editor too. */
+  --syn-control: oklch(0.72 0.15 330);
+  --syn-keyword: oklch(0.79 0.1 260);
+  --syn-definition: oklch(0.88 0.12 95);
+  --syn-string: oklch(0.82 0.12 150);
+  --syn-number: oklch(0.71 0.15 55);
+  --syn-comment: oklch(0.63 0.02 250); /* 5.2:1 on --bg */
+  --syn-punctuation: oklch(0.6 0.012 250);
 
   /* Reado's own annotation marker — deliberately outside the syntax palette. */
   --marker: oklch(0.72 0.16 35);
@@ -107,11 +111,11 @@
   --accent: oklch(0.5 0.13 260);
   --accent-contrast: oklch(0.99 0.01 260);
 
-  --syn-control: oklch(0.5 0.15 330);
-  --syn-keyword: oklch(0.5 0.13 260);
-  --syn-definition: oklch(0.52 0.12 90);
+  --syn-control: oklch(0.46 0.16 330);
+  --syn-keyword: oklch(0.52 0.13 260);
+  --syn-definition: oklch(0.44 0.08 95);
   --syn-string: oklch(0.5 0.12 150);
-  --syn-number: oklch(0.52 0.14 55);
+  --syn-number: oklch(0.53 0.13 55);
   --syn-comment: oklch(0.54 0.03 250); /* 4.63:1 on --bg */
   --syn-punctuation: oklch(0.45 0.012 250);
 
@@ -137,19 +141,19 @@
   --bg-overlay: oklch(0.24 0.02 250);
   --border: oklch(0.4 0.02 250);
   --border-strong: oklch(0.55 0.02 250);
-  --text: oklch(0.94 0.01 250);
+  --text: oklch(0.95 0.01 250);
   --text-muted: oklch(0.78 0.012 250);
   --text-faint: oklch(0.64 0.012 250);
 
   --accent: oklch(0.82 0.13 260);
   --accent-contrast: oklch(0.16 0.015 250);
 
-  --syn-control: oklch(0.84 0.14 330);
-  --syn-keyword: oklch(0.84 0.12 260);
-  --syn-definition: oklch(0.9 0.13 95);
-  --syn-string: oklch(0.86 0.13 150);
-  --syn-number: oklch(0.86 0.14 55);
-  --syn-comment: oklch(0.68 0.02 250);
+  --syn-control: oklch(0.79 0.15 330);
+  --syn-keyword: oklch(0.82 0.085 260);
+  --syn-definition: oklch(0.94 0.09 95);
+  --syn-string: oklch(0.88 0.12 150);
+  --syn-number: oklch(0.79 0.14 55);
+  --syn-comment: oklch(0.7 0.02 250);
   --syn-punctuation: oklch(0.82 0.012 250);
 
   --marker: oklch(0.8 0.18 35);
@@ -181,11 +185,11 @@
   --accent: oklch(0.5 0.13 40);
   --accent-contrast: oklch(0.98 0.02 75);
 
-  --syn-control: oklch(0.48 0.15 350);
-  --syn-keyword: oklch(0.48 0.13 290);
-  --syn-definition: oklch(0.5 0.12 80);
-  --syn-string: oklch(0.48 0.12 150);
-  --syn-number: oklch(0.5 0.14 45);
+  --syn-control: oklch(0.46 0.16 350);
+  --syn-keyword: oklch(0.52 0.13 290);
+  --syn-definition: oklch(0.44 0.08 80);
+  --syn-string: oklch(0.5 0.12 150);
+  --syn-number: oklch(0.53 0.13 45);
   --syn-comment: oklch(0.52 0.03 70); /* 4.63:1 on --bg */
   --syn-punctuation: oklch(0.46 0.02 60);
 
