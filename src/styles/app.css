@@ -484,6 +484,12 @@
   }
   .prose-reado img {
     max-width: 100%;
+    /* Tailwind preflight makes every <img> display:block, which stacks
+       inline runs like a badge row (README shields) one-per-line. Restore
+       inline flow; a standalone image is alone in its <p>, so it still sits
+       on its own line. */
+    display: inline-block;
+    vertical-align: middle;
   }
 
   /* Inlay hints (inferred types / parameter names) — quiet, secondary to the
