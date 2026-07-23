@@ -11,6 +11,37 @@ commit.
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-07-23
+
+### Changed
+- **Themes — research-grounded accessibility pass.** The default dark theme now
+  reads at a comfortable perceptual (APCA) contrast — it was under-contrasted for
+  fluent reading even though it passed WCAG. The six syntax roles are separated on
+  lightness as well as hue, so they stay distinct in grayscale and for readers with
+  colour-vision deficiency, and control-flow keywords are bold as a redundant,
+  non-colour cue. Applied across all four themes (dark, light, high-contrast, sepia)
+  and verified: every token clears WCAG AA and stays in the sRGB gamut.
+
+### Fixed
+- **Non-happy-path hardening** across the app, from a systematic audit:
+  - Browser preview: a Rules-of-Hooks crash when reopening the panel, and races in
+    the comment flow.
+  - Editor & viewers: a stale flash when switching files quickly, a PDF-viewer
+    memory leak on teardown, and a proper error state for images that fail to load.
+  - Markdown viewer: inline image rows (e.g. README badges) render in a row instead
+    of stacking one per line.
+  - Settings are no longer overwritten when the config file can't be read; stores
+    tolerate switching projects mid-load.
+  - The LSP client, the `reado` CLI and the MCP server survive dead language servers
+    and malformed input instead of hanging or crashing.
+  - Terminal (PTY): writes no longer block the session registry; child processes are
+    reaped on exit.
+  - Filesystem & git: path-traversal and TOCTOU guards, file-size caps, and more
+    robust `git status` parsing.
+  - Annotation store: atomic writes, resistance to id collisions, and an advisory
+    lock so two `reado` processes can't lose an update when editing the same comment
+    or session concurrently.
+
 ## [1.4.0] — 2026-07-21
 
 ### Added
@@ -504,7 +535,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/WatermelonBros/reado/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/WatermelonBros/reado/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/WatermelonBros/reado/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/WatermelonBros/reado/compare/v1.2.0...v1.2.1
