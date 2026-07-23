@@ -2,7 +2,23 @@
 
 <p align="center"><em>A calm place to read code.</em></p>
 
-<p align="center"><a href="https://reado.watermelon-studio.it"><strong>reado.watermelon-studio.it</strong></a> · <a href="https://discord.gg/HHqT9ucXn4"><strong>Discord</strong></a></p>
+<p align="center">
+  <a href="https://github.com/WatermelonBros/reado/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/WatermelonBros/reado/ci.yml?branch=main&style=flat-square&label=CI"></a>
+  <a href="https://github.com/WatermelonBros/reado/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/WatermelonBros/reado?style=flat-square&color=3461AC&label=release"></a>
+  <a href="https://github.com/WatermelonBros/reado/releases"><img alt="Total downloads" src="https://img.shields.io/github/downloads/WatermelonBros/reado/total?style=flat-square&color=3461AC&label=downloads"></a>
+  <img alt="Platforms: macOS, Linux, Windows" src="https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-3461AC?style=flat-square">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/WatermelonBros/reado?style=flat-square&color=3461AC&label=license"></a>
+  <a href="https://discord.gg/HHqT9ucXn4"><img alt="Discord" src="https://img.shields.io/badge/Discord-3461AC?style=flat-square&logo=discord&logoColor=white"></a>
+</p>
+
+<p align="center">
+  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-24C8DB?style=flat-square&logo=tauri&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/React-149ECA?style=flat-square&logo=react&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white">
+  <img alt="Rust" src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white">
+</p>
+
+<p align="center"><a href="https://reado.watermelon-studio.it"><strong>reado.watermelon-studio.it</strong></a></p>
 
 Most IDEs are built for **writing** code. Reado inverts that: the primary
 experience is **reading**, and the primary action is leaving durable comments
