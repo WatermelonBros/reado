@@ -20,6 +20,12 @@
 
 <p align="center"><a href="https://reado.watermelon-studio.it"><strong>reado.watermelon-studio.it</strong></a></p>
 
+<p align="center">
+  <img src="docs/media/reado-loop.gif" alt="Reado's loop: annotate a line, send the review, the agent resolves the task" width="900">
+</p>
+
+<p align="center"><sub><b>The loop:</b> leave a comment on a line → <b>Send review</b> → the agent resolves it and marks the task done.</sub></p>
+
 Most IDEs are built for **writing** code. Reado inverts that: the primary
 experience is **reading**, and the primary action is leaving durable comments
 anchored to precise points in the code. Those comments are not throwaway notes —
