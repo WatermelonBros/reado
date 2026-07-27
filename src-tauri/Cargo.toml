@@ -23,7 +23,9 @@ tempfile = "3"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["unstable"] }
+# `protocol-asset` serves project files (markdown-preview images) to the webview
+# through `asset:`; the scope stays empty until a project grants its own root.
+tauri = { version = "2", features = ["unstable", "protocol-asset"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 # Signed auto-updates (checks an update endpoint, verifies the signature).

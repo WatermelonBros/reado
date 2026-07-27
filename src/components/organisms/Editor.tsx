@@ -248,7 +248,11 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             changedLines={changedLines}
           />
         ) : (
-          <RenderedMarkdown text={content.text} />
+          <RenderedMarkdown
+            text={content.text}
+            root={root}
+            baseDir={active.replace(/\\/g, "/").replace(/\/[^/]*$/, "")}
+          />
         )}
       </div>
     );

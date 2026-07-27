@@ -129,6 +129,7 @@ pub fn run() {
             fs::move_path,
             fs::trash_path,
             fs::import_paths,
+            fs::allow_project_assets,
             fs::resolve_import,
             fs::resolve_path,
             git::git_info,

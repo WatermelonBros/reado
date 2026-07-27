@@ -554,6 +554,35 @@ pub fn resolve_path(root: String, spec: String) -> Result<Option<String>> {
     Ok(None)
 }
 
+/// Let the webview load images from inside the open project through Tauri's
+/// `asset:` protocol.
+///
+/// Markdown previews need this: a README's `![](docs/media/demo.gif)` is a path
+/// on disk, and the webview would otherwise resolve it against its own origin
+/// and 404. The frontend rewrites such `src`s with `convertFileSrc`, which only
+/// works once the directory is in the asset scope — and the scope is empty by
+/// default, so the grant has to happen per project, at runtime.
+///
+/// Scope is widened to the project root only, so this exposes exactly what the
+/// user already opened — never the rest of the filesystem.
+#[tauri::command]
+pub fn allow_project_assets(app: tauri::AppHandle, root: String) -> Result<()> {
+    use tauri::Manager;
+    let scope = app.asset_protocol_scope();
+    let raw = PathBuf::from(&root);
+    // Grant the path as given *and* its canonical form: the frontend builds
+    // image URLs from the path the user opened, which on a symlinked root
+    // (`/tmp` -> `/private/tmp` on macOS) is not the resolved one — granting
+    // only the latter would reject every request.
+    let canonical = std::fs::canonicalize(&raw).ok();
+    for dir in std::iter::once(&raw).chain(canonical.iter()) {
+        scope
+            .allow_directory(dir, true)
+            .map_err(|e| Error::Other(e.to_string()))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{base64_encode, FileContent, MAX_TEXT_BYTES};

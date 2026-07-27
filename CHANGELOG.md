@@ -11,6 +11,12 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+- **Markdown previews show the document's own images.** A README's
+  `![](docs/media/demo.gif)` — or any relative image path — rendered as its alt
+  text instead of the picture. Local images now load from the open project
+  (and only from it); absolute URLs such as badges are untouched.
+
 ## [1.5.0] — 2026-07-23
 
 ### Changed

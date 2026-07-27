@@ -116,6 +116,11 @@ export const resolveImport = (root: string, fromFile: string, spec: string) =>
 export const resolvePath = (root: string, spec: string) =>
   invoke<string | null>("resolve_path", { root, spec });
 
+/** Allow the webview to load files under `root` through the `asset:` protocol,
+ *  so markdown previews can show a README's own images. */
+export const allowProjectAssets = (root: string) =>
+  invoke<void>("allow_project_assets", { root });
+
 /** Git status of the project root (never throws). */
 export const gitInfo = (root: string) => invoke<GitInfo>("git_info", { root });
 
