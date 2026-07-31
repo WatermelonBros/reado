@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-07-31
+
 ### Changed
 - **The MCP server speaks both protocol eras.** MCP's `2026-07-28` revision
   removed the `initialize` handshake: requests now carry their protocol version
@@ -551,7 +553,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/WatermelonBros/reado/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/WatermelonBros/reado/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/WatermelonBros/reado/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/WatermelonBros/reado/compare/v1.2.1...v1.3.0
