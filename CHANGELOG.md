@@ -11,6 +11,16 @@ commit.
 
 ## [Unreleased]
 
+### Changed
+- **The MCP server speaks both protocol eras.** MCP's `2026-07-28` revision
+  removed the `initialize` handshake: requests now carry their protocol version
+  in `_meta` and servers must answer a new `server/discover`. `reado mcp` serves
+  both from the same process — today's agents keep opening with `initialize` and
+  see byte-identical replies, while a client on the new revision gets stateless,
+  typed results with cache hints (so it stops re-reading your annotations on
+  every turn). A version we don't speak now comes back as a proper
+  `UnsupportedProtocolVersionError` listing the ones we do.
+
 ### Fixed
 - **Markdown previews show the document's own images.** A README's
   `![](docs/media/demo.gif)` — or any relative image path — rendered as its alt

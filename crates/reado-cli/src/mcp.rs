@@ -12,7 +12,21 @@ use std::path::Path;
 
 use reado_core::{self as core, CommentKind, CommentState};
 
+/// Answered to `initialize`, i.e. what we speak to handshake-era ("legacy")
+/// clients. Every agent shipping today opens this way.
 const PROTOCOL_VERSION: &str = "2024-11-05";
+
+/// Every revision we serve, newest first. `2026-07-28` dropped the handshake:
+/// requests carry their version in `_meta` and the server answers statelessly.
+/// We serve both eras from this one process — the spec allows it, and legacy
+/// clients have no way to fall forward, so we can never drop `initialize`.
+const SUPPORTED_VERSIONS: [&str; 2] = ["2026-07-28", "2024-11-05"];
+
+/// `_meta` key carrying the requested revision. Its presence *is* the era
+/// signal: no `_meta` version → legacy, and the reply stays byte-identical to
+/// what we sent before dual-era support existed.
+const META_VERSION: &str = "io.modelcontextprotocol/protocolVersion";
+const META_SERVER_INFO: &str = "io.modelcontextprotocol/serverInfo";
 
 /// Surfaced to the model by the MCP client on connect — orients the agent to
 /// Reado's workflow (annotations first, then the live preview). Kept to
@@ -40,21 +54,88 @@ pub fn serve(root: &str) -> Result<(), Box<dyn std::error::Error>> {
         let Ok(req) = serde_json::from_str::<serde_json::Value>(&line) else {
             continue; // ignore malformed frames
         };
-        // Notifications (no `id`) get no response.
-        let Some(id) = req.get("id").cloned() else {
+        let Some(msg) = dispatch(root, &req) else {
             continue;
-        };
-        let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
-        let msg = match handle(root, method, req.get("params")) {
-            Ok(result) => serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": result }),
-            Err((code, message)) => serde_json::json!({
-                "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message }
-            }),
         };
         writeln!(out, "{}", serde_json::to_string(&msg)?)?;
         out.flush()?;
     }
     Ok(())
+}
+
+/// One request in, one JSON-RPC message out (`None` for notifications, which
+/// get no reply). Split out of [`serve`] so the era handling is testable
+/// without driving stdin.
+fn dispatch(root: &str, req: &serde_json::Value) -> Option<serde_json::Value> {
+    // Notifications (no `id`) get no response.
+    let id = req.get("id").cloned()?;
+    let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
+    let params = req.get("params");
+    let requested = requested_version(params);
+
+    // A version we don't speak is answered with the modern error carrying what
+    // we do speak, so the client can retry instead of guessing.
+    if let Some(v) = requested
+        .as_ref()
+        .filter(|v| !SUPPORTED_VERSIONS.contains(&v.as_str()))
+    {
+        return Some(serde_json::json!({
+            "jsonrpc": "2.0", "id": id,
+            "error": { "code": -32022, "message": "Unsupported protocol version",
+                       "data": { "supported": SUPPORTED_VERSIONS, "requested": v } }
+        }));
+    }
+
+    Some(match handle(root, method, params) {
+        // `server/discover` only exists in the modern era, so its result is
+        // always shaped for it — including when a dual-era client probes with
+        // it before it has committed to a version.
+        Ok(result) if requested.is_some() || method == "server/discover" => {
+            serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": modern(result, method) })
+        }
+        Ok(result) => serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+        Err((code, message)) => serde_json::json!({
+            "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message }
+        }),
+    })
+}
+
+/// The revision this request declares, if any. Absent → legacy client.
+fn requested_version(params: Option<&serde_json::Value>) -> Option<String> {
+    params?
+        .get("_meta")?
+        .get(META_VERSION)?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// Dress a result for the modern era: every result is typed, and the list/read
+/// results carry the cache hints that let a client stop re-polling us.
+fn modern(mut result: serde_json::Value, method: &str) -> serde_json::Value {
+    let Some(obj) = result.as_object_mut() else {
+        return result;
+    };
+    obj.insert("resultType".into(), "complete".into());
+    obj.insert(
+        "_meta".into(),
+        serde_json::json!({ META_SERVER_INFO: server_info() }),
+    );
+    // Our tool and resource lists are compiled in, so they are good for a long
+    // while; a resource *read* is the user's annotations, which change under
+    // the agent as they review — short TTL, and never cacheable by a shared
+    // intermediary.
+    let (ttl_ms, scope) = match method {
+        "tools/list" | "resources/list" | "server/discover" => (3_600_000, "public"),
+        "resources/read" => (5_000, "private"),
+        _ => return result,
+    };
+    obj.insert("ttlMs".into(), ttl_ms.into());
+    obj.insert("cacheScope".into(), scope.into());
+    result
+}
+
+fn server_info() -> serde_json::Value {
+    serde_json::json!({ "name": "reado", "version": env!("CARGO_PKG_VERSION") })
 }
 
 type RpcResult = Result<serde_json::Value, (i64, String)>;
@@ -64,9 +145,17 @@ fn handle(root: &str, method: &str, params: Option<&serde_json::Value>) -> RpcRe
         "initialize" => Ok(serde_json::json!({
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": { "resources": {}, "tools": {} },
-            "serverInfo": { "name": "reado", "version": env!("CARGO_PKG_VERSION") },
+            "serverInfo": server_info(),
             "instructions": INSTRUCTIONS,
         })),
+        // Mandatory in the modern era, and the probe a dual-era client sends
+        // first on stdio to tell the two eras apart.
+        "server/discover" => Ok(serde_json::json!({
+            "supportedVersions": SUPPORTED_VERSIONS,
+            "capabilities": { "resources": {}, "tools": {} },
+            "instructions": INSTRUCTIONS,
+        })),
+        // Gone in the modern era, still valid for legacy clients.
         "ping" => Ok(serde_json::json!({})),
         "tools/list" => Ok(serde_json::json!({ "tools": tool_list() })),
         "tools/call" => {
@@ -304,6 +393,68 @@ mod tests {
         let instr = res["instructions"].as_str().unwrap();
         assert!(instr.contains("browser_*"));
         assert!(instr.contains("Do NOT launch your own browser"));
+    }
+
+    /// A request as a client would send it; `version` set means the modern era.
+    fn req(method: &str, version: Option<&str>) -> serde_json::Value {
+        let params = match version {
+            Some(v) => serde_json::json!({ "_meta": { META_VERSION: v } }),
+            None => serde_json::json!({}),
+        };
+        serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params })
+    }
+
+    #[test]
+    fn legacy_handshake_reply_is_untouched_by_dual_era() {
+        let res = dispatch("/nope", &req("initialize", None)).unwrap();
+        let result = &res["result"];
+        assert_eq!(result["protocolVersion"], PROTOCOL_VERSION);
+        // A legacy client must not see any of the modern envelope.
+        assert!(result.get("resultType").is_none());
+        assert!(result.get("ttlMs").is_none());
+        assert!(result.get("_meta").is_none());
+    }
+
+    #[test]
+    fn discover_advertises_both_eras_and_instructions() {
+        // Answered even without `_meta`: this is the stdio era probe.
+        let res = dispatch("/nope", &req("server/discover", None)).unwrap();
+        let result = &res["result"];
+        let versions = result["supportedVersions"].as_array().unwrap();
+        assert!(versions.iter().any(|v| v == "2026-07-28"));
+        assert!(versions.iter().any(|v| v == PROTOCOL_VERSION));
+        assert_eq!(result["resultType"], "complete");
+        assert_eq!(result["_meta"][META_SERVER_INFO]["name"], "reado");
+        assert!(result["instructions"]
+            .as_str()
+            .unwrap()
+            .contains("browser_*"));
+    }
+
+    #[test]
+    fn modern_list_result_is_typed_and_cacheable() {
+        let res = dispatch("/nope", &req("tools/list", Some("2026-07-28"))).unwrap();
+        let result = &res["result"];
+        assert_eq!(result["resultType"], "complete");
+        assert_eq!(result["cacheScope"], "public");
+        assert!(result["ttlMs"].as_i64().unwrap() > 0);
+        assert_eq!(result["_meta"][META_SERVER_INFO]["name"], "reado");
+        assert_eq!(result["tools"].as_array().unwrap().len(), 12);
+    }
+
+    #[test]
+    fn unsupported_version_reports_what_we_do_speak() {
+        let res = dispatch("/nope", &req("tools/list", Some("1900-01-01"))).unwrap();
+        assert_eq!(res["error"]["code"], -32022);
+        assert_eq!(res["error"]["data"]["requested"], "1900-01-01");
+        let supported = res["error"]["data"]["supported"].as_array().unwrap();
+        assert!(supported.iter().any(|v| v == "2026-07-28"));
+    }
+
+    #[test]
+    fn notifications_get_no_reply() {
+        let note = serde_json::json!({ "jsonrpc": "2.0", "method": "notifications/cancelled" });
+        assert!(dispatch("/nope", &note).is_none());
     }
 
     #[test]
