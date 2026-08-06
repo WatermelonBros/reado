@@ -817,6 +817,11 @@ export function CodeView({
     rawThreadTop !== null && rawThreadTop >= 0 && rawThreadTop <= wrapH
       ? rawThreadTop
       : null;
+  // Room to scroll past the last line while a thread is open, so a comment on
+  // the final lines can be scrolled up until its box clears the bottom edge.
+  // The box is capped at 70% of the viewport (CommentThread), so 75% always
+  // clears it — and it costs nothing when no thread is open.
+  const scrollPastEnd = openComment && wrapH > 0 ? `${Math.round(wrapH * 0.75)}px` : undefined;
 
   const closeOverlays = () => {
     setComposer(null);
@@ -987,6 +992,7 @@ export function CodeView({
           "--code-font": codeFont || undefined,
           "--code-font-size": `${fontSize}px`,
           "--code-line-height": String(lineHeight),
+          "--code-scroll-past-end": scrollPastEnd,
         } as React.CSSProperties
       }
     >

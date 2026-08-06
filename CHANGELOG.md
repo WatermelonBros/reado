@@ -11,6 +11,14 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+- **Comments on the last lines of a file are reachable again.** A thread box
+  hangs below the line it is anchored to, but the editor stopped scrolling at
+  the last line — so a comment near the end of the file opened into space that
+  could not be scrolled to, and looked like it had not opened at all. While a
+  thread is open the editor now scrolls past the end of the code, far enough to
+  clear the box.
+
 ## [1.6.0] — 2026-07-31
 
 ### Changed

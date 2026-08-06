@@ -69,6 +69,11 @@ const editorTheme = EditorView.theme({
   ".cm-content": {
     caretColor: "var(--accent)",
     padding: "var(--space-4) 0",
+    // An open comment thread hangs below its last anchored line, so on a
+    // comment near the end of the file there is nothing left to scroll and the
+    // box stays clipped. CodeView raises this while a thread is open to make
+    // room; it is back to normal padding the rest of the time.
+    paddingBottom: "var(--code-scroll-past-end, var(--space-4))",
   },
   "&.cm-focused": { outline: "none" },
   ".cm-gutters": {
