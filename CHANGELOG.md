@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-08-06
+
 ### Fixed
 - **Comments on the last lines of a file are reachable again.** A thread box
   hangs below the line it is anchored to, but the editor stopped scrolling at
@@ -561,7 +563,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/WatermelonBros/reado/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/WatermelonBros/reado/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/WatermelonBros/reado/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/WatermelonBros/reado/compare/v1.3.0...v1.4.0
