@@ -25,9 +25,16 @@ pub struct DirEntry {
 }
 
 /// Reject paths that resolve outside `root` (defends against `..` traversal).
+///
+/// `target` may be absolute or project-relative — the frontend sends both (the
+/// editor reads by absolute path but saves by relative one). A relative target
+/// is resolved against `root`, never against the process's working directory:
+/// canonicalizing `src/foo.ts` as-is would look for it next to wherever Reado
+/// happened to be launched from, and fail with a bare ENOENT. `join` leaves an
+/// absolute target untouched, so callers that already joined are unaffected.
 pub(crate) fn ensure_within(root: &Path, target: &Path) -> Result<PathBuf> {
     let root = root.canonicalize()?;
-    let target = target.canonicalize()?;
+    let target = root.join(target).canonicalize()?;
     if target.starts_with(&root) {
         Ok(target)
     } else {
@@ -586,6 +593,44 @@ pub fn allow_project_assets(app: tauri::AppHandle, root: String) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{base64_encode, FileContent, MAX_TEXT_BYTES};
+
+    /// The editor saves by project-relative path while reading by absolute one,
+    /// so both must land on the same file — and neither may be resolved against
+    /// the process's working directory, which is wherever Reado was launched.
+    #[test]
+    fn writes_resolve_relative_and_absolute_paths_alike() {
+        use std::fs;
+        let proj = tempfile::TempDir::new().unwrap();
+        let root = proj.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        fs::create_dir(root.join("src")).unwrap();
+        fs::write(root.join("src/a.txt"), b"old").unwrap();
+
+        super::write_file(s(root.into()), "src/a.txt".into(), "relative".into()).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("src/a.txt")).unwrap(),
+            "relative"
+        );
+
+        super::write_file(s(root.into()), s(root.join("src/a.txt")), "absolute".into()).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("src/a.txt")).unwrap(),
+            "absolute"
+        );
+
+        // Confinement still holds for a relative path that climbs out.
+        let outside = tempfile::TempDir::new().unwrap();
+        fs::write(outside.path().join("o.txt"), b"keep").unwrap();
+        let escape = format!(
+            "../{}/o.txt",
+            outside.path().file_name().unwrap().to_string_lossy()
+        );
+        assert!(super::write_file(s(root.into()), escape, "pwned".into()).is_err());
+        assert_eq!(
+            fs::read_to_string(outside.path().join("o.txt")).unwrap(),
+            "keep"
+        );
+    }
 
     #[test]
     fn move_import_and_root_confinement() {

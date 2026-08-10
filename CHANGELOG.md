@@ -11,6 +11,16 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+- **Cmd+S saves again.** Saving reported the file as read-only or the disk as
+  full, while other editors wrote the same file happily. Neither was true: the
+  editor reads a file by its absolute path but saves it by its project-relative
+  one, and the backend resolved that relative path against whatever directory
+  Reado was launched from instead of the project root — so the save missed the
+  file entirely and failed with "no such file". Relative paths now always
+  resolve against the project root, for every filesystem command, and paths that
+  climb out of the root are still refused.
+
 ## [1.6.1] — 2026-08-06
 
 ### Fixed
