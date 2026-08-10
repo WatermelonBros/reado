@@ -11,6 +11,23 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+- **Reado Anywhere confines paths properly.** The LAN endpoint a paired phone
+  talks to guarded its file and directory requests with a `..` scan of its own,
+  which an absolute path walked straight past and a symlink out of the project
+  ignored. It now uses the same guard as the desktop, which resolves the path
+  and checks it really lands inside the project.
+- **Windows paths shorten correctly in the UI.** A file whose path used
+  backslashes was measured against a project root stored with forward slashes,
+  so the breadcrumb, status bar and palette showed it whole instead of relative
+  to the project — and a reading tour recorded that longer form to disk.
+
+### Changed
+- **Re-indexing comments is much faster.** The search index was rewritten one
+  comment at a time, each write flushed to disk on its own, and it rebuilds
+  every time a comment changes — so resolving a batch of comments spent most of
+  its time waiting on the disk. The rebuild is now a single transaction.
+
 ## [1.6.2] — 2026-08-11
 
 ### Fixed
