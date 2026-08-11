@@ -13,7 +13,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { markdownRehype } from "../../lib/markdown";
 import { readFile, searchText, listFiles, type Comment, type CommentType } from "../../lib/api";
-import { useComments } from "../../lib/comments";
+import { useComments, toRelative } from "../../lib/comments";
 import { useProject, useWorkspace } from "../../lib/store";
 import { useSpecs } from "../../lib/specs";
 import { listDocs, type DocItem } from "../../lib/knowledge";
@@ -132,9 +132,7 @@ export function DocsView() {
           if (cancelled) return;
           const hit = new Set<string>();
           for (const m of matches) {
-            const rel = (m.path.startsWith(root) ? m.path.slice(root.length) : m.path)
-              .replace(/^[\\/]+/, "")
-              .replace(/\\/g, "/");
+            const rel = toRelative(root, m.path);
             if (kbPaths.has(rel)) hit.add(rel);
           }
           setContentMatches(hit);

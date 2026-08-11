@@ -36,18 +36,10 @@ pub struct GitInfo {
     pub has_upstream: bool,
 }
 
+/// Run git and return trimmed stdout, or `None` on failure. Trimming is the
+/// only thing this adds over [`run_git_raw`].
 fn run_git(root: &Path, args: &[&str]) -> Option<String> {
-    let output = command("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .ok()?;
-    if output.status.success() {
-        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        None
-    }
+    run_git_raw(root, args).map(|out| out.trim().to_string())
 }
 
 /// Project-relative paths changed for a guided-review scope. With no `base`,

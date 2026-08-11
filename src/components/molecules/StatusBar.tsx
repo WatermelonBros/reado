@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { gitBranches, gitCheckout, gitInfo, anywhereStatus, type GitBranches } from "../../lib/api";
 import { useCursor, useProject, usePalette } from "../../lib/store";
-import { useComments, openCount } from "../../lib/comments";
+import { useComments, openCount, toRelative } from "../../lib/comments";
 import {
   useDocInfo,
   goToLine,
@@ -25,9 +25,7 @@ import { Input } from "../atoms/Input";
 
 /** Path relative to the project root, with forward slashes. */
 function relativePath(root: string, path: string | null): string | null {
-  if (!path) return null;
-  const rel = path.startsWith(root) ? path.slice(root.length) : path;
-  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/");
+  return path ? toRelative(root, path) : null;
 }
 
 /** Shared style for a clickable status-bar item. */

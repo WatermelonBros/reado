@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { gitRefs, type GitRefs } from "../../lib/api";
 import { useProject, useEditorActions } from "../../lib/store";
+import { toRelative } from "../../lib/comments";
 
 import { ChevronIcon, DiffIcon, BlameIcon, SparkleIcon } from "../atoms/icons";
 import { IconButton } from "../atoms/IconButton";
@@ -34,9 +35,7 @@ export function Breadcrumb() {
 
   if (!active) return null;
 
-  const rel = (active.startsWith(root) ? active.slice(root.length) : active)
-    .replace(/^[\\/]+/, "")
-    .replace(/\\/g, "/");
+  const rel = toRelative(root, active);
   const segments = rel.split("/");
 
   const baseOptions = [

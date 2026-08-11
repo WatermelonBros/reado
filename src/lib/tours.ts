@@ -10,6 +10,7 @@ import { log, safeError } from "./logger";
 import { readFile, createFile, writeFile } from "./api";
 import { dispatchToAgent } from "./agents";
 import { useProject } from "./store";
+import { toRelative } from "./comments";
 import { useDocInfo } from "./docInfo";
 
 export interface TourStep {
@@ -88,9 +89,9 @@ export const useTours = create<ToursState>((set, get) => ({
     const active = useProject.getState().active;
     if (!view || !active) return;
     const line = view.state.doc.lineAt(view.state.selection.main.head).number;
-    const rel = active.startsWith(root) ? active.slice(root.length).replace(/^[\\/]+/, "") : active;
+    const rel = toRelative(root, active);
     const tours = get().tours.map((t) =>
-      t.id === tourId ? { ...t, steps: [...t.steps, { file: rel.replace(/\\/g, "/"), line, note }] } : t,
+      t.id === tourId ? { ...t, steps: [...t.steps, { file: rel, line, note }] } : t,
     );
     set({ tours });
     void save(root, tours);

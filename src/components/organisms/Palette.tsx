@@ -210,7 +210,7 @@ export function Palette() {
         const path = "obj" in r ? (r.obj as string) : (r.target as string);
         return {
           label: basename(path),
-          detail: relative(project.root, path),
+          detail: toRelative(project.root, path),
           run: () => {
             // list_files returns project-relative paths; open expects absolute.
             project.open(`${project.root}/${path}`);
@@ -222,7 +222,7 @@ export function Palette() {
     if (mode === "search") {
       return matches.map((m) => ({
         label: m.text.trim() || basename(m.path),
-        detail: `${relative(project.root, m.path)}:${m.line}`,
+        detail: `${toRelative(project.root, m.path)}:${m.line}`,
         run: () => {
           project.open(m.path, m.line);
           close();
@@ -248,7 +248,7 @@ export function Palette() {
         : wsymbols.slice(0, 300);
       return filtered.map((s) => ({
         label: s.name,
-        detail: `${s.kind} · ${relative(project.root, s.path)}:${s.line}`,
+        detail: `${s.kind} · ${toRelative(project.root, s.path)}:${s.line}`,
         run: () => {
           project.open(s.path, s.line);
           close();
@@ -411,11 +411,6 @@ export function Palette() {
       </div>
     </div>
   );
-}
-
-function relative(root: string, path: string): string {
-  const rel = path.startsWith(root) ? path.slice(root.length) : path;
-  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/");
 }
 
 interface CommandCtx {

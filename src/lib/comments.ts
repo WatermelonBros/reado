@@ -26,12 +26,16 @@ import {
 
 /** Convert an absolute path to a project-relative, forward-slashed path. */
 export function toRelative(root: string, path: string): string {
+  // Normalise separators on both sides *before* comparing: root and path don't
+  // always agree on them (a Windows path measured against a root stored with
+  // forward slashes would otherwise miss its own prefix and fall through whole).
+  const slashed = path.replace(/\\/g, "/");
   // Compare against root with a trailing separator so a sibling dir sharing a
   // string prefix (e.g. `/home/me/proj-backup` vs root `/home/me/proj`) doesn't
   // false-match. Paths outside root fall through unchanged.
-  const base = root.endsWith("/") || root.endsWith("\\") ? root : root + "/";
-  const rel = path.startsWith(base) ? path.slice(base.length) : path;
-  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/");
+  const base = root.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
+  const rel = slashed.startsWith(base) ? slashed.slice(base.length) : slashed;
+  return rel.replace(/^\/+/, "");
 }
 
 interface CommentsState {

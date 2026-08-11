@@ -158,13 +158,16 @@ fn mint_token() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
 }
 
-/// Join a project-relative path to its root, rejecting traversal (`..`). An
-/// empty `rel` is allowed (it means the root itself).
+/// Resolve a project-relative path against its root, refusing anything that
+/// lands outside. An empty `rel` is allowed (it means the root itself).
+///
+/// This is the LAN-facing entry point — a paired phone supplies `rel` — so it
+/// uses the same guard as the desktop commands rather than its own. A bare `..`
+/// scan is not enough: `Path::join` throws the base away when `rel` is
+/// absolute, and a symlink inside the project can still point out of it.
+/// `ensure_within` canonicalizes and prefix-compares, which catches both.
 fn safe_join(root: &str, rel: &str) -> Option<PathBuf> {
-    if rel.split(['/', '\\']).any(|c| c == "..") {
-        return None;
-    }
-    Some(Path::new(root).join(rel))
+    crate::fs::ensure_within(Path::new(root), Path::new(rel)).ok()
 }
 
 // ---- The mobile client (a self-contained PWA, served at `/`) ---------------
@@ -1161,10 +1164,18 @@ mod tests {
     }
 
     #[test]
-    fn safe_join_rejects_traversal() {
-        assert!(safe_join("/root", "../etc/passwd").is_none());
-        assert!(safe_join("/root", "src/main.rs").is_some());
-        assert!(safe_join("/root", "").is_some());
+    fn safe_join_confines_to_the_project_root() {
+        let proj = tempfile::TempDir::new().unwrap();
+        let root = proj.path().to_str().unwrap();
+        std::fs::create_dir(proj.path().join("src")).unwrap();
+        std::fs::write(proj.path().join("src/main.rs"), b"fn main() {}").unwrap();
+
+        assert!(safe_join(root, "src/main.rs").is_some());
+        assert!(safe_join(root, "").is_some()); // the root itself
+        assert!(safe_join(root, "../etc/passwd").is_none());
+        // An absolute `rel` used to slip through: `Path::join` discards the
+        // base, so the old `..`-only scan handed back /etc/passwd unchanged.
+        assert!(safe_join(root, "/etc/passwd").is_none());
     }
 
     #[test]

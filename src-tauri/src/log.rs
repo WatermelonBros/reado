@@ -407,10 +407,6 @@ pub fn info(target: &str, msg: &str, fields: Value) {
 pub fn debug(target: &str, msg: &str, fields: Value) {
     write(LEVEL_DEBUG, target, msg, fields);
 }
-#[allow(dead_code)]
-pub fn trace(target: &str, msg: &str, fields: Value) {
-    write(LEVEL_TRACE, target, msg, fields);
-}
 
 // --- Tauri commands --------------------------------------------------------
 

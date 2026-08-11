@@ -37,10 +37,19 @@ const ORDER: Record<LogLevel, number> = {
 let enabled = true;
 let threshold = ORDER.info;
 
-/** Apply the user's logging preference locally and push it to the backend. */
+/** Apply the user's logging preference locally and push it to the backend.
+ *
+ *  Called from a subscriber on the *whole* settings store, so it fires on every
+ *  settings change — zoom, theme, wrap. Pushing to the backend costs an IPC
+ *  round trip and a `log-config.json` write, so only do it when these two
+ *  values actually changed. */
+let applied: string | null = null;
 export function applyLogConfig(on: boolean, level: LogLevel): void {
   enabled = on;
   threshold = ORDER[level] ?? ORDER.info;
+  const next = `${on}:${level}`;
+  if (next === applied) return;
+  applied = next;
   invoke("log_set_config", { enabled: on, level }).catch(() => {});
 }
 

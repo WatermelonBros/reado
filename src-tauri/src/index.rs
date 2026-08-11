@@ -23,7 +23,7 @@ fn rebuild(root: &str) -> Result<usize> {
         return Ok(0);
     }
     std::fs::create_dir_all(&reado)?;
-    let conn = Connection::open(index_path(root)).map_err(|e| Error::Other(e.to_string()))?;
+    let mut conn = Connection::open(index_path(root)).map_err(|e| Error::Other(e.to_string()))?;
     conn.execute_batch(
         "DROP TABLE IF EXISTS comments;
          CREATE TABLE comments (
@@ -41,12 +41,22 @@ fn rebuild(root: &str) -> Result<usize> {
     let active = reado_core::list_comments(root);
     let archived = reado_core::list_archived(root);
     let mut count = 0;
-    for c in active.iter().chain(archived.iter()) {
-        conn.execute(
-            "INSERT OR REPLACE INTO comments
+    // One transaction for the whole rebuild: bare `execute` autocommits, so a
+    // rebuild used to fsync once per comment — and it runs on every
+    // `comments-changed` event, i.e. repeatedly during a resolve loop.
+    let tx = conn
+        .transaction()
+        .map_err(|e| Error::Other(e.to_string()))?;
+    {
+        let mut stmt = tx
+            .prepare(
+                "INSERT OR REPLACE INTO comments
              (id, type, state, kind, file, start_line, end_line, orphan, archived, body, created_at, updated_at)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
-            rusqlite::params![
+            )
+            .map_err(|e| Error::Other(e.to_string()))?;
+        for c in active.iter().chain(archived.iter()) {
+            stmt.execute(rusqlite::params![
                 c.meta.id,
                 format!("{:?}", c.meta.comment_type).to_lowercase(),
                 format!("{:?}", c.meta.state).to_lowercase(),
@@ -59,11 +69,12 @@ fn rebuild(root: &str) -> Result<usize> {
                 c.messages.first().map(|m| m.body.as_str()).unwrap_or(""),
                 c.meta.created_at as i64,
                 c.meta.updated_at as i64,
-            ],
-        )
-        .map_err(|e| Error::Other(e.to_string()))?;
-        count += 1;
+            ])
+            .map_err(|e| Error::Other(e.to_string()))?;
+            count += 1;
+        }
     }
+    tx.commit().map_err(|e| Error::Other(e.to_string()))?;
     Ok(count)
 }
 
