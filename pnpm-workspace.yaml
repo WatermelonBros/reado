@@ -1,0 +1,6 @@
+# pnpm 11 asks explicitly which dependencies may run install scripts. esbuild ships its binary as
+# a per-platform optional dependency, so it does not need its postinstall to work — and it never
+# ran under pnpm 10 either, where builds were already blocked by default and CI passed. Keeping it
+# false preserves exactly the behaviour the lockfile and CI were green on.
+allowBuilds:
+  esbuild: false
