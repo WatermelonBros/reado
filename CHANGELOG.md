@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-09-02
+
 ### Added
 - **Files reach the terminal by dropping them.** Dragging files onto a terminal —
   from the file tree or from outside Reado — types their quoted paths at the
@@ -617,7 +619,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.6.2...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/WatermelonBros/reado/compare/v1.6.2...v1.7.0
 [1.6.2]: https://github.com/WatermelonBros/reado/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/WatermelonBros/reado/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/WatermelonBros/reado/compare/v1.5.0...v1.6.0
