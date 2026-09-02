@@ -11,8 +11,15 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { markdownRehype } from "../../lib/markdown";
-import { readFile, searchText, listFiles, type Comment, type CommentType } from "../../lib/api";
+import { markdownRehypeFor, markdownUrlTransform } from "../../lib/markdown";
+import {
+  readFile,
+  searchText,
+  listFiles,
+  allowProjectAssets,
+  type Comment,
+  type CommentType,
+} from "../../lib/api";
 import { useComments } from "../../lib/comments";
 import { useProject, useWorkspace } from "../../lib/store";
 import { useSpecs } from "../../lib/specs";
@@ -88,6 +95,19 @@ export function DocsView() {
       cancelled = true;
     };
   }, [selection, root]);
+
+  // A doc's own images (`<img src="docs/media/reado-loop.gif">` in the README)
+  // are paths on disk: they resolve only once the root is in the `asset:` scope
+  // and each `src` is rewritten relative to the document's own directory.
+  useEffect(() => {
+    void allowProjectAssets(root).catch(() => {});
+  }, [root]);
+  const baseDir = useMemo(() => {
+    if (selection.kind === "notes") return undefined;
+    const dir = selection.path.replace(/\\/g, "/").replace(/\/[^/]*$/, "");
+    return dir === selection.path ? root : `${root}/${dir}`;
+  }, [selection, root]);
+  const rehypePlugins = useMemo(() => markdownRehypeFor(baseDir), [baseDir]);
 
   // Comments grouped by file for the notes digest.
   const noteGroups = useMemo(() => {
@@ -295,7 +315,11 @@ export function DocsView() {
                 {/* Project docs (READMEs especially) embed raw HTML — centered
                     headings, badge images. rehype-raw renders it instead of
                     showing the literal <h1> tags as text. */}
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={markdownRehype}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={rehypePlugins}
+                  urlTransform={markdownUrlTransform}
+                >
                   {content}
                 </ReactMarkdown>
               </div>
