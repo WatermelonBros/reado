@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.7.1] — 2026-09-02
+
 ### Added
 - **Source Control carries a badge.** Its icon in the tool rail shows how many
   files have working-tree or index changes, in accent blue — the count is
@@ -625,7 +627,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/WatermelonBros/reado/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/WatermelonBros/reado/compare/v1.6.2...v1.7.0
 [1.6.2]: https://github.com/WatermelonBros/reado/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/WatermelonBros/reado/compare/v1.6.0...v1.6.1
