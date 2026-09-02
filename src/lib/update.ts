@@ -6,31 +6,32 @@
  * dismissing it keeps a small "update available" indicator so the user can come
  * back to it. A lightweight toast covers the "up to date" / error feedback.
  */
-import { create } from "zustand";
-import type { Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { createLogger, safeError } from "./logger";
 
-const log = createLogger("updater");
+import { relaunch } from "@tauri-apps/plugin-process"
+import type { Update } from "@tauri-apps/plugin-updater"
+import { create } from "zustand"
+import { createLogger, safeError } from "./logger"
+
+const log = createLogger("updater")
 
 interface UpdateState {
   /** The pending update handle, or null when up to date. */
-  update: Update | null;
-  version: string | null;
-  notes: string | null;
+  update: Update | null
+  version: string | null
+  notes: string | null
   /** Whether the update modal is open. */
-  open: boolean;
+  open: boolean
   /** Dismissed but still available — show the indicator. */
-  dismissed: boolean;
-  installing: boolean;
-  toast: { kind: "info" | "error"; text: string } | null;
+  dismissed: boolean
+  installing: boolean
+  toast: { kind: "info" | "error"; text: string } | null
 
-  setAvailable: (u: Update) => void;
-  reopen: () => void;
-  dismiss: () => void;
-  setToast: (t: { kind: "info" | "error"; text: string }) => void;
-  clearToast: () => void;
-  install: () => Promise<void>;
+  setAvailable: (u: Update) => void
+  reopen: () => void
+  dismiss: () => void
+  setToast: (t: { kind: "info" | "error"; text: string }) => void
+  clearToast: () => void
+  install: () => Promise<void>
 }
 
 export const useUpdate = create<UpdateState>((set, get) => ({
@@ -50,26 +51,26 @@ export const useUpdate = create<UpdateState>((set, get) => ({
   clearToast: () => set({ toast: null }),
 
   install: async () => {
-    const u = get().update;
-    if (!u) return;
-    set({ installing: true });
-    log.info("download + install", { version: u.version });
+    const u = get().update
+    if (!u) return
+    set({ installing: true })
+    log.info("download + install", { version: u.version })
     try {
-      await u.downloadAndInstall();
+      await u.downloadAndInstall()
     } catch (e) {
       // The update itself failed — nothing was installed.
-      log.error("install failed", { version: u.version, error: safeError(e) });
-      set({ installing: false, open: false, toast: { kind: "error", text: String(e) } });
-      return;
+      log.error("install failed", { version: u.version, error: safeError(e) })
+      set({ installing: false, open: false, toast: { kind: "error", text: String(e) } })
+      return
     }
-    log.info("installed; relaunching", { version: u.version });
+    log.info("installed; relaunching", { version: u.version })
     try {
-      await relaunch();
+      await relaunch()
     } catch (e) {
       // Installed fine, but the restart failed — don't report it as an install
       // failure.
-      log.error("relaunch failed", { version: u.version, error: safeError(e) });
-      set({ installing: false, open: false, toast: { kind: "error", text: String(e) } });
+      log.error("relaunch failed", { version: u.version, error: safeError(e) })
+      set({ installing: false, open: false, toast: { kind: "error", text: String(e) } })
     }
   },
-}));
+}))

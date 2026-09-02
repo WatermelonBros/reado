@@ -5,34 +5,36 @@
  * management, dismissal); we provide the Reado styling via Tailwind. The public
  * API stays simple — `value`, `options`, `onChange` — so call sites read well.
  */
-import { Select as ArkSelect, createListCollection } from "@ark-ui/react/select";
-import { Portal } from "@ark-ui/react/portal";
-import { ChevronIcon } from "./icons";
+
+import { Portal } from "@ark-ui/react/portal"
+import { Select as ArkSelect, createListCollection } from "@ark-ui/react/select"
+import { ChevronIcon } from "./icons"
 
 export interface SelectOption<T extends string> {
-  value: T;
-  label: string;
+  value: T
+  label: string
   /** Optional leading colour dot (e.g. comment-type accents). */
-  color?: string;
+  color?: string
 }
 
 interface SelectProps<T extends string> {
-  value: T;
-  options: SelectOption<T>[];
-  onChange: (value: T) => void;
-  ariaLabel?: string;
+  value: T
+  options: SelectOption<T>[]
+  onChange: (value: T) => void
+  ariaLabel?: string
   /** "default" shows a bordered control; "ghost" is quiet until hovered/open. */
-  variant?: "default" | "ghost";
+  variant?: "default" | "ghost"
   /** Extra classes for the trigger button. */
-  className?: string;
+  className?: string
 }
 
 const TRIGGER_BASE =
-  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink transition-colors";
+  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink transition-colors"
 const TRIGGER_VARIANT = {
-  default: "border border-line bg-surface hover:border-line-strong data-[state=open]:border-line-strong",
+  default:
+    "border border-line bg-surface hover:border-line-strong data-[state=open]:border-line-strong",
   ghost: "border border-transparent hover:bg-surface data-[state=open]:bg-surface",
-} as const;
+} as const
 
 export function Select<T extends string>({
   value,
@@ -46,8 +48,8 @@ export function Select<T extends string>({
     items: options,
     itemToString: (item) => item.label,
     itemToValue: (item) => item.value,
-  });
-  const selected = options.find((o) => o.value === value);
+  })
+  const selected = options.find((o) => o.value === value)
 
   return (
     <ArkSelect.Root
@@ -93,5 +95,5 @@ export function Select<T extends string>({
         </ArkSelect.Positioner>
       </Portal>
     </ArkSelect.Root>
-  );
+  )
 }

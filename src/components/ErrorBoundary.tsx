@@ -6,31 +6,31 @@
  * catches it, keeps the app alive, shows the error (so it can be reported) and
  * offers a reload. Class component: error boundaries can't be hooks.
  */
-import { Component, type ErrorInfo, type ReactNode } from "react";
-import { t } from "../i18n";
+import { Component, type ErrorInfo, type ReactNode } from "react"
+import { t } from "@/i18n"
 
 interface Props {
-  children: ReactNode;
+  children: ReactNode
 }
 interface State {
-  error: Error | null;
+  error: Error | null
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null }
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    return { error }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Surfaced in the webview console for diagnosis.
-    console.error("Reado render error:", error, info.componentStack);
+    console.error("Reado render error:", error, info.componentStack)
   }
 
   render() {
-    const { error } = this.state;
-    if (!error) return this.props.children;
+    const { error } = this.state
+    if (!error) return this.props.children
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-canvas p-8 text-ink">
         <div className="max-w-md">
@@ -57,6 +57,6 @@ export class ErrorBoundary extends Component<Props, State> {
           </div>
         </div>
       </div>
-    );
+    )
   }
 }

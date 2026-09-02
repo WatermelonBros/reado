@@ -1,15 +1,15 @@
 // UI test: the Orphans panel lists comments whose anchored code was lost and
 // re-anchors one (opens the file + starts the re-anchor flow).
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 
-import { OrphansPanel } from "../OrphansPanel";
-import { useComments } from "../../../lib/comments";
-import { useProject } from "../../../lib/store";
-import type { Comment } from "../../../lib/api";
+import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { OrphansPanel } from "@/components/organisms/OrphansPanel"
+import type { Comment } from "@/lib/api"
+import { useComments } from "@/lib/comments"
+import { useProject } from "@/lib/store"
 
-const ROOT = "/repo";
+const ROOT = "/repo"
 
 function comment(over: Partial<Comment> = {}): Comment {
   return {
@@ -27,52 +27,52 @@ function comment(over: Partial<Comment> = {}): Comment {
     messages: [{ author: "you", createdAt: 0, body: "why is this here?" }],
     archived: false,
     ...over,
-  };
+  }
 }
 
 function seed(comments: Comment[]) {
-  const open = vi.fn();
-  const startReanchor = vi.fn();
-  useComments.setState({ comments, startReanchor });
-  useProject.setState({ root: ROOT, open });
-  return { open, startReanchor };
+  const open = vi.fn()
+  const startReanchor = vi.fn()
+  useComments.setState({ comments, startReanchor })
+  useProject.setState({ root: ROOT, open })
+  return { open, startReanchor }
 }
 
 beforeEach(() => {
-  useComments.setState({ comments: [] });
-});
+  useComments.setState({ comments: [] })
+})
 
 describe("OrphansPanel", () => {
   it("shows the empty state when nothing is orphaned", () => {
-    seed([comment({ orphan: false })]);
-    render(<OrphansPanel />);
-    expect(screen.getByText("orphans.empty")).toBeInTheDocument();
-  });
+    seed([comment({ orphan: false })])
+    render(<OrphansPanel />)
+    expect(screen.getByText("orphans.empty")).toBeInTheDocument()
+  })
 
   it("lists orphaned comments with message, type label and snippet", () => {
-    seed([comment()]);
-    render(<OrphansPanel />);
-    expect(screen.getByText("why is this here?")).toBeInTheDocument();
-    expect(screen.getByText("comment.type.note")).toBeInTheDocument();
-    expect(screen.getByText("const x = 1;")).toBeInTheDocument();
-    expect(screen.getByText("orphans.lastKnown")).toBeInTheDocument();
-  });
+    seed([comment()])
+    render(<OrphansPanel />)
+    expect(screen.getByText("why is this here?")).toBeInTheDocument()
+    expect(screen.getByText("comment.type.note")).toBeInTheDocument()
+    expect(screen.getByText("const x = 1;")).toBeInTheDocument()
+    expect(screen.getByText("orphans.lastKnown")).toBeInTheDocument()
+  })
 
   it("re-anchor opens the last-known file and starts the flow", async () => {
-    const { open, startReanchor } = seed([comment()]);
-    render(<OrphansPanel />);
-    await userEvent.click(screen.getByRole("button", { name: "orphans.reanchor" }));
-    expect(open).toHaveBeenCalledWith(`${ROOT}/src/a.ts`);
-    expect(startReanchor).toHaveBeenCalledWith("c1");
-  });
+    const { open, startReanchor } = seed([comment()])
+    render(<OrphansPanel />)
+    await userEvent.click(screen.getByRole("button", { name: "orphans.reanchor" }))
+    expect(open).toHaveBeenCalledWith(`${ROOT}/src/a.ts`)
+    expect(startReanchor).toHaveBeenCalledWith("c1")
+  })
 
   it("re-anchor without an anchor file only starts the flow", async () => {
     const { open, startReanchor } = seed([
       comment({ anchor: { file: "", scope: "file", startLine: 0, endLine: 0 } }),
-    ]);
-    render(<OrphansPanel />);
-    await userEvent.click(screen.getByRole("button", { name: "orphans.reanchor" }));
-    expect(open).not.toHaveBeenCalled();
-    expect(startReanchor).toHaveBeenCalledWith("c1");
-  });
-});
+    ])
+    render(<OrphansPanel />)
+    await userEvent.click(screen.getByRole("button", { name: "orphans.reanchor" }))
+    expect(open).not.toHaveBeenCalled()
+    expect(startReanchor).toHaveBeenCalledWith("c1")
+  })
+})

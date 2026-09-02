@@ -5,36 +5,37 @@
  * register in `tauri dev`), and never again once the user acts or ticks "don't
  * show again". The same action is always available from Settings.
  */
-import { useEffect, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useSettings } from "../../lib/store";
-import { makeDefaultApp } from "../../lib/defaults";
-import { Modal } from "../atoms/Modal";
-import { Button } from "../atoms/Button";
-import { Checkbox } from "../atoms/Checkbox";
-import { SparkleIcon } from "../atoms/icons";
-import { useTranslation } from "react-i18next";
+
+import { getCurrentWindow } from "@tauri-apps/api/window"
+import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { Checkbox } from "@/components/atoms/Checkbox"
+import { SparkleIcon } from "@/components/atoms/icons"
+import { Modal } from "@/components/atoms/Modal"
+import { makeDefaultApp } from "@/lib/defaults"
+import { useSettings } from "@/lib/store"
 
 export function DefaultAppPrompt() {
-  const dismissed = useSettings((s) => s.defaultAppsDismissed);
-  const [open, setOpen] = useState(false);
-  const [dontAsk, setDontAsk] = useState(false);
-  const { t } = useTranslation();
+  const dismissed = useSettings((s) => s.defaultAppsDismissed)
+  const [open, setOpen] = useState(false)
+  const [dontAsk, setDontAsk] = useState(false)
+  const { t } = useTranslation()
 
   useEffect(() => {
     // Only the main window, only bundled builds (dev can't register handlers),
     // and only until the user has dealt with it once.
-    if (getCurrentWindow().label !== "main" || dismissed || !import.meta.env.PROD) return;
-    const id = setTimeout(() => setOpen(true), 1500);
-    return () => clearTimeout(id);
+    if (getCurrentWindow().label !== "main" || dismissed || !import.meta.env.PROD) return
+    const id = setTimeout(() => setOpen(true), 1500)
+    return () => clearTimeout(id)
     // Runs once on mount; `dismissed` is read at that point on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [])
 
   const close = (persist: boolean) => {
-    if (persist || dontAsk) useSettings.getState().set({ defaultAppsDismissed: true });
-    setOpen(false);
-  };
+    if (persist || dontAsk) useSettings.getState().set({ defaultAppsDismissed: true })
+    setOpen(false)
+  }
 
   return (
     <Modal
@@ -62,8 +63,8 @@ export function DefaultAppPrompt() {
           <Button
             variant="primary"
             onClick={() => {
-              void makeDefaultApp();
-              close(true);
+              void makeDefaultApp()
+              close(true)
             }}
           >
             {t("defaultApp.set")}
@@ -71,5 +72,5 @@ export function DefaultAppPrompt() {
         </div>
       </div>
     </Modal>
-  );
+  )
 }

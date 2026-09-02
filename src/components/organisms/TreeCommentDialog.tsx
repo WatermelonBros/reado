@@ -3,66 +3,66 @@
  * from the file tree's context menu (rather than a line selection). These
  * comments carry no line range; they describe a path or the whole project.
  */
-import { useState } from "react";
-import type { CommentType } from "../../lib/api";
-import { useComments } from "../../lib/comments";
-import { useSettings } from "../../lib/store";
-import { type MessageKey } from "../../i18n";
-import { COMMENT_TYPES, TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
-import { Checkbox } from "../atoms/Checkbox";
-import { Modal } from "../atoms/Modal";
-import { Textarea } from "../atoms/Textarea";
-import { useTranslation } from "react-i18next";
+import { useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Checkbox } from "@/components/atoms/Checkbox"
+import { COMMENT_TYPES, Dot, TYPE_COLOR, typeKey } from "@/components/atoms/commentMeta"
+import { Modal } from "@/components/atoms/Modal"
+import { Textarea } from "@/components/atoms/Textarea"
+import type { MessageKey } from "@/i18n"
+import type { CommentType } from "@/lib/api"
+import { useComments } from "@/lib/comments"
+import { useSettings } from "@/lib/store"
 
 export interface CommentTarget {
-  kind: "file" | "folder" | "project";
+  kind: "file" | "folder" | "project"
   /** Project-relative path; empty for the project scope. */
-  path: string;
+  path: string
 }
 
 const titleKey: Record<CommentTarget["kind"], MessageKey> = {
   file: "tree.commentFile",
   folder: "tree.commentFolder",
   project: "tree.commentProject",
-};
+}
 
 export function TreeCommentDialog({
   target,
   onClose,
 }: {
-  target: CommentTarget | null;
-  onClose: () => void;
+  target: CommentTarget | null
+  onClose: () => void
 }) {
-  const create = useComments((s) => s.create);
-  const setGitignorePrompt = useComments((s) => s.setGitignorePrompt);
-  const gitignoreDontAsk = useSettings((s) => s.gitignoreDontAsk);
-  const { t } = useTranslation();
+  const create = useComments((s) => s.create)
+  const setGitignorePrompt = useComments((s) => s.setGitignorePrompt)
+  const gitignoreDontAsk = useSettings((s) => s.gitignoreDontAsk)
+  const { t } = useTranslation()
 
-  const [type, setType] = useState<CommentType>("note");
+  const [type, setType] = useState<CommentType>("note")
   // type=note → a note; actionable types default to a task (toggleable).
-  const [isTask, setIsTask] = useState(false);
-  const [body, setBody] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [isTask, setIsTask] = useState(false)
+  const [body, setBody] = useState("")
+  const [saving, setSaving] = useState(false)
   const pickType = (tp: CommentType) => {
-    setType(tp);
-    setIsTask(tp !== "note");
-  };
+    setType(tp)
+    setIsTask(tp !== "note")
+  }
 
   const reset = () => {
-    setBody("");
-    setType("note");
-    setIsTask(false);
-  };
+    setBody("")
+    setType("note")
+    setIsTask(false)
+  }
   const close = () => {
-    reset();
-    onClose();
-  };
+    reset()
+    onClose()
+  }
 
   const save = async () => {
-    if (!target || !body.trim() || saving) return;
-    setSaving(true);
+    if (!target || !body.trim() || saving) return
+    setSaving(true)
     try {
-      const isProject = target.kind === "project";
+      const isProject = target.kind === "project"
       const { firstComment } = await create({
         file: isProject ? "" : target.path,
         scope: isProject ? "project" : "file",
@@ -72,13 +72,13 @@ export function TreeCommentDialog({
         kind: isTask ? "task" : "note",
         body: body.trim(),
         context: { snippet: "", before: "", after: "" },
-      });
-      if (firstComment && !gitignoreDontAsk) setGitignorePrompt(true);
-      close();
+      })
+      if (firstComment && !gitignoreDontAsk) setGitignorePrompt(true)
+      close()
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   return (
     <Modal
@@ -149,5 +149,5 @@ export function TreeCommentDialog({
         </div>
       </div>
     </Modal>
-  );
+  )
 }

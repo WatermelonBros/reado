@@ -1,34 +1,35 @@
 /** Settings drawer with a sidebar of tabs: Appearance, Editor, Files, System. */
-import { useEffect, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
+
+import { getVersion } from "@tauri-apps/api/app"
+import { revealItemInDir } from "@tauri-apps/plugin-opener"
+import type { TFunction } from "i18next"
+import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { Checkbox } from "@/components/atoms/Checkbox"
+import { Drawer } from "@/components/atoms/Drawer"
+import { IconButton } from "@/components/atoms/IconButton"
+import { Input } from "@/components/atoms/Input"
+import { CloseIcon } from "@/components/atoms/icons"
+import { SegmentedControl } from "@/components/atoms/SegmentedControl"
+import { Select } from "@/components/atoms/Select"
+import { Textarea } from "@/components/atoms/Textarea"
+import { type Locale, type MessageKey, useLocale } from "@/i18n"
+import { cliInstalled, installCli } from "@/lib/api"
+import { makeDefaultApp } from "@/lib/defaults"
+import { logPath } from "@/lib/logger"
 import {
-  useSettings,
-  usePalette,
-  THEMES,
   FONT_SIZE_RANGE,
   LINE_HEIGHT_RANGE,
-  type ThemeName,
-  type ThemeMode,
   type SettingsState,
-} from "../../lib/store";
-import { useLocale, type Locale, type MessageKey } from "../../i18n";
-import { installCli, cliInstalled } from "../../lib/api";
-import { checkForUpdates } from "../../lib/updater";
-import { logPath } from "../../lib/logger";
-import { useTourGuide } from "../../lib/tour";
-import { makeDefaultApp } from "../../lib/defaults";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Select } from "../atoms/Select";
-import { Drawer } from "../atoms/Drawer";
-import { Checkbox } from "../atoms/Checkbox";
-import { SegmentedControl } from "../atoms/SegmentedControl";
-import { Textarea } from "../atoms/Textarea";
-import { Input } from "../atoms/Input";
-import { Button } from "../atoms/Button";
-import { IconButton } from "../atoms/IconButton";
-import { CloseIcon } from "../atoms/icons";
-import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
+  THEMES,
+  type ThemeMode,
+  type ThemeName,
+  usePalette,
+  useSettings,
+} from "@/lib/store"
+import { useTourGuide } from "@/lib/tour"
+import { checkForUpdates } from "@/lib/updater"
 
 const FONT_PRESETS = [
   "JetBrains Mono",
@@ -37,9 +38,9 @@ const FONT_PRESETS = [
   "Fira Code",
   "IBM Plex Mono",
   "Menlo",
-];
+]
 
-type TabId = "appearance" | "editor" | "interface" | "files" | "system";
+type TabId = "appearance" | "editor" | "interface" | "files" | "system"
 
 const TABS: { id: TabId; labelKey: MessageKey }[] = [
   { id: "appearance", labelKey: "settings.tabs.appearance" },
@@ -47,13 +48,13 @@ const TABS: { id: TabId; labelKey: MessageKey }[] = [
   { id: "interface", labelKey: "settings.tabs.interface" },
   { id: "files", labelKey: "settings.tabs.files" },
   { id: "system", labelKey: "settings.tabs.system" },
-];
+]
 
 export function Settings() {
-  const open = usePalette((s) => s.settingsOpen);
-  const toggle = usePalette((s) => s.toggleSettings);
-  const { t } = useTranslation();
-  const [tab, setTab] = useState<TabId>("appearance");
+  const open = usePalette((s) => s.settingsOpen)
+  const toggle = usePalette((s) => s.toggleSettings)
+  const { t } = useTranslation()
+  const [tab, setTab] = useState<TabId>("appearance")
 
   return (
     <Drawer
@@ -97,13 +98,13 @@ export function Settings() {
         </div>
       </div>
     </Drawer>
-  );
+  )
 }
 
 function AppearanceTab() {
-  const settings = useSettings();
-  const { locale, setLocale } = useLocale();
-  const { t } = useTranslation();
+  const settings = useSettings()
+  const { locale, setLocale } = useLocale()
+  const { t } = useTranslation()
 
   return (
     <>
@@ -121,11 +122,7 @@ function AppearanceTab() {
 
       {settings.mode === "manual" ? (
         <Field label={t("settings.theme")}>
-          <ThemeChoice
-            value={settings.theme}
-            onChange={(theme) => settings.set({ theme })}
-            t={t}
-          />
+          <ThemeChoice value={settings.theme} onChange={(theme) => settings.set({ theme })} t={t} />
         </Field>
       ) : (
         <>
@@ -159,12 +156,12 @@ function AppearanceTab() {
         />
       </Field>
     </>
-  );
+  )
 }
 
 function EditorTab() {
-  const settings = useSettings();
-  const { t } = useTranslation();
+  const settings = useSettings()
+  const { t } = useTranslation()
 
   return (
     <>
@@ -293,17 +290,17 @@ function EditorTab() {
         />
       </Section>
     </>
-  );
+  )
 }
 
-const ZOOM_PRESETS = [0.9, 1, 1.1, 1.25, 1.5];
+const ZOOM_PRESETS = [0.9, 1, 1.1, 1.25, 1.5]
 
 function InterfaceTab() {
-  const settings = useSettings();
-  const { t } = useTranslation();
+  const settings = useSettings()
+  const { t } = useTranslation()
   const zoomValues = ZOOM_PRESETS.includes(settings.zoom)
     ? ZOOM_PRESETS
-    : [...ZOOM_PRESETS, settings.zoom].sort((a, b) => a - b);
+    : [...ZOOM_PRESETS, settings.zoom].sort((a, b) => a - b)
 
   return (
     <>
@@ -417,12 +414,12 @@ function InterfaceTab() {
         />
       </Section>
     </>
-  );
+  )
 }
 
 function FilesTab() {
-  const settings = useSettings();
-  const { t } = useTranslation();
+  const settings = useSettings()
+  const { t } = useTranslation()
 
   return (
     <>
@@ -451,22 +448,22 @@ function FilesTab() {
         />
       </Section>
     </>
-  );
+  )
 }
 
 /** Editable list of exclude globs — one per line, committed on blur so the tree
  *  doesn't re-list on every keystroke. */
 function ExcludeGlobs({ value, onCommit }: { value: string[]; onCommit: (g: string[]) => void }) {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState(value.join("\n"));
-  useEffect(() => setDraft(value.join("\n")), [value]);
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState(value.join("\n"))
+  useEffect(() => setDraft(value.join("\n")), [value])
   const commit = () =>
     onCommit(
       draft
         .split("\n")
         .map((s) => s.trim())
         .filter(Boolean),
-    );
+    )
   return (
     <Field label={t("settings.exclude")}>
       <Textarea
@@ -481,12 +478,12 @@ function ExcludeGlobs({ value, onCommit }: { value: string[]; onCommit: (g: stri
       />
       <span className="text-xs leading-relaxed text-faint">{t("settings.excludeHint")}</span>
     </Field>
-  );
+  )
 }
 
 function SystemTab() {
-  const settings = useSettings();
-  const { t } = useTranslation();
+  const settings = useSettings()
+  const { t } = useTranslation()
 
   return (
     <>
@@ -518,12 +515,12 @@ function SystemTab() {
       <LoggingSettings />
       <CliInstall />
     </>
-  );
+  )
 }
 
 /** Make Reado the OS default for text/source files. */
 function DefaultApp() {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <Section title={t("defaultApp.title")}>
       <Button variant="secondary" onClick={() => void makeDefaultApp()} className="self-start">
@@ -531,18 +528,20 @@ function DefaultApp() {
       </Button>
       <p className="text-xs leading-relaxed text-faint">{t("defaultApp.hint")}</p>
     </Section>
-  );
+  )
 }
 
 /** Diagnostic logging: enable toggle, detail level, and the file location. */
 function LoggingSettings() {
-  const { t } = useTranslation();
-  const settings = useSettings();
-  const [path, setPath] = useState<string | null>(null);
+  const { t } = useTranslation()
+  const settings = useSettings()
+  const [path, setPath] = useState<string | null>(null)
 
   useEffect(() => {
-    logPath().then(setPath).catch(() => {});
-  }, []);
+    logPath()
+      .then(setPath)
+      .catch(() => {})
+  }, [])
 
   return (
     <Section title={t("settings.logging")}>
@@ -552,10 +551,11 @@ function LoggingSettings() {
         label={t("settings.logEnabled")}
         className="text-sm text-muted"
       />
-      <label className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted">{t("settings.logLevel")}</span>
         <Select
           value={settings.logLevel}
+          ariaLabel={t("settings.logLevel")}
           onChange={(v) => settings.set({ logLevel: v as SettingsState["logLevel"] })}
           options={[
             { value: "error", label: "Error" },
@@ -565,7 +565,7 @@ function LoggingSettings() {
             { value: "trace", label: "Trace" },
           ]}
         />
-      </label>
+      </div>
       {/* The log-file cluster reads as one unit: buttons, its path, and the note. */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
@@ -588,33 +588,35 @@ function LoggingSettings() {
         <p className="text-xs leading-relaxed text-faint">{t("settings.logHint")}</p>
       </div>
     </Section>
-  );
+  )
 }
 
 /** Install the bundled `reado` CLI onto the user's PATH (~/.local/bin). */
 function CliInstall() {
-  const { t } = useTranslation();
-  const [installed, setInstalled] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const { t } = useTranslation()
+  const [installed, setInstalled] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
-    cliInstalled().then(setInstalled).catch(() => setInstalled(false));
-  }, []);
+    cliInstalled()
+      .then(setInstalled)
+      .catch(() => setInstalled(false))
+  }, [])
 
   const run = async () => {
-    setBusy(true);
-    setResult(null);
+    setBusy(true)
+    setResult(null)
     try {
-      const path = await installCli();
-      setInstalled(true);
-      setResult({ ok: true, text: t("settings.cliDone", { path }) });
+      const path = await installCli()
+      setInstalled(true)
+      setResult({ ok: true, text: t("settings.cliDone", { path }) })
     } catch (e) {
-      setResult({ ok: false, text: String(e) });
+      setResult({ ok: false, text: String(e) })
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
-  };
+  }
 
   return (
     <Section title={t("settings.cli")}>
@@ -622,7 +624,9 @@ function CliInstall() {
         <Button variant="secondary" onClick={run} disabled={busy}>
           {installed ? t("settings.cliReinstall") : t("settings.cliInstall")}
         </Button>
-        {installed && !result && <span className="text-xs text-faint">{t("settings.cliInstalled")}</span>}
+        {installed && !result && (
+          <span className="text-xs text-faint">{t("settings.cliInstalled")}</span>
+        )}
       </div>
       <p className="text-xs leading-relaxed text-faint">{t("settings.cliHint")}</p>
       {result && (
@@ -631,35 +635,37 @@ function CliInstall() {
         </p>
       )}
     </Section>
-  );
+  )
 }
 
 /** App version + a manual update check. */
 function AppVersion() {
-  const { t } = useTranslation();
-  const [version, setVersion] = useState("");
+  const { t } = useTranslation()
+  const [version, setVersion] = useState("")
   useEffect(() => {
     getVersion()
       .then(setVersion)
-      .catch(() => {});
-  }, []);
+      .catch(() => {})
+  }, [])
   return (
     <div className="flex flex-none items-center justify-between border-t border-line px-6 py-3 text-xs">
-      <span className="text-faint">
-        Reado {version ? `v${version}` : "—"}
-      </span>
+      <span className="text-faint">Reado {version ? `v${version}` : "—"}</span>
       <div className="flex items-center gap-2">
         <Button
           variant="secondary"
           size="sm"
           onClick={() => {
-            usePalette.getState().toggleSettings(false);
-            useTourGuide.getState().run();
+            usePalette.getState().toggleSettings(false)
+            useTourGuide.getState().run()
           }}
         >
           {t("tour.replay")}
         </Button>
-        <Button variant="secondary" size="sm" onClick={() => usePalette.getState().toggleShortcuts(true)}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => usePalette.getState().toggleShortcuts(true)}
+        >
           {t("settings.shortcuts")}
         </Button>
         <Button variant="secondary" size="sm" onClick={() => checkForUpdates(true)}>
@@ -667,11 +673,11 @@ function AppVersion() {
         </Button>
       </div>
     </div>
-  );
+  )
 }
 
 /** Uppercase "eyebrow" label shared by every settings section header. */
-const EYEBROW = "text-[11px] font-semibold uppercase tracking-[0.08em] text-muted";
+const EYEBROW = "text-[11px] font-semibold uppercase tracking-[0.08em] text-muted"
 
 /** A single labelled control (label wraps the input for a clean click target). */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -680,7 +686,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className={EYEBROW}>{label}</span>
       {children}
     </label>
-  );
+  )
 }
 
 /** A grouped section (heading + arbitrary content) for multi-control blocks. */
@@ -690,7 +696,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <span className={EYEBROW}>{title}</span>
       {children}
     </section>
-  );
+  )
 }
 
 /** A checkbox with a one-line description beneath it (aligned past the box), so
@@ -701,17 +707,17 @@ function ToggleField({
   label,
   hint,
 }: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-  hint: string;
+  checked: boolean
+  onChange: (v: boolean) => void
+  label: string
+  hint: string
 }) {
   return (
     <div className="flex flex-col gap-1">
       <Checkbox checked={checked} onChange={onChange} label={label} className="text-sm text-ink" />
       <span className="pl-[22px] text-xs leading-relaxed text-faint">{hint}</span>
     </div>
-  );
+  )
 }
 
 /** A clamped numeric field: free typing, committed (and clamped) on blur/Enter. */
@@ -724,20 +730,20 @@ function NumberField({
   onCommit,
   hint,
 }: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onCommit: (n: number) => void;
-  hint?: string;
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  onCommit: (n: number) => void
+  hint?: string
 }) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  const [draft, setDraft] = useState(String(value))
+  useEffect(() => setDraft(String(value)), [value])
   const commit = () => {
-    const n = Number(draft);
-    onCommit(Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : value);
-  };
+    const n = Number(draft)
+    onCommit(Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : value)
+  }
   return (
     <Field label={label}>
       <Input
@@ -753,7 +759,7 @@ function NumberField({
       />
       {hint && <span className="text-xs leading-relaxed text-faint">{hint}</span>}
     </Field>
-  );
+  )
 }
 
 function ThemeChoice({
@@ -762,12 +768,12 @@ function ThemeChoice({
   filter,
   t,
 }: {
-  value: ThemeName;
-  onChange: (theme: ThemeName) => void;
-  filter?: (theme: ThemeName) => boolean;
-  t: TFunction;
+  value: ThemeName
+  onChange: (theme: ThemeName) => void
+  filter?: (theme: ThemeName) => boolean
+  t: TFunction
 }) {
-  const options = filter ? THEMES.filter(filter) : THEMES;
+  const options = filter ? THEMES.filter(filter) : THEMES
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2">
       {options.map((theme) => (
@@ -779,21 +785,23 @@ function ThemeChoice({
           aria-pressed={value === theme}
           title={t(`theme.${theme}` as MessageKey)}
           className={`flex flex-col gap-2 rounded-md border p-2 ${
-            value === theme
-              ? "border-accent ring-1 ring-accent"
-              : "border-line"
+            value === theme ? "border-accent ring-1 ring-accent" : "border-line"
           }`}
         >
           <span className="flex h-[34px] items-center gap-1.5 rounded-sm border border-line bg-canvas px-2.5">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--syn-control)" }} />
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--syn-string)" }} />
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ background: "var(--syn-control)" }}
+            />
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ background: "var(--syn-string)" }}
+            />
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--marker)" }} />
           </span>
-          <span className="text-left text-xs text-muted">
-            {t(`theme.${theme}` as MessageKey)}
-          </span>
+          <span className="text-left text-xs text-muted">{t(`theme.${theme}` as MessageKey)}</span>
         </button>
       ))}
     </div>
-  );
+  )
 }

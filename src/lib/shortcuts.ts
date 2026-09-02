@@ -2,21 +2,21 @@
  * Canonical keyboard shortcuts, in one place so the command palette and the
  * welcome screen display the same bindings that `lib/hooks.ts` actually binds.
  */
-import type { MessageKey } from "../i18n";
+import type { MessageKey } from "@/i18n"
 
 // Platform modifier glyphs. `navigator.platform` is deprecated, so sniff the
 // user agent. On non-macOS the Apple symbols (⌘ ⌥ ⌃) become plain key names so
 // Windows/Linux users see keys that exist on their keyboard.
-const isMacUA = /mac|iphone|ipad/i.test(navigator.userAgent);
-export const mod = isMacUA ? "⌘" : "Ctrl";
-export const alt = isMacUA ? "⌥" : "Alt";
-export const ctrl = isMacUA ? "⌃" : "Ctrl";
-export const shift = isMacUA ? "⇧" : "Shift";
+const isMacUA = /mac|iphone|ipad/i.test(navigator.userAgent)
+export const mod = isMacUA ? "⌘" : "Ctrl"
+export const alt = isMacUA ? "⌥" : "Alt"
+export const ctrl = isMacUA ? "⌃" : "Ctrl"
+export const shift = isMacUA ? "⇧" : "Shift"
 
 export interface Shortcut {
-  labelKey: MessageKey;
+  labelKey: MessageKey
   /** Display combo, e.g. "⌘P" or "CtrlP". */
-  combo: string;
+  combo: string
 }
 
 export const SHORTCUTS: Shortcut[] = [
@@ -26,13 +26,13 @@ export const SHORTCUTS: Shortcut[] = [
   { labelKey: "palette.placeholder", combo: `${mod}K` },
   { labelKey: "terminal.toggle", combo: `${mod}J` },
   { labelKey: "settings.title", combo: `${mod},` },
-];
+]
 
 /** Full reference, grouped, for the shortcuts panel. Labels are kept literal
  * (concise dev terms); group titles are localized via the dialog. */
 export interface ShortcutGroup {
-  titleKey: MessageKey;
-  items: { label: string; combo: string }[];
+  titleKey: MessageKey
+  items: { label: string; combo: string }[]
 }
 
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
@@ -78,4 +78,4 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { label: "Settings", combo: `${mod},` },
     ],
   },
-];
+]

@@ -1,16 +1,15 @@
 // Call/type hierarchy panel store: just the defaults + the generic set patch.
-import { describe, it, expect, beforeEach } from "vitest";
-import { useHierarchy } from "../hierarchy";
-import type { HierNode } from "../lsp";
+import { beforeEach, describe, expect, it } from "vitest"
+import { useHierarchy } from "@/lib/hierarchy"
+import type { HierNode } from "@/lib/lsp"
 
-const node = (name: string): HierNode =>
-  ({ name } as unknown as HierNode);
+const node = (name: string): HierNode => ({ name }) as unknown as HierNode
 
 // Snapshot the store's create() defaults captured at import time — BEFORE the
 // beforeEach below overwrites them. Zustand's setState replaces the state object
 // (it doesn't mutate this one), so this reference keeps hierarchy.ts's real
 // initial values and would catch a changed default (e.g. mode: "type").
-const createDefaults = useHierarchy.getState();
+const createDefaults = useHierarchy.getState()
 
 beforeEach(() =>
   useHierarchy.setState({
@@ -21,38 +20,38 @@ beforeEach(() =>
     loading: false,
     unsupported: false,
   }),
-);
+)
 
 describe("useHierarchy", () => {
   it("has sensible defaults", () => {
     // Assert the module's real create() defaults (the import-time snapshot), not
     // the state the beforeEach reset writes — so this fails if hierarchy.ts's
     // defaults change.
-    const s = createDefaults;
-    expect(s.mode).toBe("call");
-    expect(s.direction).toBe("incoming");
-    expect(s.root).toBeNull();
-    expect(s.results).toEqual([]);
-    expect(s.loading).toBe(false);
-    expect(s.unsupported).toBe(false);
-  });
+    const s = createDefaults
+    expect(s.mode).toBe("call")
+    expect(s.direction).toBe("incoming")
+    expect(s.root).toBeNull()
+    expect(s.results).toEqual([])
+    expect(s.loading).toBe(false)
+    expect(s.unsupported).toBe(false)
+  })
 
   it("applies a partial patch via set", () => {
-    useHierarchy.getState().set({ mode: "type", direction: "super", loading: true });
-    const s = useHierarchy.getState();
-    expect(s.mode).toBe("type");
-    expect(s.direction).toBe("super");
-    expect(s.loading).toBe(true);
+    useHierarchy.getState().set({ mode: "type", direction: "super", loading: true })
+    const s = useHierarchy.getState()
+    expect(s.mode).toBe("type")
+    expect(s.direction).toBe("super")
+    expect(s.loading).toBe(true)
     // untouched keys keep their value
-    expect(s.unsupported).toBe(false);
-  });
+    expect(s.unsupported).toBe(false)
+  })
 
   it("can set the root + results and the unsupported flag", () => {
-    const root = node("foo");
-    useHierarchy.getState().set({ root, results: [node("a"), node("b")], unsupported: true });
-    const s = useHierarchy.getState();
-    expect(s.root).toBe(root);
-    expect(s.results).toHaveLength(2);
-    expect(s.unsupported).toBe(true);
-  });
-});
+    const root = node("foo")
+    useHierarchy.getState().set({ root, results: [node("a"), node("b")], unsupported: true })
+    const s = useHierarchy.getState()
+    expect(s.root).toBe(root)
+    expect(s.results).toHaveLength(2)
+    expect(s.unsupported).toBe(true)
+  })
+})

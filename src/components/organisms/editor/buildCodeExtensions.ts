@@ -1,52 +1,46 @@
-import { type MutableRefObject } from "react";
-import { EditorState, Compartment, type Extension } from "@codemirror/state";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
+import { bracketMatching, foldGutter, foldKeymap } from "@codemirror/language"
+import { gotoLine, highlightSelectionMatches, search, searchKeymap } from "@codemirror/search"
+import { type Compartment, EditorState, type Extension } from "@codemirror/state"
 import {
+  crosshairCursor,
+  drawSelection,
   EditorView,
   highlightSpecialChars,
   highlightWhitespace,
-  drawSelection,
-  rectangularSelection,
-  crosshairCursor,
   keymap,
-} from "@codemirror/view";
-import { foldGutter, bracketMatching, foldKeymap } from "@codemirror/language";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { search, searchKeymap, gotoLine, highlightSelectionMatches } from "@codemirror/search";
-import { occurrenceHighlight } from "../../../lib/occurrenceHighlight";
-import { syntaxSelection, expandSelection, shrinkSelection } from "../../../lib/syntaxSelection";
-import { type CommentType } from "../../../lib/api";
-import { readoAppearance } from "../../../lib/codemirror";
-import { diagnosticsRuler } from "../../../lib/overviewRuler";
-import { commentGutter, type LineComments } from "../../../lib/commentGutter";
-import { bookmarkGutter } from "../../../lib/bookmarkGutter";
-import { changedLinesHighlight } from "../../../lib/changedLines";
-import { readoSearchPanel } from "../../../lib/searchPanel";
-import { taskFromDiagnostic, explainSymbolAt } from "../../../lib/lspActions";
-import { useDocInfo, setLastEdit } from "../../../lib/docInfo";
+  rectangularSelection,
+} from "@codemirror/view"
+import type { MutableRefObject } from "react"
+import type { CommentType } from "@/lib/api"
+import { bookmarkGutter } from "@/lib/bookmarkGutter"
+import { changedLinesHighlight } from "@/lib/changedLines"
+import { readoAppearance } from "@/lib/codemirror"
+import { commentGutter, type LineComments } from "@/lib/commentGutter"
+import { setLastEdit, useDocInfo } from "@/lib/docInfo"
+import { explainSymbolAt, taskFromDiagnostic } from "@/lib/lspActions"
+import { occurrenceHighlight } from "@/lib/occurrenceHighlight"
+import { diagnosticsRuler } from "@/lib/overviewRuler"
+import { readoSearchPanel } from "@/lib/searchPanel"
+import { useCursor, useEditorActions, useProject, useSessions, useSettings } from "@/lib/store"
+import { expandSelection, shrinkSelection, syntaxSelection } from "@/lib/syntaxSelection"
 import {
-  useCursor,
-  useEditorActions,
-  useProject,
-  useSessions,
-  useSettings,
-} from "../../../lib/store";
-import {
-  lineNumbersExt,
   activeLineExt,
-  indentGuidesExt,
-  rulerExt,
-  focusExtension,
-  editableExtension,
-  landingField,
   blockField,
-  linkField,
+  ExternalReload,
+  editableExtension,
   filePathFacet,
-  gotoDefinitionHandlers,
+  findReferencesAt,
+  focusExtension,
   goToDefinitionAt,
   goToImplementationAt,
-  findReferencesAt,
-  ExternalReload,
-} from "./extensions";
+  gotoDefinitionHandlers,
+  indentGuidesExt,
+  landingField,
+  lineNumbersExt,
+  linkField,
+  rulerExt,
+} from "./extensions"
 
 /** Everything the CodeMirror extensions array references that is not a
  *  top-level import: the compartments, the initial modes/flags it reads, the
@@ -55,54 +49,54 @@ import {
  *  "create the editor once per file" effect verbatim. */
 export interface CodeExtensionsCtx {
   // Compartments.
-  lineNumbersComp: Compartment;
-  activeLineComp: Compartment;
-  bracketComp: Compartment;
-  rulerComp: Compartment;
-  indentGuidesComp: Compartment;
-  gutterComp: Compartment;
-  changedComp: Compartment;
-  bookmarkComp: Compartment;
-  blameComp: Compartment;
-  lspComp: Compartment;
-  tabSizeComp: Compartment;
-  wrapComp: Compartment;
-  whitespaceComp: Compartment;
-  focusComp: Compartment;
-  langComp: Compartment;
+  lineNumbersComp: Compartment
+  activeLineComp: Compartment
+  bracketComp: Compartment
+  rulerComp: Compartment
+  indentGuidesComp: Compartment
+  gutterComp: Compartment
+  changedComp: Compartment
+  bookmarkComp: Compartment
+  blameComp: Compartment
+  lspComp: Compartment
+  tabSizeComp: Compartment
+  wrapComp: Compartment
+  whitespaceComp: Compartment
+  focusComp: Compartment
+  langComp: Compartment
   // Initial modes / flags read to seed the compartments.
-  lineNumbersMode: "off" | "on" | "relative";
-  activeLineMode: "off" | "gutter" | "line" | "both";
-  bracketMatchingOn: boolean;
-  rulerColumn: number;
-  indentGuidesMode: "off" | "all" | "active";
-  wrap: boolean;
-  renderWhitespace: boolean;
-  focusMode: boolean;
-  primary: boolean;
-  pinned: boolean;
-  path: string;
-  relPath: string;
+  lineNumbersMode: "off" | "on" | "relative"
+  activeLineMode: "off" | "gutter" | "line" | "both"
+  bracketMatchingOn: boolean
+  rulerColumn: number
+  indentGuidesMode: "off" | "all" | "active"
+  wrap: boolean
+  renderWhitespace: boolean
+  focusMode: boolean
+  primary: boolean
+  pinned: boolean
+  path: string
+  relPath: string
   // Per-file data.
-  lineComments: LineComments;
-  changedLines: Array<[number, number]>;
-  bookmarkLines: Set<number>;
+  lineComments: LineComments
+  changedLines: Array<[number, number]>
+  bookmarkLines: Set<number>
   // Timer refs used by the updateListener.
-  autoSaveTimer: MutableRefObject<number | undefined>;
-  cursorSaveTimer: MutableRefObject<number | undefined>;
+  autoSaveTimer: MutableRefObject<number | undefined>
+  cursorSaveTimer: MutableRefObject<number | undefined>
   // Callbacks the array invokes.
-  openThreadAtLine: (line: number, ids: string[]) => void;
-  toggleBookmarkLine: (line: number) => void;
-  startComposer: (view: EditorView) => boolean;
-  saveFile: () => void;
-  peekDefinition: () => boolean;
-  explainSymbol: (pos: number) => void;
+  openThreadAtLine: (line: number, ids: string[]) => void
+  toggleBookmarkLine: (line: number) => void
+  startComposer: (view: EditorView) => boolean
+  saveFile: () => void
+  peekDefinition: () => boolean
+  explainSymbol: (pos: number) => void
   openComposerFor: (
     start: number,
     end: number,
     prefill?: { body?: string; type?: CommentType },
-  ) => void;
-  autoSave: () => void;
+  ) => void
+  autoSave: () => void
 }
 
 /** Build the CodeMirror extensions array for the code viewer. Moved verbatim
@@ -137,36 +131,36 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // Mirror the cursor position into the status bar; track unsaved edits.
     // Only the primary pane writes the shared cursor/dirty state.
     EditorView.updateListener.of((u) => {
-      if (!ctx.primary) return;
+      if (!ctx.primary) return
       if (u.selectionSet || u.docChanged) {
-        const head = u.state.selection.main.head;
-        const line = u.state.doc.lineAt(head);
-        const col = head - line.from + 1;
-        useCursor.getState().set(line.number, col);
+        const head = u.state.selection.main.head
+        const line = u.state.doc.lineAt(head)
+        const col = head - line.from + 1
+        useCursor.getState().set(line.number, col)
         // Persist the cursor per file (debounced, like the scroll save) so it
         // can be restored on reopen alongside the scroll offset.
-        clearTimeout(ctx.cursorSaveTimer.current);
+        clearTimeout(ctx.cursorSaveTimer.current)
         ctx.cursorSaveTimer.current = window.setTimeout(() => {
           useSessions
             .getState()
-            .saveCursor(useProject.getState().root, ctx.relPath, line.number, col);
-        }, 300);
+            .saveCursor(useProject.getState().root, ctx.relPath, line.number, col)
+        }, 300)
       }
       if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ExternalReload))) {
-        useEditorActions.getState().setDirty(true);
-        setLastEdit(u.state.selection.main.head);
+        useEditorActions.getState().setDirty(true)
+        setLastEdit(u.state.selection.main.head)
         // Auto Save (after-delay): debounce a write while the user types.
         if (useSettings.getState().autoSave === "afterDelay") {
-          clearTimeout(ctx.autoSaveTimer.current);
-          ctx.autoSaveTimer.current = window.setTimeout(ctx.autoSave, 1000);
+          clearTimeout(ctx.autoSaveTimer.current)
+          ctx.autoSaveTimer.current = window.setTimeout(ctx.autoSave, 1000)
         }
       }
     }),
     // Auto Save (on-focus-change): write when the editor loses focus.
     EditorView.domEventHandlers({
       blur: () => {
-        if (useSettings.getState().autoSave === "onFocusChange") ctx.autoSave();
-        return false;
+        if (useSettings.getState().autoSave === "onFocusChange") ctx.autoSave()
+        return false
       },
     }),
     // "Create task" from an LSP diagnostic tooltip: open the composer for the
@@ -175,12 +169,12 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
       for (const tr of u.transactions) {
         for (const eff of tr.effects) {
           if (eff.is(explainSymbolAt)) {
-            ctx.explainSymbol(eff.value.pos);
-            continue;
+            ctx.explainSymbol(eff.value.pos)
+            continue
           }
-          if (!eff.is(taskFromDiagnostic)) continue;
-          const line = u.state.doc.lineAt(eff.value.from).number;
-          ctx.openComposerFor(line, line, { body: eff.value.message, type: "bug" });
+          if (!eff.is(taskFromDiagnostic)) continue
+          const line = u.state.doc.lineAt(eff.value.from).number
+          ctx.openComposerFor(line, line, { body: eff.value.message, type: "bug" })
         }
       }
     }),
@@ -191,8 +185,20 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     gotoDefinitionHandlers,
     // F12 jumps to the definition of the symbol at the cursor.
     keymap.of([
-      { key: "F12", run: (v) => (goToDefinitionAt(v, v.state.selection.main.head), true) },
-      { key: "Mod-F12", run: (v) => (goToImplementationAt(v, v.state.selection.main.head), true) },
+      {
+        key: "F12",
+        run: (v) => {
+          goToDefinitionAt(v, v.state.selection.main.head)
+          return true
+        },
+      },
+      {
+        key: "Mod-F12",
+        run: (v) => {
+          goToImplementationAt(v, v.state.selection.main.head)
+          return true
+        },
+      },
     ]),
     // Go to line — Cmd/Ctrl+G (VS Code), alongside the default Cmd+Alt+G.
     keymap.of([{ key: "Mod-g", run: gotoLine }]),
@@ -209,7 +215,15 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // Create-comment gesture (spec: a dedicated key on a selection).
     keymap.of([{ key: "Mod-Shift-m", run: ctx.startComposer }]),
     // Save when editing.
-    keymap.of([{ key: "Mod-s", run: () => (ctx.saveFile(), true) }]),
+    keymap.of([
+      {
+        key: "Mod-s",
+        run: () => {
+          ctx.saveFile()
+          return true
+        },
+      },
+    ]),
     // Undo/redo: the history field plus its keymap (Mod-z / Mod-Shift-z).
     // These bindings live in historyKeymap, not defaultKeymap.
     history(),
@@ -225,5 +239,5 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     ctx.whitespaceComp.of(ctx.renderWhitespace ? highlightWhitespace() : []),
     ctx.focusComp.of(focusExtension(ctx.focusMode)),
     ctx.langComp.of([]),
-  ];
+  ]
 }

@@ -15,6 +15,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint (Biome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Formatting, lint and import order in one pass, read-only: a single
+      # diagnostic fails the job, so nothing unformatted or unlinted merges.
+      # `pnpm lint:fix` applies everything this would flag.
+      - run: pnpm lint
+
   frontend:
     name: Frontend (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

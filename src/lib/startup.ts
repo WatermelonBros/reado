@@ -5,24 +5,24 @@
  *
  * Add more checks as they come up (the place to put "if X is broken, fix X").
  */
-import { cliInstalled, installCli } from "./api";
+import { cliInstalled, installCli } from "./api"
 
 /** Ensure the bundled `reado` CLI is on PATH so the agent can call it — without
  *  the user having to find the Settings button. The install dir is chosen to be
  *  on PATH on every OS (see Rust `install_dir`). */
 async function ensureCliInstalled(): Promise<void> {
   try {
-    if (!(await cliInstalled())) await installCli();
+    if (!(await cliInstalled())) await installCli()
   } catch {
     /* non-fatal: Settings still offers a manual install */
   }
 }
 
-let ran = false;
+let ran = false
 
 /** Run the startup checks exactly once per process. */
 export function runStartupChecks(): void {
-  if (ran) return;
-  ran = true;
-  void ensureCliInstalled();
+  if (ran) return
+  ran = true
+  void ensureCliInstalled()
 }

@@ -3,29 +3,30 @@
  * lifted out of CodeView's return. Each takes explicit props (refs / geometry /
  * callbacks) so they stay decoupled from CodeView's internal state.
  */
-import { type RefObject } from "react";
-import { EditorView } from "@codemirror/view";
-import { useTranslation } from "react-i18next";
-import { type Comment } from "../../../lib/api";
-import { ACCENT } from "../../atoms/commentMeta";
-import { Button } from "../../atoms/Button";
-import { IconButton } from "../../atoms/IconButton";
-import { PlusIcon, CloseIcon } from "../../atoms/icons";
+
+import { EditorView } from "@codemirror/view"
+import type { RefObject } from "react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { ACCENT } from "@/components/atoms/commentMeta"
+import { IconButton } from "@/components/atoms/IconButton"
+import { CloseIcon, PlusIcon } from "@/components/atoms/icons"
+import type { Comment } from "@/lib/api"
 
 /** Peek-definition panel state: an inline preview of where the symbol at the
  *  cursor is defined, without navigating away. */
 export interface PeekInfo {
-  top: number;
-  label: string;
-  lines: string[];
-  defLineIndex: number;
-  target: { path: string; line: number } | null;
+  top: number
+  label: string
+  lines: string[]
+  defLineIndex: number
+  target: { path: string; line: number } | null
 }
 
 /** A failed write (read-only file, permission, disk full), surfaced as a small
  *  dismissable banner so a save error is never swallowed silently. */
 export function SaveErrorBanner({ onDismiss }: { onDismiss: () => void }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <div
       role="alert"
@@ -39,7 +40,7 @@ export function SaveErrorBanner({ onDismiss }: { onDismiss: () => void }) {
         className="h-5 w-5"
       />
     </div>
-  );
+  )
 }
 
 /** Sticky scope headers pinned above the viewport top. */
@@ -48,11 +49,11 @@ export function StickyHeaders({
   viewRef,
   hostRef,
 }: {
-  headers: { line: number; text: string }[];
-  viewRef: RefObject<EditorView | null>;
-  hostRef: RefObject<HTMLDivElement | null>;
+  headers: { line: number; text: string }[]
+  viewRef: RefObject<EditorView | null>
+  hostRef: RefObject<HTMLDivElement | null>
 }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-10 border-b border-line bg-canvas">
       {headers.map((h) => (
@@ -60,21 +61,21 @@ export function StickyHeaders({
           key={h.line}
           type="button"
           onClick={() => {
-            const v = viewRef.current;
-            if (!v) return;
-            const line = v.state.doc.line(Math.min(h.line, v.state.doc.lines));
+            const v = viewRef.current
+            if (!v) return
+            const line = v.state.doc.line(Math.min(h.line, v.state.doc.lines))
             v.dispatch({
               selection: { anchor: line.from },
               effects: EditorView.scrollIntoView(line.from, { y: "start" }),
-            });
-            v.focus();
+            })
+            v.focus()
           }}
           title={t("editor.stickyJump")}
           className="pointer-events-auto block w-full overflow-hidden text-left whitespace-pre text-muted hover:bg-surface hover:text-ink"
           style={{
             paddingLeft:
-              (hostRef.current?.querySelector(".cm-gutters") as HTMLElement | null)
-                ?.clientWidth ?? 40,
+              (hostRef.current?.querySelector(".cm-gutters") as HTMLElement | null)?.clientWidth ??
+              40,
             fontFamily: "var(--code-font, var(--font-code))",
             fontSize: "var(--text-md)",
             lineHeight: "var(--code-line-height)",
@@ -84,7 +85,7 @@ export function StickyHeaders({
         </button>
       ))}
     </div>
-  );
+  )
 }
 
 /** The re-anchor hint bar shown while an orphan is being re-anchored. */
@@ -93,16 +94,14 @@ export function ReanchorBar({
   onConfirm,
   onCancel,
 }: {
-  label: string;
-  onConfirm: () => void;
-  onCancel: () => void;
+  label: string
+  onConfirm: () => void
+  onCancel: () => void
 }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <div className="absolute inset-x-0 top-0 z-40 flex items-center gap-3 border-b border-line bg-[color-mix(in_oklch,var(--marker)_14%,var(--bg-elevated))] px-4 py-2 text-xs text-ink">
-      <span className="min-w-0 flex-1 truncate">
-        {t("orphans.reanchorHint", { label })}
-      </span>
+      <span className="min-w-0 flex-1 truncate">{t("orphans.reanchorHint", { label })}</span>
       <Button variant="primary" size="sm" onClick={onConfirm}>
         {t("orphans.confirm")}
       </Button>
@@ -110,7 +109,7 @@ export function ReanchorBar({
         {t("common.cancel")}
       </Button>
     </div>
-  );
+  )
 }
 
 /** Peek definition: an inline preview anchored under the symbol. */
@@ -119,11 +118,11 @@ export function PeekPanel({
   onOpen,
   onClose,
 }: {
-  peek: PeekInfo;
-  onOpen: (target: { path: string; line: number }) => void;
-  onClose: () => void;
+  peek: PeekInfo
+  onOpen: (target: { path: string; line: number }) => void
+  onClose: () => void
 }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <div
       className="absolute left-1/2 z-50 w-[min(680px,calc(100%-2rem))] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-overlay shadow-[var(--shadow)]"
@@ -148,28 +147,19 @@ export function PeekPanel({
       {peek.target && (
         <pre className="max-h-56 overflow-auto px-3 py-2 font-mono text-xs leading-relaxed text-ink">
           {peek.lines.map((l, i) => (
-            <div
-              key={i}
-              className={i === peek.defLineIndex ? "bg-selection" : undefined}
-            >
+            <div key={i} className={i === peek.defLineIndex ? "bg-selection" : undefined}>
               {l || " "}
             </div>
           ))}
         </pre>
       )}
     </div>
-  );
+  )
 }
 
 /** The hover "+" add-comment affordance. */
-export function AddCommentButton({
-  top,
-  onClick,
-}: {
-  top: number;
-  onClick: () => void;
-}) {
-  const { t } = useTranslation();
+export function AddCommentButton({ top, onClick }: { top: number; onClick: () => void }) {
+  const { t } = useTranslation()
   return (
     <IconButton
       label={t("comment.new")}
@@ -178,7 +168,7 @@ export function AddCommentButton({
       style={{ top }}
       className="absolute right-4 z-20 h-[18px] w-[18px] -translate-y-px border border-line-strong bg-surface text-muted shadow-[var(--shadow)] hover:bg-accent hover:text-on-accent"
     />
-  );
+  )
 }
 
 /**
@@ -197,31 +187,28 @@ export function ThreadConnector({
   startTop,
   width,
 }: {
-  comment: Comment;
-  threadTop: number;
-  startTop: number;
-  width: number;
+  comment: Comment
+  threadTop: number
+  startTop: number
+  width: number
 }) {
-  const xBoxRight = width - 16; // the box's right edge (it sits at right-4)
-  const xRail = 6; // in the line-number gutter, far left
-  const hY = threadTop; // top edge of the box = run below the last line
-  const r = 8; // matches the box's rounded-lg corner
-  const down = 64; // how far the rail traces down the box's right edge
-  const multi = comment.anchor.endLine > comment.anchor.startLine;
-  const accent = ACCENT(comment.type);
+  const xBoxRight = width - 16 // the box's right edge (it sits at right-4)
+  const xRail = 6 // in the line-number gutter, far left
+  const hY = threadTop // top edge of the box = run below the last line
+  const r = 8 // matches the box's rounded-lg corner
+  const down = 64 // how far the rail traces down the box's right edge
+  const multi = comment.anchor.endLine > comment.anchor.startLine
+  const accent = ACCENT(comment.type)
   // The line is the same colour as the box, so it goes flat into it and
   // shows only as a faint tail over the code. The vertical rail stays
   // thin; the horizontal run (along the box's top edge, the convex
   // top-RIGHT corner, then down the right side) is heavier.
-  const vertical = `M ${xRail} ${Math.min(startTop, hY)} L ${xRail} ${hY}`;
+  const vertical = `M ${xRail} ${Math.min(startTop, hY)} L ${xRail} ${hY}`
   const horizontal =
     `M ${xRail} ${hY} L ${xBoxRight - r} ${hY}` +
-    ` Q ${xBoxRight} ${hY} ${xBoxRight} ${hY + r} L ${xBoxRight} ${hY + down}`;
+    ` Q ${xBoxRight} ${hY} ${xBoxRight} ${hY + r} L ${xBoxRight} ${hY + down}`
   return (
-    <svg
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-0 z-20 h-full w-full"
-    >
+    <svg aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 h-full w-full">
       {multi && (
         <path
           d={vertical}
@@ -241,5 +228,5 @@ export function ThreadConnector({
         strokeLinejoin="round"
       />
     </svg>
-  );
+  )
 }

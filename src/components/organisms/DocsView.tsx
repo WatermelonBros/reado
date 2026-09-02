@@ -7,186 +7,182 @@
  * left, the selected document — or the notes digest — rendered on the right,
  * filterable by name. Read-only; it just points the editor at the source.
  */
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { markdownRehypeFor, markdownUrlTransform } from "../../lib/markdown";
+
+import type { TFunction } from "i18next"
+import { useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
+import { useTranslation } from "react-i18next"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { COMMENT_TYPES, Dot, stateKey, TYPE_COLOR, typeKey } from "@/components/atoms/commentMeta"
+import { IconButton } from "@/components/atoms/IconButton"
+import { Input } from "@/components/atoms/Input"
+import { CloseIcon, DocsIcon, MessageIcon, SpecsIcon } from "@/components/atoms/icons"
+import { Select } from "@/components/atoms/Select"
 import {
-  readFile,
-  searchText,
-  listFiles,
   allowProjectAssets,
   type Comment,
   type CommentType,
-} from "../../lib/api";
-import { useComments } from "../../lib/comments";
-import { useProject, useWorkspace } from "../../lib/store";
-import { useSpecs } from "../../lib/specs";
-import { listDocs, type DocItem } from "../../lib/knowledge";
+  listFiles,
+  readFile,
+  searchText,
+} from "@/lib/api"
+import { useComments } from "@/lib/comments"
+import { type DocItem, listDocs } from "@/lib/knowledge"
+import { markdownRehypeFor, markdownUrlTransform } from "@/lib/markdown"
+import { useSpecs } from "@/lib/specs"
+import { useProject, useWorkspace } from "@/lib/store"
 
-import { COMMENT_TYPES, TYPE_COLOR, typeKey, stateKey, Dot } from "../atoms/commentMeta";
-import { Select } from "../atoms/Select";
-import { Input } from "../atoms/Input";
-import { IconButton } from "../atoms/IconButton";
-import { CloseIcon, DocsIcon, SpecsIcon, MessageIcon } from "../atoms/icons";
-import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
+type Selection = { kind: "notes" } | { kind: "doc" | "spec"; path: string; label: string }
 
-type Selection =
-  | { kind: "notes" }
-  | { kind: "doc" | "spec"; path: string; label: string };
-
-const stripExt = (s: string) => s.replace(/\.(md|markdown|mdx)$/i, "");
-const basename = (p: string) => p.split("/").pop() ?? p;
+const stripExt = (s: string) => s.replace(/\.(md|markdown|mdx)$/i, "")
+const basename = (p: string) => p.split("/").pop() ?? p
 
 export function DocsView() {
-  const comments = useComments((s) => s.comments);
-  const archived = useComments((s) => s.archived);
-  const loadArchived = useComments((s) => s.loadArchived);
-  const setActiveComment = useComments((s) => s.setActive);
-  const specGroups = useSpecs((s) => s.groups);
-  const root = useProject((s) => s.root);
-  const open = useProject((s) => s.open);
-  const close = useWorkspace((s) => s.toggleDocs);
-  const { t } = useTranslation();
+  const comments = useComments((s) => s.comments)
+  const archived = useComments((s) => s.archived)
+  const loadArchived = useComments((s) => s.loadArchived)
+  const setActiveComment = useComments((s) => s.setActive)
+  const specGroups = useSpecs((s) => s.groups)
+  const root = useProject((s) => s.root)
+  const open = useProject((s) => s.open)
+  const close = useWorkspace((s) => s.toggleDocs)
+  const { t } = useTranslation()
 
-  const [docs, setDocs] = useState<DocItem[]>([]);
-  const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<CommentType | "all">("all");
-  const [selection, setSelection] = useState<Selection>({ kind: "notes" });
-  const [content, setContent] = useState<string | null>(null);
+  const [docs, setDocs] = useState<DocItem[]>([])
+  const [query, setQuery] = useState("")
+  const [typeFilter, setTypeFilter] = useState<CommentType | "all">("all")
+  const [selection, setSelection] = useState<Selection>({ kind: "notes" })
+  const [content, setContent] = useState<string | null>(null)
   // KB paths whose *content* matches the query (full-text, not just the name).
-  const [contentMatches, setContentMatches] = useState<Set<string>>(new Set());
+  const [contentMatches, setContentMatches] = useState<Set<string>>(new Set())
   // A missing ripgrep must surface (like SearchPanel), not be swallowed — else
   // content search silently degrades to name-only with no explanation.
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadArchived();
+    loadArchived()
     listFiles(root)
       .then((files) => {
-        const ds = listDocs(files);
-        setDocs(ds);
+        const ds = listDocs(files)
+        setDocs(ds)
         // Open the README (or first doc) by default; fall back to notes.
-        if (ds.length) setSelection({ kind: "doc", path: ds[0].path, label: ds[0].label });
+        if (ds.length) setSelection({ kind: "doc", path: ds[0].path, label: ds[0].label })
       })
-      .catch(() => {});
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [loadArchived, close, root]);
+      .catch(() => {})
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close(false)
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [loadArchived, close, root])
 
   // Fetch the selected markdown document.
   useEffect(() => {
     if (selection.kind === "notes") {
-      setContent(null);
-      return;
+      setContent(null)
+      return
     }
-    let cancelled = false;
-    setContent(null);
+    let cancelled = false
+    setContent(null)
     // read_file resolves `path` as given (it doesn't join `root`), so the KB's
     // project-relative doc/spec paths must be made absolute — otherwise every
     // document fails to load.
     readFile(root, `${root}/${selection.path}`)
       .then((c) => !cancelled && setContent(c.kind === "text" ? c.text : ""))
-      .catch(() => !cancelled && setContent(""));
+      .catch(() => !cancelled && setContent(""))
     return () => {
-      cancelled = true;
-    };
-  }, [selection, root]);
+      cancelled = true
+    }
+  }, [selection, root])
 
   // A doc's own images (`<img src="docs/media/reado-loop.gif">` in the README)
   // are paths on disk: they resolve only once the root is in the `asset:` scope
   // and each `src` is rewritten relative to the document's own directory.
   useEffect(() => {
-    void allowProjectAssets(root).catch(() => {});
-  }, [root]);
+    void allowProjectAssets(root).catch(() => {})
+  }, [root])
   const baseDir = useMemo(() => {
-    if (selection.kind === "notes") return undefined;
-    const dir = selection.path.replace(/\\/g, "/").replace(/\/[^/]*$/, "");
-    return dir === selection.path ? root : `${root}/${dir}`;
-  }, [selection, root]);
-  const rehypePlugins = useMemo(() => markdownRehypeFor(baseDir), [baseDir]);
+    if (selection.kind === "notes") return undefined
+    const dir = selection.path.replace(/\\/g, "/").replace(/\/[^/]*$/, "")
+    return dir === selection.path ? root : `${root}/${dir}`
+  }, [selection, root])
+  const rehypePlugins = useMemo(() => markdownRehypeFor(baseDir), [baseDir])
 
   // Comments grouped by file for the notes digest.
   const noteGroups = useMemo(() => {
     const all = [...comments, ...archived].filter(
       (c) => typeFilter === "all" || c.type === typeFilter,
-    );
-    const byFile = new Map<string, Comment[]>();
+    )
+    const byFile = new Map<string, Comment[]>()
     for (const c of all) {
-      const key = c.anchor.file || "(project)";
-      (byFile.get(key) ?? byFile.set(key, []).get(key)!).push(c);
+      const key = c.anchor.file || "(project)"
+      ;(byFile.get(key) ?? byFile.set(key, []).get(key)!).push(c)
     }
     return [...byFile.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([file, list]) => ({
         file,
         list: list.sort((a, b) => a.anchor.startLine - b.anchor.startLine),
-      }));
-  }, [comments, archived, typeFilter]);
+      }))
+  }, [comments, archived, typeFilter])
 
   const jumpToComment = (c: Comment) => {
-    if (c.anchor.file) open(`${root}/${c.anchor.file}`, c.anchor.startLine || undefined);
-    if (!c.archived) setActiveComment(c.id);
-    close(false);
-  };
+    if (c.anchor.file) open(`${root}/${c.anchor.file}`, c.anchor.startLine || undefined)
+    if (!c.archived) setActiveComment(c.id)
+    close(false)
+  }
 
   // Full-text search across the KB: ripgrep the project, keep hits that are KB
   // docs/specs. Combined with the name filter below for a real KB search.
   useEffect(() => {
     if (query.trim().length < 2) {
-      setContentMatches(new Set());
-      setSearchError(null);
-      return;
+      setContentMatches(new Set())
+      setSearchError(null)
+      return
     }
     const kbPaths = new Set([
       ...docs.map((d) => d.path),
       ...specGroups.flatMap((g) => g.items.map((i) => i.path)),
-    ]);
-    let cancelled = false;
+    ])
+    let cancelled = false
     const id = setTimeout(() => {
       searchText(root, query.trim())
         .then((matches) => {
-          if (cancelled) return;
-          const hit = new Set<string>();
+          if (cancelled) return
+          const hit = new Set<string>()
           for (const m of matches) {
             const rel = (m.path.startsWith(root) ? m.path.slice(root.length) : m.path)
               .replace(/^[\\/]+/, "")
-              .replace(/\\/g, "/");
-            if (kbPaths.has(rel)) hit.add(rel);
+              .replace(/\\/g, "/")
+            if (kbPaths.has(rel)) hit.add(rel)
           }
-          setContentMatches(hit);
-          setSearchError(null);
+          setContentMatches(hit)
+          setSearchError(null)
         })
         .catch((e) => {
-          if (cancelled) return;
+          if (cancelled) return
           // Name-filtering still works; only the full-text overlay is degraded.
-          setContentMatches(new Set());
-          setSearchError(String(e).includes("ripgrep") ? "ripgrep" : null);
-        });
-    }, 200);
+          setContentMatches(new Set())
+          setSearchError(String(e).includes("ripgrep") ? "ripgrep" : null)
+        })
+    }, 200)
     return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
-  }, [query, root, docs, specGroups]);
+      cancelled = true
+      clearTimeout(id)
+    }
+  }, [query, root, docs, specGroups])
 
-  const q = query.trim().toLowerCase();
-  const match = (s: string) => !q || s.toLowerCase().includes(q);
-  const filteredDocs = docs.filter((d) => match(d.label) || contentMatches.has(d.path));
+  const q = query.trim().toLowerCase()
+  const match = (s: string) => !q || s.toLowerCase().includes(q)
+  const filteredDocs = docs.filter((d) => match(d.label) || contentMatches.has(d.path))
   const filteredSpecs = specGroups
     .map((g) => ({
       ...g,
-      items: g.items.filter(
-        (i) => match(i.label) || match(g.title) || contentMatches.has(i.path),
-      ),
+      items: g.items.filter((i) => match(i.label) || match(g.title) || contentMatches.has(i.path)),
     }))
-    .filter((g) => g.items.length > 0);
+    .filter((g) => g.items.length > 0)
 
   const isSel = (kind: string, path?: string) =>
-    selection.kind === kind && (kind === "notes" || (selection as { path: string }).path === path);
+    selection.kind === kind && (kind === "notes" || (selection as { path: string }).path === path)
 
   const navButton = (
     key: string,
@@ -211,13 +207,13 @@ export function DocsView() {
       {icon}
       <span className="truncate">{label}</span>
     </button>
-  );
+  )
 
   const sectionLabel = (text: string) => (
     <div className="px-3 pt-3 pb-1 text-[10px] font-semibold tracking-wide text-faint uppercase">
       {text}
     </div>
-  );
+  )
 
   return createPortal(
     <div
@@ -329,7 +325,7 @@ export function DocsView() {
       </div>
     </div>,
     document.body,
-  );
+  )
 }
 
 /** The comments-as-documentation digest (the previous Documentation content). */
@@ -340,11 +336,11 @@ function NotesDigest({
   onJump,
   t,
 }: {
-  groups: { file: string; list: Comment[] }[];
-  typeFilter: CommentType | "all";
-  setTypeFilter: (v: CommentType | "all") => void;
-  onJump: (c: Comment) => void;
-  t: TFunction;
+  groups: { file: string; list: Comment[] }[]
+  typeFilter: CommentType | "all"
+  setTypeFilter: (v: CommentType | "all") => void
+  onJump: (c: Comment) => void
+  t: TFunction
 }) {
   return (
     <div className="mx-auto max-w-[680px]">
@@ -401,5 +397,5 @@ function NotesDigest({
         ))
       )}
     </div>
-  );
+  )
 }

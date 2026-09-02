@@ -32,6 +32,23 @@ promote it to an atom rather than duplicating classes.
 The `atoms/icons.tsx` set wraps Phosphor. Import the **`*Icon`-suffixed** exports
 (`CaretRightIcon`, not the deprecated bare `CaretRight`).
 
+## Code style
+
+**Biome owns formatting and lint** ([`biome.jsonc`](./biome.jsonc)): no
+semicolons, double quotes, 100 columns, imports organized. `pnpm lint` is the
+read-only check CI runs; `pnpm lint:fix` applies everything it flags. Don't
+hand-format — run the fixer.
+
+CI fails on a single diagnostic and the check is required on `main`, so a rule
+left enabled is a rule the code obeys. The handful that are off carry their
+reason inline in `biome.jsonc`; turning one back on means fixing its sites, not
+suppressing them one by one.
+
+**Imports use the `@/…` alias** for anything outside a file's own directory
+(`@/lib/api`, `@/components/atoms/Button`); a sibling stays relative (`./x`).
+The alias is declared in `tsconfig.json`, `vite.config.ts` and `vitest.config.ts`
+— all three, or one of the three toolchains won't resolve it.
+
 ## Releases & changelog
 
 Every user-facing change is recorded in [`CHANGELOG.md`](./CHANGELOG.md) under the
@@ -51,4 +68,6 @@ lands (not deferred to release time).
 
 Never release without moving the accumulated `[Unreleased]` entries into the new
 version — a tagged release with an empty changelog section means changes went out
-undocumented.
+undocumented. The GitHub release page is *built* from that section
+([`scripts/release-notes.sh`](./scripts/release-notes.sh) lifts it out at tag
+time), so skipping the rename publishes a release that describes nothing.

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { extractSymbols } from "../outline";
+import { describe, expect, it } from "vitest"
+import { extractSymbols } from "@/lib/outline"
 
 describe("extractSymbols", () => {
   it("finds functions, classes, types and variables in order", () => {
@@ -14,20 +14,20 @@ describe("extractSymbols", () => {
       "  }",
       "}",
       "interface Shape {}",
-    ].join("\n");
+    ].join("\n")
 
-    const syms = extractSymbols(src).map((s) => `${s.kind}:${s.name}@${s.line}`);
+    const syms = extractSymbols(src).map((s) => `${s.kind}:${s.name}@${s.line}`)
     expect(syms).toEqual([
       "function:add@2",
       "variable:total@5",
       "class:Box@6",
       "method:open@7",
       "type:Shape@10",
-    ]);
-  });
+    ])
+  })
 
   it("skips control-flow keywords that look like calls", () => {
-    const syms = extractSymbols("  if (x) {\n  for (y) {");
-    expect(syms).toEqual([]);
-  });
-});
+    const syms = extractSymbols("  if (x) {\n  for (y) {")
+    expect(syms).toEqual([])
+  })
+})

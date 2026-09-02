@@ -3,31 +3,30 @@
  * a small "update available" indicator (top-right) once dismissed, and a toast
  * for "up to date" / error feedback. Replaces the native updater dialogs.
  */
-import { useEffect } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { useUpdate } from "../../lib/update";
-
-import { Modal } from "../atoms/Modal";
-import { Button } from "../atoms/Button";
-import { IconButton } from "../atoms/IconButton";
-import { CloseIcon } from "../atoms/icons";
-import { useTranslation } from "react-i18next";
+import { useEffect } from "react"
+import { useTranslation } from "react-i18next"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { Button } from "@/components/atoms/Button"
+import { IconButton } from "@/components/atoms/IconButton"
+import { CloseIcon } from "@/components/atoms/icons"
+import { Modal } from "@/components/atoms/Modal"
+import { useUpdate } from "@/lib/update"
 
 export function UpdatePrompt() {
-  const { update, version, notes, open, dismissed, installing, toast } = useUpdate();
-  const reopen = useUpdate((s) => s.reopen);
-  const dismiss = useUpdate((s) => s.dismiss);
-  const install = useUpdate((s) => s.install);
-  const clearToast = useUpdate((s) => s.clearToast);
-  const { t } = useTranslation();
+  const { update, version, notes, open, dismissed, installing, toast } = useUpdate()
+  const reopen = useUpdate((s) => s.reopen)
+  const dismiss = useUpdate((s) => s.dismiss)
+  const install = useUpdate((s) => s.install)
+  const clearToast = useUpdate((s) => s.clearToast)
+  const { t } = useTranslation()
 
   // Auto-dismiss the toast.
   useEffect(() => {
-    if (!toast) return;
-    const id = setTimeout(clearToast, 4500);
-    return () => clearTimeout(id);
-  }, [toast, clearToast]);
+    if (!toast) return
+    const id = setTimeout(clearToast, 4500)
+    return () => clearTimeout(id)
+  }, [toast, clearToast])
 
   return (
     <>
@@ -48,7 +47,9 @@ export function UpdatePrompt() {
         </div>
 
         <div className="px-4 py-3">
-          <p className="m-0 text-sm text-ink">{t("update.available", { version: version ?? "" })}</p>
+          <p className="m-0 text-sm text-ink">
+            {t("update.available", { version: version ?? "" })}
+          </p>
           {notes && (
             <div className="prose-reado mt-3 max-h-60 overflow-y-auto text-base text-muted">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{notes}</ReactMarkdown>
@@ -97,5 +98,5 @@ export function UpdatePrompt() {
         </div>
       )}
     </>
-  );
+  )
 }

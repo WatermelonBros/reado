@@ -8,28 +8,28 @@
  * tooltip text (via the Ark-based `Tooltip`). A toggle passes `active` (rendered
  * accent-tinted, `aria-pressed`); a destructive action passes `danger`.
  */
-import { type ButtonHTMLAttributes, type ReactNode, isValidElement, cloneElement } from "react";
-import { Tooltip } from "./Tooltip";
-import { cn } from "../../lib/cn";
+import { type ButtonHTMLAttributes, cloneElement, isValidElement, type ReactNode } from "react"
+import { cn } from "@/lib/cn"
+import { Tooltip } from "./Tooltip"
 
-export type IconButtonSize = "sm" | "md";
+export type IconButtonSize = "sm" | "md"
 
 const SIZE: Record<IconButtonSize, string> = {
   sm: "h-6 w-6",
   md: "h-7 w-7",
-};
+}
 
 interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label"> {
   /** Accessible name + tooltip text (required — an icon alone is not a label). */
-  label: string;
-  icon: ReactNode;
+  label: string
+  icon: ReactNode
   /** Toggle-on state: accent tint + `aria-pressed`. */
-  active?: boolean;
+  active?: boolean
   /** Destructive action: marker colour. */
-  danger?: boolean;
-  size?: IconButtonSize;
+  danger?: boolean
+  size?: IconButtonSize
   /** Preferred tooltip side. */
-  tooltipPlacement?: "top" | "bottom" | "left" | "right";
+  tooltipPlacement?: "top" | "bottom" | "left" | "right"
 }
 
 export function IconButton({
@@ -47,13 +47,13 @@ export function IconButton({
     ? "text-faint hover:bg-overlay hover:text-marker"
     : active
       ? "text-accent hover:bg-overlay"
-      : "text-faint hover:bg-overlay hover:text-ink";
+      : "text-faint hover:bg-overlay hover:text-ink"
   // Active toggles read as "primary colour + duotone" (the app's accent language,
   // matching the activity bar) — render the Phosphor glyph duotone when on.
   const glyph =
     active && isValidElement(icon)
       ? cloneElement(icon as React.ReactElement<{ weight?: string }>, { weight: "duotone" })
-      : icon;
+      : icon
   return (
     <Tooltip label={label} placement={tooltipPlacement}>
       <button
@@ -74,5 +74,5 @@ export function IconButton({
         {glyph}
       </button>
     </Tooltip>
-  );
+  )
 }

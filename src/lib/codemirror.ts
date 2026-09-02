@@ -9,9 +9,9 @@
  * The highlight style is deliberately restrained (≤6 semantic colours, ordered
  * by eye-tracking salience) per the project's reading research.
  */
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorView } from "@codemirror/view";
-import { tags as t } from "@lezer/highlight";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language"
+import { EditorView } from "@codemirror/view"
+import { tags as t } from "@lezer/highlight"
 
 /** Maps Lezer highlight tags to Reado's semantic syntax colours. */
 const highlightStyle = HighlightStyle.define([
@@ -41,7 +41,11 @@ const highlightStyle = HighlightStyle.define([
     color: "var(--syn-number)",
   },
   // 6. Comments — deliberately de-emphasised.
-  { tag: [t.comment, t.lineComment, t.blockComment], color: "var(--syn-comment)", fontStyle: "italic" },
+  {
+    tag: [t.comment, t.lineComment, t.blockComment],
+    color: "var(--syn-comment)",
+    fontStyle: "italic",
+  },
   // Punctuation / operators stay near the base text colour.
   {
     tag: [t.punctuation, t.operator, t.bracket, t.derefOperator],
@@ -52,7 +56,7 @@ const highlightStyle = HighlightStyle.define([
   { tag: [t.link, t.url], color: "var(--accent)", textDecoration: "underline" },
   { tag: [t.heading], color: "var(--syn-definition)", fontWeight: "600" },
   { tag: [t.invalid], color: "var(--marker)" },
-]);
+])
 
 /** Editor chrome theme (gutters, selection, active line, landing highlight). */
 const editorTheme = EditorView.theme({
@@ -168,7 +172,7 @@ const editorTheme = EditorView.theme({
     cursor: "pointer",
   },
   ".cm-panel.cm-search [name=close]:hover": { color: "var(--text)" },
-});
+})
 
 /** All extensions implementing Reado's reading-focused appearance. */
-export const readoAppearance = [syntaxHighlighting(highlightStyle), editorTheme];
+export const readoAppearance = [syntaxHighlighting(highlightStyle), editorTheme]

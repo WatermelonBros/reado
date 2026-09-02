@@ -3,33 +3,34 @@
  * shown at 100%), with its pixel dimensions and simple zoom controls. Click the
  * image to toggle fit ↔ actual size.
  */
-import { useEffect, useState } from "react";
-import { useTextView } from "../../lib/textView";
-import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { useTextView } from "@/lib/textView"
 
-const ZOOMS = [0.25, 0.5, 1, 1.5, 2, 3, 4];
+const ZOOMS = [0.25, 0.5, 1, 1.5, 2, 3, 4]
 
 export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) {
-  const { t } = useTranslation();
-  const isSvg = /\.svg$/i.test(name);
+  const { t } = useTranslation()
+  const isSvg = /\.svg$/i.test(name)
   // `null` zoom = fit to viewport; a number = explicit scale.
-  const [zoom, setZoom] = useState<number | null>(null);
-  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [zoom, setZoom] = useState<number | null>(null)
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null)
   // A truncated/corrupt/unsupported data URL never fires onLoad; surface that as
   // an explicit error instead of leaving only the browser's broken-image glyph.
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(false)
 
   // This instance is reused as the active image changes (no remount key), so a
   // new source must clear a prior failure — otherwise the error placeholder
   // replaces the <img> for good and no fresh load can fire.
-  useEffect(() => setFailed(false), [dataUrl]);
+  useEffect(() => setFailed(false), [dataUrl])
 
   const stepZoom = (dir: 1 | -1) => {
-    const current = zoom ?? 1;
-    const idx = ZOOMS.findIndex((z) => z >= current);
-    const next = ZOOMS[Math.min(Math.max((idx < 0 ? ZOOMS.length - 1 : idx) + dir, 0), ZOOMS.length - 1)];
-    setZoom(next);
-  };
+    const current = zoom ?? 1
+    const idx = ZOOMS.findIndex((z) => z >= current)
+    const next =
+      ZOOMS[Math.min(Math.max((idx < 0 ? ZOOMS.length - 1 : idx) + dir, 0), ZOOMS.length - 1)]
+    setZoom(next)
+  }
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
@@ -46,8 +47,8 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
             src={dataUrl}
             alt={name}
             onLoad={(e) => {
-              setFailed(false);
-              setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
+              setFailed(false)
+              setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
             }}
             onError={() => setFailed(true)}
             onClick={() => setZoom((z) => (z === null ? 1 : null))}
@@ -78,7 +79,8 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
           <button
             type="button"
             onClick={() => stepZoom(-1)}
-            title={t("imageView.zoomOut")} aria-label={t("imageView.zoomOut")}
+            title={t("imageView.zoomOut")}
+            aria-label={t("imageView.zoomOut")}
             className="grid h-6 w-6 place-items-center rounded hover:bg-surface hover:text-ink"
           >
             −
@@ -93,7 +95,8 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
           <button
             type="button"
             onClick={() => stepZoom(1)}
-            title={t("imageView.zoomIn")} aria-label={t("imageView.zoomIn")}
+            title={t("imageView.zoomIn")}
+            aria-label={t("imageView.zoomIn")}
             className="grid h-6 w-6 place-items-center rounded hover:bg-surface hover:text-ink"
           >
             +
@@ -110,5 +113,5 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
         </div>
       </div>
     </div>
-  );
+  )
 }

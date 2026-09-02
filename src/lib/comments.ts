@@ -6,70 +6,70 @@
  * updates the local list with the authoritative comment returned by the
  * backend, so the two never drift.
  */
-import { create } from "zustand";
+import { create } from "zustand"
 import {
-  listComments,
-  createComment,
-  updateComment,
   addReply,
-  setCommentState,
-  deleteComment,
-  setAnchor,
-  listArchived,
-  forgeResolveThread,
   type Comment,
   type CommentPatch,
   type CommentState,
   type CommentType,
+  createComment,
+  deleteComment,
+  forgeResolveThread,
+  listArchived,
+  listComments,
   type NewComment,
-} from "./api";
+  setAnchor,
+  setCommentState,
+  updateComment,
+} from "./api"
 
 /** Convert an absolute path to a project-relative, forward-slashed path. */
 export function toRelative(root: string, path: string): string {
   // Compare against root with a trailing separator so a sibling dir sharing a
   // string prefix (e.g. `/home/me/proj-backup` vs root `/home/me/proj`) doesn't
   // false-match. Paths outside root fall through unchanged.
-  const base = root.endsWith("/") || root.endsWith("\\") ? root : root + "/";
-  const rel = path.startsWith(base) ? path.slice(base.length) : path;
-  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/");
+  const base = root.endsWith("/") || root.endsWith("\\") ? root : `${root}/`
+  const rel = path.startsWith(base) ? path.slice(base.length) : path
+  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/")
 }
 
 interface CommentsState {
-  root: string;
-  comments: Comment[];
+  root: string
+  comments: Comment[]
   /** Resolved comments (the history), loaded on demand. */
-  archived: Comment[];
-  loadArchived: () => Promise<void>;
+  archived: Comment[]
+  loadArchived: () => Promise<void>
   /** Comment whose thread is currently open, or null. */
-  activeId: string | null;
+  activeId: string | null
   /** Whether the first-comment gitignore prompt is showing. */
-  gitignorePromptOpen: boolean;
-  setGitignorePrompt: (open: boolean) => void;
+  gitignorePromptOpen: boolean
+  setGitignorePrompt: (open: boolean) => void
   /** Last-picked composer type, so a run of same-type comments doesn't reset to
    *  "note" on every open (session-scoped; an explicit `initialType` still wins). */
-  lastType: CommentType;
-  setLastType: (type: CommentType) => void;
+  lastType: CommentType
+  setLastType: (type: CommentType) => void
   /** Id of the comment being manually re-anchored, or null. */
-  reanchoringId: string | null;
-  startReanchor: (id: string) => void;
-  cancelReanchor: () => void;
-  applyReanchor: (file: string, start: number, end: number) => Promise<void>;
-  load: (root: string) => Promise<void>;
-  create: (input: NewComment) => Promise<{ comment: Comment; firstComment: boolean }>;
-  patch: (id: string, patch: CommentPatch) => Promise<void>;
-  reply: (id: string, body: string) => Promise<void>;
-  setState: (id: string, state: CommentState) => Promise<void>;
-  remove: (id: string) => Promise<void>;
-  setActive: (id: string | null) => void;
+  reanchoringId: string | null
+  startReanchor: (id: string) => void
+  cancelReanchor: () => void
+  applyReanchor: (file: string, start: number, end: number) => Promise<void>
+  load: (root: string) => Promise<void>
+  create: (input: NewComment) => Promise<{ comment: Comment; firstComment: boolean }>
+  patch: (id: string, patch: CommentPatch) => Promise<void>
+  reply: (id: string, body: string) => Promise<void>
+  setState: (id: string, state: CommentState) => Promise<void>
+  remove: (id: string) => Promise<void>
+  setActive: (id: string | null) => void
   /** Replace all comments anchored to `file` with the reanchored set. */
-  replaceForFile: (file: string, next: Comment[]) => void;
+  replaceForFile: (file: string, next: Comment[]) => void
 }
 
 /** Replace the stored comment with `next`, or drop it when archived/removed. */
 function replace(list: Comment[], next: Comment): Comment[] {
-  const without = list.filter((c) => c.id !== next.id);
+  const without = list.filter((c) => c.id !== next.id)
   // Archived comments leave the active list; they live in the history view.
-  return next.archived ? without : [...without, next];
+  return next.archived ? without : [...without, next]
 }
 
 /** Route an updated comment to the right list: archived ones move to `archived`
@@ -78,11 +78,11 @@ function distribute(
   s: { comments: Comment[]; archived: Comment[] },
   next: Comment,
 ): { comments: Comment[]; archived: Comment[] } {
-  const comments = s.comments.filter((c) => c.id !== next.id);
-  const archived = s.archived.filter((c) => c.id !== next.id);
-  if (next.archived) archived.push(next);
-  else comments.push(next);
-  return { comments, archived };
+  const comments = s.comments.filter((c) => c.id !== next.id)
+  const archived = s.archived.filter((c) => c.id !== next.id)
+  if (next.archived) archived.push(next)
+  else comments.push(next)
+  return { comments, archived }
 }
 
 export const useComments = create<CommentsState>((set, get) => ({
@@ -90,9 +90,9 @@ export const useComments = create<CommentsState>((set, get) => ({
   comments: [],
   archived: [],
   loadArchived: async () => {
-    const root = get().root;
-    const archived = await listArchived(root);
-    if (get().root === root) set({ archived });
+    const root = get().root
+    const archived = await listArchived(root)
+    if (get().root === root) set({ archived })
   },
   activeId: null,
   gitignorePromptOpen: false,
@@ -105,10 +105,10 @@ export const useComments = create<CommentsState>((set, get) => ({
   startReanchor: (id) => set({ reanchoringId: id, activeId: null }),
   cancelReanchor: () => set({ reanchoringId: null }),
   applyReanchor: async (file, start, end) => {
-    const id = get().reanchoringId;
-    if (!id) return;
-    const next = await setAnchor(get().root, id, file, start, end);
-    set((s) => ({ comments: replace(s.comments, next), reanchoringId: null }));
+    const id = get().reanchoringId
+    if (!id) return
+    const next = await setAnchor(get().root, id, file, start, end)
+    set((s) => ({ comments: replace(s.comments, next), reanchoringId: null }))
   },
 
   load: async (root) => {
@@ -116,60 +116,57 @@ export const useComments = create<CommentsState>((set, get) => ({
     // must not clear the list or drop the open thread — only a genuine project
     // switch resets activeId. Clearing/resetting here would close the thread the
     // user just acted on (our own write trips the watcher too).
-    const sameRoot = get().root === root;
-    if (!sameRoot) set({ root, comments: [], archived: [], activeId: null });
+    const sameRoot = get().root === root
+    if (!sameRoot) set({ root, comments: [], archived: [], activeId: null })
     // Load active and resolved (archived) together: done comments are shown
     // inline in the editor too, so the gutter needs them up front.
-    const [comments, archived] = await Promise.all([
-      listComments(root),
-      listArchived(root),
-    ]);
+    const [comments, archived] = await Promise.all([listComments(root), listArchived(root)])
     // Guard against a stale load if the project changed meanwhile.
-    if (get().root === root) set({ comments, archived });
+    if (get().root === root) set({ comments, archived })
   },
 
   create: async (input) => {
     // Capture the root before the await and gate the append on it, so a comment
     // created in the previous project can't be injected into a new one after a
     // rapid project switch.
-    const root = get().root;
-    const { comment, firstComment } = await createComment(root, input);
-    if (get().root === root) set((s) => ({ comments: [...s.comments, comment] }));
-    return { comment, firstComment };
+    const root = get().root
+    const { comment, firstComment } = await createComment(root, input)
+    if (get().root === root) set((s) => ({ comments: [...s.comments, comment] }))
+    return { comment, firstComment }
   },
 
   patch: async (id, patch) => {
-    const next = await updateComment(get().root, id, patch);
-    set((s) => distribute(s, next));
+    const next = await updateComment(get().root, id, patch)
+    set((s) => distribute(s, next))
   },
 
   reply: async (id, body) => {
-    const next = await addReply(get().root, id, "user", body);
-    set((s) => distribute(s, next));
+    const next = await addReply(get().root, id, "user", body)
+    set((s) => distribute(s, next))
   },
 
   setState: async (id, state) => {
-    const next = await setCommentState(get().root, id, state);
-    set((s) => distribute(s, next));
+    const next = await setCommentState(get().root, id, state)
+    set((s) => distribute(s, next))
     // If this comment mirrors a host review thread, sync the resolution back to
     // the forge (resolving/reopening the thread there too).
     if (next.origin && next.externalId && next.externalRef) {
-      const number = Number(next.externalRef);
+      const number = Number(next.externalRef)
       if (number) {
         void forgeResolveThread(get().root, number, next.externalId, state === "done").catch(
           () => {},
-        );
+        )
       }
     }
   },
 
   remove: async (id) => {
-    await deleteComment(get().root, id);
+    await deleteComment(get().root, id)
     set((s) => ({
       comments: s.comments.filter((c) => c.id !== id),
       archived: s.archived.filter((c) => c.id !== id),
       activeId: s.activeId === id ? null : s.activeId,
-    }));
+    }))
   },
 
   setActive: (id) => set({ activeId: id }),
@@ -178,12 +175,11 @@ export const useComments = create<CommentsState>((set, get) => ({
     set((s) => ({
       comments: [...s.comments.filter((c) => c.anchor.file !== file), ...next],
     })),
-}));
+}))
 
 /** Comments anchored to a given project-relative file path. */
 export const commentsForFile = (comments: Comment[], relPath: string) =>
-  comments.filter((c) => c.anchor.file === relPath);
+  comments.filter((c) => c.anchor.file === relPath)
 
 /** Count of comments that are still open (for the status bar / badges). */
-export const openCount = (comments: Comment[]) =>
-  comments.filter((c) => c.state === "open").length;
+export const openCount = (comments: Comment[]) => comments.filter((c) => c.state === "open").length

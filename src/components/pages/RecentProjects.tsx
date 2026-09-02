@@ -10,18 +10,16 @@
  * ↑/↓ move through recents and Enter opens the highlighted one. Opening a
  * project launches it in its own window.
  */
-import { useEffect, useState } from "react";
-import { useRecents } from "../../lib/store";
-import { openProjectHere, pickFolderAndOpen } from "../../lib/window";
-
-import { FolderOpenIcon, CloseIcon, ChevronIcon } from "../atoms/icons";
-import { IconButton } from "../atoms/IconButton";
-import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { IconButton } from "@/components/atoms/IconButton"
+import { ChevronIcon, CloseIcon, FolderOpenIcon } from "@/components/atoms/icons"
+import { useRecents } from "@/lib/store"
+import { openProjectHere, pickFolderAndOpen } from "@/lib/window"
 
 // ponytail: navigator.platform is deprecated but reliable in the Tauri webview,
 // and this only picks the glyph shown in the shortcut hint.
-const MOD =
-  typeof navigator !== "undefined" && /mac/i.test(navigator.platform) ? "⌘" : "Ctrl+";
+const MOD = typeof navigator !== "undefined" && /mac/i.test(navigator.platform) ? "⌘" : "Ctrl+"
 
 /** The Reado wordmark with an accent text-caret and a quiet tagline sub-mark. */
 function Wordmark({ tagline }: { tagline: string }) {
@@ -29,14 +27,11 @@ function Wordmark({ tagline }: { tagline: string }) {
     <header className="animate-rise mb-9" style={{ animationFillMode: "backwards" }}>
       <h1 className="m-0 flex items-center text-[1.9rem] font-[680] leading-none tracking-[-0.03em] text-ink">
         Reado
-        <span
-          aria-hidden
-          className="ml-1 h-[1.1rem] w-[3px] rounded-[1px] bg-accent"
-        />
+        <span aria-hidden className="ml-1 h-[1.1rem] w-[3px] rounded-[1px] bg-accent" />
       </h1>
       <p className="mt-2 text-[11px] tracking-[0.04em] text-faint">{tagline}</p>
     </header>
-  );
+  )
 }
 
 /** The shortcut hint chip shown on the "open folder" actions. */
@@ -45,54 +40,54 @@ function Kbd() {
     <kbd className="ml-auto rounded border border-line px-1.5 py-0.5 font-mono text-[10px] leading-none text-faint">
       {MOD}O
     </kbd>
-  );
+  )
 }
 
 export function RecentProjects() {
-  const projects = useRecents((s) => s.projects);
-  const remove = useRecents((s) => s.remove);
-  const { t } = useTranslation();
+  const projects = useRecents((s) => s.projects)
+  const remove = useRecents((s) => s.remove)
+  const { t } = useTranslation()
 
-  const pick = () => void pickFolderAndOpen();
-  const launch = (path: string) => void openProjectHere(path);
+  const pick = () => void pickFolderAndOpen()
+  const launch = (path: string) => void openProjectHere(path)
 
   // Abbreviate the home dir to `~` so the path reads as a location, not a full
   // absolute string (macOS/Linux `/Users|/home/<user>` and Windows `C:\Users\<user>`).
   // Purely cosmetic — the row's title tooltip keeps the real path.
   const prettyPath = (path: string) =>
-    path.replace(/^([A-Za-z]:)?[\\/](Users|home)[\\/][^\\/]+/, "~");
+    path.replace(/^([A-Za-z]:)?[\\/](Users|home)[\\/][^\\/]+/, "~")
 
-  const hasRecents = projects.length > 0;
+  const hasRecents = projects.length > 0
 
   // Keyboard selection through the recents (-1 = nothing highlighted yet). Clamped
   // on render so removing a row can't leave the highlight pointing past the end.
-  const [selRaw, setSel] = useState(-1);
-  const sel = Math.min(selRaw, projects.length - 1);
+  const [selRaw, setSel] = useState(-1)
+  const sel = Math.min(selRaw, projects.length - 1)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "o") {
-        e.preventDefault();
-        pick();
-        return;
+        e.preventDefault()
+        pick()
+        return
       }
-      if (!hasRecents) return;
+      if (!hasRecents) return
       if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSel((s) => Math.min(s + 1, projects.length - 1));
+        e.preventDefault()
+        setSel((s) => Math.min(s + 1, projects.length - 1))
       } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSel((s) => (s <= 0 ? 0 : s - 1));
+        e.preventDefault()
+        setSel((s) => (s <= 0 ? 0 : s - 1))
       } else if (e.key === "Enter" && sel >= 0) {
-        e.preventDefault();
-        launch(projects[sel].path);
+        e.preventDefault()
+        launch(projects[sel].path)
       } else if (e.key === "Escape") {
-        setSel(-1);
+        setSel(-1)
       }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [hasRecents, projects, sel]);
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [hasRecents, projects, sel])
 
   return (
     <div className="grid h-full place-items-center overflow-y-auto bg-canvas px-8 py-12">
@@ -109,15 +104,11 @@ export function RecentProjects() {
             </h2>
             <ul className="m-0 mb-3 flex list-none flex-col p-0">
               {projects.map((p, i) => {
-                const selected = i === sel;
+                const selected = i === sel
                 return (
                   <li
                     key={p.path}
-                    ref={
-                      selected
-                        ? (el) => el?.scrollIntoView({ block: "nearest" })
-                        : undefined
-                    }
+                    ref={selected ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
                     className={`group animate-rise -mx-3 flex items-center overflow-hidden rounded-md pr-1.5 transition-colors ${
                       selected ? "bg-surface" : "hover:bg-surface"
                     }`}
@@ -153,21 +144,24 @@ export function RecentProjects() {
                         label={t("recents.remove")}
                         icon={<CloseIcon className="h-[14px] w-[14px]" />}
                         onClick={() => {
-                          remove(p.path);
-                          setSel(-1);
+                          remove(p.path)
+                          setSel(-1)
                         }}
                         className="pointer-events-none col-start-1 row-start-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:opacity-100"
                       />
                     </span>
                   </li>
-                );
+                )
               })}
             </ul>
 
             <button
               type="button"
               onClick={pick}
-              style={{ animationDelay: `${80 + projects.length * 40}ms`, animationFillMode: "backwards" }}
+              style={{
+                animationDelay: `${80 + projects.length * 40}ms`,
+                animationFillMode: "backwards",
+              }}
               className="animate-rise -mx-3 flex w-[calc(100%+1.5rem)] items-center gap-2.5 rounded-md px-3 py-2 text-left text-muted transition-colors hover:bg-surface hover:text-ink"
             >
               <FolderOpenIcon className="h-[18px] w-[18px] flex-none text-accent" />
@@ -217,5 +211,5 @@ export function RecentProjects() {
         )}
       </div>
     </div>
-  );
+  )
 }

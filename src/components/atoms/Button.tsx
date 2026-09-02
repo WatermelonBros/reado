@@ -9,28 +9,28 @@
  *  - `ghost`     — text-only, hover surface (the default for toolbar actions)
  *  - `danger`    — destructive action, marker colour
  */
-import { type ButtonHTMLAttributes, type ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import type { ButtonHTMLAttributes, ReactNode } from "react"
+import { cn } from "@/lib/cn"
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-export type ButtonSize = "sm" | "md";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger"
+export type ButtonSize = "sm" | "md"
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-accent text-on-accent hover:opacity-90",
   secondary: "border border-line text-ink hover:bg-overlay",
   ghost: "text-muted hover:bg-overlay hover:text-ink",
   danger: "text-marker hover:bg-surface",
-};
+}
 
 const SIZE: Record<ButtonSize, string> = {
   sm: "h-6 gap-1 px-2 text-xs",
   md: "h-8 gap-1.5 px-3 text-sm",
-};
+}
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  children: ReactNode;
+  variant?: ButtonVariant
+  size?: ButtonSize
+  children: ReactNode
 }
 
 export function Button({
@@ -55,5 +55,5 @@ export function Button({
     >
       {children}
     </button>
-  );
+  )
 }

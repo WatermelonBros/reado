@@ -3,14 +3,15 @@
  * (read → comment → resolve) and surfaces the key shortcuts, rather than just
  * saying "no file open".
  */
-import { SHORTCUTS } from "../../lib/shortcuts";
-import { type MessageKey } from "../../i18n";
-import { useTranslation } from "react-i18next";
 
-const STEPS: MessageKey[] = ["welcome.step1", "welcome.step2", "welcome.step3"];
+import { useTranslation } from "react-i18next"
+import type { MessageKey } from "@/i18n"
+import { SHORTCUTS } from "@/lib/shortcuts"
+
+const STEPS: MessageKey[] = ["welcome.step1", "welcome.step2", "welcome.step3"]
 
 export function Welcome() {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <div className="grid h-full place-items-center p-8">
       <div className="w-full max-w-[380px]">
@@ -46,5 +47,5 @@ export function Welcome() {
         </ul>
       </div>
     </div>
-  );
+  )
 }

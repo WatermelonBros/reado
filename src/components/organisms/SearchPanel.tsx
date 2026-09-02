@@ -2,98 +2,98 @@
  * The Search side panel: full-text project search via ripgrep, with results
  * grouped by file. Selecting a result navigates the editor to that line.
  */
-import { useEffect, useMemo, useState } from "react";
-import { searchText, replaceText, type SearchMatch, type SearchOpts } from "../../lib/api";
-import { useProject, useWorkspace } from "../../lib/store";
-import { toRelative } from "../../lib/comments";
-import { Textarea } from "../atoms/Textarea";
-import { useTranslation } from "react-i18next";
+import { useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Textarea } from "@/components/atoms/Textarea"
+import { replaceText, type SearchMatch, type SearchOpts, searchText } from "@/lib/api"
+import { toRelative } from "@/lib/comments"
+import { useProject, useWorkspace } from "@/lib/store"
 
 /** Enter searches live; Shift+Enter inserts a newline (multi-line snippets). */
 const multilineKeys = (e: React.KeyboardEvent) => {
-  if (e.key === "Enter" && !e.shiftKey) e.preventDefault();
-};
+  if (e.key === "Enter" && !e.shiftKey) e.preventDefault()
+}
 /** Grow the box with its content, 1–6 rows. */
-const rowsFor = (text: string) => Math.min(6, Math.max(1, text.split("\n").length));
+const rowsFor = (text: string) => Math.min(6, Math.max(1, text.split("\n").length))
 
 // Cap the rows we actually mount. A broad query can hit the backend's 2000-match
 // cap → ~4000 DOM nodes, janking every keystroke. Render the first N (like the
 // command palette) and offer a "refine your search" hint when truncated. Full
 // virtualization is a separate follow-up.
-const RENDER_CAP = 300;
+const RENDER_CAP = 300
 
 export function SearchPanel() {
-  const root = useProject((s) => s.root);
-  const open = useProject((s) => s.open);
-  const pendingSearch = useWorkspace((s) => s.pendingSearch);
-  const clearPendingSearch = useWorkspace((s) => s.clearPendingSearch);
-  const { t } = useTranslation();
+  const root = useProject((s) => s.root)
+  const open = useProject((s) => s.open)
+  const pendingSearch = useWorkspace((s) => s.pendingSearch)
+  const clearPendingSearch = useWorkspace((s) => s.clearPendingSearch)
+  const { t } = useTranslation()
 
   // Restore the last query so leaving and returning to the Search tool doesn't
   // lose it (the debounced effect below re-runs the search from the seed).
-  const [query, setQuery] = useState(() => useWorkspace.getState().searchQuery);
+  const [query, setQuery] = useState(() => useWorkspace.getState().searchQuery)
 
   // Persist the query so it survives a tool-switch / reopen.
   useEffect(() => {
-    useWorkspace.getState().setSearchQuery(query);
-  }, [query]);
+    useWorkspace.getState().setSearchQuery(query)
+  }, [query])
 
   // Seed the query when something requests a search (e.g. Find references).
   useEffect(() => {
     if (pendingSearch !== null) {
-      setQuery(pendingSearch);
-      clearPendingSearch();
+      setQuery(pendingSearch)
+      clearPendingSearch()
     }
-  }, [pendingSearch, clearPendingSearch]);
-  const [matches, setMatches] = useState<SearchMatch[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [replacement, setReplacement] = useState("");
-  const [confirming, setConfirming] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  }, [pendingSearch, clearPendingSearch])
+  const [matches, setMatches] = useState<SearchMatch[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [replacement, setReplacement] = useState("")
+  const [confirming, setConfirming] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
   // Search toggles (VS Code-style): case sensitive, whole word, regex.
-  const [caseSensitive, setCaseSensitive] = useState(false);
-  const [wholeWord, setWholeWord] = useState(false);
-  const [regex, setRegex] = useState(false);
+  const [caseSensitive, setCaseSensitive] = useState(false)
+  const [wholeWord, setWholeWord] = useState(false)
+  const [regex, setRegex] = useState(false)
   const opts = useMemo<SearchOpts>(
     () => ({ caseSensitive, wholeWord, regex }),
     [caseSensitive, wholeWord, regex],
-  );
+  )
 
   // Literal project-wide replace, with a confirm step (it writes files, no undo).
   const doReplace = async () => {
-    setConfirming(false);
+    setConfirming(false)
     try {
-      const n = await replaceText(root, query, replacement);
-      setStatus(t("search.replaced", { count: n }));
-      setMatches(await searchText(root, query, opts));
+      const n = await replaceText(root, query, replacement)
+      setStatus(t("search.replaced", { count: n }))
+      setMatches(await searchText(root, query, opts))
     } catch (e) {
-      setStatus(String(e));
+      setStatus(String(e))
     }
-  };
+  }
 
   // Debounced search.
   useEffect(() => {
     if (query.trim().length < 2) {
-      setMatches([]);
-      setError(null);
-      setSearching(false);
-      return;
+      setMatches([])
+      setError(null)
+      setSearching(false)
+      return
     }
     const id = setTimeout(() => {
       // A slow ripgrep on a big repo shouldn't read as "no results / frozen":
       // flag the pending state so the panel can say it's searching.
-      setSearching(true);
+      setSearching(true)
       searchText(root, query, opts)
         .then((m) => {
-          setMatches(m);
-          setError(null);
+          setMatches(m)
+          setError(null)
         })
         .catch((e) => setError(String(e)))
-        .finally(() => setSearching(false));
-    }, 180);
-    return () => clearTimeout(id);
-  }, [query, root, opts]);
+        .finally(() => setSearching(false))
+    }, 180)
+    return () => clearTimeout(id)
+  }, [query, root, opts])
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -104,9 +104,9 @@ export function SearchPanel() {
             mono
             value={query}
             onChange={(e) => {
-              setQuery(e.target.value);
-              setStatus(null);
-              setConfirming(false);
+              setQuery(e.target.value)
+              setStatus(null)
+              setConfirming(false)
             }}
             onKeyDown={multilineKeys}
             rows={rowsFor(query)}
@@ -213,7 +213,7 @@ export function SearchPanel() {
         )}
       </div>
     </div>
-  );
+  )
 }
 
 /** A small square search-mode toggle (case / whole-word / regex). */
@@ -223,10 +223,10 @@ function FlagButton({
   label,
   title,
 }: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  title: string;
+  active: boolean
+  onClick: () => void
+  label: string
+  title: string
 }) {
   return (
     <button
@@ -243,5 +243,5 @@ function FlagButton({
     >
       {label}
     </button>
-  );
+  )
 }

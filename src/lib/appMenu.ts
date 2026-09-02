@@ -8,14 +8,11 @@
  * the native menu (English) for parity with macOS. Native-only items (undo/copy/
  * paste, quit) are omitted: the webview/keyboard already handle them.
  */
-export type MenuItem =
-  | { id: string; label: string }
-  | { sep: true }
-  | { header: string };
+export type MenuItem = { id: string; label: string } | { sep: true } | { header: string }
 
 export interface Menu {
-  label: string;
-  items: MenuItem[];
+  label: string
+  items: MenuItem[]
 }
 
 export const APP_MENUS: Menu[] = [
@@ -175,4 +172,4 @@ export const APP_MENUS: Menu[] = [
       { id: "checkUpdates", label: "Check for Updates…" },
     ],
   },
-];
+]

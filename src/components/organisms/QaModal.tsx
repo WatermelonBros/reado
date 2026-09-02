@@ -2,18 +2,19 @@
  * Modal showing an anchored Q&A answer (generated via the terminal agent). The
  * answer is a durable `.reado/qa/…` note; this renders its Markdown.
  */
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { useQa } from "../../lib/qa";
-import { Modal } from "../atoms/Modal";
-import { SparkleIcon } from "../atoms/icons";
-import { useTranslation } from "react-i18next";
 
-const baseName = (p: string | null) => (p ? (p.split(/[\\/]/).pop() ?? p) : "");
+import { useTranslation } from "react-i18next"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { SparkleIcon } from "@/components/atoms/icons"
+import { Modal } from "@/components/atoms/Modal"
+import { useQa } from "@/lib/qa"
+
+const baseName = (p: string | null) => (p ? (p.split(/[\\/]/).pop() ?? p) : "")
 
 export function QaModal() {
-  const { open, relPath, status, text } = useQa();
-  const { t } = useTranslation();
+  const { open, relPath, status, text } = useQa()
+  const { t } = useTranslation()
 
   return (
     <Modal
@@ -38,5 +39,5 @@ export function QaModal() {
         )}
       </div>
     </Modal>
-  );
+  )
 }

@@ -8,10 +8,11 @@
  * indicator's `top/left/width/height` from the checked item's rect and reads the
  * transition timing from our CSS to animate the slide.
  */
-import { type ReactNode } from "react";
-import { SegmentGroup } from "@ark-ui/react/segment-group";
 
-export type Segment<T extends string> = { id: T; label: ReactNode; title?: string };
+import { SegmentGroup } from "@ark-ui/react/segment-group"
+import type { ReactNode } from "react"
+
+export type Segment<T extends string> = { id: T; label: ReactNode; title?: string }
 
 export function SegmentedControl<T extends string>({
   value,
@@ -23,17 +24,17 @@ export function SegmentedControl<T extends string>({
   segmentClassName = "",
   thumbClassName = "bg-canvas rounded-md",
 }: {
-  value: T;
-  onChange: (id: T) => void;
-  segments: Segment<T>[];
-  orientation?: "horizontal" | "vertical";
-  ariaLabel?: string;
+  value: T
+  onChange: (id: T) => void
+  segments: Segment<T>[]
+  orientation?: "horizontal" | "vertical"
+  ariaLabel?: string
   /** Container styles (padding, background, gap). */
-  className?: string;
+  className?: string
   /** Per-segment button styles (size, radius, typography). */
-  segmentClassName?: string;
+  segmentClassName?: string
   /** The sliding thumb's background/radius/shadow. */
-  thumbClassName?: string;
+  thumbClassName?: string
 }) {
   return (
     <SegmentGroup.Root
@@ -60,5 +61,5 @@ export function SegmentedControl<T extends string>({
         </SegmentGroup.Item>
       ))}
     </SegmentGroup.Root>
-  );
+  )
 }

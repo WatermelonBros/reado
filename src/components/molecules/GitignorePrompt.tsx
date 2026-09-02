@@ -5,33 +5,32 @@
  * once, after the first comment creates `.reado/`, and honours a "don't ask
  * again" choice persisted in settings.
  */
-import { useState } from "react";
-import { addReadoGitignore } from "../../lib/api";
-import { useComments } from "../../lib/comments";
-import { useProject, useSettings } from "../../lib/store";
-
-import { Modal } from "../atoms/Modal";
-import { Button } from "../atoms/Button";
-import { Checkbox } from "../atoms/Checkbox";
-import { useTranslation } from "react-i18next";
+import { useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { Checkbox } from "@/components/atoms/Checkbox"
+import { Modal } from "@/components/atoms/Modal"
+import { addReadoGitignore } from "@/lib/api"
+import { useComments } from "@/lib/comments"
+import { useProject, useSettings } from "@/lib/store"
 
 export function GitignorePrompt() {
-  const open = useComments((s) => s.gitignorePromptOpen);
-  const setOpen = useComments((s) => s.setGitignorePrompt);
-  const root = useProject((s) => s.root);
-  const { versionReado, set } = useSettings();
-  const [dontAsk, setDontAsk] = useState(false);
-  const { t } = useTranslation();
+  const open = useComments((s) => s.gitignorePromptOpen)
+  const setOpen = useComments((s) => s.setGitignorePrompt)
+  const root = useProject((s) => s.root)
+  const { versionReado, set } = useSettings()
+  const [dontAsk, setDontAsk] = useState(false)
+  const { t } = useTranslation()
 
   const close = () => {
-    if (dontAsk) set({ gitignoreDontAsk: true });
-    setOpen(false);
-  };
+    if (dontAsk) set({ gitignoreDontAsk: true })
+    setOpen(false)
+  }
 
   const add = async () => {
-    await addReadoGitignore(root, versionReado).catch(() => {});
-    close();
-  };
+    await addReadoGitignore(root, versionReado).catch(() => {})
+    close()
+  }
 
   return (
     <Modal
@@ -59,5 +58,5 @@ export function GitignorePrompt() {
         </Button>
       </div>
     </Modal>
-  );
+  )
 }

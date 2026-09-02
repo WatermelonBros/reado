@@ -3,18 +3,19 @@
  * server-backed (LSP), one level deep with a direction toggle. Click a node to
  * jump; re-run "Show Call Hierarchy" at a node to go deeper.
  */
-import { useHierarchy, type HierDir } from "../../lib/hierarchy";
-import { setHierarchyDirection } from "../../lib/docInfo";
-import { useProject } from "../../lib/store";
-import { toRelative } from "../../lib/comments";
-import { SegmentedControl } from "../atoms/SegmentedControl";
-import { useTranslation } from "react-i18next";
+
+import { useTranslation } from "react-i18next"
+import { SegmentedControl } from "@/components/atoms/SegmentedControl"
+import { toRelative } from "@/lib/comments"
+import { setHierarchyDirection } from "@/lib/docInfo"
+import { type HierDir, useHierarchy } from "@/lib/hierarchy"
+import { useProject } from "@/lib/store"
 
 export function HierarchyPanel() {
-  const { mode, direction, root, results, loading, unsupported } = useHierarchy();
-  const rootProject = useProject((s) => s.root);
-  const open = useProject((s) => s.open);
-  const { t } = useTranslation();
+  const { mode, direction, root, results, loading, unsupported } = useHierarchy()
+  const rootProject = useProject((s) => s.root)
+  const open = useProject((s) => s.open)
+  const { t } = useTranslation()
 
   // The two directions for the current mode.
   const dirs: { id: HierDir; label: string }[] =
@@ -26,13 +27,13 @@ export function HierarchyPanel() {
       : [
           { id: "sub", label: t("hier.sub") },
           { id: "super", label: t("hier.super") },
-        ];
+        ]
 
   if (unsupported) {
-    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("hier.unsupported")}</p>;
+    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("hier.unsupported")}</p>
   }
   if (!root && !loading) {
-    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("hier.empty")}</p>;
+    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("hier.empty")}</p>
   }
 
   return (
@@ -76,5 +77,5 @@ export function HierarchyPanel() {
         ))}
       </ul>
     </div>
-  );
+  )
 }

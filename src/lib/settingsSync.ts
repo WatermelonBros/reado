@@ -6,16 +6,16 @@
  * (not file I/O) to avoid an unconfined filesystem surface. Never includes
  * secrets or project-local state (recents, sessions, window layout, `.reado/`).
  */
-import { ask } from "@tauri-apps/plugin-dialog";
-import { useSettings, type SettingsState } from "./store";
-import { useExtensions } from "./extensions";
-import { prompt } from "./prompt";
-import { t } from "../i18n";
-import { createLogger, safeError } from "./logger";
+import { ask } from "@tauri-apps/plugin-dialog"
+import { t } from "@/i18n"
+import { useExtensions } from "./extensions"
+import { createLogger, safeError } from "./logger"
+import { prompt } from "./prompt"
+import { type SettingsState, useSettings } from "./store"
 
-const log = createLogger("settingsSync");
+const log = createLogger("settingsSync")
 
-const BUNDLE_VERSION = 1;
+const BUNDLE_VERSION = 1
 
 /**
  * Fields that must NOT travel between machines. Everything else in `SettingsState`
@@ -29,70 +29,74 @@ const BUNDLE_VERSION = 1;
 export const SETTINGS_EXCLUDED: ReadonlySet<keyof SettingsState> = new Set([
   "set",
   "defaultAppsDismissed",
-]);
+])
 
 /** The settings fields that travel between machines, derived from live state. */
 export function syncableKeys(s: SettingsState): (keyof SettingsState)[] {
   return (Object.keys(s) as (keyof SettingsState)[]).filter(
     (k) => !SETTINGS_EXCLUDED.has(k) && typeof s[k] !== "function",
-  );
+  )
 }
 
 interface Bundle {
-  version: number;
-  settings: Partial<SettingsState>;
-  extensionsDisabled: string[];
+  version: number
+  settings: Partial<SettingsState>
+  extensionsDisabled: string[]
 }
 
 export function buildBundle(): Bundle {
-  const s = useSettings.getState();
+  const s = useSettings.getState()
   const settings = Object.fromEntries(
     syncableKeys(s).map((k) => [k, s[k]]),
-  ) as Partial<SettingsState>;
-  return { version: BUNDLE_VERSION, settings, extensionsDisabled: useExtensions.getState().disabled };
+  ) as Partial<SettingsState>
+  return {
+    version: BUNDLE_VERSION,
+    settings,
+    extensionsDisabled: useExtensions.getState().disabled,
+  }
 }
 
 /** Parse + validate a bundle. Returns null on malformed input or a newer schema
  *  than this build understands (forward-incompatible). */
 export function parseBundle(json: string): Bundle | null {
-  let b: Bundle;
+  let b: Bundle
   try {
-    b = JSON.parse(json) as Bundle;
+    b = JSON.parse(json) as Bundle
   } catch (e) {
-    log.warn("malformed bundle JSON", { error: safeError(e) });
-    return null;
+    log.warn("malformed bundle JSON", { error: safeError(e) })
+    return null
   }
-  if (!b || typeof b !== "object" || typeof b.settings !== "object") return null;
-  if (typeof b.version === "number" && b.version > BUNDLE_VERSION) return null; // too new
-  return b;
+  if (!b || typeof b !== "object" || typeof b.settings !== "object") return null
+  if (typeof b.version === "number" && b.version > BUNDLE_VERSION) return null // too new
+  return b
 }
 
 /** A plain summary of what importing a bundle will change (for confirmation). */
 export function summarizeBundle(b: Bundle): string {
-  const settings = Object.keys(b.settings ?? {}).length;
-  const disabled = Array.isArray(b.extensionsDisabled) ? b.extensionsDisabled.length : 0;
-  return t("sync.summary", { settings, disabled });
+  const settings = Object.keys(b.settings ?? {}).length
+  const disabled = Array.isArray(b.extensionsDisabled) ? b.extensionsDisabled.length : 0
+  return t("sync.summary", { settings, disabled })
 }
 
 /** Apply a parsed bundle. */
 export function applyBundle(b: Bundle): void {
-  useSettings.getState().set(b.settings);
+  useSettings.getState().set(b.settings)
   if (Array.isArray(b.extensionsDisabled)) {
-    useExtensions.setState({ disabled: b.extensionsDisabled });
+    useExtensions.setState({ disabled: b.extensionsDisabled })
   }
   log.info("settings imported", {
     settings: Object.keys(b.settings ?? {}).length,
     disabled: b.extensionsDisabled?.length ?? 0,
-  });
+  })
 }
 
 /** Copy the current settings bundle to the clipboard. */
 export async function exportSettings(): Promise<void> {
   try {
-    await navigator.clipboard.writeText(JSON.stringify(buildBundle(), null, 2));
-    log.info("settings exported");
+    await navigator.clipboard.writeText(JSON.stringify(buildBundle(), null, 2))
+    log.info("settings exported")
   } catch (e) {
-    log.error("settings export failed", { error: safeError(e) });
+    log.error("settings export failed", { error: safeError(e) })
   }
 }
 
@@ -102,16 +106,16 @@ export async function importSettings(): Promise<void> {
     title: t("sync.importTitle"),
     placeholder: "{ …bundle JSON… }",
     confirmLabel: t("sync.import"),
-  });
-  if (!json) return;
-  const bundle = parseBundle(json);
+  })
+  if (!json) return
+  const bundle = parseBundle(json)
   if (!bundle) {
-    await ask(t("sync.invalid"), { title: t("sync.import"), kind: "error" });
-    return;
+    await ask(t("sync.invalid"), { title: t("sync.import"), kind: "error" })
+    return
   }
   const ok = await ask(summarizeBundle(bundle), {
     title: t("sync.import"),
     okLabel: t("sync.apply"),
-  });
-  if (ok) applyBundle(bundle);
+  })
+  if (ok) applyBundle(bundle)
 }

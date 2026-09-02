@@ -4,28 +4,24 @@
  * Rendered inside the Review Guide panel; the same state reaches a paired phone
  * over the Reado Anywhere channel.
  */
-import { useTranslation } from "react-i18next";
-import { useProject } from "../../lib/store";
-import { useResolveLoop } from "../../lib/resolveLoop";
-import { SparkleIcon } from "../atoms/icons";
+import { useTranslation } from "react-i18next"
+import { SparkleIcon } from "@/components/atoms/icons"
+import { useResolveLoop } from "@/lib/resolveLoop"
+import { useProject } from "@/lib/store"
 
 export function ResolveLoopBar() {
-  const root = useProject((s) => s.root);
-  const active = useResolveLoop((s) => s.active);
-  const { t } = useTranslation();
-  if (!active) return null;
+  const root = useProject((s) => s.root)
+  const active = useResolveLoop((s) => s.active)
+  const { t } = useTranslation()
+  if (!active) return null
 
-  const resolved = active.resolvedIds.length;
-  const total = active.ids.length;
-  const pct = total ? (resolved / total) * 100 : 0;
-  const done = active.status === "finished";
-  const waiting = active.status === "needs_approval";
+  const resolved = active.resolvedIds.length
+  const total = active.ids.length
+  const pct = total ? (resolved / total) * 100 : 0
+  const done = active.status === "finished"
+  const waiting = active.status === "needs_approval"
 
-  const tone = done
-    ? "text-accent"
-    : waiting
-      ? "text-marker"
-      : "text-muted";
+  const tone = done ? "text-accent" : waiting ? "text-marker" : "text-muted"
 
   return (
     <div className="flex-none border-b border-line bg-surface px-3 py-2">
@@ -34,11 +30,7 @@ export function ResolveLoopBar() {
           className={`h-3 w-3 flex-none ${tone} ${active.status === "running" ? "animate-pulse" : ""}`}
         />
         <span className={`min-w-0 flex-1 truncate text-xs ${tone}`}>
-          {done
-            ? t("loop.finished")
-            : waiting
-              ? t("loop.needsApproval")
-              : t("loop.running")}
+          {done ? t("loop.finished") : waiting ? t("loop.needsApproval") : t("loop.running")}
         </span>
         <span className="flex-none text-[10px] tabular-nums text-faint">
           {t("loop.progress", { resolved, total })}
@@ -59,5 +51,5 @@ export function ResolveLoopBar() {
       </div>
       {waiting && <p className="mt-1 text-[10px] leading-snug text-faint">{t("loop.hint")}</p>}
     </div>
-  );
+  )
 }

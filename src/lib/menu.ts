@@ -3,99 +3,139 @@
  * `menu` event with the clicked item's id; here we map each id to the matching
  * action, reusing the same stores/helpers the keyboard shortcuts and palette use.
  */
-import { listen } from "@tauri-apps/api/event";
-import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
-import { logPath } from "./logger";
+import { listen } from "@tauri-apps/api/event"
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener"
+import { type MessageKey, t } from "@/i18n"
+import { clearTerminal, dispatchToAgent, launchAgent, restartTerminal } from "./agents"
+import { openCount, useComments } from "./comments"
+import { useDiagnostics } from "./diagnostics"
 import {
+  addCursorAbove,
+  addCursorBelow,
+  addCursorsToLineEnds,
+  addNextOccurrence,
+  askAboutSelection,
+  copyLineDownCmd,
+  copyLineUpCmd,
+  duplicateSelection,
+  expandSelectionCmd,
+  findReferencesAtCursor,
+  formatDocument,
+  goToBracket,
+  goToDefinitionAtCursor,
+  goToImplementationAtCursor,
+  goToTypeDefinitionAtCursor,
+  gotoLastEdit,
+  moveLineDownCmd,
+  moveLineUpCmd,
+  newFile,
+  nextProblem,
+  openFind,
+  openGotoLine,
+  openReplace,
+  prevProblem,
+  revertFile,
+  saveAs,
+  saveDocument,
+  selectAllOccurrences,
+  showCallHierarchy,
+  showTypeHierarchy,
+  shrinkSelectionCmd,
+  toggleBlockCommentCmd,
+  toggleLineComment,
+  useDocInfo,
+} from "./docInfo"
+import { logPath } from "./logger"
+import { notify } from "./notice"
+import { composeReviewPrompt } from "./review"
+import {
+  type SettingsState,
+  type ThemeName,
+  useEditorActions,
   usePalette,
   useProject,
   useSettings,
   useWorkspace,
-  useEditorActions,
-  type ThemeName,
-  type SettingsState,
-} from "./store";
-import { useTerminals } from "./terminals";
-import {
-  formatDocument,
-  saveDocument,
-  openFind,
-  openReplace,
-  openGotoLine,
-  toggleLineComment,
-  addNextOccurrence,
-  selectAllOccurrences,
-  addCursorAbove,
-  addCursorBelow,
-  addCursorsToLineEnds,
-  duplicateSelection,
-  expandSelectionCmd,
-  shrinkSelectionCmd,
-  goToBracket,
-  gotoLastEdit,
-  showCallHierarchy,
-  showTypeHierarchy,
-  copyLineUpCmd,
-  copyLineDownCmd,
-  moveLineUpCmd,
-  moveLineDownCmd,
-  findReferencesAtCursor,
-  goToDefinitionAtCursor,
-  goToTypeDefinitionAtCursor,
-  goToImplementationAtCursor,
-  toggleBlockCommentCmd,
-  nextProblem,
-  prevProblem,
-  revertFile,
-  newFile,
-  saveAs,
-  askAboutSelection,
-} from "./docInfo";
-import { checkForUpdates } from "./updater";
-import { launchAgent, dispatchToAgent, clearTerminal, restartTerminal } from "./agents";
-import { composeReviewPrompt } from "./review";
-import { useComments, openCount } from "./comments";
-import { closeProject, openInNewWindow, pickFolderAndOpen, openFileDialog } from "./window";
-import { notify } from "./notice";
-import { useDocInfo } from "./docInfo";
-import { useDiagnostics } from "./diagnostics";
-import { t, type MessageKey } from "../i18n";
+} from "./store"
+import { useTerminals } from "./terminals"
+import { checkForUpdates } from "./updater"
+import { closeProject, openFileDialog, openInNewWindow, pickFolderAndOpen } from "./window"
 
-const WEBSITE = "https://reado.watermelon-studio.it";
-const DISCORD = "https://discord.gg/HHqT9ucXn4";
-const ISSUES = "https://github.com/WatermelonBros/reado/issues";
-const RELEASES = "https://github.com/WatermelonBros/reado/releases";
+const WEBSITE = "https://reado.watermelon-studio.it"
+const DISCORD = "https://discord.gg/HHqT9ucXn4"
+const ISSUES = "https://github.com/WatermelonBros/reado/issues"
+const RELEASES = "https://github.com/WatermelonBros/reado/releases"
 
-const ZOOM_MIN = 0.6;
-const ZOOM_MAX = 2;
-const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
+const ZOOM_MIN = 0.6
+const ZOOM_MAX = 2
+const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10))
 const nudgeZoom = (delta: number) =>
-  useSettings.getState().set({ zoom: clampZoom(useSettings.getState().zoom + delta) });
+  useSettings.getState().set({ zoom: clampZoom(useSettings.getState().zoom + delta) })
 
 // Which context a menu command needs to do anything. Ids not listed are always
 // available. Mirrors the command-palette `when:` gating so the menu, the menu
 // bar and the palette agree on what's applicable.
-type MenuCond = "file" | "selection" | "back" | "forward" | "reopen" | "split" | "terminal" | "problems";
+type MenuCond =
+  | "file"
+  | "selection"
+  | "back"
+  | "forward"
+  | "reopen"
+  | "split"
+  | "terminal"
+  | "problems"
 
 const MENU_PRECOND: Record<string, MenuCond> = {
   // Need an open editor.
-  save: "file", saveAs: "file", revert: "file", format: "file", closeEditor: "file",
-  gotoLine: "file", find: "file", "edit:replace": "file",
-  "edit:toggleComment": "file", "edit:toggleBlockComment": "file", "palette:symbols": "file",
-  gotodef: "file", "go:peek": "file", "go:typedef": "file", "go:impl": "file",
-  "go:references": "file", "go:callHierarchy": "file", "go:typeHierarchy": "file",
-  "go:bracket": "file", "go:lastEdit": "file", "go:nextTab": "file", "go:prevTab": "file",
-  "sel:expand": "file", "sel:shrink": "file", "sel:addNext": "file", "sel:allOccurrences": "file",
-  "sel:cursorAbove": "file", "sel:cursorBelow": "file", "sel:lineEnds": "file", "sel:duplicate": "file",
-  "sel:copyUp": "file", "sel:copyDown": "file", "sel:moveUp": "file", "sel:moveDown": "file",
+  save: "file",
+  saveAs: "file",
+  revert: "file",
+  format: "file",
+  closeEditor: "file",
+  gotoLine: "file",
+  find: "file",
+  "edit:replace": "file",
+  "edit:toggleComment": "file",
+  "edit:toggleBlockComment": "file",
+  "palette:symbols": "file",
+  gotodef: "file",
+  "go:peek": "file",
+  "go:typedef": "file",
+  "go:impl": "file",
+  "go:references": "file",
+  "go:callHierarchy": "file",
+  "go:typeHierarchy": "file",
+  "go:bracket": "file",
+  "go:lastEdit": "file",
+  "go:nextTab": "file",
+  "go:prevTab": "file",
+  "sel:expand": "file",
+  "sel:shrink": "file",
+  "sel:addNext": "file",
+  "sel:allOccurrences": "file",
+  "sel:cursorAbove": "file",
+  "sel:cursorBelow": "file",
+  "sel:lineEnds": "file",
+  "sel:duplicate": "file",
+  "sel:copyUp": "file",
+  "sel:copyDown": "file",
+  "sel:moveUp": "file",
+  "sel:moveDown": "file",
   // Need a text selection specifically.
-  "sel:explain": "selection", "sel:ask": "selection",
+  "sel:explain": "selection",
+  "sel:ask": "selection",
   // Navigation / history / layout.
-  "go:back": "back", "go:forward": "forward", reopenClosed: "reopen", "view:split": "split",
+  "go:back": "back",
+  "go:forward": "forward",
+  reopenClosed: "reopen",
+  "view:split": "split",
   // Need a terminal / a diagnostic to jump to.
-  "terminal:clear": "terminal", "terminal:restart": "terminal", "terminal:split": "terminal",
-  "go:nextProblem": "problems", "go:prevProblem": "problems",
-};
+  "terminal:clear": "terminal",
+  "terminal:restart": "terminal",
+  "terminal:split": "terminal",
+  "go:nextProblem": "problems",
+  "go:prevProblem": "problems",
+}
 
 /** The message shown when a command is invoked without its precondition. */
 const MENU_COND_MSG: Record<MenuCond, MessageKey> = {
@@ -107,379 +147,379 @@ const MENU_COND_MSG: Record<MenuCond, MessageKey> = {
   split: "menu.needFile",
   terminal: "menu.needTerminal",
   problems: "menu.needProblems",
-};
+}
 
 function menuCondMet(cond: MenuCond): boolean {
-  const project = useProject.getState();
+  const project = useProject.getState()
   switch (cond) {
     case "file":
-      return !!project.active;
+      return !!project.active
     case "selection": {
-      const v = useDocInfo.getState().view;
-      return !!v && !v.state.selection.main.empty;
+      const v = useDocInfo.getState().view
+      return !!v && !v.state.selection.main.empty
     }
     case "back":
-      return project.navIndex > 0;
+      return project.navIndex > 0
     case "forward":
-      return project.navIndex < project.navStack.length - 1;
+      return project.navIndex < project.navStack.length - 1
     case "reopen":
-      return project.closedTabs.length > 0;
+      return project.closedTabs.length > 0
     case "split":
-      return !!project.active || !!project.splitPath;
+      return !!project.active || !!project.splitPath
     case "terminal":
-      return useTerminals.getState().sessions.length > 0;
+      return useTerminals.getState().sessions.length > 0
     case "problems":
-      return Object.keys(useDiagnostics.getState().byFile).length > 0;
+      return Object.keys(useDiagnostics.getState().byFile).length > 0
   }
 }
 
 /** Whether a menu command can act in the current context (drives both the greyed
  *  state in the rendered menu bar and the notice-instead-of-no-op in the handler). */
 export function menuCommandEnabled(id: string): boolean {
-  const cond = MENU_PRECOND[id];
-  return !cond || menuCondMet(cond);
+  const cond = MENU_PRECOND[id]
+  return !cond || menuCondMet(cond)
 }
 
 /** Run an app-menu command by id — shared by the native menu (forwarded as a
  *  `menu` event) and the rendered Win/Linux menu bar in the title bar. */
 export function runMenuCommand(id: string): void {
-    // A command whose precondition isn't met would silently do nothing (the
-    // native macOS menu can't be greyed from here) — tell the user why instead.
-    const cond = MENU_PRECOND[id];
-    if (cond && !menuCondMet(cond)) {
-      notify("info", t(MENU_COND_MSG[cond]));
-      return;
-    }
-    const palette = usePalette.getState();
-    const project = useProject.getState();
-    const workspace = useWorkspace.getState();
-    const settings = useSettings.getState();
-    const terminals = useTerminals.getState();
+  // A command whose precondition isn't met would silently do nothing (the
+  // native macOS menu can't be greyed from here) — tell the user why instead.
+  const cond = MENU_PRECOND[id]
+  if (cond && !menuCondMet(cond)) {
+    notify("info", t(MENU_COND_MSG[cond]))
+    return
+  }
+  const palette = usePalette.getState()
+  const project = useProject.getState()
+  const workspace = useWorkspace.getState()
+  const settings = useSettings.getState()
+  const terminals = useTerminals.getState()
 
-    // Theme submenu: ids like "theme:dark".
-    if (id.startsWith("theme:")) {
-      settings.set({ theme: id.slice(6) as ThemeName, mode: "manual" });
-      return;
-    }
-    // Auto Save submenu: ids like "autosave:afterDelay".
-    if (id.startsWith("autosave:")) {
-      settings.set({ autoSave: id.slice(9) as SettingsState["autoSave"] });
-      return;
-    }
+  // Theme submenu: ids like "theme:dark".
+  if (id.startsWith("theme:")) {
+    settings.set({ theme: id.slice(6) as ThemeName, mode: "manual" })
+    return
+  }
+  // Auto Save submenu: ids like "autosave:afterDelay".
+  if (id.startsWith("autosave:")) {
+    settings.set({ autoSave: id.slice(9) as SettingsState["autoSave"] })
+    return
+  }
 
-    switch (id) {
-      // App
-      case "settings":
-        palette.toggleSettings(true);
-        break;
-      case "checkUpdates":
-        void checkForUpdates(true);
-        break;
+  switch (id) {
+    // App
+    case "settings":
+      palette.toggleSettings(true)
+      break
+    case "checkUpdates":
+      void checkForUpdates(true)
+      break
 
-      // File
-      case "window:new":
-        openInNewWindow();
-        break;
-      case "openFile":
-        void openFileDialog();
-        break;
-      case "openFolder":
-        void pickFolderAndOpen();
-        break;
-      case "openRecent":
-        palette.open("recents");
-        break;
-      case "closeProject":
-        void closeProject();
-        break;
-      case "newFile":
-        void newFile();
-        break;
-      case "saveAs":
-        void saveAs();
-        break;
-      case "save":
-        saveDocument();
-        break;
-      case "format":
-        void formatDocument();
-        break;
-      case "closeEditor":
-        if (project.active) project.close(project.active);
-        break;
-      case "reopenClosed":
-        project.reopenClosed();
-        break;
-      case "revert":
-        revertFile();
-        break;
+    // File
+    case "window:new":
+      openInNewWindow()
+      break
+    case "openFile":
+      void openFileDialog()
+      break
+    case "openFolder":
+      void pickFolderAndOpen()
+      break
+    case "openRecent":
+      palette.open("recents")
+      break
+    case "closeProject":
+      void closeProject()
+      break
+    case "newFile":
+      void newFile()
+      break
+    case "saveAs":
+      void saveAs()
+      break
+    case "save":
+      saveDocument()
+      break
+    case "format":
+      void formatDocument()
+      break
+    case "closeEditor":
+      if (project.active) project.close(project.active)
+      break
+    case "reopenClosed":
+      project.reopenClosed()
+      break
+    case "revert":
+      revertFile()
+      break
 
-      // Edit
-      case "find":
-        openFind();
-        break;
-      case "edit:replace":
-        openReplace();
-        break;
-      case "edit:findInFiles":
-      case "edit:replaceInFiles":
-        workspace.searchFor("");
-        break;
-      case "edit:toggleComment":
-        toggleLineComment();
-        break;
-      case "edit:toggleBlockComment":
-        toggleBlockCommentCmd();
-        break;
-      case "gotoLine":
-        openGotoLine();
-        break;
+    // Edit
+    case "find":
+      openFind()
+      break
+    case "edit:replace":
+      openReplace()
+      break
+    case "edit:findInFiles":
+    case "edit:replaceInFiles":
+      workspace.searchFor("")
+      break
+    case "edit:toggleComment":
+      toggleLineComment()
+      break
+    case "edit:toggleBlockComment":
+      toggleBlockCommentCmd()
+      break
+    case "gotoLine":
+      openGotoLine()
+      break
 
-      // Selection
-      case "sel:expand":
-        expandSelectionCmd();
-        break;
-      case "sel:shrink":
-        shrinkSelectionCmd();
-        break;
-      case "sel:addNext":
-        addNextOccurrence();
-        break;
-      case "sel:allOccurrences":
-        selectAllOccurrences();
-        break;
-      case "sel:cursorAbove":
-        addCursorAbove();
-        break;
-      case "sel:cursorBelow":
-        addCursorBelow();
-        break;
-      case "sel:lineEnds":
-        addCursorsToLineEnds();
-        break;
-      case "sel:duplicate":
-        duplicateSelection();
-        break;
-      case "sel:explain":
-        useEditorActions.getState().requestExplain();
-        break;
-      case "sel:ask":
-        void askAboutSelection();
-        break;
-      case "sel:copyUp":
-        copyLineUpCmd();
-        break;
-      case "sel:copyDown":
-        copyLineDownCmd();
-        break;
-      case "sel:moveUp":
-        moveLineUpCmd();
-        break;
-      case "sel:moveDown":
-        moveLineDownCmd();
-        break;
+    // Selection
+    case "sel:expand":
+      expandSelectionCmd()
+      break
+    case "sel:shrink":
+      shrinkSelectionCmd()
+      break
+    case "sel:addNext":
+      addNextOccurrence()
+      break
+    case "sel:allOccurrences":
+      selectAllOccurrences()
+      break
+    case "sel:cursorAbove":
+      addCursorAbove()
+      break
+    case "sel:cursorBelow":
+      addCursorBelow()
+      break
+    case "sel:lineEnds":
+      addCursorsToLineEnds()
+      break
+    case "sel:duplicate":
+      duplicateSelection()
+      break
+    case "sel:explain":
+      useEditorActions.getState().requestExplain()
+      break
+    case "sel:ask":
+      void askAboutSelection()
+      break
+    case "sel:copyUp":
+      copyLineUpCmd()
+      break
+    case "sel:copyDown":
+      copyLineDownCmd()
+      break
+    case "sel:moveUp":
+      moveLineUpCmd()
+      break
+    case "sel:moveDown":
+      moveLineDownCmd()
+      break
 
-      // Go
-      case "palette:files":
-        palette.open("files");
-        break;
-      case "palette:commands":
-        palette.open("commands");
-        break;
-      case "palette:search":
-        palette.open("search");
-        break;
-      case "palette:symbols":
-        palette.open("symbols");
-        break;
-      case "palette:wsymbols":
-        palette.open("wsymbols");
-        break;
-      case "gotodef":
-        goToDefinitionAtCursor();
-        break;
-      case "go:peek":
-        useEditorActions.getState().requestPeek();
-        break;
-      case "go:typedef":
-        goToTypeDefinitionAtCursor();
-        break;
-      case "go:impl":
-        goToImplementationAtCursor();
-        break;
-      case "go:references":
-        findReferencesAtCursor();
-        break;
-      case "go:callHierarchy":
-        showCallHierarchy();
-        break;
-      case "go:typeHierarchy":
-        showTypeHierarchy();
-        break;
-      case "go:bracket":
-        goToBracket();
-        break;
-      case "go:lastEdit":
-        gotoLastEdit();
-        break;
-      case "go:nextProblem":
-        nextProblem();
-        break;
-      case "go:prevProblem":
-        prevProblem();
-        break;
-      case "go:nextTab":
-        project.cycleTab(1);
-        break;
-      case "go:prevTab":
-        project.cycleTab(-1);
-        break;
-      case "go:back":
-        project.goBack();
-        break;
-      case "go:forward":
-        project.goForward();
-        break;
+    // Go
+    case "palette:files":
+      palette.open("files")
+      break
+    case "palette:commands":
+      palette.open("commands")
+      break
+    case "palette:search":
+      palette.open("search")
+      break
+    case "palette:symbols":
+      palette.open("symbols")
+      break
+    case "palette:wsymbols":
+      palette.open("wsymbols")
+      break
+    case "gotodef":
+      goToDefinitionAtCursor()
+      break
+    case "go:peek":
+      useEditorActions.getState().requestPeek()
+      break
+    case "go:typedef":
+      goToTypeDefinitionAtCursor()
+      break
+    case "go:impl":
+      goToImplementationAtCursor()
+      break
+    case "go:references":
+      findReferencesAtCursor()
+      break
+    case "go:callHierarchy":
+      showCallHierarchy()
+      break
+    case "go:typeHierarchy":
+      showTypeHierarchy()
+      break
+    case "go:bracket":
+      goToBracket()
+      break
+    case "go:lastEdit":
+      gotoLastEdit()
+      break
+    case "go:nextProblem":
+      nextProblem()
+      break
+    case "go:prevProblem":
+      prevProblem()
+      break
+    case "go:nextTab":
+      project.cycleTab(1)
+      break
+    case "go:prevTab":
+      project.cycleTab(-1)
+      break
+    case "go:back":
+      project.goBack()
+      break
+    case "go:forward":
+      project.goForward()
+      break
 
-      // View
-      case "view:sidebar":
-        workspace.toggleSidebar();
-        break;
-      case "view:split":
-        project.openSplit();
-        break;
-      case "view:wrap":
-        settings.set({ wrap: !settings.wrap });
-        break;
-      case "view:whitespace":
-        settings.set({ renderWhitespace: !settings.renderWhitespace });
-        break;
-      case "view:ribbon":
-        settings.set({ showRibbon: !settings.showRibbon });
-        break;
-      case "view:focus":
-        settings.set({ focusMode: !settings.focusMode });
-        break;
-      case "view:activityBar":
-        settings.set({ showActivityBar: !settings.showActivityBar });
-        break;
-      case "view:statusBar":
-        settings.set({ showStatusBar: !settings.showStatusBar });
-        break;
-      case "view:breadcrumbs":
-        settings.set({ showBreadcrumbs: !settings.showBreadcrumbs });
-        break;
-      case "view:open:files":
-        workspace.selectTool("files");
-        break;
-      case "view:open:search":
-        workspace.selectTool("search");
-        break;
-      case "view:open:comments":
-        workspace.selectTool("comments");
-        break;
-      case "view:open:outline":
-        workspace.selectTool("outline");
-        break;
-      case "view:open:git":
-        workspace.selectTool("git");
-        break;
-      case "view:open:extensions":
-        workspace.selectTool("extensions");
-        break;
-      case "graph":
-        workspace.toggleGraph(true);
-        break;
-      case "docs":
-        workspace.toggleDocs(true);
-        break;
-      case "zoom:in":
-        nudgeZoom(0.1);
-        break;
-      case "zoom:out":
-        nudgeZoom(-0.1);
-        break;
-      case "zoom:reset":
-        settings.set({ zoom: 1 });
-        break;
+    // View
+    case "view:sidebar":
+      workspace.toggleSidebar()
+      break
+    case "view:split":
+      project.openSplit()
+      break
+    case "view:wrap":
+      settings.set({ wrap: !settings.wrap })
+      break
+    case "view:whitespace":
+      settings.set({ renderWhitespace: !settings.renderWhitespace })
+      break
+    case "view:ribbon":
+      settings.set({ showRibbon: !settings.showRibbon })
+      break
+    case "view:focus":
+      settings.set({ focusMode: !settings.focusMode })
+      break
+    case "view:activityBar":
+      settings.set({ showActivityBar: !settings.showActivityBar })
+      break
+    case "view:statusBar":
+      settings.set({ showStatusBar: !settings.showStatusBar })
+      break
+    case "view:breadcrumbs":
+      settings.set({ showBreadcrumbs: !settings.showBreadcrumbs })
+      break
+    case "view:open:files":
+      workspace.selectTool("files")
+      break
+    case "view:open:search":
+      workspace.selectTool("search")
+      break
+    case "view:open:comments":
+      workspace.selectTool("comments")
+      break
+    case "view:open:outline":
+      workspace.selectTool("outline")
+      break
+    case "view:open:git":
+      workspace.selectTool("git")
+      break
+    case "view:open:extensions":
+      workspace.selectTool("extensions")
+      break
+    case "graph":
+      workspace.toggleGraph(true)
+      break
+    case "docs":
+      workspace.toggleDocs(true)
+      break
+    case "zoom:in":
+      nudgeZoom(0.1)
+      break
+    case "zoom:out":
+      nudgeZoom(-0.1)
+      break
+    case "zoom:reset":
+      settings.set({ zoom: 1 })
+      break
 
-      // Terminal
-      case "terminal":
-        terminals.toggle();
-        break;
-      case "terminal:new":
-        terminals.add();
-        break;
-      case "terminal:split":
-        terminals.split();
-        break;
-      case "terminal:clear":
-        clearTerminal();
-        break;
-      case "terminal:restart":
-        restartTerminal();
-        break;
-      case "terminal:launch:claude":
-        void launchAgent("claude-code", "claude");
-        break;
-      case "terminal:launch:codex":
-        void launchAgent("codex", "codex");
-        break;
-      case "terminal:launch:copilot":
-        void launchAgent("copilot", "copilot");
-        break;
-      case "terminal:launch:gemini":
-        void launchAgent("gemini", "gemini");
-        break;
-      case "terminal:launch:opencode":
-        void launchAgent("opencode", "opencode");
-        break;
-      case "terminal:sendReview": {
-        const count = openCount(useComments.getState().comments);
-        // Mirror the Comments/Terminal buttons, which disable at zero: sending a
-        // review prompt with no open tasks would produce a meaningless request.
-        if (count === 0) {
-          notify("info", t("terminal.noTasks"));
-          break;
-        }
-        void dispatchToAgent(composeReviewPrompt(count));
-        break;
+    // Terminal
+    case "terminal":
+      terminals.toggle()
+      break
+    case "terminal:new":
+      terminals.add()
+      break
+    case "terminal:split":
+      terminals.split()
+      break
+    case "terminal:clear":
+      clearTerminal()
+      break
+    case "terminal:restart":
+      restartTerminal()
+      break
+    case "terminal:launch:claude":
+      void launchAgent("claude-code", "claude")
+      break
+    case "terminal:launch:codex":
+      void launchAgent("codex", "codex")
+      break
+    case "terminal:launch:copilot":
+      void launchAgent("copilot", "copilot")
+      break
+    case "terminal:launch:gemini":
+      void launchAgent("gemini", "gemini")
+      break
+    case "terminal:launch:opencode":
+      void launchAgent("opencode", "opencode")
+      break
+    case "terminal:sendReview": {
+      const count = openCount(useComments.getState().comments)
+      // Mirror the Comments/Terminal buttons, which disable at zero: sending a
+      // review prompt with no open tasks would produce a meaningless request.
+      if (count === 0) {
+        notify("info", t("terminal.noTasks"))
+        break
       }
-
-      // Help
-      case "help:shortcuts":
-        palette.toggleShortcuts(true);
-        break;
-      case "help:website":
-        void openUrl(WEBSITE);
-        break;
-      case "help:discord":
-        void openUrl(DISCORD);
-        break;
-      case "help:report":
-        void openUrl(ISSUES);
-        break;
-      case "help:releases":
-        void openUrl(RELEASES);
-        break;
-      case "help:revealLog":
-        void logPath()
-          .then((p) => {
-            if (p) return revealItemInDir(p);
-          })
-          .catch(() => {});
-        break;
-      case "help:copyLogPath":
-        void logPath()
-          .then((p) => {
-            if (p) return navigator.clipboard.writeText(p);
-          })
-          .catch(() => {});
-        break;
+      void dispatchToAgent(composeReviewPrompt(count))
+      break
     }
+
+    // Help
+    case "help:shortcuts":
+      palette.toggleShortcuts(true)
+      break
+    case "help:website":
+      void openUrl(WEBSITE)
+      break
+    case "help:discord":
+      void openUrl(DISCORD)
+      break
+    case "help:report":
+      void openUrl(ISSUES)
+      break
+    case "help:releases":
+      void openUrl(RELEASES)
+      break
+    case "help:revealLog":
+      void logPath()
+        .then((p) => {
+          if (p) return revealItemInDir(p)
+        })
+        .catch(() => {})
+      break
+    case "help:copyLogPath":
+      void logPath()
+        .then((p) => {
+          if (p) return navigator.clipboard.writeText(p)
+        })
+        .catch(() => {})
+      break
+  }
 }
 
 /** Start handling native-menu events; returns an unlisten function. */
 export function listenForMenu(): Promise<() => void> {
-  return listen<string>("menu", ({ payload: id }) => runMenuCommand(id));
+  return listen<string>("menu", ({ payload: id }) => runMenuCommand(id))
 }

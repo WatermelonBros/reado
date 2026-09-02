@@ -3,31 +3,29 @@
  * located. Each shows its last-known location and snippet, and a Re-anchor
  * action that opens the file and lets the user pick the new line/range.
  */
-import type { Comment } from "../../lib/api";
-import { useComments } from "../../lib/comments";
-import { useProject } from "../../lib/store";
 
-import { TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
-import { Button } from "../atoms/Button";
-import { useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { Dot, TYPE_COLOR, typeKey } from "@/components/atoms/commentMeta"
+import type { Comment } from "@/lib/api"
+import { useComments } from "@/lib/comments"
+import { useProject } from "@/lib/store"
 
 export function OrphansPanel() {
-  const comments = useComments((s) => s.comments);
-  const orphans = comments.filter((c) => c.orphan);
-  const startReanchor = useComments((s) => s.startReanchor);
-  const root = useProject((s) => s.root);
-  const open = useProject((s) => s.open);
-  const { t } = useTranslation();
+  const comments = useComments((s) => s.comments)
+  const orphans = comments.filter((c) => c.orphan)
+  const startReanchor = useComments((s) => s.startReanchor)
+  const root = useProject((s) => s.root)
+  const open = useProject((s) => s.open)
+  const { t } = useTranslation()
 
   const reanchor = (c: Comment) => {
-    if (c.anchor.file) open(`${root}/${c.anchor.file}`);
-    startReanchor(c.id);
-  };
+    if (c.anchor.file) open(`${root}/${c.anchor.file}`)
+    startReanchor(c.id)
+  }
 
   if (orphans.length === 0) {
-    return (
-      <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("orphans.empty")}</p>
-    );
+    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("orphans.empty")}</p>
   }
 
   return (
@@ -56,5 +54,5 @@ export function OrphansPanel() {
         </li>
       ))}
     </ul>
-  );
+  )
 }

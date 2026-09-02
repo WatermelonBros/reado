@@ -6,87 +6,83 @@
  * HTTPS address plus the pairing token and certificate fingerprint (the phone
  * uses the fingerprint to verify it's reaching the right desktop).
  */
-import { useEffect, useState } from "react";
-import {
-  anywhereEnable,
-  anywhereDisable,
-  anywhereStatus,
-  type AnywhereInfo,
-} from "../../lib/api";
-import { usePalette } from "../../lib/store";
-import { currentOS } from "../../lib/extensions";
-
-import { Modal } from "../atoms/Modal";
-import { QrCode } from "../atoms/QrCode";
-import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Modal } from "@/components/atoms/Modal"
+import { QrCode } from "@/components/atoms/QrCode"
+import { type AnywhereInfo, anywhereDisable, anywhereEnable, anywhereStatus } from "@/lib/api"
+import { currentOS } from "@/lib/extensions"
+import { usePalette } from "@/lib/store"
 
 /** The QR payload: the address with the token + fingerprint in the fragment, so
  * the mobile client can pair without the values ever hitting a query string. */
 const payload = (i: AnywhereInfo) =>
-  `${i.url}/#token=${i.token}&fp=${encodeURIComponent(i.fingerprint)}`;
+  `${i.url}/#token=${i.token}&fp=${encodeURIComponent(i.fingerprint)}`
 
-const PRIMED_KEY = "reado.anywhere.primed";
+const PRIMED_KEY = "reado.anywhere.primed"
 
 export function AnywhereDialog() {
-  const open = usePalette((s) => s.anywhereOpen);
-  const toggle = usePalette((s) => s.toggleAnywhere);
-  const { t } = useTranslation();
+  const open = usePalette((s) => s.anywhereOpen)
+  const toggle = usePalette((s) => s.toggleAnywhere)
+  const { t } = useTranslation()
 
-  const [info, setInfo] = useState<AnywhereInfo | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [info, setInfo] = useState<AnywhereInfo | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
   // macOS pops a system "allow local network access" prompt the moment the
   // server binds. We can't restyle that dialog, but we can explain it first with
   // our own step so it isn't a surprise — then let it fire.
-  const [priming, setPriming] = useState(false);
+  const [priming, setPriming] = useState(false)
 
   // Reflect the real server state whenever the dialog opens.
   useEffect(() => {
-    if (!open) return;
-    setError(null);
-    setPriming(false);
-    anywhereStatus().then(setInfo).catch(() => setInfo(null));
-  }, [open]);
+    if (!open) return
+    setError(null)
+    setPriming(false)
+    anywhereStatus()
+      .then(setInfo)
+      .catch(() => setInfo(null))
+  }, [open])
 
   const enable = async () => {
-    setBusy(true);
-    setError(null);
+    setBusy(true)
+    setError(null)
     try {
-      setInfo(await anywhereEnable());
-      setPriming(false);
-      localStorage.setItem(PRIMED_KEY, "1"); // don't re-explain on later enables
+      setInfo(await anywhereEnable())
+      setPriming(false)
+      localStorage.setItem(PRIMED_KEY, "1") // don't re-explain on later enables
     } catch (e) {
-      setError(String(e));
+      setError(String(e))
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
-  };
+  }
 
   // On macOS, explain the OS local-network prompt before triggering it — but only
   // the first time (afterwards the OS remembers the grant, so priming is noise).
   const requestEnable = () =>
-    currentOS() === "mac" && !localStorage.getItem(PRIMED_KEY) ? setPriming(true) : enable();
+    currentOS() === "mac" && !localStorage.getItem(PRIMED_KEY) ? setPriming(true) : enable()
 
   const disable = async () => {
-    setBusy(true);
+    setBusy(true)
     try {
-      await anywhereDisable();
-      setInfo(null);
+      await anywhereDisable()
+      setInfo(null)
     } catch (e) {
-      setError(String(e));
+      setError(String(e))
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
-  };
+  }
 
   const copyUrl = () => {
-    if (!info) return;
+    if (!info) return
     void navigator.clipboard.writeText(info.url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    });
-  };
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1600)
+    })
+  }
 
   return (
     <Modal
@@ -185,5 +181,5 @@ export function AnywhereDialog() {
         )}
       </footer>
     </Modal>
-  );
+  )
 }

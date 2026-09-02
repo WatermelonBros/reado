@@ -5,44 +5,51 @@
  * (detected on the user's real PATH), an enable/disable toggle, and a one-click
  * Install that runs the server's install command in the integrated terminal.
  */
-import { useCallback, useEffect, useState } from "react";
-import { lspInstalled, linuxPackageManager, submitToTerminal } from "../../lib/api";
-import { LANG_SERVERS, useExtensions, currentOS, installCmd, type LinuxPm } from "../../lib/extensions";
-import { useTerminals } from "../../lib/terminals";
-import { Checkbox } from "../atoms/Checkbox";
-import { FetchIcon } from "../atoms/icons";
-import { useTranslation } from "react-i18next";
+import { useCallback, useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Checkbox } from "@/components/atoms/Checkbox"
+import { FetchIcon } from "@/components/atoms/icons"
+import { linuxPackageManager, lspInstalled, submitToTerminal } from "@/lib/api"
+import { currentOS, installCmd, LANG_SERVERS, type LinuxPm, useExtensions } from "@/lib/extensions"
+import { useTerminals } from "@/lib/terminals"
 
 export function ExtensionsPanel() {
-  const { t } = useTranslation();
-  const disabled = useExtensions((s) => s.disabled);
-  const toggle = useExtensions((s) => s.toggle);
-  const [installed, setInstalled] = useState<Record<string, boolean>>({});
-  const [checking, setChecking] = useState(false);
+  const { t } = useTranslation()
+  const disabled = useExtensions((s) => s.disabled)
+  const toggle = useExtensions((s) => s.toggle)
+  const [installed, setInstalled] = useState<Record<string, boolean>>({})
+  const [checking, setChecking] = useState(false)
 
   const recheck = useCallback(() => {
-    setChecking(true);
+    setChecking(true)
     Promise.all(
-      LANG_SERVERS.map((s) => lspInstalled(s.id).then((ok) => [s.id, ok] as const).catch(() => [s.id, false] as const)),
+      LANG_SERVERS.map((s) =>
+        lspInstalled(s.id)
+          .then((ok) => [s.id, ok] as const)
+          .catch(() => [s.id, false] as const),
+      ),
     )
       .then((pairs) => setInstalled(Object.fromEntries(pairs)))
-      .finally(() => setChecking(false));
-  }, []);
+      .finally(() => setChecking(false))
+  }, [])
 
   useEffect(() => {
-    recheck();
-  }, [recheck]);
+    recheck()
+  }, [recheck])
 
-  const os = currentOS();
-  const [linuxPm, setLinuxPm] = useState<LinuxPm | null>(null);
+  const os = currentOS()
+  const [linuxPm, setLinuxPm] = useState<LinuxPm | null>(null)
   useEffect(() => {
-    if (os === "linux") linuxPackageManager().then((pm) => setLinuxPm(pm as LinuxPm | null)).catch(() => {});
-  }, [os]);
+    if (os === "linux")
+      linuxPackageManager()
+        .then((pm) => setLinuxPm(pm as LinuxPm | null))
+        .catch(() => {})
+  }, [os])
   const install = (cmd: string) => {
-    const term = useTerminals.getState();
-    const id = term.activeId ?? term.add();
-    submitToTerminal(id, cmd, id === term.activeId ? 0 : 400);
-  };
+    const term = useTerminals.getState()
+    const id = term.activeId ?? term.add()
+    submitToTerminal(id, cmd, id === term.activeId ? 0 : 400)
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -62,9 +69,9 @@ export function ExtensionsPanel() {
 
       <ul className="m-0 min-h-0 flex-1 list-none overflow-y-auto p-0">
         {LANG_SERVERS.map((s) => {
-          const isInstalled = installed[s.id];
-          const enabled = !disabled.includes(s.id);
-          const cmd = installCmd(s, os, linuxPm);
+          const isInstalled = installed[s.id]
+          const enabled = !disabled.includes(s.id)
+          const cmd = installCmd(s, os, linuxPm)
           return (
             <li key={s.id} className="border-b border-line/60 px-3 py-2.5">
               <div className="flex items-center gap-2">
@@ -103,9 +110,9 @@ export function ExtensionsPanel() {
                 )}
               </div>
             </li>
-          );
+          )
         })}
       </ul>
     </div>
-  );
+  )
 }

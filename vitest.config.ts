@@ -1,5 +1,6 @@
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from "node:url"
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vitest/config"
 
 // Two test projects so `pnpm test` runs both on every OS:
 //  - logic: pure helpers, no DOM (node env)
@@ -9,6 +10,9 @@ import react from "@vitejs/plugin-react";
 //           a per-OS build run — but they catch component/render/OS-logic bugs.)
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+  },
   test: {
     coverage: {
       provider: "v8", // fast, and AST-remapped to Istanbul-grade accuracy (Vitest ≥3.2)
@@ -45,4 +49,4 @@ export default defineConfig({
       },
     ],
   },
-});
+})

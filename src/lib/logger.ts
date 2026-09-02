@@ -20,9 +20,9 @@
  * affected, and a local enabled/level mirror short-circuits work (and the IPC
  * round-trip) when logging is off or below the threshold.
  */
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core"
 
-export type LogLevel = "error" | "warn" | "info" | "debug" | "trace";
+export type LogLevel = "error" | "warn" | "info" | "debug" | "trace"
 
 const ORDER: Record<LogLevel, number> = {
   error: 1,
@@ -30,18 +30,18 @@ const ORDER: Record<LogLevel, number> = {
   info: 3,
   debug: 4,
   trace: 5,
-};
+}
 
 // Local mirror of the user's setting so we can skip disabled/below-threshold
 // records before paying for an IPC call. The backend enforces the same gate.
-let enabled = true;
-let threshold = ORDER.info;
+let enabled = true
+let threshold = ORDER.info
 
 /** Apply the user's logging preference locally and push it to the backend. */
 export function applyLogConfig(on: boolean, level: LogLevel): void {
-  enabled = on;
-  threshold = ORDER[level] ?? ORDER.info;
-  invoke("log_set_config", { enabled: on, level }).catch(() => {});
+  enabled = on
+  threshold = ORDER[level] ?? ORDER.info
+  invoke("log_set_config", { enabled: on, level }).catch(() => {})
 }
 
 /** Emit one record (after the local gate) to the backend sink. */
@@ -51,19 +51,17 @@ function emit(
   msg: string,
   fields?: Record<string, unknown>,
 ): void {
-  if (!enabled || ORDER[level] > threshold) return;
+  if (!enabled || ORDER[level] > threshold) return
   // Raw `invoke` (not the traced wrapper) so logging never logs itself.
-  invoke("log_record", { level, target, msg, fields: fields ?? null }).catch(
-    () => {},
-  );
+  invoke("log_record", { level, target, msg, fields: fields ?? null }).catch(() => {})
 }
 
 export interface Logger {
-  error: (msg: string, fields?: Record<string, unknown>) => void;
-  warn: (msg: string, fields?: Record<string, unknown>) => void;
-  info: (msg: string, fields?: Record<string, unknown>) => void;
-  debug: (msg: string, fields?: Record<string, unknown>) => void;
-  trace: (msg: string, fields?: Record<string, unknown>) => void;
+  error: (msg: string, fields?: Record<string, unknown>) => void
+  warn: (msg: string, fields?: Record<string, unknown>) => void
+  info: (msg: string, fields?: Record<string, unknown>) => void
+  debug: (msg: string, fields?: Record<string, unknown>) => void
+  trace: (msg: string, fields?: Record<string, unknown>) => void
 }
 
 /** A logger bound to a `target` (the subsystem name shown in each record). */
@@ -74,11 +72,11 @@ export function createLogger(target: string): Logger {
     info: (msg, fields) => emit("info", target, msg, fields),
     debug: (msg, fields) => emit("debug", target, msg, fields),
     trace: (msg, fields) => emit("trace", target, msg, fields),
-  };
+  }
 }
 
 /** Default app-wide logger (target `app`). */
-export const log = createLogger("app");
+export const log = createLogger("app")
 
 /**
  * `invoke` wrapper that traces the IPC boundary: every command logs its name and
@@ -86,29 +84,26 @@ export const log = createLogger("app");
  * summary — never values — so contents and secrets stay out of the log.
  * `lib/api.ts` imports this as `invoke`, so all call sites are instrumented.
  */
-export async function tracedInvoke<T>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
+export async function tracedInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   // Never trace the logging commands themselves (avoids recursion / noise).
   if (cmd.startsWith("log_")) {
-    return invoke<T>(cmd, args);
+    return invoke<T>(cmd, args)
   }
-  const start = performance.now();
+  const start = performance.now()
   try {
-    const result = await invoke<T>(cmd, args);
+    const result = await invoke<T>(cmd, args)
     emit("debug", "ipc", cmd, {
       ms: Math.round(performance.now() - start),
       args: args ? Object.keys(args) : [],
-    });
-    return result;
+    })
+    return result
   } catch (e) {
     emit("error", "ipc", `${cmd} failed`, {
       ms: Math.round(performance.now() - start),
       args: args ? Object.keys(args) : [],
       error: safeError(e),
-    });
-    throw e;
+    })
+    throw e
   }
 }
 
@@ -119,11 +114,11 @@ export async function tracedInvoke<T>(
  * value. (Home paths that slip through are still shortened by the backend sink.)
  */
 export function safeError(e: unknown, max = 200): string {
-  const raw = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-  return raw.length > max ? `${raw.slice(0, max)}…` : raw;
+  const raw = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+  return raw.length > max ? `${raw.slice(0, max)}…` : raw
 }
 
 /** Absolute path of the active log file (for "copy path" / settings display). */
 export function logPath(): Promise<string | null> {
-  return invoke<string | null>("log_path").catch(() => null);
+  return invoke<string | null>("log_path").catch(() => null)
 }

@@ -8,21 +8,21 @@
  *  - `filled`   — quiet filled field, no border
  *  - `plain`    — transparent (e.g. a full-bleed command-palette search bar)
  */
-import { type InputHTMLAttributes, type Ref } from "react";
-import { cn } from "../../lib/cn";
+import type { InputHTMLAttributes, Ref } from "react"
+import { cn } from "@/lib/cn"
 
-export type InputVariant = "bordered" | "filled" | "plain";
+export type InputVariant = "bordered" | "filled" | "plain"
 
 const VARIANT: Record<InputVariant, string> = {
   bordered: "border border-line bg-surface focus:border-line-strong",
   filled: "bg-surface",
   plain: "bg-transparent",
-};
+}
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
-  variant?: InputVariant;
+  variant?: InputVariant
   /** Forwarded to the underlying element (React 19 ref-as-prop). */
-  ref?: Ref<HTMLInputElement>;
+  ref?: Ref<HTMLInputElement>
 }
 
 export function Input({ variant = "bordered", className, type = "text", ...rest }: Props) {
@@ -36,5 +36,5 @@ export function Input({ variant = "bordered", className, type = "text", ...rest 
       )}
       {...rest}
     />
-  );
+  )
 }

@@ -9,118 +9,112 @@
  * Live, non-persisted project state (the loaded git info, the in-memory tab
  * list of the *current* window) lives in `useProject`.
  */
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import type { GitInfo } from "./api";
+import { create } from "zustand"
+import { persist } from "zustand/middleware"
+import type { GitInfo } from "./api"
 
-export type ThemeName =
-  | "reado-dark"
-  | "reado-light"
-  | "reado-high-contrast"
-  | "reado-sepia";
+export type ThemeName = "reado-dark" | "reado-light" | "reado-high-contrast" | "reado-sepia"
 
-export type ThemeMode = "manual" | "system" | "auto";
+export type ThemeMode = "manual" | "system" | "auto"
 
 export const THEMES: ThemeName[] = [
   "reado-dark",
   "reado-light",
   "reado-high-contrast",
   "reado-sepia",
-];
+]
 
 /** Legible bounds for the editor's numeric reading controls. */
-export const FONT_SIZE_RANGE = { min: 10, max: 24, default: 13 } as const;
-export const LINE_HEIGHT_RANGE = { min: 1.2, max: 2.2, default: 1.65 } as const;
+export const FONT_SIZE_RANGE = { min: 10, max: 24, default: 13 } as const
+export const LINE_HEIGHT_RANGE = { min: 1.2, max: 2.2, default: 1.65 } as const
 
 /** Clamp `n` into a range; a non-finite value falls back to the range default,
  *  so a corrupted persisted value can never reach the editor. */
-export const clampRange = (
-  n: number,
-  r: { min: number; max: number; default: number },
-): number => (Number.isFinite(n) ? Math.min(r.max, Math.max(r.min, n)) : r.default);
+export const clampRange = (n: number, r: { min: number; max: number; default: number }): number =>
+  Number.isFinite(n) ? Math.min(r.max, Math.max(r.min, n)) : r.default
 
 export interface SettingsState {
   /** Theme used when mode is "manual". */
-  theme: ThemeName;
+  theme: ThemeName
   /** Light theme used by "system"/"auto" modes. */
-  lightTheme: ThemeName;
+  lightTheme: ThemeName
   /** Dark theme used by "system"/"auto" modes. */
-  darkTheme: ThemeName;
-  mode: ThemeMode;
-  codeFont: string;
+  darkTheme: ThemeName
+  mode: ThemeMode
+  codeFont: string
   /** Editor text size in px (clamped to FONT_SIZE_RANGE on read). */
-  fontSize: number;
+  fontSize: number
   /** Editor line height as a unitless multiplier (clamped to LINE_HEIGHT_RANGE). */
-  lineHeight: number;
+  lineHeight: number
   /** Gutter line numbers: hidden, absolute, or relative to the caret. */
-  lineNumbers: "off" | "on" | "relative";
+  lineNumbers: "off" | "on" | "relative"
   /** Active-line emphasis: none, gutter only, line background only, or both. */
-  activeLine: "off" | "gutter" | "line" | "both";
+  activeLine: "off" | "gutter" | "line" | "both"
   /** Indentation guides: off, on all indentation, or only the active scope. */
-  indentGuides: "off" | "all" | "active";
+  indentGuides: "off" | "all" | "active"
   /** Highlight the bracket matching the one at the caret. */
-  bracketMatching: boolean;
+  bracketMatching: boolean
   /** Vertical guide at this column as a target max line length (0 = off). */
-  rulerColumn: number;
+  rulerColumn: number
   /** Damp non-essential UI motion: follow the OS, force on, or force off. */
-  reduceMotion: "system" | "on" | "off";
+  reduceMotion: "system" | "on" | "off"
   /** Editor tab strip: full row, single tab, or hidden. */
-  tabBar: "multiple" | "single" | "hidden";
+  tabBar: "multiple" | "single" | "hidden"
   /** Editor scrollbar visibility. */
-  scrollbar: "auto" | "always" | "hidden";
+  scrollbar: "auto" | "always" | "hidden"
   /** Caret shape. */
-  cursorStyle: "line" | "block" | "underline";
+  cursorStyle: "line" | "block" | "underline"
   /** Caret blink behaviour. */
-  cursorBlink: "blink" | "smooth" | "solid";
+  cursorBlink: "blink" | "smooth" | "solid"
   /** Keep resolved comment threads visible, or hide them to declutter. */
-  showResolvedComments: boolean;
+  showResolvedComments: boolean
   /** Draw diagnostic squiggles inline (the Problems panel is unaffected). */
-  inlineDiagnostics: boolean;
+  inlineDiagnostics: boolean
   /** Glob patterns hidden from the file tree and project search. */
-  excludeGlobs: string[];
+  excludeGlobs: string[]
   /** Restore a project's tabs/scroll/caret on reopen, or start clean. */
-  restoreSession: boolean;
+  restoreSession: boolean
   /** Trim trailing whitespace on save (never on read). */
-  trimTrailingWhitespace: boolean;
+  trimTrailingWhitespace: boolean
   /** Ensure a single final newline on save (never on read). */
-  insertFinalNewline: boolean;
+  insertFinalNewline: boolean
   /** Soft-focus the rest of the file around the cursor. */
-  focusMode: boolean;
+  focusMode: boolean
   /** Wrap long lines instead of scrolling horizontally. */
-  wrap: boolean;
+  wrap: boolean
   /** Pin the enclosing scope headers while scrolling. */
-  stickyScroll: boolean;
+  stickyScroll: boolean
   /** Interface zoom factor (1 = 100%). */
-  zoom: number;
+  zoom: number
   /** Version `.reado/` (except the rebuildable index) instead of gitignoring it. */
-  versionReado: boolean;
+  versionReado: boolean
   /** Suppress the first-comment gitignore prompt once the user opts out. */
-  gitignoreDontAsk: boolean;
+  gitignoreDontAsk: boolean
   /** Play a soft chime when the agent finishes resolving tasks. */
-  completionSound: boolean;
+  completionSound: boolean
   /** Automatically write edits to disk: never / after a short pause / on blur. */
-  autoSave: "off" | "afterDelay" | "onFocusChange";
+  autoSave: "off" | "afterDelay" | "onFocusChange"
   /** Chrome visibility toggles (View menu). */
-  showActivityBar: boolean;
-  showStatusBar: boolean;
-  showBreadcrumbs: boolean;
+  showActivityBar: boolean
+  showStatusBar: boolean
+  showBreadcrumbs: boolean
   /** Show spaces/tabs as faint marks in the editor. */
-  renderWhitespace: boolean;
+  renderWhitespace: boolean
   /** Show the structure ribbon (symbols/comments/diagnostics overview column). */
-  showRibbon: boolean;
+  showRibbon: boolean
   /** File-tree icon style: generic glyph, per-type mono glyph, or tinted per type. */
-  fileIcons: "off" | "mono" | "colored";
+  fileIcons: "off" | "mono" | "colored"
   /** Write a diagnostic log file you can send back to us (on by default). */
-  logEnabled: boolean;
+  logEnabled: boolean
   /** How much detail the log captures. */
-  logLevel: "error" | "warn" | "info" | "debug" | "trace";
+  logLevel: "error" | "warn" | "info" | "debug" | "trace"
   /** Show hidden & git-ignored files in the tree (remembered across sessions). */
-  showHidden: boolean;
+  showHidden: boolean
   /** Last-used guided-review objective, so it isn't re-picked every time. */
-  reviewObjective: string;
+  reviewObjective: string
   /** The user dismissed the "make Reado the default app for text files" prompt. */
-  defaultAppsDismissed: boolean;
-  set: (patch: Partial<SettingsState>) => void;
+  defaultAppsDismissed: boolean
+  set: (patch: Partial<SettingsState>) => void
 }
 
 export const useSettings = create<SettingsState>()(
@@ -174,35 +168,39 @@ export const useSettings = create<SettingsState>()(
       name: "reado.settings",
       version: 2,
       migrate: (state, version) => {
-        const s = state as Partial<SettingsState>;
+        const s = state as Partial<SettingsState>
         // v0 stored fileIcons as "plain" | "colored"; "plain" → per-type mono.
-        if (version < 1 && (s.fileIcons as string) === "plain") s.fileIcons = "mono";
+        if (version < 1 && (s.fileIcons as string) === "plain") s.fileIcons = "mono"
         // v2 added the editor reading controls; normalise the numeric ones so a
         // stale/corrupted persisted value can't reach the editor.
         if (version < 2) {
-          s.fontSize = clampRange(Number(s.fontSize), FONT_SIZE_RANGE);
-          s.lineHeight = clampRange(Number(s.lineHeight), LINE_HEIGHT_RANGE);
+          s.fontSize = clampRange(Number(s.fontSize), FONT_SIZE_RANGE)
+          s.lineHeight = clampRange(Number(s.lineHeight), LINE_HEIGHT_RANGE)
         }
-        return s as SettingsState;
+        return s as SettingsState
       },
     },
   ),
-);
+)
 
 export interface RecentProject {
-  path: string;
-  name: string;
+  path: string
+  name: string
   /** Epoch millis of last open, for ordering. */
-  openedAt: number;
+  openedAt: number
 }
 
 interface RecentsState {
-  projects: RecentProject[];
-  touch: (path: string) => void;
-  remove: (path: string) => void;
+  projects: RecentProject[]
+  touch: (path: string) => void
+  remove: (path: string) => void
 }
 
-const basename = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? p;
+const basename = (p: string) =>
+  p
+    .replace(/[\\/]+$/, "")
+    .split(/[\\/]/)
+    .pop() ?? p
 
 export const useRecents = create<RecentsState>()(
   persist(
@@ -210,43 +208,39 @@ export const useRecents = create<RecentsState>()(
       projects: [],
       touch: (path) =>
         set((s) => {
-          const rest = s.projects.filter((p) => p.path !== path);
+          const rest = s.projects.filter((p) => p.path !== path)
           return {
-            projects: [
-              { path, name: basename(path), openedAt: Date.now() },
-              ...rest,
-            ].slice(0, 30),
-          };
+            projects: [{ path, name: basename(path), openedAt: Date.now() }, ...rest].slice(0, 30),
+          }
         }),
-      remove: (path) =>
-        set((s) => ({ projects: s.projects.filter((p) => p.path !== path) })),
+      remove: (path) => set((s) => ({ projects: s.projects.filter((p) => p.path !== path) })),
     }),
     { name: "reado.recents" },
   ),
-);
+)
 
 export interface Session {
   /** Open file paths, in tab order. */
-  tabs: string[];
+  tabs: string[]
   /** Active file path, or null. */
-  active: string | null;
+  active: string | null
   /** Per-file editor scroll offset (px), so reopening returns to where you were. */
-  scroll?: Record<string, number>;
+  scroll?: Record<string, number>
   /** Per-file cursor position, so reopening restores the caret (not just scroll). */
-  cursor?: Record<string, { line: number; col: number }>;
+  cursor?: Record<string, { line: number; col: number }>
   /** Expanded directory paths in the tree, so the drill-down survives a reopen. */
-  expanded?: string[];
+  expanded?: string[]
   /** The file shown in the split pane, so a side-by-side comparison survives. */
-  split?: string | null;
+  split?: string | null
 }
 
 interface SessionsState {
-  byRoot: Record<string, Session>;
-  save: (root: string, session: Session) => void;
+  byRoot: Record<string, Session>
+  save: (root: string, session: Session) => void
   /** Remember the editor scroll offset for a file (merged into its session). */
-  saveScroll: (root: string, path: string, top: number) => void;
+  saveScroll: (root: string, path: string, top: number) => void
   /** Remember the cursor position for a file. */
-  saveCursor: (root: string, path: string, line: number, col: number) => void;
+  saveCursor: (root: string, path: string, line: number, col: number) => void
 }
 
 export const useSessions = create<SessionsState>()(
@@ -257,7 +251,7 @@ export const useSessions = create<SessionsState>()(
       // tabs/active change, so a plain tab save never wipes them.
       save: (root, session) =>
         set((s) => {
-          const prev = s.byRoot[root];
+          const prev = s.byRoot[root]
           return {
             byRoot: {
               ...s.byRoot,
@@ -269,32 +263,32 @@ export const useSessions = create<SessionsState>()(
                 split: session.split ?? prev?.split,
               },
             },
-          };
+          }
         }),
       saveScroll: (root, path, top) =>
         set((s) => {
-          const prev = s.byRoot[root] ?? { tabs: [], active: null };
+          const prev = s.byRoot[root] ?? { tabs: [], active: null }
           return {
             byRoot: {
               ...s.byRoot,
               [root]: { ...prev, scroll: { ...prev.scroll, [path]: top } },
             },
-          };
+          }
         }),
       saveCursor: (root, path, line, col) =>
         set((s) => {
-          const prev = s.byRoot[root] ?? { tabs: [], active: null };
+          const prev = s.byRoot[root] ?? { tabs: [], active: null }
           return {
             byRoot: {
               ...s.byRoot,
               [root]: { ...prev, cursor: { ...prev.cursor, [path]: { line, col } } },
             },
-          };
+          }
         }),
     }),
     { name: "reado.sessions" },
   ),
-);
+)
 
 export type Tool =
   | "files"
@@ -313,40 +307,40 @@ export type Tool =
   | "prereview"
   | "guidedreview"
   | "coverage"
-  | "extensions";
+  | "extensions"
 
 interface WorkspaceState {
   /** Active side-panel tool, or null when the panel is collapsed. */
-  tool: Tool | null;
+  tool: Tool | null
   /** The tool to restore when re-opening a collapsed sidebar. */
-  lastTool: Tool;
+  lastTool: Tool
   /** Select a tool; selecting the active one collapses the panel. */
-  selectTool: (tool: Tool) => void;
+  selectTool: (tool: Tool) => void
   /** Collapse the sidebar, or restore the last tool (Ctrl+B). */
-  toggleSidebar: () => void;
+  toggleSidebar: () => void
   /** A query to seed the search panel (find references), consumed on read. */
-  pendingSearch: string | null;
-  searchFor: (query: string) => void;
-  clearPendingSearch: () => void;
+  pendingSearch: string | null
+  searchFor: (query: string) => void
+  clearPendingSearch: () => void
   /** Whether the knowledge-graph overlay is open. */
-  graphOpen: boolean;
-  toggleGraph: (open?: boolean) => void;
+  graphOpen: boolean
+  toggleGraph: (open?: boolean) => void
   /** Whether the documentation overlay is open. */
-  docsOpen: boolean;
-  toggleDocs: (open?: boolean) => void;
+  docsOpen: boolean
+  toggleDocs: (open?: boolean) => void
   /** Side-panel width in px (drag-resizable), persisted. */
-  sidebarWidth: number;
-  setSidebarWidth: (px: number) => void;
+  sidebarWidth: number
+  setSidebarWidth: (px: number) => void
   /** Comments-panel filters, remembered so a tool-switch doesn't reset them. */
-  commentFilter: { view: "open" | "history"; type: string; state: string; thisFile: boolean };
-  setCommentFilter: (patch: Partial<WorkspaceState["commentFilter"]>) => void;
+  commentFilter: { view: "open" | "history"; type: string; state: string; thisFile: boolean }
+  setCommentFilter: (patch: Partial<WorkspaceState["commentFilter"]>) => void
   /** Last search-panel query, so leaving and returning doesn't lose it. */
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
+  searchQuery: string
+  setSearchQuery: (q: string) => void
   /** User's custom activity-bar order (tool ids). Tools not listed keep their
    *  natural order after the listed ones. Empty = default order. */
-  toolOrder: Tool[];
-  setToolOrder: (order: Tool[]) => void;
+  toolOrder: Tool[]
+  setToolOrder: (order: Tool[]) => void
 }
 
 /** Tool sidebar state (which side panel is shown), persisted per user. */
@@ -357,11 +351,9 @@ export const useWorkspace = create<WorkspaceState>()(
       lastTool: "files",
       selectTool: (tool) =>
         set((s) => (s.tool === tool ? { tool: null } : { tool, lastTool: tool })),
-      toggleSidebar: () =>
-        set((s) => (s.tool ? { tool: null } : { tool: s.lastTool })),
+      toggleSidebar: () => set((s) => (s.tool ? { tool: null } : { tool: s.lastTool })),
       pendingSearch: null,
-      searchFor: (query) =>
-        set({ tool: "search", lastTool: "search", pendingSearch: query }),
+      searchFor: (query) => set({ tool: "search", lastTool: "search", pendingSearch: query }),
       clearPendingSearch: () => set({ pendingSearch: null }),
       graphOpen: false,
       toggleGraph: (open) => set((s) => ({ graphOpen: open ?? !s.graphOpen })),
@@ -397,7 +389,7 @@ export const useWorkspace = create<WorkspaceState>()(
       }),
     },
   ),
-);
+)
 
 export type PaletteMode =
   | "commands"
@@ -407,21 +399,21 @@ export type PaletteMode =
   | "wsymbols"
   | "recents"
   | "bookmarks"
-  | null;
+  | null
 
 interface PaletteState {
-  mode: PaletteMode;
+  mode: PaletteMode
   /** True while the settings panel is shown. */
-  settingsOpen: boolean;
+  settingsOpen: boolean
   /** True while the keyboard-shortcuts reference is shown. */
-  shortcutsOpen: boolean;
+  shortcutsOpen: boolean
   /** True while the Reado Anywhere (phone pairing) dialog is shown. */
-  anywhereOpen: boolean;
-  open: (mode: Exclude<PaletteMode, null>) => void;
-  close: () => void;
-  toggleSettings: (open?: boolean) => void;
-  toggleShortcuts: (open?: boolean) => void;
-  toggleAnywhere: (open?: boolean) => void;
+  anywhereOpen: boolean
+  open: (mode: Exclude<PaletteMode, null>) => void
+  close: () => void
+  toggleSettings: (open?: boolean) => void
+  toggleShortcuts: (open?: boolean) => void
+  toggleAnywhere: (open?: boolean) => void
 }
 
 /** Drives the quick-open palette (commands / files / search) and settings. */
@@ -432,39 +424,36 @@ export const usePalette = create<PaletteState>((set) => ({
   anywhereOpen: false,
   open: (mode) => set({ mode }),
   close: () => set({ mode: null }),
-  toggleSettings: (open) =>
-    set((s) => ({ settingsOpen: open ?? !s.settingsOpen, mode: null })),
-  toggleShortcuts: (open) =>
-    set((s) => ({ shortcutsOpen: open ?? !s.shortcutsOpen, mode: null })),
-  toggleAnywhere: (open) =>
-    set((s) => ({ anywhereOpen: open ?? !s.anywhereOpen, mode: null })),
-}));
+  toggleSettings: (open) => set((s) => ({ settingsOpen: open ?? !s.settingsOpen, mode: null })),
+  toggleShortcuts: (open) => set((s) => ({ shortcutsOpen: open ?? !s.shortcutsOpen, mode: null })),
+  toggleAnywhere: (open) => set((s) => ({ anywhereOpen: open ?? !s.anywhereOpen, mode: null })),
+}))
 
 interface EditorActionsState {
   /** Bumped to request the active code view to open the comment composer. */
-  composeNonce: number;
-  requestCompose: () => void;
+  composeNonce: number
+  requestCompose: () => void
   /** Bumped to ask the active view to explain the current selection with AI. */
-  explainNonce: number;
-  requestExplain: () => void;
+  explainNonce: number
+  requestExplain: () => void
   /** Bumped to ask the active view to peek the definition at the cursor. */
-  peekNonce: number;
-  requestPeek: () => void;
+  peekNonce: number
+  requestPeek: () => void
   /** Manual editing enabled for the active file (read-first stays the default). */
-  editing: boolean;
-  setEditing: (editing: boolean) => void;
+  editing: boolean
+  setEditing: (editing: boolean) => void
   /** True when the active editable file has unsaved changes. */
-  dirty: boolean;
-  setDirty: (dirty: boolean) => void;
+  dirty: boolean
+  setDirty: (dirty: boolean) => void
   /** Show the active file as a diff against its committed version. */
-  diffing: boolean;
-  setDiffing: (diffing: boolean) => void;
+  diffing: boolean
+  setDiffing: (diffing: boolean) => void
   /** The git ref the diff compares against (HEAD, a branch, or a commit hash). */
-  diffBase: string;
-  setDiffBase: (base: string) => void;
+  diffBase: string
+  setDiffBase: (base: string) => void
   /** Show a per-line git blame gutter in the editor. */
-  blame: boolean;
-  setBlame: (blame: boolean) => void;
+  blame: boolean
+  setBlame: (blame: boolean) => void
 }
 
 /** Bridge for triggering editor actions from outside the editor (e.g. global
@@ -496,12 +485,12 @@ export const useEditorActions = create<EditorActionsState>()(
       partialize: (s) => ({ blame: s.blame, diffBase: s.diffBase }),
     },
   ),
-);
+)
 
 interface CursorState {
-  line: number;
-  col: number;
-  set: (line: number, col: number) => void;
+  line: number
+  col: number
+  set: (line: number, col: number) => void
 }
 
 /** Cursor position of the focused editor, shown in the status bar. Kept in its
@@ -510,72 +499,80 @@ export const useCursor = create<CursorState>((set) => ({
   line: 1,
   col: 1,
   set: (line, col) => set({ line, col }),
-}));
+}))
 
 /** A single thing to jump to after navigation, for the landing highlight. */
 export interface Landing {
-  path: string;
-  line: number;
+  path: string
+  line: number
   /** Bumped on every jump so repeated jumps to the same line re-trigger. */
-  nonce: number;
+  nonce: number
 }
 
 interface ProjectState {
-  root: string;
-  git: GitInfo;
-  tabs: string[];
-  active: string | null;
-  showHidden: boolean;
-  landing: Landing | null;
+  root: string
+  git: GitInfo
+  tabs: string[]
+  active: string | null
+  showHidden: boolean
+  landing: Landing | null
   /** Bumped to make the file tree re-list directories (external/internal changes). */
-  treeNonce: number;
-  bumpTree: () => void;
+  treeNonce: number
+  bumpTree: () => void
   /** Bumped to collapse every expanded folder in the tree. */
-  collapseNonce: number;
-  collapseTree: () => void;
+  collapseNonce: number
+  collapseTree: () => void
   /** Expanded directory paths in the tree (persisted per project via Session). */
-  expandedDirs: string[];
+  expandedDirs: string[]
   /** Toggle a directory's expansion (and remember it). */
-  toggleDir: (path: string, open?: boolean) => void;
+  toggleDir: (path: string, open?: boolean) => void
   /** Back/forward history of visited locations, and the cursor into it. */
-  navStack: { path: string; line?: number }[];
-  navIndex: number;
-  goBack: () => void;
-  goForward: () => void;
+  navStack: { path: string; line?: number }[]
+  navIndex: number
+  goBack: () => void
+  goForward: () => void
   /** Recently closed tabs (newest last), for reopen. */
-  closedTabs: string[];
-  reopenClosed: () => void;
+  closedTabs: string[]
+  reopenClosed: () => void
   /** Cycle the active tab in order (Ctrl+Tab / Ctrl+Shift+Tab). */
-  cycleTab: (dir: 1 | -1) => void;
+  cycleTab: (dir: 1 | -1) => void
   /** A second file shown side-by-side, or null when not split. */
-  splitPath: string | null;
+  splitPath: string | null
   /** Open the split pane (defaults to the current file), or set its file. */
-  openSplit: (path?: string) => void;
-  closeSplit: () => void;
+  openSplit: (path?: string) => void
+  closeSplit: () => void
   /** Swap which file is primary (left) and which is in the split (right). */
-  swapSplit: () => void;
-  init: (root: string, git: GitInfo, session?: Session) => void;
-  setGit: (git: GitInfo) => void;
-  open: (path: string, line?: number) => void;
-  close: (path: string) => void;
+  swapSplit: () => void
+  init: (root: string, git: GitInfo, session?: Session) => void
+  setGit: (git: GitInfo) => void
+  open: (path: string, line?: number) => void
+  close: (path: string) => void
   /** Repoint an open tab after its file moved on disk. */
-  renamePath: (from: string, to: string) => void;
+  renamePath: (from: string, to: string) => void
   /** Close every tab except `path` (becomes active). */
-  closeOthers: (path: string) => void;
+  closeOthers: (path: string) => void
   /** Close the tabs to the right of `path`. */
-  closeToRight: (path: string) => void;
+  closeToRight: (path: string) => void
   /** Close all tabs. */
-  closeAll: () => void;
+  closeAll: () => void
   /** Reorder an open tab: move `path` to just before `beforePath` (or to the end
    *  when `beforePath` is null). Drag-and-drop in the tab strip. */
-  moveTab: (path: string, beforePath: string | null) => void;
-  setActive: (path: string) => void;
-  setShowHidden: (show: boolean) => void;
+  moveTab: (path: string, beforePath: string | null) => void
+  setActive: (path: string) => void
+  setShowHidden: (show: boolean) => void
 }
 
 export const useProject = create<ProjectState>((set) => ({
   root: "",
-  git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 },
+  git: {
+    isRepo: false,
+    branch: null,
+    ahead: 0,
+    behind: 0,
+    hasRemote: false,
+    hasUpstream: false,
+    changedFiles: 0,
+  },
   tabs: [],
   active: null,
   showHidden: false,
@@ -587,23 +584,21 @@ export const useProject = create<ProjectState>((set) => ({
   expandedDirs: [],
   toggleDir: (path, open) =>
     set((s) => {
-      const has = s.expandedDirs.includes(path);
-      const want = open ?? !has;
-      if (want === has) return s;
+      const has = s.expandedDirs.includes(path)
+      const want = open ?? !has
+      if (want === has) return s
       return {
-        expandedDirs: want
-          ? [...s.expandedDirs, path]
-          : s.expandedDirs.filter((p) => p !== path),
-      };
+        expandedDirs: want ? [...s.expandedDirs, path] : s.expandedDirs.filter((p) => p !== path),
+      }
     }),
   navStack: [],
   navIndex: -1,
   closedTabs: [],
   goBack: () =>
     set((s) => {
-      if (s.navIndex <= 0) return s;
-      const navIndex = s.navIndex - 1;
-      const e = s.navStack[navIndex];
+      if (s.navIndex <= 0) return s
+      const navIndex = s.navIndex - 1
+      const e = s.navStack[navIndex]
       return {
         navIndex,
         tabs: s.tabs.includes(e.path) ? s.tabs : [...s.tabs, e.path],
@@ -612,13 +607,13 @@ export const useProject = create<ProjectState>((set) => ({
           e.line !== undefined
             ? { path: e.path, line: e.line, nonce: (s.landing?.nonce ?? 0) + 1 }
             : s.landing,
-      };
+      }
     }),
   goForward: () =>
     set((s) => {
-      if (s.navIndex >= s.navStack.length - 1) return s;
-      const navIndex = s.navIndex + 1;
-      const e = s.navStack[navIndex];
+      if (s.navIndex >= s.navStack.length - 1) return s
+      const navIndex = s.navIndex + 1
+      const e = s.navStack[navIndex]
       return {
         navIndex,
         tabs: s.tabs.includes(e.path) ? s.tabs : [...s.tabs, e.path],
@@ -627,31 +622,30 @@ export const useProject = create<ProjectState>((set) => ({
           e.line !== undefined
             ? { path: e.path, line: e.line, nonce: (s.landing?.nonce ?? 0) + 1 }
             : s.landing,
-      };
+      }
     }),
   reopenClosed: () =>
     set((s) => {
-      if (s.closedTabs.length === 0) return s;
-      const closedTabs = s.closedTabs.slice(0, -1);
-      const path = s.closedTabs[s.closedTabs.length - 1];
+      if (s.closedTabs.length === 0) return s
+      const closedTabs = s.closedTabs.slice(0, -1)
+      const path = s.closedTabs[s.closedTabs.length - 1]
       return {
         closedTabs,
         tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path],
         active: path,
-      };
+      }
     }),
   cycleTab: (dir) =>
     set((s) => {
-      if (s.tabs.length < 2) return s;
-      const i = s.active ? s.tabs.indexOf(s.active) : 0;
-      const next = (i + dir + s.tabs.length) % s.tabs.length;
-      return { active: s.tabs[next] };
+      if (s.tabs.length < 2) return s
+      const i = s.active ? s.tabs.indexOf(s.active) : 0
+      const next = (i + dir + s.tabs.length) % s.tabs.length
+      return { active: s.tabs[next] }
     }),
   splitPath: null,
   openSplit: (path) => set((s) => ({ splitPath: path ?? s.active })),
   closeSplit: () => set({ splitPath: null }),
-  swapSplit: () =>
-    set((s) => (s.splitPath ? { active: s.splitPath, splitPath: s.active } : s)),
+  swapSplit: () => set((s) => (s.splitPath ? { active: s.splitPath, splitPath: s.active } : s)),
   init: (root, git, session) =>
     set({
       root,
@@ -670,56 +664,52 @@ export const useProject = create<ProjectState>((set) => ({
   setGit: (git) => set({ git }),
   open: (path, line) =>
     set((s) => {
-      const tabs = s.tabs.includes(path) ? s.tabs : [...s.tabs, path];
+      const tabs = s.tabs.includes(path) ? s.tabs : [...s.tabs, path]
       // Record into history: truncate any forward entries, collapse a repeat of
       // the current path (just update its line), and cap the depth.
-      const cur = s.navStack[s.navIndex];
-      let navStack = s.navStack;
-      let navIndex = s.navIndex;
+      const cur = s.navStack[s.navIndex]
+      let navStack = s.navStack
+      let navIndex = s.navIndex
       if (!cur || cur.path !== path) {
-        navStack = [...s.navStack.slice(0, s.navIndex + 1), { path, line }].slice(-50);
-        navIndex = navStack.length - 1;
+        navStack = [...s.navStack.slice(0, s.navIndex + 1), { path, line }].slice(-50)
+        navIndex = navStack.length - 1
       } else if (line !== undefined) {
-        navStack = [...s.navStack];
-        navStack[s.navIndex] = { path, line };
+        navStack = [...s.navStack]
+        navStack[s.navIndex] = { path, line }
       }
       return {
         tabs,
         active: path,
         landing:
-          line !== undefined
-            ? { path, line, nonce: (s.landing?.nonce ?? 0) + 1 }
-            : s.landing,
+          line !== undefined ? { path, line, nonce: (s.landing?.nonce ?? 0) + 1 } : s.landing,
         navStack,
         navIndex,
-      };
+      }
     }),
   close: (path) =>
     set((s) => {
-      const tabs = s.tabs.filter((t) => t !== path);
-      const active =
-        s.active === path ? (tabs[tabs.length - 1] ?? null) : s.active;
-      return { tabs, active, closedTabs: [...s.closedTabs, path].slice(-25) };
+      const tabs = s.tabs.filter((t) => t !== path)
+      const active = s.active === path ? (tabs[tabs.length - 1] ?? null) : s.active
+      return { tabs, active, closedTabs: [...s.closedTabs, path].slice(-25) }
     }),
-  closeOthers: (path) =>
-    set((s) => (s.tabs.includes(path) ? { tabs: [path], active: path } : s)),
+  closeOthers: (path) => set((s) => (s.tabs.includes(path) ? { tabs: [path], active: path } : s)),
   closeToRight: (path) =>
     set((s) => {
-      const i = s.tabs.indexOf(path);
-      if (i < 0) return s;
-      const tabs = s.tabs.slice(0, i + 1);
-      const active = s.active && tabs.includes(s.active) ? s.active : path;
-      return { tabs, active };
+      const i = s.tabs.indexOf(path)
+      if (i < 0) return s
+      const tabs = s.tabs.slice(0, i + 1)
+      const active = s.active && tabs.includes(s.active) ? s.active : path
+      return { tabs, active }
     }),
   closeAll: () => set({ tabs: [], active: null }),
   moveTab: (path, beforePath) =>
     set((s) => {
-      if (path === beforePath) return s;
-      const without = s.tabs.filter((t) => t !== path);
-      if (without.length === s.tabs.length) return s; // path not open
-      const at = beforePath === null ? without.length : without.indexOf(beforePath);
-      const idx = at < 0 ? without.length : at;
-      return { tabs: [...without.slice(0, idx), path, ...without.slice(idx)] };
+      if (path === beforePath) return s
+      const without = s.tabs.filter((t) => t !== path)
+      if (without.length === s.tabs.length) return s // path not open
+      const at = beforePath === null ? without.length : without.indexOf(beforePath)
+      const idx = at < 0 ? without.length : at
+      return { tabs: [...without.slice(0, idx), path, ...without.slice(idx)] }
     }),
   renamePath: (from, to) =>
     set((s) => ({
@@ -729,7 +719,7 @@ export const useProject = create<ProjectState>((set) => ({
   setActive: (path) => set({ active: path }),
   // Mirror to settings so the preference survives a reopen (init re-seeds from it).
   setShowHidden: (show) => {
-    useSettings.getState().set({ showHidden: show });
-    set({ showHidden: show });
+    useSettings.getState().set({ showHidden: show })
+    set({ showHidden: show })
   },
-}));
+}))

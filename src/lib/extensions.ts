@@ -6,36 +6,36 @@
  * on `id` (so a manifest can't make Reado run an arbitrary command). The
  * marketplace reads this list; `useExtensions` persists which are disabled.
  */
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { createLogger } from "./logger";
+import { create } from "zustand"
+import { persist } from "zustand/middleware"
+import { createLogger } from "./logger"
 
-const log = createLogger("extensions");
+const log = createLogger("extensions")
 
-export type OS = "mac" | "linux" | "windows";
+export type OS = "mac" | "linux" | "windows"
 
 /** The current platform, from the webview's user agent (no extra capability). */
 export function currentOS(): OS {
-  const ua = navigator.userAgent;
-  if (/Mac/i.test(ua)) return "mac";
-  if (/Win/i.test(ua)) return "windows";
-  return "linux";
+  const ua = navigator.userAgent
+  if (/Mac/i.test(ua)) return "mac"
+  if (/Win/i.test(ua)) return "windows"
+  return "linux"
 }
 
-export type LinuxPm = "apt" | "dnf" | "pacman" | "zypper" | "brew";
+export type LinuxPm = "apt" | "dnf" | "pacman" | "zypper" | "brew"
 
 /** Install command per OS. `linux` may be a single string (a distro-agnostic
  * installer like npm/cargo/brew) or a per-package-manager map for system
  * packages that differ by distro. An OS/manager may be omitted when there's no
  * clean one-liner (the marketplace then shows "manual" + the prerequisite). */
 interface Install {
-  mac?: string;
-  windows?: string;
-  linux?: string | Partial<Record<LinuxPm, string>>;
+  mac?: string
+  windows?: string
+  linux?: string | Partial<Record<LinuxPm, string>>
 }
 
 /** Same command on every OS (npm/rustup/go/dotnet/gem/coursier are portable). */
-const all = (cmd: string): Install => ({ mac: cmd, linux: cmd, windows: cmd });
+const all = (cmd: string): Install => ({ mac: cmd, linux: cmd, windows: cmd })
 
 /** The install command for the current OS (and Linux package manager), or
  * undefined when none is configured (→ manual install). */
@@ -44,21 +44,21 @@ export function installCmd(
   os: OS,
   linuxPm: LinuxPm | null,
 ): string | undefined {
-  if (os !== "linux") return ext.install[os];
-  const l = ext.install.linux;
-  if (typeof l === "string") return l;
-  return l && linuxPm ? l[linuxPm] : undefined;
+  if (os !== "linux") return ext.install[os]
+  const l = ext.install.linux
+  if (typeof l === "string") return l
+  return l && linuxPm ? l[linuxPm] : undefined
 }
 
 export interface LangServerExt {
   /** Must match the Rust `server_command` id and the LSP `SERVERS` id. */
-  id: string;
-  name: string;
-  description: string;
+  id: string
+  name: string
+  description: string
   /** How to install the server, per OS. */
-  install: Install;
+  install: Install
   /** Prerequisite toolchain, shown up front (e.g. "Node.js"). */
-  requires?: string;
+  requires?: string
 }
 
 export const LANG_SERVERS: LangServerExt[] = [
@@ -273,17 +273,23 @@ export const LANG_SERVERS: LangServerExt[] = [
       mac: "brew install taplo",
       windows: "cargo install taplo-cli --locked",
       // cargo is distro-agnostic; brew as an alternative where present.
-      linux: { apt: "cargo install taplo-cli --locked", dnf: "cargo install taplo-cli --locked", pacman: "sudo pacman -S taplo-cli", zypper: "cargo install taplo-cli --locked", brew: "brew install taplo" },
+      linux: {
+        apt: "cargo install taplo-cli --locked",
+        dnf: "cargo install taplo-cli --locked",
+        pacman: "sudo pacman -S taplo-cli",
+        zypper: "cargo install taplo-cli --locked",
+        brew: "brew install taplo",
+      },
     },
     requires: "Rust (cargo) or Homebrew",
   },
-];
+]
 
 interface ExtensionsState {
   /** Ids the user has disabled (persisted). Everything else is enabled. */
-  disabled: string[];
-  isEnabled: (id: string) => boolean;
-  toggle: (id: string, enabled: boolean) => void;
+  disabled: string[]
+  isEnabled: (id: string) => boolean
+  toggle: (id: string, enabled: boolean) => void
 }
 
 export const useExtensions = create<ExtensionsState>()(
@@ -292,16 +298,16 @@ export const useExtensions = create<ExtensionsState>()(
       disabled: [],
       isEnabled: (id) => !get().disabled.includes(id),
       toggle: (id, enabled) => {
-        log.info(enabled ? "extension enabled" : "extension disabled", { id });
+        log.info(enabled ? "extension enabled" : "extension disabled", { id })
         set((s) => ({
           disabled: enabled
             ? s.disabled.filter((x) => x !== id)
             : s.disabled.includes(id)
               ? s.disabled
               : [...s.disabled, id],
-        }));
+        }))
       },
     }),
     { name: "reado.extensions" },
   ),
-);
+)

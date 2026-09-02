@@ -6,100 +6,98 @@
  * the entry point to the AI loop. Every pane stays mounted (hidden when not in
  * the active group) so PTYs and scrollback persist across tab/layout changes.
  */
-import { launchAgent } from "../../lib/agents";
-import { agentInstalled } from "../../lib/api";
-import { useTerminals } from "../../lib/terminals";
-import { useProject, useSettings } from "../../lib/store";
-import { useComments, toRelative } from "../../lib/comments";
+
 import {
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
-
-import { Terminal } from "../organisms/Terminal";
-import { SendReviewDialog } from "../organisms/SendReviewDialog";
-import { AuditDialog, type AuditTarget } from "../organisms/AuditDialog";
-import { ContextMenu, type ContextMenuItem } from "../atoms/ContextMenu";
-import { Badge } from "../atoms/Badge";
-import { IconButton } from "../atoms/IconButton";
-import { useTranslation } from "react-i18next";
+} from "react"
+import { useTranslation } from "react-i18next"
+import { Badge } from "@/components/atoms/Badge"
+import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
+import { IconButton } from "@/components/atoms/IconButton"
 import {
-  PlusIcon,
-  CloseIcon,
-  SendIcon,
-  SparkleIcon,
-  SplitIcon,
   ClaudeIcon,
+  CloseIcon,
   CodexIcon,
   CopilotIcon,
   GeminiIcon,
-  OpenCodeIcon,
   LayoutIcon,
-} from "../atoms/icons";
+  OpenCodeIcon,
+  PlusIcon,
+  SendIcon,
+  SparkleIcon,
+  SplitIcon,
+} from "@/components/atoms/icons"
+import { AuditDialog, type AuditTarget } from "@/components/organisms/AuditDialog"
+import { SendReviewDialog } from "@/components/organisms/SendReviewDialog"
+import { Terminal } from "@/components/organisms/Terminal"
+import { launchAgent } from "@/lib/agents"
+import { agentInstalled } from "@/lib/api"
+import { toRelative, useComments } from "@/lib/comments"
+import { useProject, useSettings } from "@/lib/store"
+import { useTerminals } from "@/lib/terminals"
 
 // Brand colours for the agent launchers.
-const CLAUDE_ORANGE = "#D97757";
-const CODEX_TEAL = "#10A37F";
-const COPILOT_VIOLET = "#8957E5";
-const OPENCODE_GREY = "#656363";
+const CLAUDE_ORANGE = "#D97757"
+const CODEX_TEAL = "#10A37F"
+const COPILOT_VIOLET = "#8957E5"
+const OPENCODE_GREY = "#656363"
 
 // Below this panel width the labelled buttons collapse to icon-only.
-const COMPACT_WIDTH = 560;
+const COMPACT_WIDTH = 560
 
 export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
-  const sessions = useTerminals((s) => s.sessions);
-  const activeId = useTerminals((s) => s.activeId);
-  const groups = useTerminals((s) => s.groups);
-  const activeGroupId = useTerminals((s) => s.activeGroupId);
-  const add = useTerminals((s) => s.add);
-  const split = useTerminals((s) => s.split);
-  const remove = useTerminals((s) => s.remove);
-  const removeGroup = useTerminals((s) => s.removeGroup);
-  const setActive = useTerminals((s) => s.setActive);
-  const setActiveGroup = useTerminals((s) => s.setActiveGroup);
-  const setGroupDir = useTerminals((s) => s.setGroupDir);
-  const setSizes = useTerminals((s) => s.setSizes);
-  const toggle = useTerminals((s) => s.toggle);
-  const root = useProject((s) => s.root);
-  const active = useProject((s) => s.active);
-  const height = useTerminals((s) => s.height);
-  const setHeight = useTerminals((s) => s.setHeight);
-  const width = useTerminals((s) => s.width);
-  const setWidth = useTerminals((s) => s.setWidth);
-  const position = useTerminals((s) => s.position);
-  const togglePosition = useTerminals((s) => s.togglePosition);
-  const isRight = position === "right";
+  const sessions = useTerminals((s) => s.sessions)
+  const activeId = useTerminals((s) => s.activeId)
+  const groups = useTerminals((s) => s.groups)
+  const activeGroupId = useTerminals((s) => s.activeGroupId)
+  const add = useTerminals((s) => s.add)
+  const split = useTerminals((s) => s.split)
+  const remove = useTerminals((s) => s.remove)
+  const removeGroup = useTerminals((s) => s.removeGroup)
+  const setActive = useTerminals((s) => s.setActive)
+  const setActiveGroup = useTerminals((s) => s.setActiveGroup)
+  const setGroupDir = useTerminals((s) => s.setGroupDir)
+  const setSizes = useTerminals((s) => s.setSizes)
+  const toggle = useTerminals((s) => s.toggle)
+  const root = useProject((s) => s.root)
+  const active = useProject((s) => s.active)
+  const height = useTerminals((s) => s.height)
+  const setHeight = useTerminals((s) => s.setHeight)
+  const width = useTerminals((s) => s.width)
+  const setWidth = useTerminals((s) => s.setWidth)
+  const position = useTerminals((s) => s.position)
+  const togglePosition = useTerminals((s) => s.togglePosition)
+  const isRight = position === "right"
   const openTaskCount = useComments(
     (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
-  );
-  const { t } = useTranslation();
+  )
+  const { t } = useTranslation()
 
-  const activeGroup = groups.find((g) => g.id === activeGroupId) ?? null;
-  const titleOf = (paneId: string) =>
-    sessions.find((p) => p.id === paneId)?.title ?? "Terminal";
+  const activeGroup = groups.find((g) => g.id === activeGroupId) ?? null
+  const titleOf = (paneId: string) => sessions.find((p) => p.id === paneId)?.title ?? "Terminal"
 
   // Collapse labelled buttons to icon-only when the panel is narrow.
-  const rootRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [compact, setCompact] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [compact, setCompact] = useState(false)
   useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(() => setCompact(el.clientWidth < COMPACT_WIDTH));
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
+    const el = rootRef.current
+    if (!el) return
+    const obs = new ResizeObserver(() => setCompact(el.clientWidth < COMPACT_WIDTH))
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
 
   // Probe which agent binaries are on PATH so the launch buttons can signal
   // (dimmed + a tooltip) which ones aren't installed. Mount-probe is enough;
   // launching a missing one still surfaces the existing not-installed notice.
-  const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  const [installed, setInstalled] = useState<Record<string, boolean>>({})
   useEffect(() => {
-    let alive = true;
+    let alive = true
     void Promise.all([
       agentInstalled("claude"),
       agentInstalled("codex"),
@@ -108,33 +106,31 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
       agentInstalled("opencode"),
     ])
       .then(([claude, codex, copilot, gemini, opencode]) => {
-        if (alive) setInstalled({ claude, codex, copilot, gemini, opencode });
+        if (alive) setInstalled({ claude, codex, copilot, gemini, opencode })
       })
-      .catch(() => {});
+      .catch(() => {})
     return () => {
-      alive = false;
-    };
-  }, []);
+      alive = false
+    }
+  }, [])
 
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null);
-  const [paneMenu, setPaneMenu] = useState<{ x: number; y: number; paneId: string } | null>(
-    null,
-  );
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null)
+  const [paneMenu, setPaneMenu] = useState<{ x: number; y: number; paneId: string } | null>(null)
 
   // Right-click a pane → terminal management menu (also suppresses the global
   // edit menu / native menu for this area).
   const openPaneMenu = (e: ReactMouseEvent, paneId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setActive(paneId);
-    setPaneMenu({ x: e.clientX, y: e.clientY, paneId });
-  };
+    e.preventDefault()
+    e.stopPropagation()
+    setActive(paneId)
+    setPaneMenu({ x: e.clientX, y: e.clientY, paneId })
+  }
 
   const paneMenuItems = (): ContextMenuItem[] => {
-    if (!paneMenu) return [];
-    const group = groups.find((g) => g.paneIds.includes(paneMenu.paneId));
-    const isMulti = (group?.paneIds.length ?? 0) > 1;
+    if (!paneMenu) return []
+    const group = groups.find((g) => g.paneIds.includes(paneMenu.paneId))
+    const isMulti = (group?.paneIds.length ?? 0) > 1
     return [
       { label: t("terminal.new"), onSelect: () => add() },
       { label: t("terminal.split"), onSelect: () => split() },
@@ -160,65 +156,65 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
         separatorBefore: true,
         onSelect: togglePosition,
       },
-    ];
-  };
+    ]
+  }
   const openAudit = () =>
     setAuditTarget(
       active ? { path: toRelative(root, active), isDir: false } : { path: ".", isDir: true },
-    );
+    )
 
   // Resize the whole panel by dragging its inner edge. The pointer deltas are in
   // viewport (visual) pixels, but the panel width/height are layout pixels inside
   // the interface-zoom transform — so divide by the zoom to convert, otherwise the
   // panel resizes by the wrong amount at zoom ≠ 1.
   const startResize = (e: ReactPointerEvent) => {
-    e.preventDefault();
-    const zoom = useSettings.getState().zoom || 1;
+    e.preventDefault()
+    const zoom = useSettings.getState().zoom || 1
     const onMove = (ev: PointerEvent) =>
       isRight
         ? setWidth((window.innerWidth - ev.clientX) / zoom)
-        : setHeight((window.innerHeight - ev.clientY) / zoom);
+        : setHeight((window.innerHeight - ev.clientY) / zoom)
     const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  };
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+    }
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+  }
 
   // Resize two adjacent panes by dragging the divider between pane k and k+1.
   const startPaneResize = (e: ReactPointerEvent, k: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const group = activeGroup;
-    const body = bodyRef.current;
-    if (!group || !body) return;
-    const horizontal = group.dir === "row";
-    const rect = body.getBoundingClientRect();
-    const axis = horizontal ? rect.width : rect.height;
-    const orig = [...group.sizes];
-    const start = horizontal ? e.clientX : e.clientY;
+    e.preventDefault()
+    e.stopPropagation()
+    const group = activeGroup
+    const body = bodyRef.current
+    if (!group || !body) return
+    const horizontal = group.dir === "row"
+    const rect = body.getBoundingClientRect()
+    const axis = horizontal ? rect.width : rect.height
+    const orig = [...group.sizes]
+    const start = horizontal ? e.clientX : e.clientY
     const onMove = (ev: PointerEvent) => {
-      const delta = ((horizontal ? ev.clientX : ev.clientY) - start) / Math.max(axis, 1);
-      const a = orig[k] + delta;
-      const b = orig[k + 1] - delta;
-      const min = 0.1;
-      if (a < min || b < min) return;
-      const sizes = [...orig];
-      sizes[k] = a;
-      sizes[k + 1] = b;
-      setSizes(group.id, sizes);
-    };
+      const delta = ((horizontal ? ev.clientX : ev.clientY) - start) / Math.max(axis, 1)
+      const a = orig[k] + delta
+      const b = orig[k + 1] - delta
+      const min = 0.1
+      if (a < min || b < min) return
+      const sizes = [...orig]
+      sizes[k] = a
+      sizes[k + 1] = b
+      setSizes(group.id, sizes)
+    }
     const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  };
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+    }
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+  }
 
-  const paneIds = activeGroup?.paneIds ?? [];
-  const multi = paneIds.length > 1;
+  const paneIds = activeGroup?.paneIds ?? []
+  const multi = paneIds.length > 1
 
   return (
     <div
@@ -266,16 +262,15 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
                 className="flex items-center gap-2"
               >
                 <span>{titleOf(g.paneIds[0])}</span>
-                {g.paneIds.length > 1 && (
-                  <Badge tone="neutral">{g.paneIds.length}</Badge>
-                )}
+                {g.paneIds.length > 1 && <Badge tone="neutral">{g.paneIds.length}</Badge>}
               </button>
               <button
                 type="button"
-                title={t("terminal.close")} aria-label={t("terminal.close")}
+                title={t("terminal.close")}
+                aria-label={t("terminal.close")}
                 onClick={(e) => {
-                  e.stopPropagation();
-                  removeGroup(g.id);
+                  e.stopPropagation()
+                  removeGroup(g.id)
                 }}
                 className="grid h-4 w-4 place-items-center rounded-sm text-faint opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-ink"
               >
@@ -302,9 +297,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
         >
           <SendIcon className="h-3.5 w-3.5" />
           {!compact && t("terminal.sendReview")}
-          {openTaskCount > 0 && (
-            <Badge tone="soft">{openTaskCount}</Badge>
-          )}
+          {openTaskCount > 0 && <Badge tone="soft">{openTaskCount}</Badge>}
         </button>
         <button
           type="button"
@@ -466,14 +459,14 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
         style={{ flexDirection: activeGroup?.dir ?? "row" }}
       >
         {sessions.map((s) => {
-          const idx = paneIds.indexOf(s.id);
+          const idx = paneIds.indexOf(s.id)
           if (idx === -1) {
             // A pane from another group: keep it mounted but out of layout.
             return (
               <div key={s.id} className="hidden">
                 <Terminal id={s.id} cwd={root} active={false} />
               </div>
-            );
+            )
           }
           return (
             <div
@@ -485,8 +478,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
                 order: idx * 2,
                 flexGrow: activeGroup?.sizes[idx] ?? 1,
                 flexBasis: 0,
-                boxShadow:
-                  multi && s.id === activeId ? "inset 0 0 0 1px var(--accent)" : undefined,
+                boxShadow: multi && s.id === activeId ? "inset 0 0 0 1px var(--accent)" : undefined,
               }}
             >
               <Terminal id={s.id} cwd={root} active={s.id === activeId} />
@@ -496,8 +488,8 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
                   aria-label={t("terminal.closePane")}
                   title={t("terminal.closePane")}
                   onClick={(e) => {
-                    e.stopPropagation();
-                    remove(s.id);
+                    e.stopPropagation()
+                    remove(s.id)
                   }}
                   className="absolute top-1 right-1 z-10 grid h-5 w-5 place-items-center rounded-md bg-surface/80 text-faint opacity-0 transition-opacity group-hover/pane:opacity-100 group-focus-within/pane:opacity-100 focus-visible:opacity-100 hover:text-ink"
                 >
@@ -505,21 +497,23 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
                 </button>
               )}
             </div>
-          );
+          )
         })}
         {/* Dividers between adjacent panes of the active group. */}
         {multi &&
           activeGroup &&
-          paneIds.slice(0, -1).map((_, k) => (
-            <div
-              key={`div-${activeGroup.id}-${k}`}
-              onPointerDown={(e) => startPaneResize(e, k)}
-              style={{ order: k * 2 + 1 }}
-              className={`flex-none bg-line transition-colors hover:bg-line-strong ${
-                activeGroup.dir === "row" ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"
-              }`}
-            />
-          ))}
+          paneIds
+            .slice(0, -1)
+            .map((_, k) => (
+              <div
+                key={`div-${activeGroup.id}-${k}`}
+                onPointerDown={(e) => startPaneResize(e, k)}
+                style={{ order: k * 2 + 1 }}
+                className={`flex-none bg-line transition-colors hover:bg-line-strong ${
+                  activeGroup.dir === "row" ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"
+                }`}
+              />
+            ))}
       </div>
 
       {paneMenu && (
@@ -534,5 +528,5 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
       <SendReviewDialog open={reviewOpen} onClose={() => setReviewOpen(false)} />
       <AuditDialog target={auditTarget} onClose={() => setAuditTarget(null)} />
     </div>
-  );
+  )
 }

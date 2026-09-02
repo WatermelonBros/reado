@@ -2,22 +2,23 @@
  * Semantic search results (natural-language query answered by the terminal agent).
  * Lists ranked locations; click to jump.
  */
-import { useSemanticSearch } from "../../lib/semanticSearch";
-import { useProject } from "../../lib/store";
-import { Modal } from "../atoms/Modal";
-import { SearchIcon } from "../atoms/icons";
-import { useTranslation } from "react-i18next";
+
+import { useTranslation } from "react-i18next"
+import { SearchIcon } from "@/components/atoms/icons"
+import { Modal } from "@/components/atoms/Modal"
+import { useSemanticSearch } from "@/lib/semanticSearch"
+import { useProject } from "@/lib/store"
 
 export function SemanticModal() {
-  const { open, query, status, results } = useSemanticSearch();
-  const root = useProject((s) => s.root);
-  const openFile = useProject((s) => s.open);
-  const { t } = useTranslation();
+  const { open, query, status, results } = useSemanticSearch()
+  const root = useProject((s) => s.root)
+  const openFile = useProject((s) => s.open)
+  const { t } = useTranslation()
 
   const jump = (file: string, line: number) => {
-    openFile(`${root}/${file}`, line);
-    useSemanticSearch.getState().close();
-  };
+    openFile(`${root}/${file}`, line)
+    useSemanticSearch.getState().close()
+  }
 
   return (
     <Modal
@@ -36,7 +37,9 @@ export function SemanticModal() {
         {status === "loading" && (
           <p className="px-5 py-3 text-sm text-muted">{t("semantic.generating")}</p>
         )}
-        {status === "error" && <p className="px-5 py-3 text-sm text-muted">{t("semantic.error")}</p>}
+        {status === "error" && (
+          <p className="px-5 py-3 text-sm text-muted">{t("semantic.error")}</p>
+        )}
         {status === "ready" &&
           results.map((h, i) => (
             <button
@@ -49,10 +52,12 @@ export function SemanticModal() {
                 <span className="min-w-0 flex-1 truncate">{h.file}</span>
                 <span className="flex-none tabular-nums">{h.line}</span>
               </div>
-              {h.snippet && <p className="mt-0.5 truncate font-mono text-xs text-muted">{h.snippet}</p>}
+              {h.snippet && (
+                <p className="mt-0.5 truncate font-mono text-xs text-muted">{h.snippet}</p>
+              )}
             </button>
           ))}
       </div>
     </Modal>
-  );
+  )
 }

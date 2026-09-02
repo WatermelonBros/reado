@@ -3,31 +3,32 @@
  * through the terminal agent (see lib/onboarding). Relative Markdown links open
  * the referenced project file; external links open in the browser.
  */
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { useOnboarding } from "../../lib/onboarding";
-import { useProject } from "../../lib/store";
-import { Modal } from "../atoms/Modal";
-import { SparkleIcon } from "../atoms/icons";
-import { useTranslation } from "react-i18next";
+
+import { openUrl } from "@tauri-apps/plugin-opener"
+import { useTranslation } from "react-i18next"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { SparkleIcon } from "@/components/atoms/icons"
+import { Modal } from "@/components/atoms/Modal"
+import { useOnboarding } from "@/lib/onboarding"
+import { useProject } from "@/lib/store"
 
 export function OnboardingModal() {
-  const { open, status, text, stale } = useOnboarding();
-  const root = useProject((s) => s.root);
-  const openFile = useProject((s) => s.open);
-  const { t } = useTranslation();
+  const { open, status, text, stale } = useOnboarding()
+  const root = useProject((s) => s.root)
+  const openFile = useProject((s) => s.open)
+  const { t } = useTranslation()
 
   const onLink = (href: string | undefined) => {
-    if (!href) return;
+    if (!href) return
     if (/^[a-z]+:\/\//i.test(href)) {
-      void openUrl(href);
+      void openUrl(href)
     } else {
       // A relative project path → open it and close the overview.
-      openFile(`${root}/${href.replace(/^\.?\//, "")}`);
-      useOnboarding.getState().close();
+      openFile(`${root}/${href.replace(/^\.?\//, "")}`)
+      useOnboarding.getState().close()
     }
-  };
+  }
 
   return (
     <Modal
@@ -56,9 +57,7 @@ export function OnboardingModal() {
             {t("onboarding.stale")}
           </p>
         )}
-        {status === "loading" && (
-          <p className="text-sm text-muted">{t("onboarding.generating")}</p>
-        )}
+        {status === "loading" && <p className="text-sm text-muted">{t("onboarding.generating")}</p>}
         {status === "error" && <p className="text-sm text-muted">{t("synopsis.error")}</p>}
         {status === "ready" && (
           <div className="prose-reado max-w-none text-sm">
@@ -69,8 +68,8 @@ export function OnboardingModal() {
                   <a
                     href={href}
                     onClick={(e) => {
-                      e.preventDefault();
-                      onLink(href);
+                      e.preventDefault()
+                      onLink(href)
                     }}
                   >
                     {children}
@@ -84,5 +83,5 @@ export function OnboardingModal() {
         )}
       </div>
     </Modal>
-  );
+  )
 }

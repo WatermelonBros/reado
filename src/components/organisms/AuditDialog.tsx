@@ -6,47 +6,46 @@
  * the code (via the `reado` CLI), so the findings are readable inline. Mirrors
  * SendReviewDialog: pick the target terminal, then inject a one-line prompt.
  */
-import { useState } from "react";
-import { submitToTerminal } from "../../lib/api";
-import { useTerminals } from "../../lib/terminals";
-import { composeAuditPrompt } from "../../lib/review";
-
-import { Modal } from "../atoms/Modal";
-import { Button } from "../atoms/Button";
-import { Select } from "../atoms/Select";
-import { Textarea } from "../atoms/Textarea";
-import { useTranslation } from "react-i18next";
+import { useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { Modal } from "@/components/atoms/Modal"
+import { Select } from "@/components/atoms/Select"
+import { Textarea } from "@/components/atoms/Textarea"
+import { submitToTerminal } from "@/lib/api"
+import { composeAuditPrompt } from "@/lib/review"
+import { useTerminals } from "@/lib/terminals"
 
 export interface AuditTarget {
   /** Project-relative path of the file or folder to audit. */
-  path: string;
-  isDir: boolean;
+  path: string
+  isDir: boolean
 }
 
 export function AuditDialog({
   target,
   onClose,
 }: {
-  target: AuditTarget | null;
-  onClose: () => void;
+  target: AuditTarget | null
+  onClose: () => void
 }) {
-  const sessions = useTerminals((s) => s.sessions);
-  const activeId = useTerminals((s) => s.activeId);
-  const add = useTerminals((s) => s.add);
-  const { t } = useTranslation();
+  const sessions = useTerminals((s) => s.sessions)
+  const activeId = useTerminals((s) => s.activeId)
+  const add = useTerminals((s) => s.add)
+  const { t } = useTranslation()
 
-  const [instructions, setInstructions] = useState("");
-  const [agent, setAgent] = useState("");
+  const [instructions, setInstructions] = useState("")
+  const [agent, setAgent] = useState("")
 
   const send = () => {
-    if (!target) return;
-    const id = agent || activeId || add();
-    const prompt = composeAuditPrompt(target.path, instructions);
+    if (!target) return
+    const id = agent || activeId || add()
+    const prompt = composeAuditPrompt(target.path, instructions)
     // Defer when we just spawned a terminal so the PTY is ready to receive.
-    submitToTerminal(id, prompt, id === (agent || activeId) ? 0 : 400);
-    setInstructions("");
-    onClose();
-  };
+    submitToTerminal(id, prompt, id === (agent || activeId) ? 0 : 400)
+    setInstructions("")
+    onClose()
+  }
 
   return (
     <Modal
@@ -69,8 +68,7 @@ export function AuditDialog({
 
       <div className="flex flex-col gap-3 p-5">
         <div className="text-xs text-muted">
-          {t("audit.target")}{" "}
-          <span className="font-mono text-ink">{target?.path}</span>
+          {t("audit.target")} <span className="font-mono text-ink">{target?.path}</span>
         </div>
 
         <label className="flex flex-col gap-1.5 text-xs text-muted">
@@ -96,5 +94,5 @@ export function AuditDialog({
         </Button>
       </footer>
     </Modal>
-  );
+  )
 }

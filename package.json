@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.7.1",
   "type": "module",
-  "description": "Reado — a calm, read-first code IDE where comments are durable, AI-resolvable artifacts.",
+  "description": "Reado \u2014 a calm, read-first code IDE where comments are durable, AI-resolvable artifacts.",
   "license": "MIT",
   "packageManager": "pnpm@11.21.0",
   "scripts": {
@@ -14,6 +14,8 @@
     "tauri:dev": "bash scripts/bundle-cli.sh && tauri dev",
     "tauri:build": "bash scripts/bundle-cli.sh && tauri build",
     "typecheck": "tsc --noEmit",
+    "lint": "biome ci",
+    "lint:fix": "biome check --write",
     "test": "vitest run",
     "cli:install": "bash scripts/install-cli.sh",
     "release": "bash scripts/release.sh",
@@ -63,6 +65,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.11",
     "@tailwindcss/vite": "^4.3.1",
     "@tauri-apps/cli": "^2",
     "@testing-library/dom": "^10.4.1",

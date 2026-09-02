@@ -12,24 +12,24 @@
  *  - `filled`   — quiet filled field, no border (inline edit, commit box)
  *  - `plain`    — transparent, for a textarea inside an already-bordered container
  */
-import { type TextareaHTMLAttributes } from "react";
-import { cn } from "../../lib/cn";
+import type { TextareaHTMLAttributes } from "react"
+import { cn } from "@/lib/cn"
 
-export type TextareaVariant = "bordered" | "filled" | "plain";
+export type TextareaVariant = "bordered" | "filled" | "plain"
 
 const VARIANT: Record<TextareaVariant, string> = {
   bordered: "border border-line bg-surface focus:border-line-strong",
   filled: "bg-surface",
   plain: "bg-transparent",
-};
+}
 
 interface Props extends TextareaHTMLAttributes<HTMLTextAreaElement> {
-  variant?: TextareaVariant;
-  mono?: boolean;
+  variant?: TextareaVariant
+  mono?: boolean
   /** Cmd/Ctrl+Enter handler (the standard "submit this composer"). */
-  onSubmit?: () => void;
+  onSubmit?: () => void
   /** Escape handler (the standard "cancel this composer"). */
-  onCancel?: () => void;
+  onCancel?: () => void
 }
 
 export function Textarea({
@@ -44,9 +44,9 @@ export function Textarea({
   return (
     <textarea
       onKeyDown={(e) => {
-        if (onCancel && e.key === "Escape") onCancel();
-        else if (onSubmit && e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSubmit();
-        onKeyDown?.(e);
+        if (onCancel && e.key === "Escape") onCancel()
+        else if (onSubmit && e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSubmit()
+        onKeyDown?.(e)
       }}
       className={cn(
         "block w-full resize-y rounded-md px-2 py-1.5 text-sm text-ink outline-none placeholder:text-faint",
@@ -56,5 +56,5 @@ export function Textarea({
       )}
       {...rest}
     />
-  );
+  )
 }

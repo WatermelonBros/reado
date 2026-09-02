@@ -1,0 +1,78 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["src/**", "*.ts", "*.json", "!src-tauri", "!plugin"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    // 100, not the default 80: the codebase already sat around this width, and
+    // dropping to 80 would rewrap nearly every JSX attribute list.
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "semicolons": "asNeeded",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "bracketSameLine": false
+    }
+  },
+  // The stylesheet is Tailwind 4: `@theme`, `@apply` and friends are syntax
+  // errors to a stock CSS parser.
+  "css": { "parser": { "tailwindDirectives": true } },
+  "assist": {
+    "actions": { "source": { "organizeImports": "on" } }
+  },
+  "linter": {
+    "enabled": true,
+    // Biome's recommended set, minus the rules whose "fix" would be worse than
+    // the code they flag. Everything still on is clean — CI fails on a single
+    // diagnostic, so a rule left on is a rule we obey.
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        // 94 hits, all deliberate: effects that must run once on mount (PTY
+        // spawn, listener wiring) or that read a store imperatively. Obeying
+        // this means changing *when* those effects re-run — a behaviour audit,
+        // not a lint fix. Off until that audit happens on purpose.
+        "useExhaustiveDependencies": "off"
+      },
+      "complexity": {
+        // Every hit is in app.css, overriding CodeMirror's and xterm's own
+        // stylesheets. A specificity war with a vendor widget is what
+        // `!important` is for.
+        "noImportantStyles": "off"
+      },
+      "style": {
+        // Asserted only after an explicit guard (`menu.entry && … menu.entry!`),
+        // where the narrowing can't cross a callback boundary. TS strict still
+        // covers the cases that actually matter.
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        // Most lists key by a stable field *plus* the index, as a tiebreaker for
+        // rows that are genuinely duplicated (two search matches on one line).
+        // The rule can't tell that apart from a bare `key={i}`.
+        "noArrayIndexKey": "off"
+      },
+      "a11y": {
+        // Fires on `<label>` wrapping a Textarea / Input *atom*: the real
+        // control is inside the component, so the implicit association the
+        // rule is looking for is there — it just can't see through the import.
+        "noLabelWithoutControl": "off",
+        // These fire on scrims, drag wrappers and menu containers — elements
+        // whose keyboard path is Escape or the real <button> nested inside, not
+        // a role on the wrapper. Controls proper go through the Button /
+        // IconButton atoms, which carry their own labels (see CLAUDE.md).
+        "noStaticElementInteractions": "off",
+        "useKeyWithClickEvents": "off"
+      }
+    }
+  }
+}

@@ -3,18 +3,19 @@
  * Generation runs through the terminal agent; this renders the cached/generated
  * Markdown, with a Regenerate action. Calm, themed surface.
  */
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { useSynopsis } from "../../lib/synopsis";
-import { Modal } from "../atoms/Modal";
-import { SparkleIcon } from "../atoms/icons";
-import { useTranslation } from "react-i18next";
 
-const baseName = (p: string | null) => (p ? (p.split(/[\\/]/).pop() ?? p) : "");
+import { useTranslation } from "react-i18next"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { SparkleIcon } from "@/components/atoms/icons"
+import { Modal } from "@/components/atoms/Modal"
+import { useSynopsis } from "@/lib/synopsis"
+
+const baseName = (p: string | null) => (p ? (p.split(/[\\/]/).pop() ?? p) : "")
 
 export function SynopsisModal() {
-  const { open, relPath, status, text, stale } = useSynopsis();
-  const { t } = useTranslation();
+  const { open, relPath, status, text, stale } = useSynopsis()
+  const { t } = useTranslation()
 
   return (
     <Modal
@@ -43,9 +44,7 @@ export function SynopsisModal() {
             {t("synopsis.stale")}
           </p>
         )}
-        {status === "loading" && (
-          <p className="text-sm text-muted">{t("synopsis.generating")}</p>
-        )}
+        {status === "loading" && <p className="text-sm text-muted">{t("synopsis.generating")}</p>}
         {status === "error" && <p className="text-sm text-muted">{t("synopsis.error")}</p>}
         {status === "ready" && (
           <div className="prose-reado max-w-none text-sm">
@@ -54,5 +53,5 @@ export function SynopsisModal() {
         )}
       </div>
     </Modal>
-  );
+  )
 }

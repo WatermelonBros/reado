@@ -6,44 +6,44 @@
  * sits at the bottom. New tools (Git, Orphans, Graph, History) slot in here as
  * their capabilities land.
  */
-import { useRef } from "react";
-import { usePointerReorder, useFlip } from "../../lib/pointerReorder";
-import { useWorkspace, usePalette, useProject, type Tool } from "../../lib/store";
-import { useComments, openCount } from "../../lib/comments";
-import { useSpecs } from "../../lib/specs";
-import { useDiagnostics } from "../../lib/diagnostics";
-import { useBookmarks } from "../../lib/bookmarks";
-import { useHierarchy } from "../../lib/hierarchy";
-import { useQa } from "../../lib/qa";
-import { useTours } from "../../lib/tours";
-import { usePreReview } from "../../lib/preReview";
-import { useGuidedReview, openProposals } from "../../lib/guidedReview";
-import { type MessageKey } from "../../i18n";
-import { useTranslation } from "react-i18next";
+import { useRef } from "react"
+import { useTranslation } from "react-i18next"
+import { Badge } from "@/components/atoms/Badge"
 import {
-  FolderIcon,
-  SearchIcon,
-  MessageIcon,
-  GitBranchIcon,
-  UnlinkIcon,
-  GraphIcon,
-  DocsIcon,
-  SettingsIcon,
-  SpecsIcon,
-  OutlineIcon,
-  ExtensionsIcon,
-  ProblemsIcon,
   BookmarkIcon,
-  HierarchyIcon,
-  TimelineIcon,
-  SparkleIcon,
-  RouteIcon,
-  TourIcon,
   CoverageIcon,
-} from "../atoms/icons";
-import { Badge } from "../atoms/Badge";
+  DocsIcon,
+  ExtensionsIcon,
+  FolderIcon,
+  GitBranchIcon,
+  GraphIcon,
+  HierarchyIcon,
+  MessageIcon,
+  OutlineIcon,
+  ProblemsIcon,
+  RouteIcon,
+  SearchIcon,
+  SettingsIcon,
+  SparkleIcon,
+  SpecsIcon,
+  TimelineIcon,
+  TourIcon,
+  UnlinkIcon,
+} from "@/components/atoms/icons"
+import type { MessageKey } from "@/i18n"
+import { useBookmarks } from "@/lib/bookmarks"
+import { openCount, useComments } from "@/lib/comments"
+import { useDiagnostics } from "@/lib/diagnostics"
+import { openProposals, useGuidedReview } from "@/lib/guidedReview"
+import { useHierarchy } from "@/lib/hierarchy"
+import { useFlip, usePointerReorder } from "@/lib/pointerReorder"
+import { usePreReview } from "@/lib/preReview"
+import { useQa } from "@/lib/qa"
+import { useSpecs } from "@/lib/specs"
+import { type Tool, usePalette, useProject, useWorkspace } from "@/lib/store"
+import { useTours } from "@/lib/tours"
 
-type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon };
+type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon }
 
 const BASE_TOOLS: ToolDef[] = [
   { id: "files", labelKey: "files.panel", Icon: FolderIcon },
@@ -51,33 +51,33 @@ const BASE_TOOLS: ToolDef[] = [
   { id: "comments", labelKey: "comments.panel", Icon: MessageIcon },
   { id: "outline", labelKey: "outline.panel", Icon: OutlineIcon },
   { id: "extensions", labelKey: "ext.panel", Icon: ExtensionsIcon },
-];
+]
 
 export function ActivityBar() {
-  const tool = useWorkspace((s) => s.tool);
-  const selectTool = useWorkspace((s) => s.selectTool);
-  const toolOrder = useWorkspace((s) => s.toolOrder);
-  const setToolOrder = useWorkspace((s) => s.setToolOrder);
-  const toggleGraph = useWorkspace((s) => s.toggleGraph);
-  const toggleDocs = useWorkspace((s) => s.toggleDocs);
-  const toggleSettings = usePalette((s) => s.toggleSettings);
-  const isRepo = useProject((s) => s.git.isRepo);
-  const changedFiles = useProject((s) => s.git.changedFiles);
-  const openComments = useComments((s) => openCount(s.comments));
-  const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length);
-  const hasSpecs = useSpecs((s) => s.groups.length > 0);
+  const tool = useWorkspace((s) => s.tool)
+  const selectTool = useWorkspace((s) => s.selectTool)
+  const toolOrder = useWorkspace((s) => s.toolOrder)
+  const setToolOrder = useWorkspace((s) => s.setToolOrder)
+  const toggleGraph = useWorkspace((s) => s.toggleGraph)
+  const toggleDocs = useWorkspace((s) => s.toggleDocs)
+  const toggleSettings = usePalette((s) => s.toggleSettings)
+  const isRepo = useProject((s) => s.git.isRepo)
+  const changedFiles = useProject((s) => s.git.changedFiles)
+  const openComments = useComments((s) => openCount(s.comments))
+  const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length)
+  const hasSpecs = useSpecs((s) => s.groups.length > 0)
   const problemCount = useDiagnostics((s) =>
     Object.values(s.byFile).reduce((n, items) => n + items.length, 0),
-  );
-  const bookmarkCount = useBookmarks((s) => s.bookmarks.length);
-  const hasHierarchy = useHierarchy((s) => s.root !== null || s.loading || s.unsupported);
-  const qaCount = useQa((s) => s.notes.length);
-  const tourCount = useTours((s) => s.tours.length);
-  const preReviewCount = usePreReview((s) => s.drafts.length);
+  )
+  const bookmarkCount = useBookmarks((s) => s.bookmarks.length)
+  const hasHierarchy = useHierarchy((s) => s.root !== null || s.loading || s.unsupported)
+  const qaCount = useQa((s) => s.notes.length)
+  const tourCount = useTours((s) => s.tours.length)
+  const preReviewCount = usePreReview((s) => s.drafts.length)
   const guidedOpen = useGuidedReview((s) =>
     s.sessions.reduce((n, sess) => n + openProposals(sess).length, 0),
-  );
-  const { t } = useTranslation();
+  )
+  const { t } = useTranslation()
 
   // Source Control appears in git repos; Orphans only when there's something to
   // fix; Specs only when the project has an OpenSpec/speckit plan.
@@ -118,7 +118,7 @@ export function ActivityBar() {
     ...(preReviewCount > 0
       ? [{ id: "prereview" as Tool, labelKey: "prereview.panel" as MessageKey, Icon: SparkleIcon }]
       : []),
-  ];
+  ]
   const badgeFor = (id: Tool) =>
     id === "git"
       ? changedFiles
@@ -132,35 +132,35 @@ export function ActivityBar() {
               ? preReviewCount
               : id === "guidedreview"
                 ? guidedOpen
-                : 0;
+                : 0
 
   // Apply the user's custom order: listed tools first (in that order), the rest
   // keep their natural order after (sort is stable). Drag reorders the list.
-  const rank = new Map(toolOrder.map((id, i) => [id, i]));
+  const rank = new Map(toolOrder.map((id, i) => [id, i]))
   const orderedTools = [...tools].sort(
     (a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity),
-  );
+  )
 
   const reorder = (from: Tool, to: Tool, after: boolean) => {
-    if (from === to) return;
-    const ids = orderedTools.map((x) => x.id).filter((id) => id !== from);
-    const at = ids.indexOf(to) + (after ? 1 : 0);
-    ids.splice(at, 0, from);
+    if (from === to) return
+    const ids = orderedTools.map((x) => x.id).filter((id) => id !== from)
+    const at = ids.indexOf(to) + (after ? 1 : 0)
+    ids.splice(at, 0, from)
     // Keep any previously-ordered tool that isn't currently shown at the end.
-    const hidden = toolOrder.filter((id) => !ids.includes(id));
-    setToolOrder([...ids, ...hidden]);
-  };
+    const hidden = toolOrder.filter((id) => !ids.includes(id))
+    setToolOrder([...ids, ...hidden])
+  }
 
   // Pointer-based drag-to-reorder (HTML5 DnD is hijacked by Tauri's OS drop).
   const { dragging, over, onPointerDown } = usePointerReorder("y", (from, to, after) =>
     reorder(from as Tool, to as Tool, after),
-  );
-  const railRef = useRef<HTMLDivElement>(null);
-  useFlip(railRef, orderedTools.map((x) => x.id).join(" "));
+  )
+  const railRef = useRef<HTMLDivElement>(null)
+  useFlip(railRef, orderedTools.map((x) => x.id).join(" "))
 
   // One shared accent bar that slides to the active tool (button pitch = 44px:
   // h-10 (40px) + gap-1 (4px)).
-  const activeIndex = orderedTools.findIndex((x) => x.id === tool);
+  const activeIndex = orderedTools.findIndex((x) => x.id === tool)
 
   return (
     <nav className="flex h-full w-12 flex-none flex-col items-center border-r border-line bg-surface py-2">
@@ -177,8 +177,8 @@ export function ActivityBar() {
           }}
         />
         {orderedTools.map(({ id, labelKey, Icon }) => {
-          const active = tool === id;
-          const badge = badgeFor(id);
+          const active = tool === id
+          const badge = badgeFor(id)
           return (
             <button
               key={id}
@@ -216,7 +216,7 @@ export function ActivityBar() {
                 </Badge>
               )}
             </button>
-          );
+          )
         })}
       </div>
 
@@ -251,5 +251,5 @@ export function ActivityBar() {
         </button>
       </div>
     </nav>
-  );
+  )
 }

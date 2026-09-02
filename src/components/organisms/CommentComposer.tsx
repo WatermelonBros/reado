@@ -5,27 +5,27 @@
  * comment is a task (sent to the AI) or a note, writes Markdown, and saves. The
  * code file is never modified — the comment is an external overlay.
  */
-import { useState } from "react";
-import type { CommentType, Context, Scope } from "../../lib/api";
-import { useComments } from "../../lib/comments";
-import { useSettings } from "../../lib/store";
-import { type MessageKey } from "../../i18n";
-import { COMMENT_TYPES, TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
-import { Checkbox } from "../atoms/Checkbox";
-import { Select } from "../atoms/Select";
-import { Textarea } from "../atoms/Textarea";
-import { useTranslation } from "react-i18next";
+import { useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Checkbox } from "@/components/atoms/Checkbox"
+import { COMMENT_TYPES, Dot, TYPE_COLOR, typeKey } from "@/components/atoms/commentMeta"
+import { Select } from "@/components/atoms/Select"
+import { Textarea } from "@/components/atoms/Textarea"
+import type { MessageKey } from "@/i18n"
+import type { CommentType, Context, Scope } from "@/lib/api"
+import { useComments } from "@/lib/comments"
+import { useSettings } from "@/lib/store"
 
 interface Props {
-  relPath: string;
-  startLine: number;
-  endLine: number;
-  context: Context;
-  top: number;
-  onClose: () => void;
+  relPath: string
+  startLine: number
+  endLine: number
+  context: Context
+  top: number
+  onClose: () => void
   /** Seed the body/type (e.g. opening from an LSP diagnostic's "Create task"). */
-  initialBody?: string;
-  initialType?: CommentType;
+  initialBody?: string
+  initialType?: CommentType
 }
 
 export function CommentComposer({
@@ -38,36 +38,36 @@ export function CommentComposer({
   initialBody,
   initialType,
 }: Props) {
-  const create = useComments((s) => s.create);
-  const setGitignorePrompt = useComments((s) => s.setGitignorePrompt);
-  const setLastType = useComments((s) => s.setLastType);
-  const gitignoreDontAsk = useSettings((s) => s.gitignoreDontAsk);
-  const { t } = useTranslation();
+  const create = useComments((s) => s.create)
+  const setGitignorePrompt = useComments((s) => s.setGitignorePrompt)
+  const setLastType = useComments((s) => s.setLastType)
+  const gitignoreDontAsk = useSettings((s) => s.gitignoreDontAsk)
+  const { t } = useTranslation()
 
   // Seed from an explicit initialType, else the last type picked this session.
-  const [type, setType] = useState<CommentType>(initialType ?? useComments.getState().lastType);
-  const [scope, setScope] = useState<Scope>("range");
+  const [type, setType] = useState<CommentType>(initialType ?? useComments.getState().lastType)
+  const [scope, setScope] = useState<Scope>("range")
   // A "note" type defaults to a note (not sent to the AI); actionable types
   // (bug/refactor/…) default to a task. The user can still toggle it.
-  const [isTask, setIsTask] = useState(initialType ? initialType !== "note" : false);
+  const [isTask, setIsTask] = useState(initialType ? initialType !== "note" : false)
   const pickType = (tp: CommentType) => {
-    setLastType(tp);
-    setType(tp);
-    setIsTask(tp !== "note");
-  };
-  const [body, setBody] = useState(initialBody ?? "");
-  const [saving, setSaving] = useState(false);
+    setLastType(tp)
+    setType(tp)
+    setIsTask(tp !== "note")
+  }
+  const [body, setBody] = useState(initialBody ?? "")
+  const [saving, setSaving] = useState(false)
 
   const label =
     scope !== "range"
       ? t(`comment.scope.${scope}` as MessageKey)
       : startLine === endLine
         ? t("comment.line", { line: startLine })
-        : t("comment.lines", { from: startLine, to: endLine });
+        : t("comment.lines", { from: startLine, to: endLine })
 
   const save = async () => {
-    if (!body.trim() || saving) return;
-    setSaving(true);
+    if (!body.trim() || saving) return
+    setSaving(true)
     try {
       const { firstComment } = await create({
         file: scope === "project" ? "" : relPath,
@@ -78,13 +78,13 @@ export function CommentComposer({
         kind: isTask ? "task" : "note",
         body: body.trim(),
         context: scope === "range" ? context : { snippet: "", before: "", after: "" },
-      });
-      if (firstComment && !gitignoreDontAsk) setGitignorePrompt(true);
-      onClose();
+      })
+      if (firstComment && !gitignoreDontAsk) setGitignorePrompt(true)
+      onClose()
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   return (
     <div
@@ -104,9 +104,7 @@ export function CommentComposer({
               label: t(`comment.scope.${s}` as MessageKey),
             }))}
           />
-          {scope === "range" && (
-            <span className="font-mono text-xs text-faint">{label}</span>
-          )}
+          {scope === "range" && <span className="font-mono text-xs text-faint">{label}</span>}
         </div>
         <div className="flex flex-wrap justify-end gap-1">
           {COMMENT_TYPES.map((tp) => (
@@ -163,5 +161,5 @@ export function CommentComposer({
         </div>
       </div>
     </div>
-  );
+  )
 }

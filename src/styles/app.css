@@ -375,14 +375,6 @@
     overflow: scroll;
   }
 
-  /* Suppress inline diagnostic squiggles when the setting is off. The diagnostics
-     still exist (Problems panel, tree counts, overview ruler are unaffected); only
-     the in-editor underline is hidden. */
-  [data-inline-diagnostics="off"] .cm-lintRange {
-    background-image: none !important;
-    text-decoration: none !important;
-  }
-
   .cm-focus-mode .cm-line {
     opacity: 0.32;
     transition: opacity var(--motion-base) var(--ease);
@@ -596,6 +588,14 @@
     text-decoration-style: wavy;
     text-decoration-skip-ink: none;
     text-underline-offset: 3px;
+  }
+
+  /* Suppress inline diagnostic squiggles when the setting is off. The diagnostics
+     still exist (Problems panel, tree counts, overview ruler are unaffected); only
+     the in-editor underline is hidden. */
+  [data-inline-diagnostics="off"] .cm-lintRange {
+    background-image: none !important;
+    text-decoration: none !important;
   }
   .cm-lintRange-error {
     text-decoration-color: var(--diag-error);

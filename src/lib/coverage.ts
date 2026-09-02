@@ -8,26 +8,26 @@
 /** Coverage of one top-level area of the project. */
 export interface FolderCoverage {
   /** Top-level directory name, or "" for files sitting at the project root. */
-  path: string;
-  read: number;
-  total: number;
+  path: string
+  read: number
+  total: number
 }
 
 export interface Coverage {
-  read: number;
-  total: number;
+  read: number
+  total: number
   /** Whole-percent read, 0 when the project has no readable files. */
-  pct: number;
+  pct: number
   /** Per-top-level-folder rows, largest area first. */
-  folders: FolderCoverage[];
+  folders: FolderCoverage[]
   /** Read files that changed externally since (worth re-reading), sorted. */
-  changed: string[];
+  changed: string[]
 }
 
 /** First path segment of a forward-slashed relative path, or "" at the root. */
 function topFolder(rel: string): string {
-  const i = rel.indexOf("/");
-  return i === -1 ? "" : rel.slice(0, i);
+  const i = rel.indexOf("/")
+  return i === -1 ? "" : rel.slice(0, i)
 }
 
 /**
@@ -40,18 +40,21 @@ export function computeCoverage(
   read: ReadonlySet<string>,
   changed: ReadonlySet<string>,
 ): Coverage {
-  const fileSet = new Set(files);
-  const byFolder = new Map<string, { read: number; total: number }>();
-  let readCount = 0;
+  const fileSet = new Set(files)
+  const byFolder = new Map<string, { read: number; total: number }>()
+  let readCount = 0
 
   for (const f of files) {
-    const key = topFolder(f);
-    let row = byFolder.get(key);
-    if (!row) byFolder.set(key, (row = { read: 0, total: 0 }));
-    row.total++;
+    const key = topFolder(f)
+    let row = byFolder.get(key)
+    if (!row) {
+      row = { read: 0, total: 0 }
+      byFolder.set(key, row)
+    }
+    row.total++
     if (read.has(f)) {
-      row.read++;
-      readCount++;
+      row.read++
+      readCount++
     }
   }
 
@@ -59,18 +62,18 @@ export function computeCoverage(
     .map(([path, r]) => ({ path, read: r.read, total: r.total }))
     // Largest area first (that's where most reading lives); alphabetical tiebreak
     // so the order is stable across renders. Root bucket ("") sorts by name last.
-    .sort((a, b) => b.total - a.total || a.path.localeCompare(b.path));
+    .sort((a, b) => b.total - a.total || a.path.localeCompare(b.path))
 
   // Only surface changed files that are still in the tree (a deleted file that
   // was flagged changed shouldn't linger in the list).
-  const changedList = [...changed].filter((f) => fileSet.has(f)).sort();
+  const changedList = [...changed].filter((f) => fileSet.has(f)).sort()
 
-  const total = files.length;
+  const total = files.length
   return {
     read: readCount,
     total,
     pct: total === 0 ? 0 : Math.round((readCount / total) * 100),
     folders,
     changed: changedList,
-  };
+  }
 }

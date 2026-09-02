@@ -5,100 +5,106 @@
  * created/parked/closed by `BrowserPanel`, which measures its placeholder and
  * calls the `preview_*` commands. Kept tiny on purpose.
  */
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from "zustand"
+import { persist } from "zustand/middleware"
 
 /** A sensible default dev-server URL; the user edits it in the pane's URL bar. */
-const DEFAULT_URL = "http://localhost:5173";
-const MAX = 500;
+const DEFAULT_URL = "http://localhost:5173"
+const MAX = 500
 
 /** Agent navigation is confined to this: localhost/127.0.0.1 (any port) is always
  *  allowed, plus any origins the user added. Human navigation isn't restricted. */
 export function isOriginAllowed(url: string, extra: string[]): boolean {
   try {
-    const u = new URL(url);
-    if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return true;
+    const u = new URL(url)
+    if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return true
     return extra.some((o) => {
       try {
-        return new URL(o).origin === u.origin;
+        return new URL(o).origin === u.origin
       } catch {
-        return false;
+        return false
       }
-    });
+    })
   } catch {
-    return false;
+    return false
   }
 }
 
-export type LogLevel = "log" | "info" | "warn" | "error" | "debug" | "result";
-export interface LogEntry { level: LogLevel; args: unknown[]; source?: string; stack?: string; t: number }
+export type LogLevel = "log" | "info" | "warn" | "error" | "debug" | "result"
+export interface LogEntry {
+  level: LogLevel
+  args: unknown[]
+  source?: string
+  stack?: string
+  t: number
+}
 export interface NetEntry {
-  id: number;
-  method: string;
-  url: string;
-  status?: number;
-  ok?: boolean;
-  ms?: number;
-  error?: string;
-  frames?: number;
-  reqHeaders?: Record<string, string>;
-  reqBody?: string;
-  resHeaders?: Record<string, string>;
-  resBody?: string;
-  t: number;
+  id: number
+  method: string
+  url: string
+  status?: number
+  ok?: boolean
+  ms?: number
+  error?: string
+  frames?: number
+  reqHeaders?: Record<string, string>
+  reqBody?: string
+  resHeaders?: Record<string, string>
+  resBody?: string
+  t: number
 }
 
 interface PreviewState {
-  open: boolean;
-  url: string;
+  open: boolean
+  url: string
   /** Console/Network inspector docked at the bottom of the pane. */
-  inspector: boolean;
+  inspector: boolean
   /** Where the inspector docks, and its size (height if bottom, width if right). */
-  inspectorPos: "bottom" | "right";
-  inspectorSize: number;
+  inspectorPos: "bottom" | "right"
+  inspectorSize: number
   /** Detached: the inspector is a standalone dockable panel (in the layout) instead
    *  of nested inside the browser pane. */
-  inspectorDetached: boolean;
+  inspectorDetached: boolean
   /** A right-click "inspect" from the page: child-index path to reveal in Elements. */
-  inspectRequest: number[] | null;
+  inspectRequest: number[] | null
   /** A design comment to reveal: navigate to `url`, then open its card at (x,y). */
-  pinRequest: { url: string; x: number; y: number; id: string } | null;
+  pinRequest: { url: string; x: number; y: number; id: string } | null
   /** Mirror captured console/network to `.reado/` and run the agent's commands, so
    *  the terminal agent can see and drive the preview. On by default; the toggle
    *  lets the user cut it off. */
-  agentAccess: boolean;
+  agentAccess: boolean
   /** Extra origins the agent may navigate to (localhost is always allowed). */
-  allowlist: string[];
+  allowlist: string[]
   /** Chosen viewport size to emulate, or null for "fit the pane" (responsive). */
-  device: { w: number; h: number; label: string } | null;
+  device: { w: number; h: number; label: string } | null
   /** Docked pane width in px (layout space); the editor takes the rest. */
-  paneWidth: number;
+  paneWidth: number
   /** Preview page zoom — scale the rendered page (e.g. fit a 4K viewport). */
-  browserZoom: number;
+  browserZoom: number
   /** Captured console + network, drained from the page bridge by BrowserPanel and
    *  shared by every consumer (inspector, persisted MCP file, send-to-agent). */
-  logs: LogEntry[];
-  net: NetEntry[];
+  logs: LogEntry[]
+  net: NetEntry[]
   /** Open the pane (optionally at a URL); reuses the last URL otherwise. */
-  openPane: (url?: string) => void;
+  openPane: (url?: string) => void
   /** Record a navigation (the webview itself is driven by BrowserPanel). */
-  setUrl: (url: string) => void;
-  toggleInspector: () => void;
-  setInspectorPos: (p: "bottom" | "right") => void;
-  setInspectorSize: (n: number) => void;
-  setInspectorDetached: (d: boolean) => void;
-  setInspectRequest: (p: number[] | null) => void;
-  setPinRequest: (p: { url: string; x: number; y: number; id: string } | null) => void;
-  setAgentAccess: (on: boolean) => void;
-  addAllowedOrigin: (origin: string) => void;
-  setDevice: (d: { w: number; h: number; label: string } | null) => void;
-  setPaneWidth: (w: number) => void;
-  setBrowserZoom: (z: number) => void;
-  pushLog: (e: LogEntry) => void;
-  appendLogs: (logs: LogEntry[]) => void;
-  setNet: (net: NetEntry[]) => void;
-  clearCaptured: () => void;
-  close: () => void;
+  setUrl: (url: string) => void
+  toggleInspector: () => void
+  setInspectorPos: (p: "bottom" | "right") => void
+  setInspectorSize: (n: number) => void
+  setInspectorDetached: (d: boolean) => void
+  setInspectRequest: (p: number[] | null) => void
+  setPinRequest: (p: { url: string; x: number; y: number; id: string } | null) => void
+  setAgentAccess: (on: boolean) => void
+  addAllowedOrigin: (origin: string) => void
+  setDevice: (d: { w: number; h: number; label: string } | null) => void
+  setPaneWidth: (w: number) => void
+  setBrowserZoom: (z: number) => void
+  pushLog: (e: LogEntry) => void
+  appendLogs: (logs: LogEntry[]) => void
+  setNet: (net: NetEntry[]) => void
+  clearCaptured: () => void
+  close: () => void
 }
 
 export const usePreview = create<PreviewState>()(
@@ -155,4 +161,4 @@ export const usePreview = create<PreviewState>()(
       }),
     },
   ),
-);
+)

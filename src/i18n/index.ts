@@ -9,30 +9,31 @@
  * comes from the module augmentation in `i18next.d.ts`. This module only owns
  * initialization, the persisted-locale store, and a non-React `t`.
  */
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import i18n from "i18next";
-import { initReactI18next } from "react-i18next";
-import en from "./locales/en.json";
-import it from "./locales/it.json";
 
-export type Locale = "en" | "it";
+import i18n from "i18next"
+import { initReactI18next } from "react-i18next"
+import { create } from "zustand"
+import { persist } from "zustand/middleware"
+import en from "./locales/en.json"
+import it from "./locales/it.json"
+
+export type Locale = "en" | "it"
 
 /** Dotted leaf paths of a nested message tree, e.g. "comment.type.bug". */
 type Leaves<T> = T extends string
   ? never
   : {
-      [K in keyof T & string]: T[K] extends string ? K : `${K}.${Leaves<T[K]>}`;
-    }[keyof T & string];
+      [K in keyof T & string]: T[K] extends string ? K : `${K}.${Leaves<T[K]>}`
+    }[keyof T & string]
 
 /** Every valid message key (English is the source of truth). */
-export type MessageKey = Leaves<typeof en>;
+export type MessageKey = Leaves<typeof en>
 
-type Vars = Record<string, string | number>;
+type Vars = Record<string, string | number>
 
 interface LocaleState {
-  locale: Locale;
-  setLocale: (locale: Locale) => void;
+  locale: Locale
+  setLocale: (locale: Locale) => void
 }
 
 /** Persisted active locale. Defaults to the OS language when it is Italian. */
@@ -41,13 +42,13 @@ export const useLocale = create<LocaleState>()(
     (set) => ({
       locale: navigator.language.startsWith("it") ? "it" : "en",
       setLocale: (locale) => {
-        set({ locale });
-        void i18n.changeLanguage(locale);
+        set({ locale })
+        void i18n.changeLanguage(locale)
       },
     }),
     { name: "reado.locale" },
   ),
-);
+)
 
 void i18n.use(initReactI18next).init({
   resources: { en: { translation: en }, it: { translation: it } },
@@ -57,9 +58,9 @@ void i18n.use(initReactI18next).init({
   // double braces.
   interpolation: { prefix: "{", suffix: "}", escapeValue: false },
   returnNull: false,
-});
+})
 
 /** Non-React translator for code outside components (reads the active locale). */
 export function t(key: MessageKey, vars?: Vars): string {
-  return i18n.t(key, vars ?? {});
+  return i18n.t(key, vars ?? {})
 }

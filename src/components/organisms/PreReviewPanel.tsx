@@ -3,19 +3,20 @@
  * changes. The human approves each (→ a real anchored comment) or discards it.
  * Never edits code, never posts directly.
  */
-import { usePreReview } from "../../lib/preReview";
-import { useProject } from "../../lib/store";
-import { SparkleIcon } from "../atoms/icons";
-import { Button } from "../atoms/Button";
-import { useTranslation } from "react-i18next";
+
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { SparkleIcon } from "@/components/atoms/icons"
+import { usePreReview } from "@/lib/preReview"
+import { useProject } from "@/lib/store"
 
 export function PreReviewPanel() {
-  const drafts = usePreReview((s) => s.drafts);
-  const generating = usePreReview((s) => s.generating);
-  const error = usePreReview((s) => s.error);
-  const root = useProject((s) => s.root);
-  const open = useProject((s) => s.open);
-  const { t } = useTranslation();
+  const drafts = usePreReview((s) => s.drafts)
+  const generating = usePreReview((s) => s.generating)
+  const error = usePreReview((s) => s.error)
+  const root = useProject((s) => s.root)
+  const open = useProject((s) => s.open)
+  const { t } = useTranslation()
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -72,5 +73,5 @@ export function PreReviewPanel() {
         </ul>
       )}
     </div>
-  );
+  )
 }

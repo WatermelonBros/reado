@@ -5,16 +5,16 @@
  * floating in a centred modal (e.g. Settings). Ark handles focus trap, Escape
  * and dismissal; the slide animation lives in app.css (`.drawer-content`).
  */
-import { Dialog } from "@ark-ui/react/dialog";
-import { Portal } from "@ark-ui/react/portal";
+import { Dialog } from "@ark-ui/react/dialog"
+import { Portal } from "@ark-ui/react/portal"
 
 interface DrawerProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  ariaLabel?: string;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  ariaLabel?: string
   /** Extra classes for the panel surface (e.g. width). */
-  className?: string;
-  children: React.ReactNode;
+  className?: string
+  children: React.ReactNode
 }
 
 export function Drawer({ open, onOpenChange, ariaLabel, className = "", children }: DrawerProps) {
@@ -32,5 +32,5 @@ export function Drawer({ open, onOpenChange, ariaLabel, className = "", children
         </Dialog.Positioner>
       </Portal>
     </Dialog.Root>
-  );
+  )
 }

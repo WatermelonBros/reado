@@ -6,54 +6,53 @@
  * set with a message. Selecting a file opens it with the diff view on so you can
  * see what changed (including the agent's edits).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { IconButton } from "@/components/atoms/IconButton"
+import { Input } from "@/components/atoms/Input"
 import {
-  gitStatus,
-  gitStage,
-  gitUnstage,
-  gitStageAll,
-  gitUnstageAll,
-  gitDiscard,
-  gitDiscardAll,
-  gitCommit,
-  gitFetch,
-  gitPull,
-  gitPush,
-  gitSync,
-  gitInfo,
-  gitCreateBranch,
-  gitStash,
-  gitStashList,
-  gitStashPop,
-  gitStashApply,
-  gitStashDrop,
-  submitToTerminal,
-  type GitChange,
-  type StashEntry,
-} from "../../lib/api";
-import { useProject, useEditorActions } from "../../lib/store";
-import { useTerminals } from "../../lib/terminals";
-import { notify } from "../../lib/notice";
-import { composeCommitPrompt } from "../../lib/review";
-import { Textarea } from "../atoms/Textarea";
-import { Input } from "../atoms/Input";
-import { IconButton } from "../atoms/IconButton";
-
-import {
-  PlusIcon,
-  MinusIcon,
+  CloseIcon,
   DiscardIcon,
-  SparkleIcon,
   FetchIcon,
+  GitBranchIcon,
+  MinusIcon,
+  MoreIcon,
+  PlusIcon,
   PullIcon,
   PushIcon,
-  SyncIcon,
+  SparkleIcon,
   StashIcon,
-  MoreIcon,
-  GitBranchIcon,
-  CloseIcon,
-} from "../atoms/icons";
-import { useTranslation } from "react-i18next";
+  SyncIcon,
+} from "@/components/atoms/icons"
+import { Textarea } from "@/components/atoms/Textarea"
+import {
+  type GitChange,
+  gitCommit,
+  gitCreateBranch,
+  gitDiscard,
+  gitDiscardAll,
+  gitFetch,
+  gitInfo,
+  gitPull,
+  gitPush,
+  gitStage,
+  gitStageAll,
+  gitStash,
+  gitStashApply,
+  gitStashDrop,
+  gitStashList,
+  gitStashPop,
+  gitStatus,
+  gitSync,
+  gitUnstage,
+  gitUnstageAll,
+  type StashEntry,
+  submitToTerminal,
+} from "@/lib/api"
+import { notify } from "@/lib/notice"
+import { composeCommitPrompt } from "@/lib/review"
+import { useEditorActions, useProject } from "@/lib/store"
+import { useTerminals } from "@/lib/terminals"
 
 /** Single-letter badge + colour per change category. */
 const STATUS: Record<GitChange["status"], { letter: string; color: string }> = {
@@ -63,159 +62,161 @@ const STATUS: Record<GitChange["status"], { letter: string; color: string }> = {
   renamed: { letter: "R", color: "var(--syn-keyword)" },
   untracked: { letter: "U", color: "var(--text-faint)" },
   conflicted: { letter: "!", color: "var(--diag-error)" },
-};
+}
 
-const basename = (p: string) => p.split("/").pop() ?? p;
+const basename = (p: string) => p.split("/").pop() ?? p
 const dirname = (p: string) => {
-  const i = p.lastIndexOf("/");
-  return i > 0 ? p.slice(0, i) : "";
-};
+  const i = p.lastIndexOf("/")
+  return i > 0 ? p.slice(0, i) : ""
+}
 
 export function GitPanel() {
-  const root = useProject((s) => s.root);
-  const open = useProject((s) => s.open);
-  const git = useProject((s) => s.git);
-  const setGit = useProject((s) => s.setGit);
-  const setDiffing = useEditorActions((s) => s.setDiffing);
-  const activeTerminal = useTerminals((s) => s.activeId);
-  const addTerminal = useTerminals((s) => s.add);
-  const { t } = useTranslation();
-  const [changes, setChanges] = useState<GitChange[]>([]);
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
+  const root = useProject((s) => s.root)
+  const open = useProject((s) => s.open)
+  const git = useProject((s) => s.git)
+  const setGit = useProject((s) => s.setGit)
+  const setDiffing = useEditorActions((s) => s.setDiffing)
+  const activeTerminal = useTerminals((s) => s.activeId)
+  const addTerminal = useTerminals((s) => s.add)
+  const { t } = useTranslation()
+  const [changes, setChanges] = useState<GitChange[]>([])
+  const [message, setMessage] = useState("")
+  const [busy, setBusy] = useState(false)
   // Path armed for discard confirmation (inline, like the comment delete flow).
-  const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null)
   // Stash index armed for drop confirmation (inline, like discardDiscard above).
-  const [confirmDropStash, setConfirmDropStash] = useState<number | null>(null);
+  const [confirmDropStash, setConfirmDropStash] = useState<number | null>(null)
   // Repo-level "more actions" dropdown + its data.
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false)
   // The "more" menu is positioned with fixed coords (to the right of the dots) so
   // it escapes the sidebar's overflow clipping entirely.
-  const dotsRef = useRef<HTMLDivElement>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const [stashes, setStashes] = useState<StashEntry[]>([]);
-  const [branchName, setBranchName] = useState<string | null>(null); // null = input hidden
-  const [confirmDiscardAll, setConfirmDiscardAll] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const dotsRef = useRef<HTMLDivElement>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
+  const [stashes, setStashes] = useState<StashEntry[]>([])
+  const [branchName, setBranchName] = useState<string | null>(null) // null = input hidden
+  const [confirmDiscardAll, setConfirmDiscardAll] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
     gitStatus(root)
       .then(setChanges)
-      .catch(() => setChanges([]));
-  }, [root]);
+      .catch(() => setChanges([]))
+  }, [root])
 
   const refreshStashes = useCallback(() => {
     gitStashList(root)
       .then(setStashes)
-      .catch(() => setStashes([]));
-  }, [root]);
+      .catch(() => setStashes([]))
+  }, [root])
 
   // Refresh ahead/behind/remote after a repo op so the push/sync affordances
   // reflect the new state (a commit adds to `ahead`, a push clears it).
   const refreshInfo = useCallback(() => {
-    gitInfo(root).then(setGit).catch(() => {});
-  }, [root, setGit]);
+    gitInfo(root)
+      .then(setGit)
+      .catch(() => {})
+  }, [root, setGit])
 
   useEffect(() => {
-    refresh();
+    refresh()
     // Keep the view fresh as the tree changes (cheap, debounced by interval).
     // Skip the poll while the window is hidden — nothing to refresh for.
     const id = window.setInterval(() => {
-      if (document.hidden) return;
-      refresh();
-    }, 4000);
-    return () => clearInterval(id);
-  }, [refresh]);
+      if (document.hidden) return
+      refresh()
+    }, 4000)
+    return () => clearInterval(id)
+  }, [refresh])
 
-  const staged = changes.filter((c) => c.staged);
-  const unstaged = changes.filter((c) => !c.staged);
+  const staged = changes.filter((c) => c.staged)
+  const unstaged = changes.filter((c) => !c.staged)
 
   const select = (c: GitChange) => {
-    if (c.status === "deleted") return;
-    open(`${root}/${c.path}`);
-    setDiffing(true);
-  };
+    if (c.status === "deleted") return
+    open(`${root}/${c.path}`)
+    setDiffing(true)
+  }
 
   // Run a mutation, then refresh — optimism isn't worth a stale index here.
   const act = (p: Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
+    setBusy(true)
+    setError(null)
     p.then(() => {
-      refresh();
-      refreshInfo();
+      refresh()
+      refreshInfo()
     })
       .catch((e) => setError(String(e)))
-      .finally(() => setBusy(false));
-  };
+      .finally(() => setBusy(false))
+  }
 
   // Repo-level op (fetch/pull/push/stash/…): refresh status, stashes and
   // ahead/behind, close the menu, and surface git's stderr on failure.
   const runRepo = (p: Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
-    setMenuOpen(false);
+    setBusy(true)
+    setError(null)
+    setMenuOpen(false)
     p.then(() => {
-      refresh();
-      refreshStashes();
-      refreshInfo();
+      refresh()
+      refreshStashes()
+      refreshInfo()
     })
       .catch((e) => setError(String(e)))
-      .finally(() => setBusy(false));
-  };
+      .finally(() => setBusy(false))
+  }
 
   // Sync = pull then push. A conflict isn't an error: the backend reports the
   // conflicted files (which then show in the list) and we point the user at them.
   const sync = () => {
-    setBusy(true);
-    setError(null);
-    setMenuOpen(false);
+    setBusy(true)
+    setError(null)
+    setMenuOpen(false)
     gitSync(root)
       .then((res) => {
-        refresh();
-        refreshStashes();
-        refreshInfo();
+        refresh()
+        refreshStashes()
+        refreshInfo()
         if (res.conflicted.length > 0) {
-          notify("info", t("git.syncConflicts", { count: res.conflicted.length }));
+          notify("info", t("git.syncConflicts", { count: res.conflicted.length }))
         }
       })
       .catch((e) => setError(String(e)))
-      .finally(() => setBusy(false));
-  };
+      .finally(() => setBusy(false))
+  }
 
   const discard = (c: GitChange) => {
-    setConfirmDiscard(null);
-    act(gitDiscard(root, c.path, c.status === "untracked"));
-  };
+    setConfirmDiscard(null)
+    act(gitDiscard(root, c.path, c.status === "untracked"))
+  }
 
   const createBranch = () => {
-    const name = (branchName ?? "").trim();
-    if (!name) return;
-    setBranchName(null);
-    runRepo(gitCreateBranch(root, name));
-  };
+    const name = (branchName ?? "").trim()
+    if (!name) return
+    setBranchName(null)
+    runRepo(gitCreateBranch(root, name))
+  }
 
   const commit = () => {
-    if (!message.trim() || staged.length === 0) return;
-    setBusy(true);
-    setError(null);
+    if (!message.trim() || staged.length === 0) return
+    setBusy(true)
+    setError(null)
     gitCommit(root, message.trim())
       .then(() => {
-        setMessage("");
-        refresh();
+        setMessage("")
+        refresh()
       })
       .catch((e) => setError(String(e)))
-      .finally(() => setBusy(false));
-  };
+      .finally(() => setBusy(false))
+  }
 
   // Hand the commit+push off to the agent in the terminal: it reviews the diff,
   // writes the message, commits and pushes.
   const aiCommit = () => {
-    const id = activeTerminal ?? addTerminal();
-    submitToTerminal(id, composeCommitPrompt(), id === activeTerminal ? 0 : 400);
-  };
+    const id = activeTerminal ?? addTerminal()
+    submitToTerminal(id, composeCommitPrompt(), id === activeTerminal ? 0 : 400)
+  }
 
   const Row = ({ c }: { c: GitChange }) => {
-    const s = STATUS[c.status];
+    const s = STATUS[c.status]
     return (
       <li className="group/row">
         <div className="flex items-center gap-2 px-3 py-1 text-sm transition-colors hover:bg-surface">
@@ -261,9 +262,7 @@ export function GitPanel() {
               )}
               <button
                 type="button"
-                onClick={() =>
-                  act(c.staged ? gitUnstage(root, c.path) : gitStage(root, c.path))
-                }
+                onClick={() => act(c.staged ? gitUnstage(root, c.path) : gitStage(root, c.path))}
                 title={c.staged ? t("git.unstage") : t("git.stage")}
                 aria-label={c.staged ? t("git.unstage") : t("git.stage")}
                 className="grid h-5 w-5 place-items-center rounded text-muted hover:bg-overlay hover:text-ink"
@@ -276,25 +275,22 @@ export function GitPanel() {
               </button>
             </div>
           )}
-          <span
-            className="flex-none font-mono text-xs font-semibold"
-            style={{ color: s.color }}
-          >
+          <span className="flex-none font-mono text-xs font-semibold" style={{ color: s.color }}>
             {s.letter}
           </span>
         </div>
       </li>
-    );
-  };
+    )
+  }
 
   const GroupHeader = ({
     label,
     count,
     actions,
   }: {
-    label: string;
-    count: number;
-    actions: { onClick: () => void; label: string; Icon: typeof PlusIcon; danger?: boolean }[];
+    label: string
+    count: number
+    actions: { onClick: () => void; label: string; Icon: typeof PlusIcon; danger?: boolean }[]
   }) => (
     <div className="group/hdr flex items-center gap-2 px-3 pt-3 pb-1 text-xs font-medium tracking-wide text-muted uppercase">
       <span>{label}</span>
@@ -316,7 +312,7 @@ export function GitPanel() {
         ))}
       </div>
     </div>
-  );
+  )
 
   const ToolButton = ({
     onClick,
@@ -324,10 +320,10 @@ export function GitPanel() {
     Icon,
     disabled,
   }: {
-    onClick: () => void;
-    label: string;
-    Icon: typeof PlusIcon;
-    disabled?: boolean;
+    onClick: () => void
+    label: string
+    Icon: typeof PlusIcon
+    disabled?: boolean
   }) => (
     <IconButton
       onClick={onClick}
@@ -335,28 +331,23 @@ export function GitPanel() {
       label={label}
       icon={<Icon className="h-4 w-4" />}
     />
-  );
+  )
 
   // Remote affordances: what can each action actually do right now?
-  const { ahead, behind, hasRemote, hasUpstream } = git;
-  const canPush = hasRemote && (!hasUpstream || ahead > 0);
-  const canSync = hasRemote && (ahead > 0 || behind > 0 || hasUpstream);
+  const { ahead, behind, hasRemote, hasUpstream } = git
+  const canPush = hasRemote && (!hasUpstream || ahead > 0)
+  const canSync = hasRemote && (ahead > 0 || behind > 0 || hasUpstream)
   // Tooltip that spells out the pending counts, e.g. "Sync (↓2 ↑1)".
   const counts = [behind > 0 ? `↓${behind}` : "", ahead > 0 ? `↑${ahead}` : ""]
     .filter(Boolean)
-    .join(" ");
-  const syncLabel = counts ? `${t("git.sync")} (${counts})` : t("git.sync");
+    .join(" ")
+  const syncLabel = counts ? `${t("git.sync")} (${counts})` : t("git.sync")
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Repo toolbar: fetch / pull / push, plus a "more" menu */}
       <div className="relative flex flex-none items-center gap-0.5 border-b border-line px-2 py-1.5">
-        <ToolButton
-          onClick={sync}
-          label={syncLabel}
-          Icon={SyncIcon}
-          disabled={!canSync}
-        />
+        <ToolButton onClick={sync} label={syncLabel} Icon={SyncIcon} disabled={!canSync} />
         {counts && (
           <span className="mr-0.5 font-mono text-[11px] text-muted tabular-nums">{counts}</span>
         )}
@@ -381,13 +372,13 @@ export function GitPanel() {
         <div ref={dotsRef} className="ml-auto">
           <ToolButton
             onClick={() => {
-              const next = !menuOpen;
+              const next = !menuOpen
               if (next) {
-                const r = dotsRef.current?.getBoundingClientRect();
-                if (r) setMenuPos({ top: r.top, left: r.right + 6 });
-                refreshStashes();
+                const r = dotsRef.current?.getBoundingClientRect()
+                if (r) setMenuPos({ top: r.top, left: r.right + 6 })
+                refreshStashes()
               }
-              setMenuOpen(next);
+              setMenuOpen(next)
             }}
             label={t("git.more")}
             Icon={MoreIcon}
@@ -406,8 +397,8 @@ export function GitPanel() {
                 <button
                   type="button"
                   onClick={() => {
-                    setMenuOpen(false);
-                    setBranchName("");
+                    setMenuOpen(false)
+                    setBranchName("")
                   }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
                 >
@@ -435,8 +426,8 @@ export function GitPanel() {
                 <button
                   type="button"
                   onClick={() => {
-                    setMenuOpen(false);
-                    setConfirmDiscardAll(true);
+                    setMenuOpen(false)
+                    setConfirmDiscardAll(true)
                   }}
                   disabled={unstaged.length === 0}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-marker hover:bg-surface disabled:opacity-40"
@@ -456,7 +447,10 @@ export function GitPanel() {
                       key={s.index}
                       className="group/stash flex items-center gap-1 px-3 py-1 hover:bg-surface"
                     >
-                      <span className="min-w-0 flex-1 truncate text-xs text-muted" title={s.message}>
+                      <span
+                        className="min-w-0 flex-1 truncate text-xs text-muted"
+                        title={s.message}
+                      >
                         {s.message}
                       </span>
                       {confirmDropStash === s.index ? (
@@ -465,8 +459,8 @@ export function GitPanel() {
                           <button
                             type="button"
                             onClick={() => {
-                              setConfirmDropStash(null);
-                              runRepo(gitStashDrop(root, s.index));
+                              setConfirmDropStash(null)
+                              runRepo(gitStashDrop(root, s.index))
                             }}
                             className="font-semibold text-marker hover:underline"
                           >
@@ -523,8 +517,8 @@ export function GitPanel() {
             value={branchName}
             onChange={(e) => setBranchName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") createBranch();
-              if (e.key === "Escape") setBranchName(null);
+              if (e.key === "Enter") createBranch()
+              if (e.key === "Escape") setBranchName(null)
             }}
             placeholder={t("git.newBranchPlaceholder")}
             className="min-w-0 flex-1 px-2"
@@ -551,8 +545,8 @@ export function GitPanel() {
             <button
               type="button"
               onClick={() => {
-                setConfirmDiscardAll(false);
-                act(gitDiscardAll(root, true));
+                setConfirmDiscardAll(false)
+                act(gitDiscardAll(root, true))
               }}
               className="font-semibold text-marker hover:underline"
             >
@@ -611,7 +605,11 @@ export function GitPanel() {
                 label={t("git.staged")}
                 count={staged.length}
                 actions={[
-                  { onClick: () => act(gitUnstageAll(root)), label: t("git.unstageAll"), Icon: MinusIcon },
+                  {
+                    onClick: () => act(gitUnstageAll(root)),
+                    label: t("git.unstageAll"),
+                    Icon: MinusIcon,
+                  },
                 ]}
               />
               <ul className="m-0 list-none p-0">
@@ -633,7 +631,11 @@ export function GitPanel() {
                     Icon: DiscardIcon,
                     danger: true,
                   },
-                  { onClick: () => act(gitStageAll(root)), label: t("git.stageAll"), Icon: PlusIcon },
+                  {
+                    onClick: () => act(gitStageAll(root)),
+                    label: t("git.stageAll"),
+                    Icon: PlusIcon,
+                  },
                 ]}
               />
               <ul className="m-0 list-none p-0">
@@ -646,5 +648,5 @@ export function GitPanel() {
         </div>
       )}
     </div>
-  );
+  )
 }

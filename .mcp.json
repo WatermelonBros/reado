@@ -2,9 +2,7 @@
   "mcpServers": {
     "reado": {
       "command": "reado",
-      "args": [
-        "mcp"
-      ]
+      "args": ["mcp"]
     }
   }
 }

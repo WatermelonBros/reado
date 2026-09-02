@@ -5,26 +5,21 @@
  * dismissal, ARIA); we style the backdrop and content surface. Children render
  * the dialog body; pass `ariaLabel` or include a `Dialog.Title` inside.
  */
-import { Dialog } from "@ark-ui/react/dialog";
-import { Portal } from "@ark-ui/react/portal";
+import { Dialog } from "@ark-ui/react/dialog"
+import { Portal } from "@ark-ui/react/portal"
 
 interface ModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  ariaLabel?: string;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  ariaLabel?: string
   /** Extra classes for the content surface. */
-  className?: string;
-  children: React.ReactNode;
+  className?: string
+  children: React.ReactNode
 }
 
 export function Modal({ open, onOpenChange, ariaLabel, className = "", children }: ModalProps) {
   return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(d) => onOpenChange(d.open)}
-      lazyMount
-      unmountOnExit
-    >
+    <Dialog.Root open={open} onOpenChange={(d) => onOpenChange(d.open)} lazyMount unmountOnExit>
       <Portal>
         <Dialog.Backdrop className="animate-fade fixed inset-0 z-[110] reado-scrim" />
         <Dialog.Positioner className="fixed inset-0 z-[110] grid place-items-center p-4">
@@ -37,5 +32,5 @@ export function Modal({ open, onOpenChange, ariaLabel, className = "", children 
         </Dialog.Positioner>
       </Portal>
     </Dialog.Root>
-  );
+  )
 }

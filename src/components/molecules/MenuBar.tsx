@@ -6,32 +6,32 @@
  * the native macOS menu dispatches through) and the `APP_MENUS` model, so there's
  * one source of truth. macOS keeps its system menu bar and never renders this.
  */
-import { useEffect, useRef, useState } from "react";
-import { APP_MENUS } from "../../lib/appMenu";
-import { runMenuCommand, menuCommandEnabled } from "../../lib/menu";
+import { useEffect, useRef, useState } from "react"
+import { APP_MENUS } from "@/lib/appMenu"
+import { menuCommandEnabled, runMenuCommand } from "@/lib/menu"
 
 export function MenuBar() {
-  const [open, setOpen] = useState<number | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState<number | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (open === null) return;
+    if (open === null) return
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(null);
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null)
+    }
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(null)
+    window.addEventListener("mousedown", onDown)
+    window.addEventListener("keydown", onKey)
     return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+      window.removeEventListener("mousedown", onDown)
+      window.removeEventListener("keydown", onKey)
+    }
+  }, [open])
 
   const run = (id: string) => {
-    setOpen(null);
-    runMenuCommand(id);
-  };
+    setOpen(null)
+    runMenuCommand(id)
+  }
 
   return (
     <div ref={ref} className="flex h-full items-stretch">
@@ -77,5 +77,5 @@ export function MenuBar() {
         </div>
       ))}
     </div>
-  );
+  )
 }

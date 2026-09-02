@@ -8,169 +8,174 @@
  *
  * Keyboard-first: ↑/↓ move, Enter runs, Esc closes.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import fuzzysort from "fuzzysort";
+
+import fuzzysort from "fuzzysort"
+import type { TFunction } from "i18next"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Input } from "@/components/atoms/Input"
+import type { MessageKey } from "@/i18n"
+import { clearTerminal, restartTerminal } from "@/lib/agents"
 import {
   listFiles,
-  searchText,
   listSymbols,
   type SearchMatch,
+  searchText,
   type Symbol as WorkspaceSymbol,
-} from "../../lib/api";
+} from "@/lib/api"
+import { useBookmarks } from "@/lib/bookmarks"
+import { toRelative } from "@/lib/comments"
 import {
-  usePalette,
-  useProject,
-  useSettings,
-  useEditorActions,
-  useWorkspace,
-  useRecents,
-  THEMES,
-} from "../../lib/store";
-import { openProjectHere } from "../../lib/window";
-import { useTerminals } from "../../lib/terminals";
-import { usePreview } from "../../lib/preview";
-import { mod, alt, shift } from "../../lib/shortcuts";
-import { checkForUpdates } from "../../lib/updater";
-import {
-  formatDocument,
-  goToLine,
-  goToBracket,
-  gotoLastEdit,
   addCursorsToLineEnds,
-  toggleBookmarkAtCursor,
+  askAboutSelection,
+  formatDocument,
+  goToBracket,
+  goToLine,
+  gotoLastEdit,
   showCallHierarchy,
   showTypeHierarchy,
-  askAboutSelection,
+  toggleBookmarkAtCursor,
   useDocInfo,
-} from "../../lib/docInfo";
-import { clearTerminal, restartTerminal } from "../../lib/agents";
-import { extractSymbols, type OutlineSymbol } from "../../lib/outline";
-import { lspDocumentSymbols } from "../../lib/lsp";
-import { useReadProgress } from "../../lib/readProgress";
-import { useBookmarks } from "../../lib/bookmarks";
-import { exportSettings, importSettings } from "../../lib/settingsSync";
-import { useOnboarding } from "../../lib/onboarding";
-import { usePreReview } from "../../lib/preReview";
-import { useGuidedReview } from "../../lib/guidedReview";
-import { useResolveLoop } from "../../lib/resolveLoop";
-import { enableMcp } from "../../lib/mcp";
-import { useSemanticSearch } from "../../lib/semanticSearch";
-import { prompt as promptDialog } from "../../lib/prompt";
-import { toRelative } from "../../lib/comments";
-import { type MessageKey } from "../../i18n";
-import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
-import { Input } from "../atoms/Input";
+} from "@/lib/docInfo"
+import { useGuidedReview } from "@/lib/guidedReview"
+import { lspDocumentSymbols } from "@/lib/lsp"
+import { enableMcp } from "@/lib/mcp"
+import { useOnboarding } from "@/lib/onboarding"
+import { extractSymbols, type OutlineSymbol } from "@/lib/outline"
+import { usePreReview } from "@/lib/preReview"
+import { usePreview } from "@/lib/preview"
+import { prompt as promptDialog } from "@/lib/prompt"
+import { useReadProgress } from "@/lib/readProgress"
+import { useResolveLoop } from "@/lib/resolveLoop"
+import { useSemanticSearch } from "@/lib/semanticSearch"
+import { exportSettings, importSettings } from "@/lib/settingsSync"
+import { alt, mod, shift } from "@/lib/shortcuts"
+import {
+  THEMES,
+  useEditorActions,
+  usePalette,
+  useProject,
+  useRecents,
+  useSettings,
+  useWorkspace,
+} from "@/lib/store"
+import { useTerminals } from "@/lib/terminals"
+import { checkForUpdates } from "@/lib/updater"
+import { openProjectHere } from "@/lib/window"
 
 interface Row {
   /** Primary line. */
-  label: string;
+  label: string
   /** Secondary, dimmer line (path). */
-  detail?: string;
+  detail?: string
   /** Optional keyboard-shortcut chip shown on the right. */
-  hint?: string;
+  hint?: string
   /** Precondition: when `false` the command is hidden (its action would be a
    *  no-op or nonsensical in the current context — e.g. "comment on selection"
    *  with nothing selected). Undefined means always shown. */
-  when?: boolean;
-  run: () => void;
+  when?: boolean
+  run: () => void
 }
 
-const basename = (p: string) => p.split(/[\\/]/).pop() ?? p;
+const basename = (p: string) => p.split(/[\\/]/).pop() ?? p
 
 /** The active editor's selected text, trimmed to a single line, or "". */
 function selectionText(): string {
-  const view = useDocInfo.getState().view;
-  if (!view) return "";
-  const { from, to } = view.state.selection.main;
-  if (from === to) return "";
-  return view.state.sliceDoc(from, to).split("\n")[0].trim();
+  const view = useDocInfo.getState().view
+  if (!view) return ""
+  const { from, to } = view.state.selection.main
+  if (from === to) return ""
+  return view.state.sliceDoc(from, to).split("\n")[0].trim()
 }
 
 export function Palette() {
-  const mode = usePalette((s) => s.mode);
-  const close = usePalette((s) => s.close);
-  const open = usePalette((s) => s.open);
-  const toggleSettings = usePalette((s) => s.toggleSettings);
-  const project = useProject();
-  const settings = useSettings();
-  const { t } = useTranslation();
+  const mode = usePalette((s) => s.mode)
+  const close = usePalette((s) => s.close)
+  const open = usePalette((s) => s.open)
+  const toggleSettings = usePalette((s) => s.toggleSettings)
+  const project = useProject()
+  const settings = useSettings()
+  const { t } = useTranslation()
 
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState(0);
-  const [files, setFiles] = useState<string[]>([]);
-  const [matches, setMatches] = useState<SearchMatch[]>([]);
-  const [wsymbols, setWsymbols] = useState<WorkspaceSymbol[]>([]);
-  const [fsymbols, setFsymbols] = useState<OutlineSymbol[]>([]);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("")
+  const [selected, setSelected] = useState(0)
+  const [files, setFiles] = useState<string[]>([])
+  const [matches, setMatches] = useState<SearchMatch[]>([])
+  const [wsymbols, setWsymbols] = useState<WorkspaceSymbol[]>([])
+  const [fsymbols, setFsymbols] = useState<OutlineSymbol[]>([])
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Reset transient state whenever the palette opens or changes mode.
   // Entering search with an active editor selection seeds it as the query.
   useEffect(() => {
-    setQuery(mode === "search" ? selectionText() : "");
-    setSelected(0);
-    setMatches([]);
-    setSearchError(null);
+    setQuery(mode === "search" ? selectionText() : "")
+    setSelected(0)
+    setMatches([])
+    setSearchError(null)
     if (mode) {
-      const el = inputRef.current;
-      el?.focus();
-      el?.select();
+      const el = inputRef.current
+      el?.focus()
+      el?.select()
     }
-  }, [mode]);
+  }, [mode])
 
   // Load the file index lazily when entering file mode.
   useEffect(() => {
     if (mode === "files" && files.length === 0) {
-      listFiles(project.root).then(setFiles).catch(() => setFiles([]));
+      listFiles(project.root)
+        .then(setFiles)
+        .catch(() => setFiles([]))
     }
-  }, [mode, project.root, files.length]);
+  }, [mode, project.root, files.length])
 
   // Load the project symbol index lazily when entering workspace-symbol mode.
   useEffect(() => {
     if (mode === "wsymbols" && wsymbols.length === 0) {
-      listSymbols(project.root).then(setWsymbols).catch(() => setWsymbols([]));
+      listSymbols(project.root)
+        .then(setWsymbols)
+        .catch(() => setWsymbols([]))
     }
-  }, [mode, project.root, wsymbols.length]);
+  }, [mode, project.root, wsymbols.length])
 
   // Load the active file's symbols when entering file-symbol mode: prefer the
   // language server's document symbols, fall back to the heuristic extractor.
   useEffect(() => {
-    if (mode !== "symbols") return;
-    const view = useDocInfo.getState().view;
+    if (mode !== "symbols") return
+    const view = useDocInfo.getState().view
     if (!view) {
-      setFsymbols([]);
-      return;
+      setFsymbols([])
+      return
     }
-    setFsymbols(extractSymbols(view.state.doc.toString()));
-    let cancelled = false;
-    const fromServer = lspDocumentSymbols(view);
+    setFsymbols(extractSymbols(view.state.doc.toString()))
+    let cancelled = false
+    const fromServer = lspDocumentSymbols(view)
     if (fromServer) {
       void fromServer.then((syms) => {
-        if (!cancelled && syms && syms.length) setFsymbols(syms);
-      });
+        if (!cancelled && syms && syms.length) setFsymbols(syms)
+      })
     }
     return () => {
-      cancelled = true;
-    };
-  }, [mode]);
+      cancelled = true
+    }
+  }, [mode])
 
   // Debounced full-text search.
   useEffect(() => {
     if (mode !== "search" || query.trim().length < 2) {
-      setMatches([]);
-      return;
+      setMatches([])
+      return
     }
     const id = setTimeout(() => {
       searchText(project.root, query)
         .then((m) => {
-          setMatches(m);
-          setSearchError(null);
+          setMatches(m)
+          setSearchError(null)
         })
-        .catch((e) => setSearchError(String(e)));
-    }, 160);
-    return () => clearTimeout(id);
-  }, [mode, query, project.root]);
+        .catch((e) => setSearchError(String(e)))
+    }, 160)
+    return () => clearTimeout(id)
+  }, [mode, query, project.root])
 
   /** The list of rows for the current mode and query. */
   const rows: Row[] = useMemo(() => {
@@ -181,117 +186,132 @@ export function Palette() {
         open,
         toggleSettings,
         requestCompose: () => {
-          useEditorActions.getState().requestCompose();
-          close();
+          useEditorActions.getState().requestCompose()
+          close()
         },
         requestExplain: () => {
-          useEditorActions.getState().requestExplain();
-          close();
+          useEditorActions.getState().requestExplain()
+          close()
         },
         requestPeek: () => {
-          useEditorActions.getState().requestPeek();
-          close();
+          useEditorActions.getState().requestPeek()
+          close()
         },
         openGraph: () => {
-          useWorkspace.getState().toggleGraph(true);
-          close();
+          useWorkspace.getState().toggleGraph(true)
+          close()
         },
         openDocs: () => {
-          useWorkspace.getState().toggleDocs(true);
-          close();
+          useWorkspace.getState().toggleDocs(true)
+          close()
         },
-      }).filter((r) => r.label.toLowerCase().includes(query.toLowerCase()));
+      }).filter((r) => r.label.toLowerCase().includes(query.toLowerCase()))
     }
     if (mode === "files") {
       const results = query
         ? fuzzysort.go(query, files, { limit: 200, key: (f: string) => basename(f) })
-        : files.slice(0, 200).map((f) => ({ target: f, highlight: () => f }));
+        : files.slice(0, 200).map((f) => ({ target: f, highlight: () => f }))
       return results.map((r) => {
-        const path = "obj" in r ? (r.obj as string) : (r.target as string);
+        const path = "obj" in r ? (r.obj as string) : (r.target as string)
         return {
           label: basename(path),
           detail: relative(project.root, path),
           run: () => {
             // list_files returns project-relative paths; open expects absolute.
-            project.open(`${project.root}/${path}`);
-            close();
+            project.open(`${project.root}/${path}`)
+            close()
           },
-        };
-      });
+        }
+      })
     }
     if (mode === "search") {
       return matches.map((m) => ({
         label: m.text.trim() || basename(m.path),
         detail: `${relative(project.root, m.path)}:${m.line}`,
         run: () => {
-          project.open(m.path, m.line);
-          close();
+          project.open(m.path, m.line)
+          close()
         },
-      }));
+      }))
     }
     if (mode === "symbols") {
       const filtered = query
         ? fuzzysort.go(query, fsymbols, { limit: 300, key: (s) => s.name }).map((r) => r.obj)
-        : fsymbols;
+        : fsymbols
       return filtered.map((s) => ({
         label: s.name,
         detail: `${s.kind} · ${s.line}`,
         run: () => {
-          goToLine(s.line);
-          close();
+          goToLine(s.line)
+          close()
         },
-      }));
+      }))
     }
     if (mode === "wsymbols") {
       const filtered = query
         ? fuzzysort.go(query, wsymbols, { limit: 300, key: (s) => s.name }).map((r) => r.obj)
-        : wsymbols.slice(0, 300);
+        : wsymbols.slice(0, 300)
       return filtered.map((s) => ({
         label: s.name,
         detail: `${s.kind} · ${relative(project.root, s.path)}:${s.line}`,
         run: () => {
-          project.open(s.path, s.line);
-          close();
+          project.open(s.path, s.line)
+          close()
         },
-      }));
+      }))
     }
     if (mode === "recents") {
-      const recents = useRecents.getState().projects;
+      const recents = useRecents.getState().projects
       const filtered = query
         ? fuzzysort.go(query, recents, { limit: 100, key: (p) => p.path }).map((r) => r.obj)
-        : recents;
+        : recents
       return filtered.map((p) => ({
         label: basename(p.path),
         detail: p.path,
         run: () => {
-          void openProjectHere(p.path);
-          close();
+          void openProjectHere(p.path)
+          close()
         },
-      }));
+      }))
     }
     if (mode === "bookmarks") {
-      const marks = useBookmarks.getState().bookmarks;
+      const marks = useBookmarks.getState().bookmarks
       const filtered = query
-        ? fuzzysort.go(query, marks, { limit: 200, key: (b) => `${b.path} ${b.snippet}` }).map((r) => r.obj)
-        : marks;
+        ? fuzzysort
+            .go(query, marks, { limit: 200, key: (b) => `${b.path} ${b.snippet}` })
+            .map((r) => r.obj)
+        : marks
       return filtered.map((b) => ({
         label: b.snippet || `${b.path}:${b.line}`,
         detail: `${b.path}:${b.line}`,
         run: () => {
-          useProject.getState().open(`${project.root}/${b.path}`, b.line);
-          close();
+          useProject.getState().open(`${project.root}/${b.path}`, b.line)
+          close()
         },
-      }));
+      }))
     }
-    return [];
-  }, [mode, query, files, matches, wsymbols, fsymbols, project, settings, t, open, toggleSettings, close]);
+    return []
+  }, [
+    mode,
+    query,
+    files,
+    matches,
+    wsymbols,
+    fsymbols,
+    project,
+    settings,
+    t,
+    open,
+    toggleSettings,
+    close,
+  ])
 
   // Keep the selection in range as rows change.
   useEffect(() => {
-    setSelected((s) => Math.min(s, Math.max(0, rows.length - 1)));
-  }, [rows.length]);
+    setSelected((s) => Math.min(s, Math.max(0, rows.length - 1)))
+  }, [rows.length])
 
-  if (!mode) return null;
+  if (!mode) return null
 
   const placeholderKey: MessageKey =
     mode === "commands"
@@ -304,12 +324,12 @@ export function Palette() {
             ? "recents.title"
             : mode === "bookmarks"
               ? "bookmarks.panel"
-              : "search.placeholder";
+              : "search.placeholder"
 
   // What to show when there are no rows: a per-mode empty state instead of a
   // blank box. `search`/`commands` only speak up once you've typed (an empty
   // query isn't "no results", it's "start typing"); the list modes always guide.
-  const typed = query.trim().length >= (mode === "search" ? 2 : 1);
+  const typed = query.trim().length >= (mode === "search" ? 2 : 1)
   const emptyMessage: string | null =
     mode === "search"
       ? typed
@@ -327,22 +347,22 @@ export function Palette() {
               ? t("recents.empty")
               : mode === "bookmarks"
                 ? t("bookmarks.empty")
-                : null;
+                : null
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
-      close();
+      close()
     } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelected((s) => Math.min(s + 1, rows.length - 1));
+      e.preventDefault()
+      setSelected((s) => Math.min(s + 1, rows.length - 1))
     } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelected((s) => Math.max(s - 1, 0));
+      e.preventDefault()
+      setSelected((s) => Math.max(s - 1, 0))
     } else if (e.key === "Enter") {
-      e.preventDefault();
-      rows[selected]?.run();
+      e.preventDefault()
+      rows[selected]?.run()
     }
-  };
+  }
 
   return (
     <div
@@ -367,18 +387,19 @@ export function Palette() {
         />
         {searchError ? (
           <div className="px-5 py-4 text-sm text-marker">
-            {searchError.includes("ripgrep")
-              ? t("search.ripgrepMissing")
-              : searchError}
+            {searchError.includes("ripgrep") ? t("search.ripgrepMissing") : searchError}
           </div>
         ) : rows.length === 0 ? (
           <div className="px-5 py-4 text-sm text-faint">{emptyMessage}</div>
         ) : (
-          <ul role="listbox" className="m-0 list-none overflow-y-auto p-2">
+          <div role="listbox" className="overflow-y-auto p-2">
             {rows.slice(0, 300).map((row, i) => (
-              <li
+              <div
                 key={`${row.label}-${i}`}
                 role="option"
+                // Focus stays in the query input (this is an aria-activedescendant
+                // listbox); the row is only programmatically focusable.
+                tabIndex={-1}
                 aria-selected={i === selected}
                 onMouseEnter={() => setSelected(i)}
                 onClick={row.run}
@@ -399,9 +420,9 @@ export function Palette() {
                     {row.hint}
                   </kbd>
                 )}
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
         {mode === "search" && matches.length > 0 && (
           <div className="border-t border-line px-5 py-2 text-xs text-faint">
@@ -410,24 +431,24 @@ export function Palette() {
         )}
       </div>
     </div>
-  );
+  )
 }
 
 function relative(root: string, path: string): string {
-  const rel = path.startsWith(root) ? path.slice(root.length) : path;
-  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/");
+  const rel = path.startsWith(root) ? path.slice(root.length) : path
+  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/")
 }
 
 interface CommandCtx {
-  project: ReturnType<typeof useProject.getState>;
-  settings: ReturnType<typeof useSettings.getState>;
-  open: (mode: "commands" | "files" | "search" | "symbols" | "wsymbols") => void;
-  toggleSettings: (open?: boolean) => void;
-  requestCompose: () => void;
-  requestExplain: () => void;
-  requestPeek: () => void;
-  openGraph: () => void;
-  openDocs: () => void;
+  project: ReturnType<typeof useProject.getState>
+  settings: ReturnType<typeof useSettings.getState>
+  open: (mode: "commands" | "files" | "search" | "symbols" | "wsymbols") => void
+  toggleSettings: (open?: boolean) => void
+  requestCompose: () => void
+  requestExplain: () => void
+  requestPeek: () => void
+  openGraph: () => void
+  openDocs: () => void
 }
 
 /** Static command list for Cmd+K. */
@@ -448,16 +469,16 @@ function commandRows(
   // Context flags: gate each command on its precondition so the palette only
   // lists what's actually applicable here (a "comment on selection" with nothing
   // selected, or "clear terminal" with no terminal, is just noise).
-  const hasFile = !!project.active;
-  const view = useDocInfo.getState().view;
-  const hasSelection = !!view && !view.state.selection.main.empty;
-  const isRepo = project.git.isRepo;
-  const hasTerminal = useTerminals.getState().sessions.length > 0;
-  const canBack = project.navIndex > 0;
-  const canForward = project.navIndex < project.navStack.length - 1;
-  const hasClosed = project.closedTabs.length > 0;
-  const canSplit = hasFile || !!project.splitPath;
-  const hasBookmarks = useBookmarks.getState().bookmarks.length > 0;
+  const hasFile = !!project.active
+  const view = useDocInfo.getState().view
+  const hasSelection = !!view && !view.state.selection.main.empty
+  const isRepo = project.git.isRepo
+  const hasTerminal = useTerminals.getState().sessions.length > 0
+  const canBack = project.navIndex > 0
+  const canForward = project.navIndex < project.navStack.length - 1
+  const hasClosed = project.closedTabs.length > 0
+  const canSplit = hasFile || !!project.splitPath
+  const hasBookmarks = useBookmarks.getState().bookmarks.length > 0
 
   const rows: Row[] = [
     { label: t("comment.new"), hint: `${mod}⇧M`, when: hasSelection, run: requestCompose },
@@ -466,8 +487,8 @@ function commandRows(
       label: t("qa.ask"),
       when: hasSelection,
       run: () => {
-        void askAboutSelection();
-        close();
+        void askAboutSelection()
+        close()
       },
     },
     { label: t("peek.def"), when: hasFile, run: requestPeek },
@@ -476,96 +497,96 @@ function commandRows(
     {
       label: t("onboarding.open"),
       run: () => {
-        useOnboarding.getState().show();
-        close();
+        useOnboarding.getState().show()
+        close()
       },
     },
     {
       label: t("preview.toggle"),
       run: () => {
-        const p = usePreview.getState();
-        if (p.open) p.close();
-        else p.openPane();
-        close();
+        const p = usePreview.getState()
+        if (p.open) p.close()
+        else p.openPane()
+        close()
       },
     },
     {
       label: t("preview.agentAccess"),
       run: () => {
-        const p = usePreview.getState();
-        p.setAgentAccess(!p.agentAccess);
-        close();
+        const p = usePreview.getState()
+        p.setAgentAccess(!p.agentAccess)
+        close()
       },
     },
     {
       label: t("tours.open"),
       run: () => {
-        useWorkspace.getState().selectTool("tours");
-        close();
+        useWorkspace.getState().selectTool("tours")
+        close()
       },
     },
     {
       label: t("prereview.run"),
       when: isRepo,
       run: () => {
-        usePreReview.getState().generate(project.root);
-        useWorkspace.getState().selectTool("prereview");
-        close();
+        usePreReview.getState().generate(project.root)
+        useWorkspace.getState().selectTool("prereview")
+        close()
       },
     },
     {
       label: t("guided.cmd.start"),
       when: isRepo,
       run: () => {
-        void useGuidedReview.getState().start(project.root, { kind: "diff" }, "bug_risk");
-        useWorkspace.getState().selectTool("guidedreview");
-        close();
+        void useGuidedReview.getState().start(project.root, { kind: "diff" }, "bug_risk")
+        useWorkspace.getState().selectTool("guidedreview")
+        close()
       },
     },
     {
       label: t("guided.cmd.open"),
       run: () => {
-        useGuidedReview.getState().load(project.root);
-        useWorkspace.getState().selectTool("guidedreview");
-        close();
+        useGuidedReview.getState().load(project.root)
+        useWorkspace.getState().selectTool("guidedreview")
+        close()
       },
     },
     {
       label: t("loop.cmd.start"),
       run: () => {
-        void useResolveLoop.getState().start(project.root, []);
-        useWorkspace.getState().selectTool("guidedreview");
-        close();
+        void useResolveLoop.getState().start(project.root, [])
+        useWorkspace.getState().selectTool("guidedreview")
+        close()
       },
     },
     {
       label: t("mcp.enable"),
       run: () => {
-        void enableMcp(project.root);
-        close();
+        void enableMcp(project.root)
+        close()
       },
     },
     {
       label: t("anywhere.open"),
       run: () => {
-        usePalette.getState().toggleAnywhere(true);
-        close();
+        usePalette.getState().toggleAnywhere(true)
+        close()
       },
     },
     {
       label: t("hier.showCall"),
       when: hasFile,
       run: () => {
-        showCallHierarchy();
-        close();
+        showCallHierarchy()
+        close()
       },
     },
     {
       label: t("hier.showType"),
       when: hasFile,
       run: () => {
-        showTypeHierarchy();
-        close();
+        showTypeHierarchy()
+        close()
       },
     },
     { label: t("editor.cursorsLineEnds"), when: hasFile, run: addCursorsToLineEnds },
@@ -573,8 +594,8 @@ function commandRows(
       label: t("bookmarks.toggle"),
       when: hasFile,
       run: () => {
-        toggleBookmarkAtCursor();
-        close();
+        toggleBookmarkAtCursor()
+        close()
       },
     },
     {
@@ -585,18 +606,23 @@ function commandRows(
     {
       label: t("sync.export"),
       run: () => {
-        void exportSettings();
-        close();
+        void exportSettings()
+        close()
       },
     },
     {
       label: t("sync.import"),
       run: () => {
-        void importSettings();
-        close();
+        void importSettings()
+        close()
       },
     },
-    { label: t("editor.format"), hint: `${shift}${alt}F`, when: hasFile, run: () => void formatDocument() },
+    {
+      label: t("editor.format"),
+      hint: `${shift}${alt}F`,
+      when: hasFile,
+      run: () => void formatDocument(),
+    },
     { label: t("terminal.clear"), when: hasTerminal, run: clearTerminal },
     { label: t("terminal.restart"), when: hasTerminal, run: restartTerminal },
     { label: t("symbols.goto"), hint: `${mod}⇧O`, when: hasFile, run: () => open("symbols") },
@@ -608,10 +634,11 @@ function commandRows(
     {
       label: t("semantic.search"),
       run: () => {
-        close();
-        void promptDialog({ title: t("semantic.title"), placeholder: t("semantic.placeholder") }).then(
-          (q) => q && useSemanticSearch.getState().run(q),
-        );
+        close()
+        void promptDialog({
+          title: t("semantic.title"),
+          placeholder: t("semantic.placeholder"),
+        }).then((q) => q && useSemanticSearch.getState().run(q))
       },
     },
     {
@@ -632,23 +659,34 @@ function commandRows(
     },
     {
       label:
-        project.active && useReadProgress.getState().read.has(toRelative(project.root, project.active))
+        project.active &&
+        useReadProgress.getState().read.has(toRelative(project.root, project.active))
           ? t("tree.markUnread")
           : t("tree.markRead"),
       when: hasFile,
       run: () => {
-        if (!project.active) return;
-        const rel = toRelative(project.root, project.active);
-        const isRead = useReadProgress.getState().read.has(rel);
-        useReadProgress.getState().mark(project.root, rel, !isRead);
+        if (!project.active) return
+        const rel = toRelative(project.root, project.active)
+        const isRead = useReadProgress.getState().read.has(rel)
+        useReadProgress.getState().mark(project.root, rel, !isRead)
       },
     },
     {
       label: `${t("tree.showHidden")}: ${project.showHidden ? "on" : "off"}`,
       run: () => project.setShowHidden(!project.showHidden),
     },
-    { label: t("nav.back"), hint: `${alt}←`, when: canBack, run: () => useProject.getState().goBack() },
-    { label: t("nav.forward"), hint: `${alt}→`, when: canForward, run: () => useProject.getState().goForward() },
+    {
+      label: t("nav.back"),
+      hint: `${alt}←`,
+      when: canBack,
+      run: () => useProject.getState().goBack(),
+    },
+    {
+      label: t("nav.forward"),
+      hint: `${alt}→`,
+      when: canForward,
+      run: () => useProject.getState().goForward(),
+    },
     {
       label: t("tabs.reopen"),
       hint: `${mod}⇧T`,
@@ -660,29 +698,33 @@ function commandRows(
       hint: `${mod}B`,
       run: () => useWorkspace.getState().toggleSidebar(),
     },
-    { label: t("terminal.move"), when: hasTerminal, run: () => useTerminals.getState().togglePosition() },
+    {
+      label: t("terminal.move"),
+      when: hasTerminal,
+      run: () => useTerminals.getState().togglePosition(),
+    },
     {
       label: t("split.toggle"),
       hint: `${mod}\\`,
       when: canSplit,
       run: () => {
-        const p = useProject.getState();
-        if (p.splitPath) p.closeSplit();
-        else p.openSplit();
+        const p = useProject.getState()
+        if (p.splitPath) p.closeSplit()
+        else p.openSplit()
       },
     },
     { label: t("settings.title"), hint: `${mod},`, run: () => toggleSettings(true) },
     { label: t("sc.title"), run: () => usePalette.getState().toggleShortcuts(true) },
     { label: t("settings.checkUpdates"), run: () => checkForUpdates(true) },
-  ];
+  ]
   // Quick theme switches.
   for (const theme of THEMES) {
     rows.push({
       label: `${t("settings.theme")}: ${t(`theme.${theme}` as MessageKey)}`,
       run: () => settings.set({ theme, mode: "manual" }),
-    });
+    })
   }
   // Drop commands whose precondition isn't met, so the palette lists only what's
   // actually applicable in the current context.
-  return rows.filter((r) => r.when !== false);
+  return rows.filter((r) => r.when !== false)
 }

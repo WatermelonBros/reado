@@ -4,11 +4,11 @@
  * what to understand". Scope follows what the servers publish (workspace-wide for
  * servers like rust-analyzer, open-file-only for others).
  */
-import { useMemo, useState } from "react";
-import { useDiagnostics, type DiagItem } from "../../lib/diagnostics";
-import { useProject } from "../../lib/store";
-import { toRelative } from "../../lib/comments";
-import { useTranslation } from "react-i18next";
+import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { toRelative } from "@/lib/comments"
+import { type DiagItem, useDiagnostics } from "@/lib/diagnostics"
+import { useProject } from "@/lib/store"
 
 // LSP severity → token + short label key. Hints fold into "info".
 const SEVERITY: Record<number, { color: string; bucket: "error" | "warn" | "info" }> = {
@@ -16,46 +16,44 @@ const SEVERITY: Record<number, { color: string; bucket: "error" | "warn" | "info
   2: { color: "var(--diag-warn)", bucket: "warn" },
   3: { color: "var(--diag-info)", bucket: "info" },
   4: { color: "var(--diag-info)", bucket: "info" },
-};
+}
 
 export function ProblemsPanel() {
-  const byFile = useDiagnostics((s) => s.byFile);
-  const root = useProject((s) => s.root);
-  const open = useProject((s) => s.open);
-  const { t } = useTranslation();
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const byFile = useDiagnostics((s) => s.byFile)
+  const root = useProject((s) => s.root)
+  const open = useProject((s) => s.open)
+  const { t } = useTranslation()
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
 
   // Files sorted by path, each with its diagnostics sorted by line; counts per
   // bucket drive the filter chips.
   const { files, counts } = useMemo(() => {
-    const counts = { error: 0, warn: 0, info: 0 };
+    const counts = { error: 0, warn: 0, info: 0 }
     const files = Object.entries(byFile)
       .map(([path, items]) => {
-        const sorted = [...items].sort((a, b) => a.line - b.line);
-        for (const d of sorted) counts[SEVERITY[d.severity]?.bucket ?? "info"]++;
-        return { path, items: sorted };
+        const sorted = [...items].sort((a, b) => a.line - b.line)
+        for (const d of sorted) counts[SEVERITY[d.severity]?.bucket ?? "info"]++
+        return { path, items: sorted }
       })
       .filter((f) => f.items.length)
-      .sort((a, b) => a.path.localeCompare(b.path));
-    return { files, counts };
-  }, [byFile]);
+      .sort((a, b) => a.path.localeCompare(b.path))
+    return { files, counts }
+  }, [byFile])
 
-  const visible = (d: DiagItem) => !hidden.has(SEVERITY[d.severity]?.bucket ?? "info");
+  const visible = (d: DiagItem) => !hidden.has(SEVERITY[d.severity]?.bucket ?? "info")
   const shown = files
     .map((f) => ({ ...f, items: f.items.filter(visible) }))
-    .filter((f) => f.items.length);
+    .filter((f) => f.items.length)
 
   const toggle = (bucket: string) =>
     setHidden((h) => {
-      const next = new Set(h);
-      next.has(bucket) ? next.delete(bucket) : next.add(bucket);
-      return next;
-    });
+      const next = new Set(h)
+      next.has(bucket) ? next.delete(bucket) : next.add(bucket)
+      return next
+    })
 
   if (files.length === 0) {
-    return (
-      <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("problems.empty")}</p>
-    );
+    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("problems.empty")}</p>
   }
 
   const chip = (bucket: "error" | "warn" | "info", count: number) => (
@@ -73,7 +71,7 @@ export function ProblemsPanel() {
       />
       {count} {t(`problems.${bucket}`)}
     </button>
-  );
+  )
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -110,5 +108,5 @@ export function ProblemsPanel() {
         ))}
       </ul>
     </div>
-  );
+  )
 }

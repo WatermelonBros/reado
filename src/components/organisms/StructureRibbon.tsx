@@ -5,8 +5,8 @@
  * presentational; the editor computes the marks + viewport band.
  */
 export interface RibbonMark {
-  line: number;
-  kind: "symbol" | "comment" | "error" | "warn";
+  line: number
+  kind: "symbol" | "comment" | "error" | "warn"
 }
 
 const COLOR: Record<RibbonMark["kind"], string> = {
@@ -14,7 +14,7 @@ const COLOR: Record<RibbonMark["kind"], string> = {
   comment: "var(--marker)",
   error: "var(--diag-error)",
   warn: "var(--diag-warn)",
-};
+}
 
 export function StructureRibbon({
   marks,
@@ -22,13 +22,13 @@ export function StructureRibbon({
   band,
   onJump,
 }: {
-  marks: RibbonMark[];
-  totalLines: number;
+  marks: RibbonMark[]
+  totalLines: number
   /** Visible range as top/height percentages, or null if not scrollable. */
-  band: { top: number; height: number } | null;
-  onJump: (line: number) => void;
+  band: { top: number; height: number } | null
+  onJump: (line: number) => void
 }) {
-  const lines = Math.max(1, totalLines);
+  const lines = Math.max(1, totalLines)
   return (
     <div className="absolute top-0 right-0 bottom-0 z-10 w-2.5 border-l border-line/50 bg-canvas/40">
       {band && (
@@ -50,5 +50,5 @@ export function StructureRibbon({
         />
       ))}
     </div>
-  );
+  )
 }

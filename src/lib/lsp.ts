@@ -7,49 +7,46 @@
  * Servers must be installed on the user's machine; when absent, `lsp_start`
  * fails and we silently fall back to the index-based features.
  */
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+import { type Diagnostic, setDiagnostics } from "@codemirror/lint"
+import type { Transport } from "@codemirror/lsp-client"
 import {
+  formatKeymap,
   LSPClient,
   LSPPlugin,
+  renameKeymap,
   serverCompletion,
   signatureHelp,
-  formatKeymap,
-  renameKeymap,
-} from "@codemirror/lsp-client";
-import type { Transport } from "@codemirror/lsp-client";
+} from "@codemirror/lsp-client"
+import { type Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state"
 import {
-  keymap,
-  ViewPlugin,
-  EditorView,
   Decoration,
-  WidgetType,
-  hoverTooltip,
-  type Tooltip,
   type DecorationSet,
+  EditorView,
+  hoverTooltip,
+  keymap,
+  type Tooltip,
+  ViewPlugin,
   type ViewUpdate,
-} from "@codemirror/view";
-import { setDiagnostics, type Diagnostic } from "@codemirror/lint";
-import {
-  StateField,
-  StateEffect,
-  RangeSetBuilder,
-  type Extension,
-} from "@codemirror/state";
-import { lspStart, lspSend, lspStop, resolvePath } from "./api";
-import type { OutlineSymbol } from "./outline";
-import { useExtensions } from "./extensions";
-import { useDiagnostics } from "./diagnostics";
-import { notify } from "./notice";
-import { createLogger } from "./logger";
+  WidgetType,
+} from "@codemirror/view"
+import { listen, type UnlistenFn } from "@tauri-apps/api/event"
+import { lspSend, lspStart, lspStop, resolvePath } from "./api"
+import { useDiagnostics } from "./diagnostics"
+import { useExtensions } from "./extensions"
+import { createLogger } from "./logger"
+import { notify } from "./notice"
+import type { OutlineSymbol } from "./outline"
 
-const log = createLogger("lsp");
-import { taskFromDiagnostic, explainSymbolAt } from "./lspActions";
-import { t } from "../i18n";
+const log = createLogger("lsp")
+
+import { t } from "@/i18n"
+import { explainSymbolAt, taskFromDiagnostic } from "./lspActions"
 
 interface ServerDef {
   /** Server name — resolved to an actual binary on the Rust side (allowlist). */
-  id: string;
-  exts: string[];
+  id: string
+  exts: string[]
 }
 
 // Which server handles which extension. The binary for each `id` lives in the
@@ -79,7 +76,7 @@ const SERVERS: ServerDef[] = [
   { id: "solidity", exts: ["sol"] },
   { id: "terraform", exts: ["tf", "tfvars"] },
   { id: "toml", exts: ["toml"] },
-];
+]
 
 // LSP language identifiers per extension. Crucially `.tsx`/`.jsx` are *react*
 // dialects — telling the server a `.tsx` file is plain "typescript" makes it
@@ -133,107 +130,106 @@ const LANG_IDS: Record<string, string> = {
   tf: "terraform",
   tfvars: "terraform",
   toml: "toml",
-};
+}
 
-const extOf = (path: string) => path.split(".").pop()?.toLowerCase() ?? "";
+const extOf = (path: string) => path.split(".").pop()?.toLowerCase() ?? ""
 // A server applies only if its extension matches *and* the user hasn't disabled
 // it in the marketplace.
 const serverFor = (path: string) =>
-  SERVERS.find(
-    (s) => s.exts.includes(extOf(path)) && useExtensions.getState().isEnabled(s.id),
-  ) ?? null;
-const langIdFor = (path: string) => LANG_IDS[extOf(path)] ?? extOf(path);
+  SERVERS.find((s) => s.exts.includes(extOf(path)) && useExtensions.getState().isEnabled(s.id)) ??
+  null
+const langIdFor = (path: string) => LANG_IDS[extOf(path)] ?? extOf(path)
 
 /** A file:// URI for an absolute path (spaces and the like encoded). Handles
  *  Windows paths (`C:\…`): backslashes are normalized and the drive gets a
  *  leading slash (`file:///C:/…`), with the drive-letter colon left intact. */
 const toUri = (absPath: string) => {
-  const p = absPath.replace(/\\/g, "/");
-  const withSlash = p.startsWith("/") ? p : `/${p}`;
+  const p = absPath.replace(/\\/g, "/")
+  const withSlash = p.startsWith("/") ? p : `/${p}`
   const enc = withSlash
     .split("/")
     .map((seg) => (/^[A-Za-z]:$/.test(seg) ? seg : encodeURIComponent(seg)))
-    .join("/");
-  return `file://${enc}`;
-};
+    .join("/")
+  return `file://${enc}`
+}
 
 /** The absolute path back out of a file:// URI (undoes `toUri`). */
 const fromUri = (uri: string) => {
-  const p = decodeURIComponent(uri.replace(/^file:\/\//, ""));
+  const p = decodeURIComponent(uri.replace(/^file:\/\//, ""))
   // "/C:/…" → "C:/…" on Windows; leave a POSIX "/…" path untouched.
-  return /^\/[A-Za-z]:/.test(p) ? p.slice(1) : p;
-};
+  return /^\/[A-Za-z]:/.test(p) ? p.slice(1) : p
+}
 
 /** Tap `publishDiagnostics` to surface per-file error counts outside the editor
  * (red filenames in the tree). The CodeMirror client still renders them; this
  * just mirrors the error count into a store. */
 function tapDiagnostics(payload: string) {
   let msg: {
-    method?: string;
+    method?: string
     params?: {
-      uri: string;
+      uri: string
       diagnostics: {
-        severity?: number;
-        message?: string;
-        range?: { start?: { line?: number; character?: number } };
-      }[];
-    };
-  };
-  try {
-    msg = JSON.parse(payload);
-  } catch {
-    return;
+        severity?: number
+        message?: string
+        range?: { start?: { line?: number; character?: number } }
+      }[]
+    }
   }
-  if (msg.method !== "textDocument/publishDiagnostics" || !msg.params) return;
+  try {
+    msg = JSON.parse(payload)
+  } catch {
+    return
+  }
+  if (msg.method !== "textDocument/publishDiagnostics" || !msg.params) return
   const items = msg.params.diagnostics.map((d) => ({
     line: (d.range?.start?.line ?? 0) + 1,
     character: d.range?.start?.character ?? 0,
     severity: d.severity ?? 1,
     message: d.message ?? "",
-  }));
-  useDiagnostics.getState().setFileDiagnostics(fromUri(msg.params.uri), items);
+  }))
+  useDiagnostics.getState().setFileDiagnostics(fromUri(msg.params.uri), items)
 }
 
 // ---- Diagnostics + sync (replacing the library's bundled `serverDiagnostics`,
 // which we can't extend with an action) ------------------------------------
 
 interface LspPos {
-  line: number;
-  character: number;
+  line: number
+  character: number
 }
 interface LspDiag {
-  range: { start: LspPos; end: LspPos };
-  severity?: number;
-  message: string;
+  range: { start: LspPos; end: LspPos }
+  severity?: number
+  message: string
 }
 interface PublishParams {
-  uri: string;
-  version?: number;
-  diagnostics: LspDiag[];
+  uri: string
+  version?: number
+  diagnostics: LspDiag[]
 }
 
 const toSeverity = (sev: number): Diagnostic["severity"] =>
-  sev === 1 ? "error" : sev === 2 ? "warning" : sev === 4 ? "hint" : "info";
+  sev === 1 ? "error" : sev === 2 ? "warning" : sev === 4 ? "hint" : "info"
 
 // The library's `autoSync` (which pushes `didChange` after edits) isn't
 // exported, so we reimplement it: debounce doc changes, then flush via the
 // public `LSPClient.sync()`.
 const autoSync = ViewPlugin.fromClass(
   class {
-    pending = -1;
+    pending = -1
     update(u: ViewUpdate) {
-      if (!u.docChanged) return;
-      if (this.pending > -1) clearTimeout(this.pending);
+      if (!u.docChanged) return
+      if (this.pending > -1) clearTimeout(this.pending)
       this.pending = window.setTimeout(() => {
-        this.pending = -1;
-        LSPPlugin.get(u.view)?.client.sync();
-      }, 500);
+        this.pending = -1
+        LSPPlugin.get(u.view)?.client.sync()
+      }, 500)
     }
     destroy() {
-      if (this.pending > -1) clearTimeout(this.pending);
+      if (this.pending > -1) clearTimeout(this.pending)
     }
   },
-);
+)
 
 /** Our `serverDiagnostics`: renders server diagnostics as lint markers (as the
  * library does) but adds a "Create task" action so the user can turn a problem
@@ -243,21 +239,21 @@ function serverDiagnostics() {
     clientCapabilities: { textDocument: { publishDiagnostics: { versionSupport: true } } },
     notificationHandlers: {
       "textDocument/publishDiagnostics": (client: LSPClient, params: PublishParams) => {
-        const file = client.workspace.getFile(params.uri);
-        if (!file || (params.version != null && params.version !== file.version)) return false;
-        const view = file.getView();
-        const plugin = view && LSPPlugin.get(view);
-        if (!view || !plugin) return false;
+        const file = client.workspace.getFile(params.uri)
+        if (!file || (params.version != null && params.version !== file.version)) return false
+        const view = file.getView()
+        const plugin = view && LSPPlugin.get(view)
+        if (!view || !plugin) return false
         view.dispatch(
           setDiagnostics(
             view.state,
             params.diagnostics.map((item): Diagnostic => {
               const from = plugin.unsyncedChanges.mapPos(
                 plugin.fromPosition(item.range.start, plugin.syncedDoc),
-              );
+              )
               const to = plugin.unsyncedChanges.mapPos(
                 plugin.fromPosition(item.range.end, plugin.syncedDoc),
-              );
+              )
               return {
                 from,
                 to,
@@ -272,19 +268,19 @@ function serverDiagnostics() {
                       }),
                   },
                 ],
-              };
+              }
             }),
           ),
-        );
-        return true;
+        )
+        return true
       },
     },
     editorExtension: autoSync,
-  };
+  }
 }
 
 interface HoverResult {
-  contents: string | { value: string } | (string | { value: string })[];
+  contents: string | { value: string } | (string | { value: string })[]
 }
 
 /** Fetch the language server's hover documentation for the symbol at `pos`
@@ -292,34 +288,35 @@ interface HoverResult {
  * attached or there's nothing to show. Used to give the AI real context about a
  * symbol — especially from external libraries whose source isn't in the repo. */
 export function lspHover(view: EditorView, pos: number): Promise<string | null> {
-  const plugin = LSPPlugin.get(view);
-  if (!plugin) return Promise.resolve(null);
-  plugin.client.sync();
+  const plugin = LSPPlugin.get(view)
+  if (!plugin) return Promise.resolve(null)
+  plugin.client.sync()
   return plugin.client
     .request<unknown, HoverResult | null>("textDocument/hover", {
       textDocument: { uri: plugin.uri },
       position: plugin.toPosition(pos),
     })
     .then((res) => {
-      const c = res?.contents;
-      if (!c) return null;
-      const text = typeof c === "string"
-        ? c
-        : Array.isArray(c)
-          ? c.map((x) => (typeof x === "string" ? x : x.value)).join("\n\n")
-          : c.value;
-      return text.trim() || null;
+      const c = res?.contents
+      if (!c) return null
+      const text =
+        typeof c === "string"
+          ? c
+          : Array.isArray(c)
+            ? c.map((x) => (typeof x === "string" ? x : x.value)).join("\n\n")
+            : c.value
+      return text.trim() || null
     })
-    .catch(() => null);
+    .catch(() => null)
 }
 
 // ---- Inlay hints (inferred types + parameter names, inline) ---------------
 
 interface InlayHint {
-  position: { line: number; character: number };
-  label: string | { value: string }[];
-  paddingLeft?: boolean;
-  paddingRight?: boolean;
+  position: { line: number; character: number }
+  label: string | { value: string }[]
+  paddingLeft?: boolean
+  paddingRight?: boolean
 }
 
 class InlayWidget extends WidgetType {
@@ -328,68 +325,68 @@ class InlayWidget extends WidgetType {
     readonly padL: boolean,
     readonly padR: boolean,
   ) {
-    super();
+    super()
   }
   eq(o: InlayWidget) {
-    return o.label === this.label && o.padL === this.padL && o.padR === this.padR;
+    return o.label === this.label && o.padL === this.padL && o.padR === this.padR
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = "cm-inlay-hint";
-    if (this.padL) s.style.marginLeft = "0.4ch";
-    if (this.padR) s.style.marginRight = "0.4ch";
-    s.textContent = this.label;
-    return s;
+    const s = document.createElement("span")
+    s.className = "cm-inlay-hint"
+    if (this.padL) s.style.marginLeft = "0.4ch"
+    if (this.padR) s.style.marginRight = "0.4ch"
+    s.textContent = this.label
+    return s
   }
 }
 
-const setInlays = StateEffect.define<DecorationSet>();
+const setInlays = StateEffect.define<DecorationSet>()
 const inlayField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(value, tr) {
-    value = value.map(tr.changes);
-    for (const e of tr.effects) if (e.is(setInlays)) value = e.value;
-    return value;
+    value = value.map(tr.changes)
+    for (const e of tr.effects) if (e.is(setInlays)) value = e.value
+    return value
   },
   provide: (f) => EditorView.decorations.from(f),
-});
+})
 
 // Fetches inlay hints for the viewport (debounced) and pushes them into the
 // field. A no-op when the server has no inlayHintProvider (request rejects).
 const inlayFetcher = ViewPlugin.fromClass(
   class {
-    pending = -1;
+    pending = -1
     constructor(view: EditorView) {
-      this.schedule(view);
+      this.schedule(view)
     }
     update(u: ViewUpdate) {
-      if (u.docChanged || u.viewportChanged) this.schedule(u.view);
+      if (u.docChanged || u.viewportChanged) this.schedule(u.view)
     }
     schedule(view: EditorView) {
-      if (this.pending > -1) clearTimeout(this.pending);
+      if (this.pending > -1) clearTimeout(this.pending)
       this.pending = window.setTimeout(() => {
-        this.pending = -1;
-        this.fetch(view);
-      }, 400);
+        this.pending = -1
+        this.fetch(view)
+      }, 400)
     }
     fetch(view: EditorView) {
-      const plugin = LSPPlugin.get(view);
-      if (!plugin) return;
-      const { from, to } = view.viewport;
+      const plugin = LSPPlugin.get(view)
+      if (!plugin) return
+      const { from, to } = view.viewport
       plugin.client
         .request<unknown, InlayHint[] | null>("textDocument/inlayHint", {
           textDocument: { uri: plugin.uri },
           range: { start: plugin.toPosition(from), end: plugin.toPosition(to) },
         })
         .then((hints) => {
-          if (!hints) return;
+          if (!hints) return
           const items = hints
             .map((h) => ({ pos: plugin.fromPosition(h.position), h }))
-            .sort((a, b) => a.pos - b.pos);
-          const b = new RangeSetBuilder<Decoration>();
+            .sort((a, b) => a.pos - b.pos)
+          const b = new RangeSetBuilder<Decoration>()
           for (const { pos, h } of items) {
             const label =
-              typeof h.label === "string" ? h.label : h.label.map((p) => p.value).join("");
+              typeof h.label === "string" ? h.label : h.label.map((p) => p.value).join("")
             b.add(
               pos,
               pos,
@@ -397,41 +394,41 @@ const inlayFetcher = ViewPlugin.fromClass(
                 widget: new InlayWidget(label, !!h.paddingLeft, !!h.paddingRight),
                 side: 1,
               }),
-            );
+            )
           }
-          view.dispatch({ effects: setInlays.of(b.finish()) });
+          view.dispatch({ effects: setInlays.of(b.finish()) })
         })
-        .catch(() => {});
+        .catch(() => {})
     }
     destroy() {
-      if (this.pending > -1) clearTimeout(this.pending);
+      if (this.pending > -1) clearTimeout(this.pending)
     }
   },
-);
+)
 
-const inlayHints = (): Extension => [inlayField, inlayFetcher];
+const inlayHints = (): Extension => [inlayField, inlayFetcher]
 
 /** Render the server's hover markdown into a calm DOM. We don't run a full
  * markdown parser (it would pull in a dep and risk HTML injection): fenced code
  * blocks go to <pre>, everything else is plain text. */
 function renderHoverDoc(md: string): HTMLElement {
-  const section = document.createElement("div");
-  section.className = "cm-tooltip-section";
+  const section = document.createElement("div")
+  section.className = "cm-tooltip-section"
   // Split on ``` fences; odd indices are code blocks (drop the language line).
   md.split("```").forEach((part, i) => {
     if (i % 2 === 1) {
-      const pre = document.createElement("pre");
-      pre.textContent = part.replace(/^[^\n]*\n/, "").replace(/\s+$/, "");
-      section.appendChild(pre);
+      const pre = document.createElement("pre")
+      pre.textContent = part.replace(/^[^\n]*\n/, "").replace(/\s+$/, "")
+      section.appendChild(pre)
     } else {
-      const text = part.trim();
-      if (!text) return;
-      const div = document.createElement("div");
-      div.textContent = text;
-      section.appendChild(div);
+      const text = part.trim()
+      if (!text) return
+      const div = document.createElement("div")
+      div.textContent = text
+      section.appendChild(div)
     }
-  });
-  return section;
+  })
+  return section
 }
 
 /** Our hover tooltip: the server's docs plus a "Spiegamelo con l'AI" chip that
@@ -440,31 +437,31 @@ function renderHoverDoc(md: string): HTMLElement {
  * are, not only in the context menu. */
 function lspHoverTooltip() {
   return hoverTooltip((view, pos): Promise<Tooltip | null> => {
-    if (!LSPPlugin.get(view)) return Promise.resolve(null);
-    const word = view.state.wordAt(pos);
-    if (!word) return Promise.resolve(null);
+    if (!LSPPlugin.get(view)) return Promise.resolve(null)
+    const word = view.state.wordAt(pos)
+    if (!word) return Promise.resolve(null)
     return lspHover(view, pos).then((docs) => {
-      if (!docs) return null;
+      if (!docs) return null
       return {
         pos: word.from,
         end: word.to,
         create: () => {
-          const dom = document.createElement("div");
-          dom.appendChild(renderHoverDoc(docs));
-          const actions = document.createElement("div");
-          actions.className = "cm-tooltip-section";
-          const chip = document.createElement("button");
-          chip.type = "button";
-          chip.className = "cm-diagnosticAction";
-          chip.textContent = t("editor.explainSymbol");
-          chip.onclick = () => view.dispatch({ effects: explainSymbolAt.of({ pos }) });
-          actions.appendChild(chip);
-          dom.appendChild(actions);
-          return { dom };
+          const dom = document.createElement("div")
+          dom.appendChild(renderHoverDoc(docs))
+          const actions = document.createElement("div")
+          actions.className = "cm-tooltip-section"
+          const chip = document.createElement("button")
+          chip.type = "button"
+          chip.className = "cm-diagnosticAction"
+          chip.textContent = t("editor.explainSymbol")
+          chip.onclick = () => view.dispatch({ effects: explainSymbolAt.of({ pos }) })
+          actions.appendChild(chip)
+          dom.appendChild(actions)
+          return { dom }
         },
-      };
-    });
-  });
+      }
+    })
+  })
 }
 
 /** The per-client LSP feature set: completion, hover, signature help, our
@@ -478,11 +475,11 @@ const clientExtensions = () => [
   signatureHelp(),
   serverDiagnostics(),
   inlayHints(),
-];
+]
 
 interface LspLocation {
-  uri: string;
-  range: { start: { line: number; character: number } };
+  uri: string
+  range: { start: { line: number; character: number } }
 }
 
 /** Ask the server to locate a symbol (definition/typeDefinition/implementation)
@@ -495,20 +492,20 @@ export function lspLocate(
   method: "definition" | "typeDefinition" | "implementation",
   open: (path: string, line: number) => void,
 ): boolean {
-  const plugin = LSPPlugin.get(view);
-  if (!plugin) return false;
-  plugin.client.sync();
+  const plugin = LSPPlugin.get(view)
+  if (!plugin) return false
+  plugin.client.sync()
   plugin.client
     .request<unknown, LspLocation | LspLocation[] | null>(`textDocument/${method}`, {
       textDocument: { uri: plugin.uri },
       position: plugin.toPosition(pos),
     })
     .then((res) => {
-      const loc = Array.isArray(res) ? res[0] : res;
-      if (loc) open(fromUri(loc.uri), loc.range.start.line + 1);
+      const loc = Array.isArray(res) ? res[0] : res
+      if (loc) open(fromUri(loc.uri), loc.range.start.line + 1)
     })
-    .catch(() => {});
-  return true;
+    .catch(() => {})
+  return true
 }
 
 /** Resolve the definition location of the symbol at `pos` via the server, for
@@ -519,19 +516,19 @@ export function lspDefinition(
   view: EditorView,
   pos: number,
 ): Promise<{ path: string; line: number } | null> | null {
-  const plugin = LSPPlugin.get(view);
-  if (!plugin) return null;
-  plugin.client.sync();
+  const plugin = LSPPlugin.get(view)
+  if (!plugin) return null
+  plugin.client.sync()
   return plugin.client
     .request<unknown, LspLocation | LspLocation[] | null>("textDocument/definition", {
       textDocument: { uri: plugin.uri },
       position: plugin.toPosition(pos),
     })
     .then((res) => {
-      const loc = Array.isArray(res) ? res[0] : res;
-      return loc ? { path: fromUri(loc.uri), line: loc.range.start.line + 1 } : null;
+      const loc = Array.isArray(res) ? res[0] : res
+      return loc ? { path: fromUri(loc.uri), line: loc.range.start.line + 1 } : null
     })
-    .catch(() => null);
+    .catch(() => null)
 }
 
 // LSP SymbolKind (a subset) → the outline's coarser kinds. Unmapped kinds fall
@@ -549,68 +546,65 @@ const SYMBOL_KIND: Record<number, OutlineSymbol["kind"]> = {
   14: "variable", // Constant
   8: "variable", // Field
   7: "variable", // Property
-};
+}
 
 interface DocSymbol {
-  name: string;
-  kind: number;
-  range?: { start: { line: number } };
-  selectionRange?: { start: { line: number } };
-  location?: { range: { start: { line: number } } };
-  children?: DocSymbol[];
+  name: string
+  kind: number
+  range?: { start: { line: number } }
+  selectionRange?: { start: { line: number } }
+  location?: { range: { start: { line: number } } }
+  children?: DocSymbol[]
 }
 
 /** Ask the server for the active file's document symbols, mapped to the outline
  *  shape. Returns null synchronously when no server is attached (caller falls
  *  back to the heuristic extractor); otherwise a promise of symbols (or null). */
-export function lspDocumentSymbols(
-  view: EditorView,
-): Promise<OutlineSymbol[] | null> | null {
-  const plugin = LSPPlugin.get(view);
-  if (!plugin) return null;
-  plugin.client.sync();
+export function lspDocumentSymbols(view: EditorView): Promise<OutlineSymbol[] | null> | null {
+  const plugin = LSPPlugin.get(view)
+  if (!plugin) return null
+  plugin.client.sync()
   return plugin.client
     .request<unknown, DocSymbol[] | null>("textDocument/documentSymbol", {
       textDocument: { uri: plugin.uri },
     })
     .then((res) => {
-      if (!res || !res.length) return null;
-      const out: OutlineSymbol[] = [];
+      if (!res?.length) return null
+      const out: OutlineSymbol[] = []
       const walk = (syms: DocSymbol[]) => {
         for (const s of syms) {
-          const line =
-            (s.selectionRange ?? s.range ?? s.location?.range)?.start.line ?? 0;
-          out.push({ name: s.name, kind: SYMBOL_KIND[s.kind] ?? "variable", line: line + 1 });
-          if (s.children?.length) walk(s.children);
+          const line = (s.selectionRange ?? s.range ?? s.location?.range)?.start.line ?? 0
+          out.push({ name: s.name, kind: SYMBOL_KIND[s.kind] ?? "variable", line: line + 1 })
+          if (s.children?.length) walk(s.children)
         }
-      };
-      walk(res);
-      out.sort((a, b) => a.line - b.line);
-      return out;
+      }
+      walk(res)
+      out.sort((a, b) => a.line - b.line)
+      return out
     })
-    .catch(() => null);
+    .catch(() => null)
 }
 
 // ---- Call & type hierarchy --------------------------------------------------
 
 /** An LSP CallHierarchyItem / TypeHierarchyItem (the fields we use). */
 export interface HierItem {
-  name: string;
-  detail?: string;
-  kind?: number;
-  uri: string;
-  range?: { start: { line: number } };
-  selectionRange?: { start: { line: number } };
+  name: string
+  detail?: string
+  kind?: number
+  uri: string
+  range?: { start: { line: number } }
+  selectionRange?: { start: { line: number } }
 }
 
 /** A resolved hierarchy node for the UI (navigable). */
 export interface HierNode {
-  name: string;
-  detail?: string;
-  path: string;
-  line: number;
+  name: string
+  detail?: string
+  path: string
+  line: number
   /** The original item, so the caller can re-root the hierarchy on it. */
-  item: HierItem;
+  item: HierItem
 }
 
 const toHierNode = (i: HierItem): HierNode => ({
@@ -619,7 +613,7 @@ const toHierNode = (i: HierItem): HierNode => ({
   path: fromUri(i.uri),
   line: ((i.selectionRange ?? i.range)?.start.line ?? 0) + 1,
   item: i,
-});
+})
 
 /** Prepare a call/type hierarchy at `pos`. Returns null when no server is
  *  attached or the server lacks the capability (caller can fall back). */
@@ -628,30 +622,30 @@ function prepareHierarchy(
   pos: number,
   kind: "callHierarchy" | "typeHierarchy",
 ): Promise<HierNode[] | null> | null {
-  const plugin = LSPPlugin.get(view);
-  if (!plugin) return null;
-  plugin.client.sync();
+  const plugin = LSPPlugin.get(view)
+  if (!plugin) return null
+  plugin.client.sync()
   const method =
     kind === "callHierarchy"
       ? "textDocument/prepareCallHierarchy"
-      : "textDocument/prepareTypeHierarchy";
+      : "textDocument/prepareTypeHierarchy"
   return plugin.client
     .request<unknown, HierItem[] | null>(method, {
       textDocument: { uri: plugin.uri },
       position: plugin.toPosition(pos),
     })
-    .then((res) => (res && res.length ? res.map(toHierNode) : null))
-    .catch(() => null);
+    .then((res) => (res?.length ? res.map(toHierNode) : null))
+    .catch(() => null)
 }
 
 export const lspPrepareCallHierarchy = (view: EditorView, pos: number) =>
-  prepareHierarchy(view, pos, "callHierarchy");
+  prepareHierarchy(view, pos, "callHierarchy")
 export const lspPrepareTypeHierarchy = (view: EditorView, pos: number) =>
-  prepareHierarchy(view, pos, "typeHierarchy");
+  prepareHierarchy(view, pos, "typeHierarchy")
 
 interface CallEdge {
-  from?: HierItem;
-  to?: HierItem;
+  from?: HierItem
+  to?: HierItem
 }
 
 /** Incoming (callers) or outgoing (callees) for a call-hierarchy item. */
@@ -660,16 +654,18 @@ export function lspCalls(
   item: HierItem,
   direction: "incoming" | "outgoing",
 ): Promise<HierNode[] | null> | null {
-  const plugin = LSPPlugin.get(view);
-  if (!plugin) return null;
+  const plugin = LSPPlugin.get(view)
+  if (!plugin) return null
   const method =
-    direction === "incoming" ? "callHierarchy/incomingCalls" : "callHierarchy/outgoingCalls";
+    direction === "incoming" ? "callHierarchy/incomingCalls" : "callHierarchy/outgoingCalls"
   return plugin.client
     .request<unknown, CallEdge[] | null>(method, { item })
     .then((res) =>
-      res ? res.map((e) => toHierNode((direction === "incoming" ? e.from : e.to) as HierItem)) : null,
+      res
+        ? res.map((e) => toHierNode((direction === "incoming" ? e.from : e.to) as HierItem))
+        : null,
     )
-    .catch(() => null);
+    .catch(() => null)
 }
 
 /** Supertypes (bases) or subtypes (implementers) for a type-hierarchy item. */
@@ -678,37 +674,37 @@ export function lspTypes(
   item: HierItem,
   direction: "super" | "sub",
 ): Promise<HierNode[] | null> | null {
-  const plugin = LSPPlugin.get(view);
-  if (!plugin) return null;
-  const method = direction === "super" ? "typeHierarchy/supertypes" : "typeHierarchy/subtypes";
+  const plugin = LSPPlugin.get(view)
+  if (!plugin) return null
+  const method = direction === "super" ? "typeHierarchy/supertypes" : "typeHierarchy/subtypes"
   return plugin.client
     .request<unknown, HierItem[] | null>(method, { item })
     .then((res) => (res ? res.map(toHierNode) : null))
-    .catch(() => null);
+    .catch(() => null)
 }
 
 interface Conn {
-  client: LSPClient;
-  unlisten: Promise<UnlistenFn>;
-  exitUnlisten: Promise<UnlistenFn>;
+  client: LSPClient
+  unlisten: Promise<UnlistenFn>
+  exitUnlisten: Promise<UnlistenFn>
 }
-const conns = new Map<string, Promise<Conn>>();
+const conns = new Map<string, Promise<Conn>>()
 
 // Connections we've already told the user crashed, so a flapping server notifies
 // at most once until it successfully reconnects (the flag is cleared on connect).
-const crashNotified = new Set<string>();
+const crashNotified = new Set<string>()
 
 /** Drop a connection and unsubscribe both its listeners (idempotent). */
 function dropConn(key: string): void {
-  const p = conns.get(key);
-  conns.delete(key);
-  if (!p) return;
+  const p = conns.get(key)
+  conns.delete(key)
+  if (!p) return
   void p
     .then((c) => {
-      void c.unlisten.then((u) => u()).catch(() => {});
-      void c.exitUnlisten.then((u) => u()).catch(() => {});
+      void c.unlisten.then((u) => u()).catch(() => {})
+      void c.exitUnlisten.then((u) => u()).catch(() => {})
     })
-    .catch(() => {});
+    .catch(() => {})
 }
 
 // Language servers run in the Rust backend and outlive a webview reload, but
@@ -721,47 +717,47 @@ if (typeof window !== "undefined") {
   window.addEventListener("pagehide", () => {
     // Clear the map first so the resulting exit events read as intentional.
     for (const key of [...conns.keys()]) {
-      dropConn(key);
-      void lspStop(key);
+      dropConn(key)
+      void lspStop(key)
     }
-  });
+  })
 }
 
 /** Get (or create) a connected client for a server + project root. */
 function connect(server: ServerDef, root: string): Promise<Conn> {
-  const key = `${server.id}:${root}`;
-  const existing = conns.get(key);
-  if (existing) return existing;
+  const key = `${server.id}:${root}`
+  const existing = conns.get(key)
+  if (existing) return existing
 
   const p = (async () => {
     // Spawn the server first; this throws if it isn't installed/allowed.
-    await lspStart(key, server.id, root);
-    log.info("client connected", { server: server.id });
-    crashNotified.delete(key); // fresh connection — a future crash may notify again
-    const handlers = new Set<(v: string) => void>();
+    await lspStart(key, server.id, root)
+    log.info("client connected", { server: server.id })
+    crashNotified.delete(key) // fresh connection — a future crash may notify again
+    const handlers = new Set<(v: string) => void>()
     const unlisten = listen<string>(`lsp-${key}`, (e) => {
-      tapDiagnostics(e.payload);
-      handlers.forEach((h) => h(e.payload));
-    });
+      tapDiagnostics(e.payload)
+      for (const h of handlers) h(e.payload)
+    })
     // The backend signals a dead server here. If we didn't tear it down on
     // purpose, drop the stale connection (so the next interaction reconnects a
     // fresh server) and tell the user once — a crashed server otherwise breaks
     // code intelligence silently.
     const exitUnlisten = listen(`lsp-exit-${key}`, () => {
-      if (!conns.has(key)) return; // intentional stop already removed it
-      log.warn("language server exited unexpectedly", { server: server.id });
-      dropConn(key);
+      if (!conns.has(key)) return // intentional stop already removed it
+      log.warn("language server exited unexpectedly", { server: server.id })
+      dropConn(key)
       if (!crashNotified.has(key)) {
-        crashNotified.add(key);
-        notify("error", t("lsp.serverStopped", { name: server.id }));
+        crashNotified.add(key)
+        notify("error", t("lsp.serverStopped", { name: server.id }))
       }
-    });
-    await unlisten; // subscription live before we send `initialize`
+    })
+    await unlisten // subscription live before we send `initialize`
     const transport: Transport = {
       send: (m) => void lspSend(key, m),
       subscribe: (h) => handlers.add(h),
       unsubscribe: (h) => handlers.delete(h),
-    };
+    }
     // Diagnostics (`serverDiagnostics`) and document sync (`autoSync`) live in
     // these client-level extensions — `LSPPlugin.create` injects them into each
     // view. Without them the server never hears about edits and never publishes
@@ -769,33 +765,33 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
     const client = new LSPClient({
       rootUri: toUri(root),
       extensions: clientExtensions(),
-    }).connect(transport);
-    return { client, unlisten, exitUnlisten };
-  })();
+    }).connect(transport)
+    return { client, unlisten, exitUnlisten }
+  })()
 
-  conns.set(key, p);
+  conns.set(key, p)
   // If startup failed (server missing), drop the cache entry so we don't retry
   // a dead promise and stay quiet.
   p.catch((e) => {
-    log.error("client connect failed", { server: server.id, error: String(e) });
-    conns.delete(key);
-  });
-  return p;
+    log.error("client connect failed", { server: server.id, error: String(e) })
+    conns.delete(key)
+  })
+  return p
 }
 
 // Angular has no extension of its own — it shares .ts/.html with TypeScript and
 // HTML. Detect an Angular project (angular.json present) once per root so we can
 // route those files to the Angular server instead.
-const angularCache = new Map<string, Promise<boolean>>();
+const angularCache = new Map<string, Promise<boolean>>()
 function isAngularProject(root: string): Promise<boolean> {
-  let p = angularCache.get(root);
+  let p = angularCache.get(root)
   if (!p) {
     p = resolvePath(root, "angular.json")
       .then((r) => r !== null)
-      .catch(() => false);
-    angularCache.set(root, p);
+      .catch(() => false)
+    angularCache.set(root, p)
   }
-  return p;
+  return p
 }
 
 /**
@@ -803,27 +799,27 @@ function isAngularProject(root: string): Promise<boolean> {
  * configured/installed for the file's language.
  */
 export async function lspSupport(root: string, path: string): Promise<Extension | null> {
-  const ext = extOf(path);
-  let server = serverFor(path);
+  const ext = extOf(path)
+  let server = serverFor(path)
   // In an Angular project, .ts/.html go to the Angular language server.
   if (
     (ext === "ts" || ext === "html" || ext === "htm") &&
     useExtensions.getState().isEnabled("angular") &&
     (await isAngularProject(root))
   ) {
-    server = { id: "angular", exts: server?.exts ?? [ext] };
+    server = { id: "angular", exts: server?.exts ?? [ext] }
   }
-  if (!server) return null;
+  if (!server) return null
   try {
-    const { client } = await connect(server, root);
-    return LSPPlugin.create(client, toUri(path), langIdFor(path));
+    const { client } = await connect(server, root)
+    return LSPPlugin.create(client, toUri(path), langIdFor(path))
   } catch {
-    return null; // server not installed / failed to start
+    return null // server not installed / failed to start
   }
 }
 
 /** Whether a server is configured for this file (cheap check, no spawn). */
-export const hasServer = (path: string) => serverFor(path) !== null;
+export const hasServer = (path: string) => serverFor(path) !== null
 
 // On HMR, tear the servers down so the replaced module reconnects cleanly —
 // otherwise the old processes linger and get a second `initialize` (protocol
@@ -831,11 +827,11 @@ export const hasServer = (path: string) => serverFor(path) !== null;
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     for (const key of [...conns.keys()]) {
-      log.debug("client disconnected", { key });
-      dropConn(key); // unlistens both subscriptions and removes from the map
-      void lspStop(key).catch(() => {});
+      log.debug("client disconnected", { key })
+      dropConn(key) // unlistens both subscriptions and removes from the map
+      void lspStop(key).catch(() => {})
     }
-    crashNotified.clear();
-    useDiagnostics.getState().reset();
-  });
+    crashNotified.clear()
+    useDiagnostics.getState().reset()
+  })
 }

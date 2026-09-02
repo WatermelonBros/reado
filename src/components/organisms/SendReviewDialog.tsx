@@ -3,53 +3,52 @@
  * terminal (agent) receives them, then inject the review prompt. Completes
  * task 4.4 (deselectable batch + target agent).
  */
-import { useMemo, useState } from "react";
-import { useComments } from "../../lib/comments";
-import { useTerminals } from "../../lib/terminals";
-import { useProject } from "../../lib/store";
-import { useResolveLoop } from "../../lib/resolveLoop";
-
-import { TYPE_COLOR, typeKey, Dot } from "../atoms/commentMeta";
-import { Modal } from "../atoms/Modal";
-import { Button } from "../atoms/Button";
-import { Checkbox } from "../atoms/Checkbox";
-import { Select } from "../atoms/Select";
-import { useTranslation } from "react-i18next";
+import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { Checkbox } from "@/components/atoms/Checkbox"
+import { Dot, TYPE_COLOR, typeKey } from "@/components/atoms/commentMeta"
+import { Modal } from "@/components/atoms/Modal"
+import { Select } from "@/components/atoms/Select"
+import { useComments } from "@/lib/comments"
+import { useResolveLoop } from "@/lib/resolveLoop"
+import { useProject } from "@/lib/store"
+import { useTerminals } from "@/lib/terminals"
 
 export function SendReviewDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const comments = useComments((s) => s.comments);
-  const tasks = comments.filter((c) => c.kind === "task" && c.state === "open");
-  const sessions = useTerminals((s) => s.sessions);
-  const activeId = useTerminals((s) => s.activeId);
-  const add = useTerminals((s) => s.add);
-  const { t } = useTranslation();
+  const comments = useComments((s) => s.comments)
+  const tasks = comments.filter((c) => c.kind === "task" && c.state === "open")
+  const sessions = useTerminals((s) => s.sessions)
+  const activeId = useTerminals((s) => s.activeId)
+  const add = useTerminals((s) => s.add)
+  const { t } = useTranslation()
 
   // All tasks selected by default; the target is the active terminal.
-  const [excluded, setExcluded] = useState<Set<string>>(new Set());
-  const [target, setTarget] = useState<string>("");
+  const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  const [target, setTarget] = useState<string>("")
 
   const selected = useMemo(
     () => tasks.filter((c) => !excluded.has(c.id)).map((c) => c.id),
     [tasks, excluded],
-  );
+  )
 
   const toggle = (id: string) =>
     setExcluded((s) => {
-      const next = new Set(s);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+      const next = new Set(s)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
 
   const send = () => {
     // Route through the resolve loop so the handoff gets progress tracking,
     // completion notification, and the hardened dispatch (agent boot-wait +
     // install check + correct submit) — same path guided review uses. Honour the
     // chosen target terminal by making it active first.
-    if (target) useTerminals.getState().setActive(target);
-    else if (!activeId) add();
-    void useResolveLoop.getState().start(useProject.getState().root, selected);
-    onClose();
-  };
+    if (target) useTerminals.getState().setActive(target)
+    else if (!activeId) add()
+    void useResolveLoop.getState().start(useProject.getState().root, selected)
+    onClose()
+  }
 
   return (
     <Modal
@@ -72,10 +71,7 @@ export function SendReviewDialog({ open, onClose }: { open: boolean; onClose: ()
 
       <ul className="m-0 min-h-0 flex-1 list-none overflow-y-auto p-2">
         {tasks.map((c) => (
-          <li
-            key={c.id}
-            className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-surface"
-          >
+          <li key={c.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-surface">
             <Checkbox
               checked={!excluded.has(c.id)}
               onChange={() => toggle(c.id)}
@@ -105,5 +101,5 @@ export function SendReviewDialog({ open, onClose }: { open: boolean; onClose: ()
         </Button>
       </footer>
     </Modal>
-  );
+  )
 }

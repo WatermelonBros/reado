@@ -3,25 +3,14 @@
  * type option lists, and author/agent identity. Kept separate so badges stay
  * consistent across the composer, thread popover and comment list.
  */
-import type { ReactElement } from "react";
-import type { CommentType, CommentState, Message } from "../../lib/api";
-import type { MessageKey } from "../../i18n";
-import { ClaudeIcon, CodexIcon, CopilotIcon } from "./icons";
+import type { ReactElement } from "react"
+import type { MessageKey } from "@/i18n"
+import type { CommentState, CommentType, Message } from "@/lib/api"
+import { ClaudeIcon, CodexIcon, CopilotIcon } from "./icons"
 
-export const COMMENT_TYPES: CommentType[] = [
-  "bug",
-  "refactor",
-  "performance",
-  "question",
-  "note",
-];
+export const COMMENT_TYPES: CommentType[] = ["bug", "refactor", "performance", "question", "note"]
 
-export const COMMENT_STATES: CommentState[] = [
-  "open",
-  "in-progress",
-  "done",
-  "discarded",
-];
+export const COMMENT_STATES: CommentState[] = ["open", "in-progress", "done", "discarded"]
 
 /** Distinct accent per type, drawn from the theme's semantic palette. */
 export const TYPE_COLOR: Record<CommentType, string> = {
@@ -30,7 +19,7 @@ export const TYPE_COLOR: Record<CommentType, string> = {
   performance: "var(--syn-number)",
   question: "var(--syn-control)",
   note: "var(--text-muted)",
-};
+}
 
 /**
  * The shared surface colour used by both the connector line and the thread box,
@@ -39,19 +28,17 @@ export const TYPE_COLOR: Record<CommentType, string> = {
  * a readable background.
  */
 export const ACCENT = (_t?: CommentType): string =>
-  `color-mix(in oklab, var(--text-muted) 16%, var(--bg-elevated))`;
+  `color-mix(in oklab, var(--text-muted) 16%, var(--bg-elevated))`
 
-export const typeKey = (t: CommentType): MessageKey =>
-  `comment.type.${t}` as MessageKey;
-export const stateKey = (s: CommentState): MessageKey =>
-  `comment.state.${s}` as MessageKey;
+export const typeKey = (t: CommentType): MessageKey => `comment.type.${t}` as MessageKey
+export const stateKey = (s: CommentState): MessageKey => `comment.state.${s}` as MessageKey
 
 /** Human label for a known agent id, else the raw id. */
 const AGENT_NAMES: Record<string, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   copilot: "Copilot",
-};
+}
 
 /** Brand colour + glyph per agent, for attributing thread messages. */
 export const AGENT_BRAND: Record<
@@ -62,26 +49,23 @@ export const AGENT_BRAND: Record<
   codex: { color: "#10A37F", Icon: CodexIcon },
   // Copilot's mark is monochrome; a GitHub-family violet keeps it distinct.
   copilot: { color: "#8957E5", Icon: CopilotIcon },
-};
+}
 
 /** The brand for a message's agent author, or null (user / unknown agent). */
 export function agentBrand(message: Message) {
-  if (message.author !== "agent" || !message.agent) return null;
-  return AGENT_BRAND[message.agent] ?? null;
+  if (message.author !== "agent" || !message.agent) return null
+  return AGENT_BRAND[message.agent] ?? null
 }
 
 /** Display name for a thread message's author. */
 export function authorLabel(message: Message, you: string): string {
-  if (message.author !== "agent") return you;
-  return message.agent ? (AGENT_NAMES[message.agent] ?? message.agent) : "AI";
+  if (message.author !== "agent") return you
+  return message.agent ? (AGENT_NAMES[message.agent] ?? message.agent) : "AI"
 }
 
 /** A small colour dot used in badges. */
 export function Dot({ color }: { color: string }) {
   return (
-    <span
-      className="inline-block h-2 w-2 flex-none rounded-full"
-      style={{ background: color }}
-    />
-  );
+    <span className="inline-block h-2 w-2 flex-none rounded-full" style={{ background: color }} />
+  )
 }

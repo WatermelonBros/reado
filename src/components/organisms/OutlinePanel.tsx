@@ -3,13 +3,12 @@
  * extracted on the fly, click to jump. A read-first navigation aid — see the
  * shape of a file at a glance without scrolling it.
  */
-import { useEffect, useState } from "react";
-import { useDocInfo, goToLine } from "../../lib/docInfo";
-import { useProject } from "../../lib/store";
-import { extractSymbols, type OutlineSymbol } from "../../lib/outline";
-import { lspDocumentSymbols } from "../../lib/lsp";
-import { useCursor } from "../../lib/store";
-import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { goToLine, useDocInfo } from "@/lib/docInfo"
+import { lspDocumentSymbols } from "@/lib/lsp"
+import { extractSymbols, type OutlineSymbol } from "@/lib/outline"
+import { useCursor, useProject } from "@/lib/store"
 
 /** A faint type label + colour per symbol kind. */
 const KIND_COLOR: Record<OutlineSymbol["kind"], string> = {
@@ -18,48 +17,48 @@ const KIND_COLOR: Record<OutlineSymbol["kind"], string> = {
   class: "var(--syn-number)",
   type: "var(--syn-control)",
   variable: "var(--text-muted)",
-};
+}
 
 export function OutlinePanel() {
-  const view = useDocInfo((s) => s.view);
-  const active = useProject((s) => s.active);
-  const line = useCursor((s) => s.line);
-  const { t } = useTranslation();
-  const [symbols, setSymbols] = useState<OutlineSymbol[]>([]);
+  const view = useDocInfo((s) => s.view)
+  const active = useProject((s) => s.active)
+  const line = useCursor((s) => s.line)
+  const { t } = useTranslation()
+  const [symbols, setSymbols] = useState<OutlineSymbol[]>([])
 
   // Re-derive symbols when the file changes (or its editor view is (re)created).
   // Prefer the language server's document symbols; fall back to the heuristic
   // extractor when no server is attached or it returns nothing.
   useEffect(() => {
     if (!view) {
-      setSymbols([]);
-      return;
+      setSymbols([])
+      return
     }
-    const heuristic = () => extractSymbols(view.state.doc.toString());
-    setSymbols(heuristic());
-    let cancelled = false;
-    const fromServer = lspDocumentSymbols(view);
+    const heuristic = () => extractSymbols(view.state.doc.toString())
+    setSymbols(heuristic())
+    let cancelled = false
+    const fromServer = lspDocumentSymbols(view)
     if (fromServer) {
       void fromServer.then((syms) => {
-        if (!cancelled && syms && syms.length) setSymbols(syms);
-      });
+        if (!cancelled && syms && syms.length) setSymbols(syms)
+      })
     }
     return () => {
-      cancelled = true;
-    };
-  }, [view, active]);
+      cancelled = true
+    }
+  }, [view, active])
 
   if (!active) {
-    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("outline.noFile")}</p>;
+    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("outline.noFile")}</p>
   }
   if (symbols.length === 0) {
-    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("outline.empty")}</p>;
+    return <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("outline.empty")}</p>
   }
 
   // The symbol the cursor is currently inside (the last one at/above the line).
-  let current = -1;
+  let current = -1
   for (let i = 0; i < symbols.length; i++) {
-    if (symbols[i].line <= line) current = i;
+    if (symbols[i].line <= line) current = i
   }
 
   return (
@@ -86,5 +85,5 @@ export function OutlinePanel() {
         </li>
       ))}
     </ul>
-  );
+  )
 }

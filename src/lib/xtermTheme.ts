@@ -5,17 +5,17 @@
  * token to its computed `rgb(...)` via a throwaway probe element. Called when a
  * terminal mounts (and can be re-applied on theme change).
  */
-import type { ITheme } from "@xterm/xterm";
+import type { ITheme } from "@xterm/xterm"
 
 /** Resolve a CSS custom property to a concrete `rgb(...)` string. */
 function resolve(varName: string): string {
-  const probe = document.createElement("span");
-  probe.style.color = `var(${varName})`;
-  probe.style.display = "none";
-  document.body.appendChild(probe);
-  const color = getComputedStyle(probe).color;
-  probe.remove();
-  return color || "#000";
+  const probe = document.createElement("span")
+  probe.style.color = `var(${varName})`
+  probe.style.display = "none"
+  document.body.appendChild(probe)
+  const color = getComputedStyle(probe).color
+  probe.remove()
+  return color || "#000"
 }
 
 /**
@@ -26,24 +26,23 @@ function resolve(varName: string): string {
  */
 export function xtermLinkColor(): string {
   try {
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 1;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return LINK_FALLBACK;
-    ctx.fillStyle = resolve("--accent");
-    ctx.fillRect(0, 0, 1, 1);
-    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+    const canvas = document.createElement("canvas")
+    canvas.width = canvas.height = 1
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })
+    if (!ctx) return LINK_FALLBACK
+    ctx.fillStyle = resolve("--accent")
+    ctx.fillRect(0, 0, 1, 1)
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
+    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`
   } catch {
-    return LINK_FALLBACK;
+    return LINK_FALLBACK
   }
 }
 
-const LINK_FALLBACK = "#4d9fff";
+const LINK_FALLBACK = "#4d9fff"
 
 /** Last-resort stack if neither CSS custom property resolves. */
-const CODE_FONT_FALLBACK =
-  '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace';
+const CODE_FONT_FALLBACK = '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace'
 
 /**
  * Resolve the configured code font to a concrete font-family string for xterm.
@@ -51,11 +50,10 @@ const CODE_FONT_FALLBACK =
  * `--code-font` override, fall back to the default `--font-code` stack.
  */
 export function xtermFontFamily(): string {
-  const root = getComputedStyle(document.documentElement);
+  const root = getComputedStyle(document.documentElement)
   const font =
-    root.getPropertyValue("--code-font").trim() ||
-    root.getPropertyValue("--font-code").trim();
-  return font || CODE_FONT_FALLBACK;
+    root.getPropertyValue("--code-font").trim() || root.getPropertyValue("--font-code").trim()
+  return font || CODE_FONT_FALLBACK
 }
 
 export function xtermTheme(): ITheme {
@@ -81,5 +79,5 @@ export function xtermTheme(): ITheme {
     brightMagenta: resolve("--syn-control"),
     brightCyan: resolve("--accent"),
     brightWhite: resolve("--text"),
-  };
+  }
 }

@@ -6,55 +6,59 @@
  * app root (outside the zoom layer) and portalled to <body> so its backdrop and
  * positioner anchor to the viewport.
  */
-import { Tour, useTour, Portal } from "@ark-ui/react";
-import { useEffect, useMemo, useRef } from "react";
-import { useTranslation } from "react-i18next";
-import { mod, shift } from "../../lib/shortcuts";
-import { useTourGuide } from "../../lib/tour";
-import { useProject } from "../../lib/store";
+import { Portal, Tour, useTour } from "@ark-ui/react"
+import { useEffect, useMemo, useRef } from "react"
+import { useTranslation } from "react-i18next"
+import { mod, shift } from "@/lib/shortcuts"
+import { useProject } from "@/lib/store"
+import { useTourGuide } from "@/lib/tour"
 
-const SEEN_KEY = "reado.tour.seen";
+const SEEN_KEY = "reado.tour.seen"
 
 /** SVG path for a rounded rectangle (one subpath). */
 function roundedRect(x: number, y: number, w: number, h: number, r: number) {
-  r = Math.max(0, Math.min(r, w / 2, h / 2));
-  const X = Math.round(x), Y = Math.round(y), W = Math.round(w), H = Math.round(h);
+  r = Math.max(0, Math.min(r, w / 2, h / 2))
+  const X = Math.round(x),
+    Y = Math.round(y),
+    W = Math.round(w),
+    H = Math.round(h)
   return (
     `M${X + r} ${Y} H${X + W - r} A${r} ${r} 0 0 1 ${X + W} ${Y + r} ` +
     `V${Y + H - r} A${r} ${r} 0 0 1 ${X + W - r} ${Y + H} ` +
     `H${X + r} A${r} ${r} 0 0 1 ${X} ${Y + H - r} ` +
     `V${Y + r} A${r} ${r} 0 0 1 ${X + r} ${Y} Z`
-  );
+  )
 }
 
 function intersects(a: DOMRect, b: DOMRect) {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
 /** Build the clip-path (outer viewport rect + cut-outs) for the current step. */
 function scrimPath(): string | null {
   const q = (part: string) =>
-    document.querySelector<HTMLElement>(`[data-scope="tour"][data-part="${part}"]`);
-  const card = q("content");
-  if (!card) return null;
-  const cr = card.getBoundingClientRect();
+    document.querySelector<HTMLElement>(`[data-scope="tour"][data-part="${part}"]`)
+  const card = q("content")
+  if (!card) return null
+  const cr = card.getBoundingClientRect()
   // Reject the garbage rect zag reports for a frame before it applies the
   // transform — the real card is never zero-sized nor pinned to the corner.
-  if (cr.width <= 1 || cr.height <= 1 || (cr.x < 2 && cr.y < 2)) return null;
-  const W = window.innerWidth, H = window.innerHeight;
-  const holes: string[] = [];
-  const spot = q("spotlight");
-  const sr = spot?.getBoundingClientRect();
+  if (cr.width <= 1 || cr.height <= 1 || (cr.x < 2 && cr.y < 2)) return null
+  const W = window.innerWidth,
+    H = window.innerHeight
+  const holes: string[] = []
+  const spot = q("spotlight")
+  const sr = spot?.getBoundingClientRect()
   // Spotlight is hidden on target-less (dialog) steps.
-  const hasTarget = !!spot && !spot.hasAttribute("hidden") && !!sr && sr.width > 1 && sr.height > 1;
-  if (hasTarget) holes.push(roundedRect(sr!.x - 4, sr!.y - 4, sr!.width + 8, sr!.height + 8, 8));
+  const hasTarget = !!spot && !spot.hasAttribute("hidden") && !!sr && sr.width > 1 && sr.height > 1
+  if (hasTarget) holes.push(roundedRect(sr!.x - 4, sr!.y - 4, sr!.width + 8, sr!.height + 8, 8))
   // Skip the card hole when it's inside the target hole: overlapping holes cancel
   // under even-odd and would re-dim the card (the comment step targets the whole
   // editor, with the card inside it).
   if (!(hasTarget && intersects(cr, sr!))) {
-    holes.push(roundedRect(cr.x - 6, cr.y - 6, cr.width + 12, cr.height + 12, 12));
+    holes.push(roundedRect(cr.x - 6, cr.y - 6, cr.width + 12, cr.height + 12, 12))
   }
-  return `M0 0 H${W} V${H} H0 Z ${holes.join(" ")}`;
+  return `M0 0 H${W} V${H} H0 Z ${holes.join(" ")}`
 }
 
 /**
@@ -68,39 +72,39 @@ function scrimPath(): string | null {
  * path holds steady for two frames, then stop touching the DOM.
  */
 function TourScrim({ open, stepIndex }: { open: boolean; stepIndex: number }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (!open) return;
-    let raf = 0;
-    let prev = "";
-    let tries = 0;
+    if (!open) return
+    let raf = 0
+    let prev = ""
+    let tries = 0
     const settle = () => {
-      const el = ref.current;
-      const path = scrimPath();
+      const el = ref.current
+      const path = scrimPath()
       if (el && path) {
         if (path === prev) {
-          el.style.clipPath = `path(evenodd, "${path}")`;
-          return; // stable for two frames — stop polling
+          el.style.clipPath = `path(evenodd, "${path}")`
+          return // stable for two frames — stop polling
         }
-        prev = path;
+        prev = path
       }
-      if (tries++ < 40) raf = requestAnimationFrame(settle);
-    };
+      if (tries++ < 40) raf = requestAnimationFrame(settle)
+    }
     const restart = () => {
-      cancelAnimationFrame(raf);
-      prev = "";
-      tries = 0;
-      raf = requestAnimationFrame(settle);
-    };
-    restart();
-    window.addEventListener("resize", restart);
-    window.addEventListener("scroll", restart, true);
+      cancelAnimationFrame(raf)
+      prev = ""
+      tries = 0
+      raf = requestAnimationFrame(settle)
+    }
+    restart()
+    window.addEventListener("resize", restart)
+    window.addEventListener("scroll", restart, true)
     return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", restart);
-      window.removeEventListener("scroll", restart, true);
-    };
-  }, [open, stepIndex]);
+      cancelAnimationFrame(raf)
+      window.removeEventListener("resize", restart)
+      window.removeEventListener("scroll", restart, true)
+    }
+  }, [open, stepIndex])
   return (
     <div
       ref={ref}
@@ -108,20 +112,23 @@ function TourScrim({ open, stepIndex }: { open: boolean; stepIndex: number }) {
       className="pointer-events-none fixed inset-0 z-[300]"
       style={{ display: open ? "block" : "none", background: "oklch(0.13 0.02 250 / 0.55)" }}
     />
-  );
+  )
 }
 
 export function OnboardingTour() {
-  const { t } = useTranslation();
-  const runNonce = useTourGuide((s) => s.runNonce);
+  const { t } = useTranslation()
+  const runNonce = useTourGuide((s) => s.runNonce)
   // The tour targets live inside a project; gate so it never fires on the launcher.
-  const inProject = useProject((s) => !!s.root);
+  const inProject = useProject((s) => !!s.root)
 
   const nav = (back: boolean, last: boolean) => [
     ...(back ? [{ label: t("tour.back"), action: "prev" as const }] : []),
-    { label: last ? t("tour.done") : t("tour.next"), action: (last ? "dismiss" : "next") as "dismiss" | "next" },
-  ];
-  const sel = (q: string) => () => document.querySelector<HTMLElement>(q);
+    {
+      label: last ? t("tour.done") : t("tour.next"),
+      action: (last ? "dismiss" : "next") as "dismiss" | "next",
+    },
+  ]
+  const sel = (q: string) => () => document.querySelector<HTMLElement>(q)
 
   const steps = useMemo(
     () => [
@@ -202,30 +209,30 @@ export function OnboardingTour() {
       },
     ],
     [t],
-  );
+  )
 
-  const tour = useTour({ steps });
+  const tour = useTour({ steps })
 
   // Auto-start once, the first time a project is open (so the targets exist).
   // Mark "seen" only when the timer actually fires — not synchronously — so
   // React StrictMode's mount/unmount/remount doesn't burn the flag on the
   // throwaway first mount and suppress the tour forever in dev.
   useEffect(() => {
-    if (!inProject || localStorage.getItem(SEEN_KEY)) return;
+    if (!inProject || localStorage.getItem(SEEN_KEY)) return
     const id = window.setTimeout(() => {
-      localStorage.setItem(SEEN_KEY, "1");
-      tour.start("welcome"); // always from the first step
-    }, 800); // let the UI settle
-    return () => window.clearTimeout(id);
+      localStorage.setItem(SEEN_KEY, "1")
+      tour.start("welcome") // always from the first step
+    }, 800) // let the UI settle
+    return () => window.clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inProject]);
+  }, [inProject])
 
   // Replay on demand (Settings → "Replay the intro tour"). Pass the first step
   // id explicitly: tour.start() with no id resumes wherever the tour last was.
   useEffect(() => {
-    if (runNonce > 0) tour.start("welcome");
+    if (runNonce > 0) tour.start("welcome")
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runNonce]);
+  }, [runNonce])
 
   return (
     <Tour.Root tour={tour}>
@@ -270,5 +277,5 @@ export function OnboardingTour() {
         </Tour.Positioner>
       </Portal>
     </Tour.Root>
-  );
+  )
 }

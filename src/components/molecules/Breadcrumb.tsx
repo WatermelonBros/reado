@@ -1,43 +1,45 @@
 /** Path breadcrumb for the active file, with the diff toggle and base picker. */
-import { useEffect, useState } from "react";
-import { gitRefs, type GitRefs } from "../../lib/api";
-import { useProject, useEditorActions } from "../../lib/store";
-
-import { ChevronIcon, DiffIcon, BlameIcon, SparkleIcon } from "../atoms/icons";
-import { IconButton } from "../atoms/IconButton";
-import { Select } from "../atoms/Select";
-import { useSynopsis } from "../../lib/synopsis";
-import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { IconButton } from "@/components/atoms/IconButton"
+import { BlameIcon, ChevronIcon, DiffIcon, SparkleIcon } from "@/components/atoms/icons"
+import { Select } from "@/components/atoms/Select"
+import { type GitRefs, gitRefs } from "@/lib/api"
+import { useEditorActions, useProject } from "@/lib/store"
+import { useSynopsis } from "@/lib/synopsis"
 
 export function Breadcrumb() {
-  const root = useProject((s) => s.root);
-  const active = useProject((s) => s.active);
-  const isRepo = useProject((s) => s.git.isRepo);
-  const navStack = useProject((s) => s.navStack);
-  const navIndex = useProject((s) => s.navIndex);
-  const goBack = useProject((s) => s.goBack);
-  const goForward = useProject((s) => s.goForward);
-  const diffing = useEditorActions((s) => s.diffing);
-  const setDiffing = useEditorActions((s) => s.setDiffing);
-  const diffBase = useEditorActions((s) => s.diffBase);
-  const setDiffBase = useEditorActions((s) => s.setDiffBase);
-  const blame = useEditorActions((s) => s.blame);
-  const setBlame = useEditorActions((s) => s.setBlame);
-  const dirty = useEditorActions((s) => s.dirty);
-  const { t } = useTranslation();
-  const [refs, setRefs] = useState<GitRefs>({ branches: [], commits: [] });
+  const root = useProject((s) => s.root)
+  const active = useProject((s) => s.active)
+  const isRepo = useProject((s) => s.git.isRepo)
+  const navStack = useProject((s) => s.navStack)
+  const navIndex = useProject((s) => s.navIndex)
+  const goBack = useProject((s) => s.goBack)
+  const goForward = useProject((s) => s.goForward)
+  const diffing = useEditorActions((s) => s.diffing)
+  const setDiffing = useEditorActions((s) => s.setDiffing)
+  const diffBase = useEditorActions((s) => s.diffBase)
+  const setDiffBase = useEditorActions((s) => s.setDiffBase)
+  const blame = useEditorActions((s) => s.blame)
+  const setBlame = useEditorActions((s) => s.setBlame)
+  const dirty = useEditorActions((s) => s.dirty)
+  const { t } = useTranslation()
+  const [refs, setRefs] = useState<GitRefs>({ branches: [], commits: [] })
 
   // Load the diff base options when the diff turns on.
   useEffect(() => {
-    if (diffing && isRepo) gitRefs(root).then(setRefs).catch(() => {});
-  }, [diffing, isRepo, root]);
+    if (diffing && isRepo)
+      gitRefs(root)
+        .then(setRefs)
+        .catch(() => {})
+  }, [diffing, isRepo, root])
 
-  if (!active) return null;
+  if (!active) return null
 
   const rel = (active.startsWith(root) ? active.slice(root.length) : active)
     .replace(/^[\\/]+/, "")
-    .replace(/\\/g, "/");
-  const segments = rel.split("/");
+    .replace(/\\/g, "/")
+  const segments = rel.split("/")
 
   const baseOptions = [
     { value: "HEAD", label: t("diff.head") },
@@ -46,7 +48,7 @@ export function Breadcrumb() {
       value: c.hash,
       label: `${c.hash} · ${c.subject.slice(0, 32)}`,
     })),
-  ];
+  ]
 
   return (
     <nav
@@ -122,5 +124,5 @@ export function Breadcrumb() {
         )}
       </div>
     </nav>
-  );
+  )
 }

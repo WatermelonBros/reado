@@ -1,86 +1,87 @@
 // The Windows/Linux rendered menu bar: clicking a top-level label opens its
 // dropdown, items dispatch through runMenuCommand, and the menu dismisses on
 // item-select / Escape / outside click. Hovering switches menus once one is open.
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+
+import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const { runMenuCommand, menuCommandEnabled } = vi.hoisted(() => ({
   runMenuCommand: vi.fn(),
   menuCommandEnabled: vi.fn((_id: string) => true),
-}));
-vi.mock("../../../lib/menu", () => ({ runMenuCommand, menuCommandEnabled }));
+}))
+vi.mock("../../../lib/menu", () => ({ runMenuCommand, menuCommandEnabled }))
 
-import { MenuBar } from "../MenuBar";
+import { MenuBar } from "@/components/molecules/MenuBar"
 
 beforeEach(() => {
-  runMenuCommand.mockClear();
-  menuCommandEnabled.mockReset().mockReturnValue(true);
-});
+  runMenuCommand.mockClear()
+  menuCommandEnabled.mockReset().mockReturnValue(true)
+})
 
 describe("MenuBar", () => {
   it("renders the top-level menu labels", () => {
-    render(<MenuBar />);
-    expect(screen.getByRole("button", { name: "File" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument();
-  });
+    render(<MenuBar />)
+    expect(screen.getByRole("button", { name: "File" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument()
+  })
 
   it("opens a dropdown with the menu's items on click", async () => {
-    render(<MenuBar />);
-    await userEvent.click(screen.getByRole("button", { name: "File" }));
-    expect(screen.getByRole("button", { name: "New File…" })).toBeInTheDocument();
+    render(<MenuBar />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    expect(screen.getByRole("button", { name: "New File…" })).toBeInTheDocument()
     // A header from the File menu is rendered (non-clickable).
-    expect(screen.getByText("Auto Save")).toBeInTheDocument();
-  });
+    expect(screen.getByText("Auto Save")).toBeInTheDocument()
+  })
 
   it("clicking the same label again closes the dropdown", async () => {
-    render(<MenuBar />);
-    const file = screen.getByRole("button", { name: "File" });
-    await userEvent.click(file);
-    expect(screen.getByRole("button", { name: "New File…" })).toBeInTheDocument();
-    await userEvent.click(file);
-    expect(screen.queryByRole("button", { name: "New File…" })).not.toBeInTheDocument();
-  });
+    render(<MenuBar />)
+    const file = screen.getByRole("button", { name: "File" })
+    await userEvent.click(file)
+    expect(screen.getByRole("button", { name: "New File…" })).toBeInTheDocument()
+    await userEvent.click(file)
+    expect(screen.queryByRole("button", { name: "New File…" })).not.toBeInTheDocument()
+  })
 
   it("selecting an item runs its command and closes the menu", async () => {
-    render(<MenuBar />);
-    await userEvent.click(screen.getByRole("button", { name: "File" }));
-    await userEvent.click(screen.getByRole("button", { name: "New File…" }));
-    expect(runMenuCommand).toHaveBeenCalledWith("newFile");
-    expect(screen.queryByRole("button", { name: "Open File…" })).not.toBeInTheDocument();
-  });
+    render(<MenuBar />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    await userEvent.click(screen.getByRole("button", { name: "New File…" }))
+    expect(runMenuCommand).toHaveBeenCalledWith("newFile")
+    expect(screen.queryByRole("button", { name: "Open File…" })).not.toBeInTheDocument()
+  })
 
   it("greys out (and won't dispatch) a command whose precondition isn't met", async () => {
     // Disable "Save" only.
-    menuCommandEnabled.mockImplementation((id: string) => id !== "save");
-    render(<MenuBar />);
-    await userEvent.click(screen.getByRole("button", { name: "File" }));
-    const save = screen.getByRole("button", { name: "Save" });
-    expect(save).toBeDisabled();
-    await userEvent.click(save);
-    expect(runMenuCommand).not.toHaveBeenCalled();
-  });
+    menuCommandEnabled.mockImplementation((id: string) => id !== "save")
+    render(<MenuBar />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    const save = screen.getByRole("button", { name: "Save" })
+    expect(save).toBeDisabled()
+    await userEvent.click(save)
+    expect(runMenuCommand).not.toHaveBeenCalled()
+  })
 
   it("hovering another label switches the open menu", async () => {
-    render(<MenuBar />);
-    await userEvent.click(screen.getByRole("button", { name: "File" }));
-    await userEvent.hover(screen.getByRole("button", { name: "Edit" }));
-    expect(screen.getByRole("button", { name: "Find…" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New File…" })).not.toBeInTheDocument();
-  });
+    render(<MenuBar />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    await userEvent.hover(screen.getByRole("button", { name: "Edit" }))
+    expect(screen.getByRole("button", { name: "Find…" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "New File…" })).not.toBeInTheDocument()
+  })
 
   it("Escape closes the open menu", async () => {
-    render(<MenuBar />);
-    await userEvent.click(screen.getByRole("button", { name: "File" }));
-    await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("button", { name: "New File…" })).not.toBeInTheDocument();
-  });
+    render(<MenuBar />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    await userEvent.keyboard("{Escape}")
+    expect(screen.queryByRole("button", { name: "New File…" })).not.toBeInTheDocument()
+  })
 
   it("an outside mousedown closes the open menu", async () => {
-    render(<MenuBar />);
-    await userEvent.click(screen.getByRole("button", { name: "File" }));
-    await userEvent.click(document.body);
-    expect(screen.queryByRole("button", { name: "New File…" })).not.toBeInTheDocument();
-  });
-});
+    render(<MenuBar />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    await userEvent.click(document.body)
+    expect(screen.queryByRole("button", { name: "New File…" })).not.toBeInTheDocument()
+  })
+})

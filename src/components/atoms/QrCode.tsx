@@ -6,18 +6,18 @@
  * that doubles as the quiet zone. Ark generates and lays out the modules; we only
  * style the surface.
  */
-import { QrCode as ArkQrCode } from "@ark-ui/react/qr-code";
-import { useTranslation } from "react-i18next";
+import { QrCode as ArkQrCode } from "@ark-ui/react/qr-code"
+import { useTranslation } from "react-i18next"
 
 interface Props {
   /** The payload to encode. */
-  value: string;
+  value: string
   /** Rendered pixel size of the square. */
-  size?: number;
+  size?: number
 }
 
 export function QrCode({ value, size = 220 }: Props) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <ArkQrCode.Root value={value} encoding={{ ecc: "M" }}>
       <ArkQrCode.Frame
@@ -30,5 +30,5 @@ export function QrCode({ value, size = 220 }: Props) {
         <ArkQrCode.Pattern fill="var(--qr-ink)" />
       </ArkQrCode.Frame>
     </ArkQrCode.Root>
-  );
+  )
 }

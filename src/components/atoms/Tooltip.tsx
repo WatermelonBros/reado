@@ -11,21 +11,22 @@
  * A missing/empty `label` renders the child alone (no tooltip machinery), so it's
  * safe to wrap unconditionally.
  */
-import { type ReactElement } from "react";
-import { Tooltip as ArkTooltip } from "@ark-ui/react/tooltip";
-import { Portal } from "@ark-ui/react/portal";
+
+import { Portal } from "@ark-ui/react/portal"
+import { Tooltip as ArkTooltip } from "@ark-ui/react/tooltip"
+import type { ReactElement } from "react"
 
 interface Props {
   /** Tooltip text; when falsy the child renders bare. */
-  label?: string;
+  label?: string
   /** The single trigger element (receives Ark's trigger props via `asChild`). */
-  children: ReactElement;
+  children: ReactElement
   /** Preferred side; Ark flips it near a viewport edge. */
-  placement?: "top" | "bottom" | "left" | "right";
+  placement?: "top" | "bottom" | "left" | "right"
 }
 
 export function Tooltip({ label, children, placement = "bottom" }: Props) {
-  if (!label) return children;
+  if (!label) return children
   return (
     <ArkTooltip.Root openDelay={350} closeDelay={0} positioning={{ placement }}>
       <ArkTooltip.Trigger asChild>{children}</ArkTooltip.Trigger>
@@ -37,5 +38,5 @@ export function Tooltip({ label, children, placement = "bottom" }: Props) {
         </ArkTooltip.Positioner>
       </Portal>
     </ArkTooltip.Root>
-  );
+  )
 }

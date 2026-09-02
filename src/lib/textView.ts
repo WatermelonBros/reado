@@ -5,14 +5,14 @@
  * are editable source too. "Open as text" flags a path here; the editor then
  * fetches and shows it as code. The set is per-session and not persisted.
  */
-import { create } from "zustand";
+import { create } from "zustand"
 
 interface TextViewState {
   /** Absolute paths to force-open as text. */
-  force: Set<string>;
-  openAsText: (path: string) => void;
+  force: Set<string>
+  openAsText: (path: string) => void
   /** Flip a path between its rich rendering and source (e.g. markdown). */
-  toggleText: (path: string) => void;
+  toggleText: (path: string) => void
 }
 
 export const useTextView = create<TextViewState>((set) => ({
@@ -20,9 +20,9 @@ export const useTextView = create<TextViewState>((set) => ({
   openAsText: (path) => set((s) => ({ force: new Set(s.force).add(path) })),
   toggleText: (path) =>
     set((s) => {
-      const force = new Set(s.force);
-      if (force.has(path)) force.delete(path);
-      else force.add(path);
-      return { force };
+      const force = new Set(s.force)
+      if (force.has(path)) force.delete(path)
+      else force.add(path)
+      return { force }
     }),
-}));
+}))

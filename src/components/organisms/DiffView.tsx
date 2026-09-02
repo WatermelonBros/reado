@@ -5,78 +5,68 @@
  * leaving the reader. It's opt-in (the default view is clean code) and
  * read-only, rendered as a CodeMirror unified merge against the git base.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { EditorState, Compartment } from "@codemirror/state";
-import { EditorView, lineNumbers, keymap } from "@codemirror/view";
-import { LanguageDescription } from "@codemirror/language";
-import { languages } from "../../lib/languages";
-import {
-  unifiedMergeView,
-  goToNextChunk,
-  goToPreviousChunk,
-  getChunks,
-} from "@codemirror/merge";
 
-import { gitShowRef, getReadSnapshot } from "../../lib/api";
-import { readoAppearance } from "../../lib/codemirror";
-import { diffRuler } from "../../lib/overviewRuler";
-import { useProject, useSettings, useEditorActions } from "../../lib/store";
-import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
-
-import { ChevronIcon } from "../atoms/icons";
-import { Button } from "../atoms/Button";
-import { useTranslation } from "react-i18next";
+import { LanguageDescription } from "@codemirror/language"
+import { getChunks, goToNextChunk, goToPreviousChunk, unifiedMergeView } from "@codemirror/merge"
+import { Compartment, EditorState } from "@codemirror/state"
+import { EditorView, keymap, lineNumbers } from "@codemirror/view"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { ChevronIcon } from "@/components/atoms/icons"
+import { getReadSnapshot, gitShowRef } from "@/lib/api"
+import { readoAppearance } from "@/lib/codemirror"
+import { languages } from "@/lib/languages"
+import { diffRuler } from "@/lib/overviewRuler"
+import { LAST_READ_BASE, useReadProgress } from "@/lib/readProgress"
+import { useEditorActions, useProject, useSettings } from "@/lib/store"
 
 interface Props {
-  relPath: string;
-  text: string;
+  relPath: string
+  text: string
   /** Override the git base to diff against (PR review diffs head vs the PR base
    *  ref, not the working tree's HEAD). Falls back to the shared diff base. */
-  base?: string;
+  base?: string
 }
 
 export function DiffView({ relPath, text, base: baseOverride }: Props) {
-  const root = useProject((s) => s.root);
-  const storeBase = useEditorActions((s) => s.diffBase);
-  const base = baseOverride ?? storeBase;
-  const { codeFont } = useSettings();
-  const { t } = useTranslation();
-  const [head, setHead] = useState<string | null | undefined>(undefined);
+  const root = useProject((s) => s.root)
+  const storeBase = useEditorActions((s) => s.diffBase)
+  const base = baseOverride ?? storeBase
+  const { codeFont } = useSettings()
+  const { t } = useTranslation()
+  const [head, setHead] = useState<string | null | undefined>(undefined)
   // Delta mode: diff against the last-read snapshot rather than a git ref.
-  const isDelta = base === LAST_READ_BASE;
+  const isDelta = base === LAST_READ_BASE
 
   // Fetch the base version whenever the file or chosen base changes.
   useEffect(() => {
-    let cancelled = false;
-    setHead(undefined);
-    const fetchBase = isDelta
-      ? getReadSnapshot(root, relPath)
-      : gitShowRef(root, relPath, base);
-    fetchBase
-      .then((h) => !cancelled && setHead(h))
-      .catch(() => !cancelled && setHead(null));
+    let cancelled = false
+    setHead(undefined)
+    const fetchBase = isDelta ? getReadSnapshot(root, relPath) : gitShowRef(root, relPath, base)
+    fetchBase.then((h) => !cancelled && setHead(h)).catch(() => !cancelled && setHead(null))
     return () => {
-      cancelled = true;
-    };
-  }, [root, relPath, base, isDelta]);
+      cancelled = true
+    }
+  }, [root, relPath, base, isDelta])
 
   // "Mark reviewed": re-snapshot the current content as read and leave the delta.
   const markReviewed = () => {
-    useReadProgress.getState().mark(root, relPath, true, text);
-    useReadProgress.getState().clearChanged(relPath);
-    useEditorActions.getState().setDiffBase("HEAD");
-    useEditorActions.getState().setDiffing(false);
-  };
+    useReadProgress.getState().mark(root, relPath, true, text)
+    useReadProgress.getState().clearChanged(relPath)
+    useEditorActions.getState().setDiffBase("HEAD")
+    useEditorActions.getState().setDiffing(false)
+  }
 
   if (head === undefined) {
-    return <div className="grid h-full place-items-center text-muted">{t("common.loading")}</div>;
+    return <div className="grid h-full place-items-center text-muted">{t("common.loading")}</div>
   }
   if (head === null) {
     return (
       <div className="grid h-full place-items-center p-8 text-center text-sm text-muted">
         {isDelta ? t("delta.noBase") : t("diff.noBase")}
       </div>
-    );
+    )
   }
   if (head === text) {
     return (
@@ -88,7 +78,7 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
           </Button>
         )}
       </div>
-    );
+    )
   }
   return (
     <div className="relative h-full w-full">
@@ -110,7 +100,7 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
         </button>
       )}
     </div>
-  );
+  )
 }
 
 function DiffEditor({
@@ -119,19 +109,19 @@ function DiffEditor({
   text,
   codeFont,
 }: {
-  path: string;
-  original: string;
-  text: string;
-  codeFont: string;
+  path: string
+  original: string
+  text: string
+  codeFont: string
 }) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<EditorView | null>(null);
-  const langComp = useMemo(() => new Compartment(), []);
-  const { t } = useTranslation();
-  const [chunkCount, setChunkCount] = useState(0);
+  const hostRef = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<EditorView | null>(null)
+  const langComp = useMemo(() => new Compartment(), [])
+  const { t } = useTranslation()
+  const [chunkCount, setChunkCount] = useState(0)
 
   useEffect(() => {
-    if (!hostRef.current) return;
+    if (!hostRef.current) return
     const view = new EditorView({
       parent: hostRef.current,
       state: EditorState.create({
@@ -153,24 +143,24 @@ function DiffEditor({
           langComp.of([]),
         ],
       }),
-    });
-    viewRef.current = view;
-    setChunkCount(getChunks(view.state)?.chunks.length ?? 0);
-    const desc = LanguageDescription.matchFilename(languages, path);
-    if (desc) desc.load().then((s) => view.dispatch({ effects: langComp.reconfigure(s) }));
+    })
+    viewRef.current = view
+    setChunkCount(getChunks(view.state)?.chunks.length ?? 0)
+    const desc = LanguageDescription.matchFilename(languages, path)
+    if (desc) desc.load().then((s) => view.dispatch({ effects: langComp.reconfigure(s) }))
     return () => {
-      view.destroy();
-      viewRef.current = null;
-    };
+      view.destroy()
+      viewRef.current = null
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [])
 
   const jump = (next: boolean) => {
-    const view = viewRef.current;
-    if (!view) return;
-    (next ? goToNextChunk : goToPreviousChunk)(view);
-    view.focus();
-  };
+    const view = viewRef.current
+    if (!view) return
+    ;(next ? goToNextChunk : goToPreviousChunk)(view)
+    view.focus()
+  }
 
   return (
     <div className="relative h-full w-full">
@@ -209,5 +199,5 @@ function DiffEditor({
         </div>
       )}
     </div>
-  );
+  )
 }

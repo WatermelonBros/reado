@@ -1,54 +1,55 @@
 // Cross-OS UI test: the interface theme is applied to <html data-theme>.
 // Establishes the Tauri-mock pattern for component tests. Runs on all 3 OSes.
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render } from "@testing-library/react";
+
+import { render } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Tauri's window API isn't present in a simulated DOM — mock it.
-const setTheme = vi.fn(() => Promise.resolve());
+const setTheme = vi.fn(() => Promise.resolve())
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ setTheme }),
-}));
+}))
 
-import { useApplyTheme } from "../hooks";
-import { useSettings } from "../store";
+import { useApplyTheme } from "@/lib/hooks"
+import { useSettings } from "@/lib/store"
 
 function Probe() {
-  useApplyTheme();
-  return null;
+  useApplyTheme()
+  return null
 }
 
 beforeEach(() => {
   // deterministic matchMedia (used by "system" mode)
   vi.stubGlobal("matchMedia", (q: string) => ({
-    matches: /dark/.test(q) ? true : false,
+    matches: !!/dark/.test(q),
     media: q,
     addEventListener: () => {},
     removeEventListener: () => {},
-  }));
-});
+  }))
+})
 
 afterEach(() => {
-  vi.unstubAllGlobals();
-});
+  vi.unstubAllGlobals()
+})
 
 describe("interface theme applies to <html data-theme>", () => {
   it("manual mode honours the chosen theme", () => {
-    useSettings.setState({ mode: "manual", theme: "reado-sepia" });
-    render(<Probe />);
-    expect(document.documentElement.dataset.theme).toBe("reado-sepia");
-  });
+    useSettings.setState({ mode: "manual", theme: "reado-sepia" })
+    render(<Probe />)
+    expect(document.documentElement.dataset.theme).toBe("reado-sepia")
+  })
 
   it("manual mode switches to high-contrast", () => {
-    useSettings.setState({ mode: "manual", theme: "reado-high-contrast" });
-    render(<Probe />);
-    expect(document.documentElement.dataset.theme).toBe("reado-high-contrast");
-  });
+    useSettings.setState({ mode: "manual", theme: "reado-high-contrast" })
+    render(<Probe />)
+    expect(document.documentElement.dataset.theme).toBe("reado-high-contrast")
+  })
 
   it("system mode resolves to the dark-theme pair when the OS prefers dark", () => {
-    useSettings.setState({ mode: "system", darkTheme: "reado-dark", lightTheme: "reado-light" });
-    render(<Probe />);
-    expect(document.documentElement.dataset.theme).toBe("reado-dark");
-  });
+    useSettings.setState({ mode: "system", darkTheme: "reado-dark", lightTheme: "reado-light" })
+    render(<Probe />)
+    expect(document.documentElement.dataset.theme).toBe("reado-dark")
+  })
 
   it("system mode resolves to the light-theme pair when the OS prefers light", () => {
     vi.stubGlobal("matchMedia", (q: string) => ({
@@ -56,9 +57,9 @@ describe("interface theme applies to <html data-theme>", () => {
       media: q,
       addEventListener: () => {},
       removeEventListener: () => {},
-    }));
-    useSettings.setState({ mode: "system", darkTheme: "reado-dark", lightTheme: "reado-light" });
-    render(<Probe />);
-    expect(document.documentElement.dataset.theme).toBe("reado-light");
-  });
-});
+    }))
+    useSettings.setState({ mode: "system", darkTheme: "reado-dark", lightTheme: "reado-light" })
+    render(<Probe />)
+    expect(document.documentElement.dataset.theme).toBe("reado-light")
+  })
+})

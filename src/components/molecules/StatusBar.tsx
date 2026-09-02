@@ -4,51 +4,50 @@
  * run status. Some items are clickable (go to line, convert line endings), in
  * the spirit of VS Code's status bar.
  */
-import { useEffect, useRef, useState } from "react";
-import { gitBranches, gitCheckout, gitInfo, anywhereStatus, type GitBranches } from "../../lib/api";
-import { useCursor, useProject, usePalette } from "../../lib/store";
-import { useComments, openCount } from "../../lib/comments";
+import { useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Input } from "@/components/atoms/Input"
 import {
-  useDocInfo,
-  goToLine,
-  convertEol,
-  LANGUAGE_OPTIONS,
-  type Eol,
-} from "../../lib/docInfo";
-import { useTerminals } from "../../lib/terminals";
-
-import { GitBranchIcon, MessageIcon, TerminalIcon, DeviceIcon, BrowserIcon } from "../atoms/icons";
-import { usePreview } from "../../lib/preview";
-import { useTranslation } from "react-i18next";
-import { mod } from "../../lib/shortcuts";
-import { Input } from "../atoms/Input";
+  BrowserIcon,
+  DeviceIcon,
+  GitBranchIcon,
+  MessageIcon,
+  TerminalIcon,
+} from "@/components/atoms/icons"
+import { anywhereStatus, type GitBranches, gitBranches, gitCheckout, gitInfo } from "@/lib/api"
+import { openCount, useComments } from "@/lib/comments"
+import { convertEol, type Eol, goToLine, LANGUAGE_OPTIONS, useDocInfo } from "@/lib/docInfo"
+import { usePreview } from "@/lib/preview"
+import { mod } from "@/lib/shortcuts"
+import { useCursor, usePalette, useProject } from "@/lib/store"
+import { useTerminals } from "@/lib/terminals"
 
 /** Path relative to the project root, with forward slashes. */
 function relativePath(root: string, path: string | null): string | null {
-  if (!path) return null;
-  const rel = path.startsWith(root) ? path.slice(root.length) : path;
-  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/");
+  if (!path) return null
+  const rel = path.startsWith(root) ? path.slice(root.length) : path
+  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/")
 }
 
 /** Shared style for a clickable status-bar item. */
 const ITEM =
-  "inline-flex items-center gap-[5px] whitespace-nowrap rounded-sm px-1 transition-colors hover:bg-overlay hover:text-ink";
+  "inline-flex items-center gap-[5px] whitespace-nowrap rounded-sm px-1 transition-colors hover:bg-overlay hover:text-ink"
 
 /** A pop-up anchored above a status-bar item, dismissed on outside click/Esc. */
 function Popover({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
+    window.addEventListener("mousedown", onDown)
+    window.addEventListener("keydown", onKey)
     return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
+      window.removeEventListener("mousedown", onDown)
+      window.removeEventListener("keydown", onKey)
+    }
+  }, [onClose])
   return (
     <div
       ref={ref}
@@ -56,7 +55,7 @@ function Popover({ onClose, children }: { onClose: () => void; children: React.R
     >
       {children}
     </div>
-  );
+  )
 }
 
 /** A menu row with an optional check, for the status-bar popovers. */
@@ -65,9 +64,9 @@ function MenuRow({
   checked,
   onClick,
 }: {
-  label: string;
-  checked?: boolean;
-  onClick: () => void;
+  label: string
+  checked?: boolean
+  onClick: () => void
 }) {
   return (
     <button
@@ -80,66 +79,70 @@ function MenuRow({
       {label}
       {checked && <span className="text-accent">✓</span>}
     </button>
-  );
+  )
 }
 
 export function StatusBar() {
-  const root = useProject((s) => s.root);
-  const active = useProject((s) => s.active);
-  const git = useProject((s) => s.git);
-  const previewOpen = usePreview((s) => s.open);
-  const { line, col } = useCursor();
-  const eol = useDocInfo((s) => s.eol);
-  const indentKind = useDocInfo((s) => s.indentKind);
-  const indentSize = useDocInfo((s) => s.indentSize);
-  const language = useDocInfo((s) => s.language);
-  const setDoc = useDocInfo((s) => s.set);
-  const openComments = useComments((s) => openCount(s.comments));
-  const toggleTerminal = useTerminals((s) => s.toggle);
-  const { t } = useTranslation();
+  const root = useProject((s) => s.root)
+  const active = useProject((s) => s.active)
+  const git = useProject((s) => s.git)
+  const previewOpen = usePreview((s) => s.open)
+  const { line, col } = useCursor()
+  const eol = useDocInfo((s) => s.eol)
+  const indentKind = useDocInfo((s) => s.indentKind)
+  const indentSize = useDocInfo((s) => s.indentSize)
+  const language = useDocInfo((s) => s.language)
+  const setDoc = useDocInfo((s) => s.set)
+  const openComments = useComments((s) => openCount(s.comments))
+  const toggleTerminal = useTerminals((s) => s.toggle)
+  const { t } = useTranslation()
 
   // Reado Anywhere: a phone icon + a live dot (green when the LAN server is up),
   // opening the pairing dialog. Re-checked whenever the dialog opens/closes.
-  const anywhereOpen = usePalette((s) => s.anywhereOpen);
-  const [anywhereOn, setAnywhereOn] = useState(false);
+  const anywhereOpen = usePalette((s) => s.anywhereOpen)
+  const [anywhereOn, setAnywhereOn] = useState(false)
   useEffect(() => {
-    anywhereStatus().then((s) => setAnywhereOn(!!s)).catch(() => setAnywhereOn(false));
-  }, [anywhereOpen]);
+    anywhereStatus()
+      .then((s) => setAnywhereOn(!!s))
+      .catch(() => setAnywhereOn(false))
+  }, [anywhereOpen])
 
-  const [menu, setMenu] = useState<"goto" | "eol" | "indent" | "language" | "branch" | null>(null);
-  const [gotoValue, setGotoValue] = useState("");
-  const [branches, setBranches] = useState<GitBranches | null>(null);
-  const [branchError, setBranchError] = useState<string | null>(null);
+  const [menu, setMenu] = useState<"goto" | "eol" | "indent" | "language" | "branch" | null>(null)
+  const [gotoValue, setGotoValue] = useState("")
+  const [branches, setBranches] = useState<GitBranches | null>(null)
+  const [branchError, setBranchError] = useState<string | null>(null)
 
   const openBranchMenu = () => {
-    setBranchError(null);
-    setBranches(null);
-    setMenu("branch");
-    gitBranches(root).then(setBranches).catch(() => setBranches(null));
-  };
+    setBranchError(null)
+    setBranches(null)
+    setMenu("branch")
+    gitBranches(root)
+      .then(setBranches)
+      .catch(() => setBranches(null))
+  }
 
   const checkout = async (name: string, remote: boolean) => {
     try {
-      await gitCheckout(root, name, remote);
+      await gitCheckout(root, name, remote)
       // Refresh in place. A full page reload would tear down the terminals and
       // tabs; instead update the branch + tree now, and let the file watcher
       // reload the open file and re-anchor comments for the new working tree.
-      setMenu(null);
-      useProject.getState().setGit(await gitInfo(root));
-      useProject.getState().bumpTree();
+      setMenu(null)
+      useProject.getState().setGit(await gitInfo(root))
+      useProject.getState().bumpTree()
     } catch (e) {
-      setBranchError(String(e));
+      setBranchError(String(e))
     }
-  };
+  }
 
-  const rel = relativePath(root, active);
+  const rel = relativePath(root, active)
 
   const submitGoto = () => {
-    const n = parseInt(gotoValue, 10);
-    if (Number.isFinite(n)) goToLine(n);
-    setMenu(null);
-    setGotoValue("");
-  };
+    const n = parseInt(gotoValue, 10)
+    if (Number.isFinite(n)) goToLine(n)
+    setMenu(null)
+    setGotoValue("")
+  }
 
   return (
     <footer className="flex h-[26px] flex-none items-center justify-between border-t border-line bg-surface px-2 text-xs text-muted select-none">
@@ -176,8 +179,8 @@ export function StatusBar() {
                       // Prevent the Enter from reaching the editor once goToLine
                       // refocuses it — otherwise it inserts a newline (shifting
                       // the target line by one and marking the file dirty).
-                      e.preventDefault();
-                      submitGoto();
+                      e.preventDefault()
+                      submitGoto()
                     }
                   }}
                   placeholder={t("status.goToLinePlaceholder")}
@@ -194,9 +197,9 @@ export function StatusBar() {
         <button
           type="button"
           onClick={() => {
-            const p = usePreview.getState();
-            if (p.open) p.close();
-            else p.openPane();
+            const p = usePreview.getState()
+            if (p.open) p.close()
+            else p.openPane()
           }}
           title={t("preview.open")}
           className={`${ITEM} ${previewOpen ? "text-accent" : ""}`}
@@ -224,8 +227,8 @@ export function StatusBar() {
                       label={t(kind === "tabs" ? "status.useTabs" : "status.useSpaces")}
                       checked={indentKind === kind}
                       onClick={() => {
-                        setDoc({ indentKind: kind });
-                        setMenu(null);
+                        setDoc({ indentKind: kind })
+                        setMenu(null)
                       }}
                     />
                   ))}
@@ -236,8 +239,8 @@ export function StatusBar() {
                       label={String(size)}
                       checked={indentSize === size}
                       onClick={() => {
-                        setDoc({ indentSize: size });
-                        setMenu(null);
+                        setDoc({ indentSize: size })
+                        setMenu(null)
                       }}
                     />
                   ))}
@@ -261,8 +264,8 @@ export function StatusBar() {
                       key={opt}
                       type="button"
                       onClick={() => {
-                        if (opt !== eol) convertEol(opt);
-                        setMenu(null);
+                        if (opt !== eol) convertEol(opt)
+                        setMenu(null)
                       }}
                       className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm hover:bg-surface ${
                         opt === eol ? "text-ink" : "text-muted"
@@ -294,8 +297,8 @@ export function StatusBar() {
                           label={name}
                           checked={language === name}
                           onClick={() => {
-                            setDoc({ language: name, languageOverride: name });
-                            setMenu(null);
+                            setDoc({ language: name, languageOverride: name })
+                            setMenu(null)
                           }}
                         />
                       ))}
@@ -394,5 +397,5 @@ export function StatusBar() {
         </button>
       </div>
     </footer>
-  );
+  )
 }

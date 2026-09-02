@@ -5,76 +5,75 @@
  * state controls, the task/note flag, a reply box, and edit/delete. Anchored
  * near its line; positioned by the editor via the `top` prop.
  */
-import { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import type { Comment, CommentState, CommentType } from "../../lib/api";
-import { useComments } from "../../lib/comments";
-
+import { useState } from "react"
+import { useTranslation } from "react-i18next"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { Button } from "@/components/atoms/Button"
+import { Checkbox } from "@/components/atoms/Checkbox"
 import {
+  ACCENT,
+  agentBrand,
+  authorLabel,
   COMMENT_STATES,
   COMMENT_TYPES,
-  TYPE_COLOR,
-  ACCENT,
-  typeKey,
   stateKey,
-  authorLabel,
-  agentBrand,
-} from "../atoms/commentMeta";
-import { Select } from "../atoms/Select";
-import { Checkbox } from "../atoms/Checkbox";
-import { Button } from "../atoms/Button";
-import { IconButton } from "../atoms/IconButton";
-import { CloseIcon, SendIcon } from "../atoms/icons";
-import { dispatchToAgent } from "../../lib/agents";
-import { composeSingleTaskPrompt } from "../../lib/review";
-import { Textarea } from "../atoms/Textarea";
-import { useTranslation } from "react-i18next";
+  TYPE_COLOR,
+  typeKey,
+} from "@/components/atoms/commentMeta"
+import { IconButton } from "@/components/atoms/IconButton"
+import { CloseIcon, SendIcon } from "@/components/atoms/icons"
+import { Select } from "@/components/atoms/Select"
+import { Textarea } from "@/components/atoms/Textarea"
+import { dispatchToAgent } from "@/lib/agents"
+import type { Comment, CommentState, CommentType } from "@/lib/api"
+import { useComments } from "@/lib/comments"
+import { composeSingleTaskPrompt } from "@/lib/review"
 
 const fmtTime = (ms: number) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(ms),
-  );
+  )
 
 interface Props {
-  comment: Comment;
-  top: number;
-  onClose: () => void;
+  comment: Comment
+  top: number
+  onClose: () => void
 }
 
 export function CommentThread({ comment, top, onClose }: Props) {
-  const { patch, reply, setState, remove } = useComments();
-  const { t } = useTranslation();
-  const [replyText, setReplyText] = useState("");
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const { patch, reply, setState, remove } = useComments()
+  const { t } = useTranslation()
+  const [replyText, setReplyText] = useState("")
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   // When non-null, the root message is being edited (holds the draft text).
-  const [editDraft, setEditDraft] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<string | null>(null)
 
   const saveEdit = async () => {
-    if (editDraft === null) return;
-    await patch(comment.id, { body: editDraft.trim() });
-    setEditDraft(null);
-  };
+    if (editDraft === null) return
+    await patch(comment.id, { body: editDraft.trim() })
+    setEditDraft(null)
+  }
 
   const lineLabel =
     comment.anchor.scope !== "range"
       ? comment.anchor.scope
       : comment.anchor.startLine === comment.anchor.endLine
         ? t("comment.line", { line: comment.anchor.startLine })
-        : t("comment.lines", { from: comment.anchor.startLine, to: comment.anchor.endLine });
+        : t("comment.lines", { from: comment.anchor.startLine, to: comment.anchor.endLine })
 
   const sendReply = async () => {
-    if (!replyText.trim()) return;
-    await reply(comment.id, replyText.trim());
-    setReplyText("");
-  };
+    if (!replyText.trim()) return
+    await reply(comment.id, replyText.trim())
+    setReplyText("")
+  }
 
   // "Send just this now": hand this one task to the agent through the hardened
   // dispatch (launches/boot-waits the agent, checks it's installed, submits
   // correctly) rather than a raw PTY write that a TUI agent may not even submit.
   const sendToAgent = () => {
-    void dispatchToAgent(composeSingleTaskPrompt(comment.id));
-  };
+    void dispatchToAgent(composeSingleTaskPrompt(comment.id))
+  }
 
   return (
     <div
@@ -100,8 +99,8 @@ export function CommentThread({ comment, top, onClose }: Props) {
           // type is a note; any actionable type becomes a task) so it's sent to
           // the AI. The task/note checkbox below can still override it.
           onChange={(v) => {
-            const type = v as CommentType;
-            patch(comment.id, { type, kind: type === "note" ? "note" : "task" });
+            const type = v as CommentType
+            patch(comment.id, { type, kind: type === "note" ? "note" : "task" })
           }}
           options={COMMENT_TYPES.map((tp) => ({
             value: tp,
@@ -145,7 +144,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
           <div key={i} className={`group/msg ${i > 0 ? "border-t border-line pt-3" : ""}`}>
             <div className="mb-1 flex items-baseline gap-2">
               {(() => {
-                const brand = agentBrand(m);
+                const brand = agentBrand(m)
                 return (
                   <span
                     className={`flex items-center gap-1 text-xs font-semibold ${
@@ -156,7 +155,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
                     {brand && <brand.Icon className="h-3 w-3 translate-y-px" />}
                     {authorLabel(m, t("comment.you"))}
                   </span>
-                );
+                )
               })()}
               <span className="text-xs text-faint">{fmtTime(m.createdAt)}</span>
               {i === 0 && editDraft === null && (
@@ -245,5 +244,5 @@ export function CommentThread({ comment, top, onClose }: Props) {
         </div>
       </div>
     </div>
-  );
+  )
 }
