@@ -321,8 +321,13 @@ enum TaskCmd {
     Show { id: String },
     /// Mark a task done (archives it as history).
     Done { id: String },
-    /// Return a task to open with a note explaining why it could not be done.
+    /// Record a failed attempt and return the task to open with a note. Past the
+    /// attempt budget the task blocks itself.
     Fail { id: String, note: Option<String> },
+    /// Block a task: you cannot proceed without a human answering first.
+    Block { id: String, reason: String },
+    /// Answer a blocked task: add context and return it to the resolvable set.
+    Answer { id: String, note: String },
     /// Link a task to another comment (for the knowledge graph).
     Link { id: String, target: String },
 }
@@ -896,9 +901,16 @@ fn task(
 ) -> Result<(), Box<dyn std::error::Error>> {
     match action {
         TaskCmd::List => {
+            // Blocked tasks are deliberately absent: this list is the resolvable
+            // set an agent works from, and a blocked task is waiting on a human.
+            // `reado task show` still reads one by id.
             let tasks: Vec<Comment> = core::list_comments(root)
                 .into_iter()
-                .filter(|c| c.meta.kind == CommentKind::Task && c.meta.state != CommentState::Done)
+                .filter(|c| {
+                    c.meta.kind == CommentKind::Task
+                        && c.meta.state != CommentState::Done
+                        && c.meta.state != CommentState::Blocked
+                })
                 .collect();
             if cli.json {
                 println!("{}", serde_json::to_string_pretty(&tasks)?);
@@ -926,8 +938,21 @@ fn task(
             if let Some(note) = note {
                 core::add_reply(root, id, "agent", Some(_agent.to_string()), note.clone())?;
             }
-            let c = core::set_comment_state(root, id, CommentState::Open)?;
-            report(cli, &c, "failed (returned to open)");
+            let c = core::fail_attempt(root, id)?;
+            let outcome = if c.meta.state == CommentState::Blocked {
+                "failed (blocked — needs a human)"
+            } else {
+                "failed (returned to open)"
+            };
+            report(cli, &c, outcome);
+        }
+        TaskCmd::Block { id, reason } => {
+            let c = core::block_comment(root, id, reason)?;
+            report(cli, &c, "blocked");
+        }
+        TaskCmd::Answer { id, note } => {
+            let c = core::answer_blocked(root, id, "human", note)?;
+            report(cli, &c, "answered (returned to open)");
         }
         TaskCmd::Link { id, target } => {
             let c = core::link_comments(root, id, target)?;

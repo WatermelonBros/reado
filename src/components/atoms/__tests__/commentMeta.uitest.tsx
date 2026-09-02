@@ -31,7 +31,9 @@ describe("commentMeta option lists", () => {
   })
 
   it("exposes the ordered comment states", () => {
-    expect(COMMENT_STATES).toEqual(["open", "in-progress", "done", "discarded"])
+    // "blocked" sits between in-progress and done: it is a live state the human
+    // still has to act on, not an outcome.
+    expect(COMMENT_STATES).toEqual(["open", "in-progress", "blocked", "done", "discarded"])
   })
 })
 

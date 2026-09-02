@@ -9,6 +9,8 @@
 import { create } from "zustand"
 import {
   addReply,
+  answerBlocked,
+  blockComment,
   type Comment,
   type CommentPatch,
   type CommentState,
@@ -59,6 +61,10 @@ interface CommentsState {
   patch: (id: string, patch: CommentPatch) => Promise<void>
   reply: (id: string, body: string) => Promise<void>
   setState: (id: string, state: CommentState) => Promise<void>
+  /** Block a task with the agent's reason: it leaves the resolvable set. */
+  block: (id: string, reason: string) => Promise<void>
+  /** Answer a blocked task: the note joins the thread and the task reopens. */
+  answer: (id: string, note: string) => Promise<void>
   remove: (id: string) => Promise<void>
   setActive: (id: string | null) => void
   /** Replace all comments anchored to `file` with the reanchored set. */
@@ -142,6 +148,16 @@ export const useComments = create<CommentsState>((set, get) => ({
 
   reply: async (id, body) => {
     const next = await addReply(get().root, id, "user", body)
+    set((s) => distribute(s, next))
+  },
+
+  block: async (id, reason) => {
+    const next = await blockComment(get().root, id, reason)
+    set((s) => distribute(s, next))
+  },
+
+  answer: async (id, note) => {
+    const next = await answerBlocked(get().root, id, note)
     set((s) => distribute(s, next))
   },
 

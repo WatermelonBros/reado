@@ -45,6 +45,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
   const { patch, reply, setState, remove } = useComments()
   const { t } = useTranslation()
   const [replyText, setReplyText] = useState("")
+  const [answer, setAnswer] = useState("")
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   // When non-null, the root message is being edited (holds the draft text).
   const [editDraft, setEditDraft] = useState<string | null>(null)
@@ -116,7 +117,9 @@ export function CommentThread({ comment, top, onClose }: Props) {
           options={COMMENT_STATES.map((st) => ({ value: st, label: t(stateKey(st)) }))}
         />
         <span className="ml-auto font-mono text-xs text-faint">{lineLabel}</span>
-        {comment.kind === "task" && comment.state !== "done" && (
+        {/* A blocked task is waiting on you, not on the agent: sending it back
+          unanswered would just spend another attempt on the same wall. */}
+        {comment.kind === "task" && comment.state !== "done" && comment.state !== "blocked" && (
           <IconButton
             size="sm"
             label={t("terminal.sendReview")}
@@ -135,6 +138,40 @@ export function CommentThread({ comment, top, onClose }: Props) {
       {comment.orphan && (
         <div className="border-b border-line px-3 py-2 text-xs text-marker">
           {t("comment.orphan")}
+        </div>
+      )}
+
+      {/* Blocked: show the agent's question and take the answer here, so the
+        human's reply and the return to open are one action rather than two. */}
+      {comment.state === "blocked" && (
+        <div className="flex flex-col gap-2 border-b border-line bg-surface px-3 py-2">
+          <p className="text-xs leading-relaxed text-muted">
+            {comment.blockedReason || t("comment.blockedHint")}
+          </p>
+          {!!comment.attempts && (
+            <p className="text-[10px] text-faint">
+              {t("comment.attempts", { count: comment.attempts })}
+            </p>
+          )}
+          <Textarea
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            placeholder={t("comment.answerPlaceholder")}
+            rows={2}
+            className="text-xs"
+          />
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!answer.trim()}
+            className="self-start"
+            onClick={() => {
+              void useComments.getState().answer(comment.id, answer.trim())
+              setAnswer("")
+            }}
+          >
+            {t("comment.answer")}
+          </Button>
         </div>
       )}
 

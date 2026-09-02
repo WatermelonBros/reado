@@ -10,7 +10,13 @@ import { ClaudeIcon, CodexIcon, CopilotIcon } from "./icons"
 
 export const COMMENT_TYPES: CommentType[] = ["bug", "refactor", "performance", "question", "note"]
 
-export const COMMENT_STATES: CommentState[] = ["open", "in-progress", "done", "discarded"]
+export const COMMENT_STATES: CommentState[] = [
+  "open",
+  "in-progress",
+  "blocked",
+  "done",
+  "discarded",
+]
 
 /** Distinct accent per type, drawn from the theme's semantic palette. */
 export const TYPE_COLOR: Record<CommentType, string> = {

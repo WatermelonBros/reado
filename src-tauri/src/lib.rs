@@ -175,6 +175,8 @@ pub fn run() {
             annotations::update_comment,
             annotations::add_reply,
             annotations::set_comment_state,
+            annotations::block_comment,
+            annotations::answer_blocked,
             annotations::delete_comment,
             annotations::add_reado_gitignore,
             annotations::read_project_config,

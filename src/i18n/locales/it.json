@@ -725,7 +725,8 @@
       "open": "Aperto",
       "in-progress": "In corso",
       "done": "Risolto",
-      "discarded": "Scartato"
+      "discarded": "Scartato",
+      "blocked": "Bloccato"
     },
     "task": "Task",
     "note": "Nota",
@@ -746,7 +747,12 @@
       "file": "File",
       "project": "Progetto"
     },
-    "orphan": "Orfano — il codice ancorato non è stato trovato."
+    "orphan": "Orfano — il codice ancorato non è stato trovato.",
+    "blockedHint": "L'agente si è fermato qui e serve una risposta prima che possa continuare.",
+    "answer": "Rispondi",
+    "answerPlaceholder": "Rispondi all'agente…",
+    "attempts_one": "{count} tentativo fallito",
+    "attempts_other": "{count} tentativi falliti"
   },
   "terminal": {
     "new": "Nuovo terminale",

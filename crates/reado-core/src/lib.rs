@@ -73,6 +73,11 @@ pub enum CommentState {
     InProgress,
     Done,
     Discarded,
+    /// The agent tried and cannot proceed without a human. Distinct from `Open`
+    /// because an open task is one nobody has picked up yet, while a blocked one
+    /// has been picked up, attempted, and handed back with a reason — sending it
+    /// round the loop again would just burn the same attempt.
+    Blocked,
 }
 
 /// Whether a comment is an actionable task (eligible for the AI review batch)
@@ -162,9 +167,27 @@ pub struct CommentMeta {
     pub external_ref: Option<String>,
     #[serde(default)]
     pub orphan: bool,
+    /// Why the agent could not proceed, set with the `Blocked` state. Kept beside
+    /// the state rather than only as a reply so the UI can show it without
+    /// reading the thread.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_reason: Option<String>,
+    /// How many times an agent has tried and failed this task. Past
+    /// `ATTEMPT_BUDGET` the task blocks itself: the loop has evidence that
+    /// retrying is not working.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub attempts: u32,
     pub created_at: u64,
     pub updated_at: u64,
 }
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
+/// Failed attempts before a task blocks itself. Three is enough to ride out a
+/// flaky run and few enough that a genuinely stuck task stops early.
+pub const ATTEMPT_BUDGET: u32 = 3;
 
 /// One message in a comment thread.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -507,6 +530,8 @@ pub fn create_comment(
         external_id: None,
         external_ref: None,
         orphan: false,
+        blocked_reason: None,
+        attempts: 0,
         created_at: now,
         updated_at: now,
     };
@@ -664,6 +689,58 @@ pub fn set_comment_state(root: &str, id: &str, state: CommentState) -> Result<Co
     Ok(comment)
 }
 
+/// Block a task: record why the agent cannot proceed and take it out of the
+/// resolvable set until a human answers. Idempotent — blocking an already
+/// blocked task just replaces the reason.
+pub fn block_comment(root: &str, id: &str, reason: &str) -> Result<Comment> {
+    let _lock = ReadoLock::acquire(root)?;
+    let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
+    let mut comment = read_comment(&path, archived)?;
+    comment.meta.state = CommentState::Blocked;
+    comment.meta.blocked_reason = Some(reason.trim().to_string());
+    comment.meta.updated_at = now_millis();
+    write_comment(&dir_for(root, archived), &comment.meta, &comment.messages)?;
+    Ok(comment)
+}
+
+/// Answer a blocked task: add the human's context as a reply and return it to
+/// open, with the attempt counter reset — the agent is being given something it
+/// did not have before, so the previous failures no longer count against it.
+pub fn answer_blocked(root: &str, id: &str, author: &str, note: &str) -> Result<Comment> {
+    add_reply(root, id, author, None, note.to_string())?;
+    let _lock = ReadoLock::acquire(root)?;
+    let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
+    let mut comment = read_comment(&path, archived)?;
+    comment.meta.state = CommentState::Open;
+    comment.meta.blocked_reason = None;
+    comment.meta.attempts = 0;
+    comment.meta.updated_at = now_millis();
+    write_comment(&dir_for(root, archived), &comment.meta, &comment.messages)?;
+    Ok(comment)
+}
+
+/// Record a failed attempt. Returns the task, blocked automatically once the
+/// attempt budget is spent: at that point "try again" has been tried enough for
+/// the loop to know it isn't working.
+pub fn fail_attempt(root: &str, id: &str) -> Result<Comment> {
+    let _lock = ReadoLock::acquire(root)?;
+    let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
+    let mut comment = read_comment(&path, archived)?;
+    comment.meta.attempts = comment.meta.attempts.saturating_add(1);
+    if comment.meta.attempts >= ATTEMPT_BUDGET {
+        comment.meta.state = CommentState::Blocked;
+        comment.meta.blocked_reason = Some(format!(
+            "{} attempts failed without resolving it",
+            comment.meta.attempts
+        ));
+    } else {
+        comment.meta.state = CommentState::Open;
+    }
+    comment.meta.updated_at = now_millis();
+    write_comment(&dir_for(root, archived), &comment.meta, &comment.messages)?;
+    Ok(comment)
+}
+
 /// Create or update a comment mirroring a host review thread, keyed by
 /// `(origin, external_id)` so re-pulling a PR/MR is idempotent. A resolved host
 /// thread maps to a `Done` comment (archived); reopening restores it. The body
@@ -725,6 +802,8 @@ pub fn upsert_host_comment(
                 external_id: Some(external_id.to_string()),
                 external_ref: Some(external_ref.to_string()),
                 orphan: false,
+                blocked_reason: None,
+                attempts: 0,
                 created_at: now,
                 updated_at: now,
             };
@@ -1103,9 +1182,35 @@ mod tests {
             external_id: None,
             external_ref: None,
             orphan: false,
+            blocked_reason: None,
+            attempts: 0,
             created_at: 1000,
             updated_at: 1000,
         }
+    }
+
+    /// A real task on disk under `root`, for the state-machine tests.
+    fn task(root: &str, body: &str) -> Comment {
+        create_comment(
+            root,
+            NewComment {
+                file: "src/main.rs".into(),
+                scope: Scope::Range,
+                start_line: 1,
+                end_line: 1,
+                comment_type: CommentType::Bug,
+                kind: CommentKind::Task,
+                body: body.into(),
+                context: Context::default(),
+                url: None,
+                x: None,
+                y: None,
+            },
+            "user",
+            None,
+        )
+        .unwrap()
+        .comment
     }
 
     #[test]
@@ -1376,5 +1481,106 @@ mod tests {
 
         assert_eq!(rename_comments(root, "old.rs", "new.rs").unwrap(), 1);
         assert_eq!(list_comments(root)[0].meta.anchor.file, "new.rs");
+    }
+
+    #[test]
+    fn blocking_records_the_reason_and_survives_the_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+
+        let blocked = super::block_comment(&root, &c.meta.id, "  which of the two anchors?  ").unwrap();
+        assert_eq!(blocked.meta.state, CommentState::Blocked);
+        assert_eq!(
+            blocked.meta.blocked_reason.as_deref(),
+            Some("which of the two anchors?"),
+            "the reason is trimmed and kept beside the state"
+        );
+
+        // Re-read from disk: the state and reason are in the `.md`, not just in memory.
+        let reread = super::get_comment(&root, &c.meta.id).unwrap();
+        assert_eq!(reread.meta.state, CommentState::Blocked);
+        assert_eq!(reread.meta.blocked_reason.as_deref(), Some("which of the two anchors?"));
+    }
+
+    #[test]
+    fn blocking_twice_replaces_the_reason() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+        super::block_comment(&root, &c.meta.id, "first").unwrap();
+        let again = super::block_comment(&root, &c.meta.id, "second").unwrap();
+        assert_eq!(again.meta.blocked_reason.as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn a_failed_attempt_counts_and_returns_the_task_to_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+
+        let after = super::fail_attempt(&root, &c.meta.id).unwrap();
+        assert_eq!(after.meta.attempts, 1);
+        assert_eq!(after.meta.state, CommentState::Open, "still worth another try");
+    }
+
+    #[test]
+    fn spending_the_attempt_budget_blocks_the_task_by_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+
+        for _ in 0..super::ATTEMPT_BUDGET - 1 {
+            let mid = super::fail_attempt(&root, &c.meta.id).unwrap();
+            assert_eq!(mid.meta.state, CommentState::Open);
+        }
+        let last = super::fail_attempt(&root, &c.meta.id).unwrap();
+        assert_eq!(last.meta.state, CommentState::Blocked);
+        assert!(
+            last.meta.blocked_reason.unwrap().contains("attempts"),
+            "the auto-block says why it gave up"
+        );
+    }
+
+    #[test]
+    fn answering_reopens_the_task_and_forgives_the_attempts() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+        for _ in 0..super::ATTEMPT_BUDGET {
+            super::fail_attempt(&root, &c.meta.id).unwrap();
+        }
+
+        let answered = super::answer_blocked(&root, &c.meta.id, "human", "the second one").unwrap();
+        assert_eq!(answered.meta.state, CommentState::Open);
+        assert_eq!(answered.meta.blocked_reason, None);
+        assert_eq!(
+            answered.meta.attempts, 0,
+            "the agent is being given something new; the old failures don't count"
+        );
+        assert!(
+            answered.messages.iter().any(|m| m.body.contains("the second one")),
+            "the answer is in the thread, not just discarded"
+        );
+    }
+
+    #[test]
+    fn a_comment_written_before_blocking_existed_still_loads() {
+        // `blocked_reason`/`attempts` are additive: an older `.md` has neither.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+        let path = dir.path().join(".reado/comments").join(format!("{}.md", c.meta.id));
+        let text = std::fs::read_to_string(&path).unwrap();
+        let stripped: String = text
+            .lines()
+            .filter(|l| !l.starts_with("blockedReason") && !l.starts_with("attempts"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, stripped).unwrap();
+
+        let reread = super::get_comment(&root, &c.meta.id).unwrap();
+        assert_eq!(reread.meta.attempts, 0);
+        assert_eq!(reread.meta.blocked_reason, None);
     }
 }

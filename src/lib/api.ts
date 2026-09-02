@@ -346,7 +346,7 @@ export const formatFile = (root: string, path: string, content: string) =>
 // ---- Annotations ---------------------------------------------------------
 
 export type CommentType = "bug" | "refactor" | "performance" | "question" | "note"
-export type CommentState = "open" | "in-progress" | "done" | "discarded"
+export type CommentState = "open" | "in-progress" | "done" | "discarded" | "blocked"
 export type CommentKind = "task" | "note"
 export type Scope = "range" | "file" | "project" | "web"
 
@@ -391,6 +391,10 @@ export interface Comment {
   /** The host change-request ref (PR/MR number) the thread belongs to. */
   externalRef?: string
   orphan: boolean
+  /** Why the agent stopped, when `state` is "blocked". */
+  blockedReason?: string
+  /** Failed agent attempts; the task blocks itself once the budget is spent. */
+  attempts?: number
   createdAt: number
   updatedAt: number
   messages: Message[]
@@ -436,6 +440,15 @@ export const updateComment = (root: string, id: string, patch: CommentPatch) =>
 
 export const addReply = (root: string, id: string, author: string, body: string, agent?: string) =>
   invoke<Comment>("add_reply", { root, id, author, agent, body })
+
+/** Block a task with the reason the agent gave. It leaves the resolvable set
+ *  until a human answers it. */
+export const blockComment = (root: string, id: string, reason: string) =>
+  invoke<Comment>("block_comment", { root, id, reason })
+
+/** Answer a blocked task: the note joins the thread and the task reopens. */
+export const answerBlocked = (root: string, id: string, note: string) =>
+  invoke<Comment>("answer_blocked", { root, id, note })
 
 export const setCommentState = (root: string, id: string, state: CommentState) =>
   invoke<Comment>("set_comment_state", { root, id, state })

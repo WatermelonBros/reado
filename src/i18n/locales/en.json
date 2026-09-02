@@ -725,7 +725,8 @@
       "open": "Open",
       "in-progress": "In progress",
       "done": "Done",
-      "discarded": "Discarded"
+      "discarded": "Discarded",
+      "blocked": "Blocked"
     },
     "task": "Task",
     "note": "Note",
@@ -746,7 +747,12 @@
       "file": "File",
       "project": "Project"
     },
-    "orphan": "Orphaned — the anchored code could not be found."
+    "orphan": "Orphaned — the anchored code could not be found.",
+    "blockedHint": "The agent stopped here and needs an answer before it can continue.",
+    "answer": "Answer",
+    "answerPlaceholder": "Answer the agent…",
+    "attempts_one": "{count} failed attempt",
+    "attempts_other": "{count} failed attempts"
   },
   "terminal": {
     "new": "New terminal",

@@ -12,6 +12,16 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **A task can be blocked instead of failing forever.** An agent that hits a
+  question it can't answer used to hand the task back as "open", which is
+  indistinguishable from a task nobody has looked at — so the next loop sent it
+  straight back into the same wall. `reado task block <id> "<reason>"` marks it
+  blocked with the reason; three failed attempts block it automatically. Blocked
+  tasks leave the resolvable set (they're out of `reado task list` and out of the
+  review queue) and show the agent's question in the comment thread with an
+  Answer box: your reply joins the thread, the task reopens, and the attempt
+  count is forgiven. Relaunching an agent mid-loop re-dispatches only the tasks
+  still outstanding, not the ones already done.
 - **A large file asks before it opens.** A generated bundle or a huge fixture
   used to load straight into the editor and take it with them. A text file over
   the guard (2 MB by default, adjustable in Settings → Files, 0 to turn it off)

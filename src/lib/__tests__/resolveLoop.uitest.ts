@@ -121,6 +121,56 @@ describe("start", () => {
   })
 })
 
+describe("blocked tasks", () => {
+  it("are left out of the queue", async () => {
+    commentsState.comments = [
+      { id: "a", kind: "task", state: "open" },
+      { id: "b", kind: "task", state: "blocked" },
+    ]
+    await useResolveLoop.getState().start("/p", [])
+    // The agent already tried `b` and handed it back with a question.
+    expect(useResolveLoop.getState().active?.ids).toEqual(["a"])
+  })
+
+  it("do not hold a loop open forever", () => {
+    useResolveLoop.setState({ active: loop({ ids: ["a", "b"] }) })
+    commentsState.comments = [
+      { id: "a", kind: "task", state: "done" },
+      { id: "b", kind: "task", state: "blocked" },
+    ]
+    useResolveLoop.getState().sync("/p")
+    // The loop is done with `b`; the human is not.
+    expect(useResolveLoop.getState().active?.status).toBe("finished")
+  })
+})
+
+describe("resume", () => {
+  it("re-dispatches only the tasks still outstanding", async () => {
+    useResolveLoop.setState({ active: loop({ ids: ["a", "b", "c"] }) })
+    commentsState.comments = [
+      { id: "a", kind: "task", state: "done" },
+      { id: "b", kind: "task", state: "open" },
+      { id: "c", kind: "task", state: "blocked" },
+    ]
+    const sent = useResolveLoop.getState().resume("/p")
+    expect(sent).toBe(1)
+    expect(composeReviewPromptForIds).toHaveBeenCalledWith(["b"])
+  })
+
+  it("dispatches nothing when everything queued is settled", () => {
+    useResolveLoop.setState({ active: loop({ ids: ["a"] }) })
+    commentsState.comments = [{ id: "a", kind: "task", state: "done" }]
+    expect(useResolveLoop.getState().resume("/p")).toBe(0)
+    expect(dispatchToAgent).not.toHaveBeenCalled()
+    expect(useResolveLoop.getState().active?.status).toBe("finished")
+  })
+
+  it("is a no-op without an active loop", () => {
+    useResolveLoop.setState({ active: null })
+    expect(useResolveLoop.getState().resume("/p")).toBe(0)
+  })
+})
+
 describe("failure", () => {
   it("fails the loop when the prompt never reached an agent", async () => {
     // No agent installed: dispatchToAgent reports it did not send.

@@ -47,6 +47,32 @@ pub fn add_reply(
     Ok(core::add_reply(&root, &id, &author, agent, body)?)
 }
 
+/// Block a task with the reason the agent gave, taking it out of the resolvable
+/// set until a human answers.
+#[tauri::command]
+pub fn block_comment(root: String, id: String, reason: String) -> Result<Comment> {
+    let result = core::block_comment(&root, &id, &reason)?;
+    crate::log::info(
+        "annotations",
+        "task blocked",
+        serde_json::json!({ "id": id }),
+    );
+    Ok(result)
+}
+
+/// Answer a blocked task: the human's note joins the thread and the task returns
+/// to open with its attempt count forgiven.
+#[tauri::command]
+pub fn answer_blocked(root: String, id: String, note: String) -> Result<Comment> {
+    let result = core::answer_blocked(&root, &id, "human", &note)?;
+    crate::log::info(
+        "annotations",
+        "blocked task answered",
+        serde_json::json!({ "id": id }),
+    );
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn set_comment_state(root: String, id: String, state: CommentState) -> Result<Comment> {
     let state_val = serde_json::to_value(state).unwrap_or(serde_json::Value::Null);

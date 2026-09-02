@@ -56,9 +56,22 @@ function openTaskIds(): Set<string> {
   return new Set(
     useComments
       .getState()
-      .comments.filter((c) => c.kind === "task" && c.state !== "done")
+      // Blocked tasks are excluded: the agent already tried and handed each one
+      // back with a question. Queueing them would send it round the same wall.
+      .comments.filter((c) => c.kind === "task" && c.state !== "done" && c.state !== "blocked")
       .map((c) => c.id),
   )
+}
+
+/** Queued ids that are neither resolved nor blocked — the stragglers a relaunch
+ *  should re-dispatch. Re-sending the whole queue would ask the agent to redo
+ *  work it has already finished. */
+function stragglerIds(ids: string[]): string[] {
+  const byId = new Map(useComments.getState().comments.map((c) => [c.id, c]))
+  return ids.filter((id) => {
+    const c = byId.get(id)
+    return !!c && c.kind === "task" && c.state !== "done" && c.state !== "blocked"
+  })
 }
 
 /** Comment ids that are genuinely resolved: present in the store AND done.
@@ -84,6 +97,9 @@ interface ResolveLoopState {
   tick: (root: string) => void
   /** Give up on the loop: nothing is coming, so say so rather than spin. */
   fail: (root: string, reason: string) => void
+  /** Re-dispatch only the queued tasks still outstanding — after an agent
+   *  relaunch, say. Returns how many were sent. */
+  resume: (root: string) => number
   /** Clear the loop (cancel, or dismiss a finished one). */
   clear: (root: string) => void
 }
@@ -132,6 +148,25 @@ export const useResolveLoop = create<ResolveLoopState>((set, get) => ({
       })
   },
 
+  resume: (root) => {
+    const active = get().active
+    if (!active || active.status === "finished") return 0
+    const stragglers = stragglerIds(active.ids)
+    if (stragglers.length === 0) {
+      // Everything queued is either done or blocked: nothing to re-dispatch, so
+      // let `sync` settle the loop rather than sending an empty prompt.
+      get().sync(root)
+      return 0
+    }
+    const next: LoopState = { ...active, status: "running", lastProgressAt: Date.now() }
+    set({ active: next })
+    void persist(root, next)
+    void dispatchToAgent(composeReviewPromptForIds(stragglers)).then((sent) => {
+      if (!sent) get().fail(root, "dispatch")
+    })
+    return stragglers.length
+  },
+
   fail: (root, reason) => {
     const active = get().active
     // Only a live loop can fail; a finished one keeps its outcome.
@@ -152,7 +187,8 @@ export const useResolveLoop = create<ResolveLoopState>((set, get) => ({
     const progressed = resolvedIds.length !== active.resolvedIds.length
     // Finished once no queued id is still an open task. Deleted ids fell out of
     // scope (neither open nor done), so they don't block completion, but they
-    // don't count as resolved either — no false completion from a deletion.
+    // don't count as resolved either — no false completion from a deletion. A
+    // blocked id is out of `open` too: the loop is done with it, the human is not.
     const finished = !active.ids.some((id) => open.has(id))
     const next: LoopState = {
       ...active,
