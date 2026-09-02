@@ -15,6 +15,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { ptyWrite } from "./api"
+import { findPanel, useLayout } from "./layout"
 import { createLogger } from "./logger"
 import { useSettings } from "./store"
 
@@ -154,8 +155,8 @@ interface TerminalsState {
   /** Panel width in px when docked on the right (drag-resizable). */
   width: number
   setWidth: (px: number) => void
-  /** Where the panel docks. */
-  position: "bottom" | "right"
+  /** Flip the panel between the bottom and right dock. Where it *is* lives in
+   *  the layout model — this store no longer keeps a second copy of it. */
   togglePosition: () => void
   /** Create a new tab (group with one pane) and focus it. Returns the pane id. */
   add: () => string
@@ -217,9 +218,11 @@ export const useTerminals = create<TerminalsState>()(
             Math.min(px, window.innerWidth / (useSettings.getState().zoom || 1) - 360),
           ),
         }),
-      position: "bottom",
-      togglePosition: () =>
-        set((s) => ({ position: s.position === "bottom" ? "right" : "bottom" })),
+      togglePosition: () => {
+        const layout = useLayout.getState()
+        const at = findPanel(layout.layout, "terminal")?.area
+        layout.move("terminal", at === "right" ? "bottom" : "right")
+      },
 
       add: () => {
         const id = newId()
@@ -363,11 +366,22 @@ export const useTerminals = create<TerminalsState>()(
       // that don't survive a restart.
       name: "reado.terminal-layout",
       partialize: (s) => ({
-        position: s.position,
         height: s.height,
         width: s.width,
         lastAgent: s.lastAgent,
       }),
+      // v1 dropped `position`: the dock model owns where the terminal sits. A
+      // user who had moved it to the right before the model existed would
+      // otherwise find it back at the bottom, so carry the old value across once.
+      version: 1,
+      migrate: (persisted, from) => {
+        const state = (persisted ?? {}) as { position?: "bottom" | "right" }
+        if (from < 1 && state.position === "right") {
+          useLayout.getState().move("terminal", "right")
+        }
+        const { position: _dropped, ...rest } = state
+        return rest
+      },
     },
   ),
 )

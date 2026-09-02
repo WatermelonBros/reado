@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("../logger", () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 
+import { findPanel, useLayout } from "@/lib/layout"
 import { shellQuote, terminalLinks, useTerminals } from "@/lib/terminals"
 
 const T = () => useTerminals.getState()
@@ -29,12 +30,16 @@ describe("useTerminals — panel geometry", () => {
     T().setWidth(1)
     expect(T().width).toBe(240)
   })
-  it("togglePosition flips bottom <-> right", () => {
-    expect(T().position).toBe("bottom")
+  it("togglePosition moves the panel in the layout model", () => {
+    // The store keeps no copy of where the terminal sits — dragging it to
+    // another dock would have desynced one.
+    const area = () => findPanel(useLayout.getState().layout, "terminal")?.area
+    useLayout.getState().reset()
+    expect(area()).toBe("bottom")
     T().togglePosition()
-    expect(T().position).toBe("right")
+    expect(area()).toBe("right")
     T().togglePosition()
-    expect(T().position).toBe("bottom")
+    expect(area()).toBe("bottom")
   })
 })
 

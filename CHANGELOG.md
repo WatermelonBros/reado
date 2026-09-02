@@ -12,6 +12,13 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **Every tool panel can be docked.** Files, Search, Comments, Git, Problems and
+  the rest lived only in the left sidebar, because the sidebar was the one thing
+  that knew how to draw them. Their bodies are now shared, so any of them can be
+  moved to the right or the bottom dock — tab-stacked beside the terminal, split
+  next to the browser — from the menu on the panel's own title. A docked panel
+  stops appearing in the sidebar (no second copy with its own scroll position),
+  and its activity-bar icon brings the docked one forward instead.
 - **A guided review can step back and take a wide pass.** The file-by-file walk
   is deliberately narrow, which is what keeps it honest — and also what makes it
   blind to the findings that only exist between files. "Wide pass" widens to the
@@ -27,6 +34,12 @@ commit.
   or contradicts one. Each route entry cites the document that moved it.
 
 ### Fixed
+- **Where the terminal is docked has one answer.** The terminal store kept its
+  own `position` alongside the layout model's, so dragging the panel to another
+  dock updated one and not the other, and the panel could render its
+  right-hand-dock layout while sitting at the bottom. The layout model is now
+  the only source; an existing right-docked terminal is carried across.
+
 - **A review loop that never started says so.** If the prompt never reached an
   agent — none installed, or the terminal gone — the loop sat at "Resolving…"
   forever, waiting on work nobody was doing. `dispatchToAgent` now reports

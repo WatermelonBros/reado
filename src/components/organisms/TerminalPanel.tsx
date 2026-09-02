@@ -37,6 +37,7 @@ import { Terminal } from "@/components/organisms/Terminal"
 import { launchAgent } from "@/lib/agents"
 import { agentInstalled } from "@/lib/api"
 import { toRelative, useComments } from "@/lib/comments"
+import { findPanel, useLayout } from "@/lib/layout"
 import { useProject, useSettings } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
 
@@ -69,9 +70,10 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
   const setHeight = useTerminals((s) => s.setHeight)
   const width = useTerminals((s) => s.width)
   const setWidth = useTerminals((s) => s.setWidth)
-  const position = useTerminals((s) => s.position)
   const togglePosition = useTerminals((s) => s.togglePosition)
-  const isRight = position === "right"
+  // Where the panel sits is the layout model's answer, not a second copy kept
+  // here: dragging it to another dock has to change this too.
+  const isRight = useLayout((s) => findPanel(s.layout, "terminal")?.area === "right")
   const openTaskCount = useComments(
     (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
   )

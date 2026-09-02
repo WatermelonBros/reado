@@ -11,8 +11,9 @@
  * strand the drag state. Pointer events fire reliably, and `elementFromPoint`
  * resolves the drop target — the same pattern as the resize handles here.
  *
- * ponytail: v1 knows two panels (terminal, browser) via `renderPanel`; a new
- * dockable panel just adds a case there and an entry in `PANEL_LABEL`.
+ * Every tool panel (files, search, comments, …) is dockable too: their bodies
+ * come from `ToolPanelBody`, so the same panel renders in the sidebar or in a
+ * dock without either surface owning the list.
  */
 import { Fragment, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -35,12 +36,19 @@ import { BrowserInspector } from "./BrowserInspector"
 import { BrowserPanel } from "./BrowserPanel"
 import { ReasoningPanel } from "./ReasoningPanel"
 import { TerminalPanel } from "./TerminalPanel"
+import { isTool, TOOL_TITLE, ToolPanelBody } from "./ToolPanelBody"
 
-const PANEL_LABEL: Record<PanelId, MessageKey> = {
+const PANEL_LABEL: Record<string, MessageKey> = {
   terminal: "dock.terminal",
   browser: "dock.browser",
   inspector: "dock.inspector",
   reasoning: "dock.reasoning",
+}
+
+/** A panel's name. Tool panels reuse the title their sidebar header shows, so a
+ *  docked Search reads the same as a sidebar Search. */
+function panelLabel(id: PanelId): MessageKey | undefined {
+  return PANEL_LABEL[id] ?? (isTool(id) ? TOOL_TITLE[id] : undefined)
 }
 
 function renderPanel(id: PanelId) {
@@ -48,6 +56,7 @@ function renderPanel(id: PanelId) {
   if (id === "browser") return <BrowserPanel docked />
   if (id === "inspector") return <BrowserInspector docked />
   if (id === "reasoning") return <ReasoningPanel docked />
+  if (isTool(id)) return <ToolPanelBody tool={id} />
   return null
 }
 
@@ -64,6 +73,10 @@ function closePanel(id: PanelId) {
     useLayout.getState().remove("inspector")
   }
   if (id === "reasoning") useReasoning.getState().close()
+  // A tool panel has no visibility store of its own: it exists where it is
+  // placed, so closing it is removing it from the layout. It stays reachable
+  // from the activity bar, which puts it back in the sidebar.
+  if (isTool(id)) useLayout.getState().remove(id)
 }
 
 /** Resolve the dock target under a screen point by walking up from the element
@@ -102,6 +115,8 @@ export function DockRegion({ area }: { area: DockArea }) {
   // The console shows as a dock panel only when it's both on and detached.
   const inspectorOpen = usePreview((s) => s.inspector && s.inspectorDetached)
   const reasoningOpen = useReasoning((s) => s.open)
+  // A tool panel has no separate "open" flag: being placed in the layout IS
+  // being open, so it shows whenever the model says it lives here.
   const isOpen = (id: PanelId) =>
     id === "terminal"
       ? terminalOpen
@@ -111,7 +126,13 @@ export function DockRegion({ area }: { area: DockArea }) {
           ? inspectorOpen
           : id === "reasoning"
             ? reasoningOpen
-            : false
+            : isTool(id)
+
+  /** A panel's translated name — the label the strip and the menus show. */
+  const labelOf = (id: PanelId) => {
+    const key = panelLabel(id)
+    return key ? t(key) : id
+  }
 
   const regionRef = useRef<HTMLDivElement>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; panel: PanelId } | null>(null)
@@ -270,7 +291,7 @@ export function DockRegion({ area }: { area: DockArea }) {
     const otherAt = isOpen(other) ? findPanel(layout, other) : null
     if (otherAt && otherAt.groupId !== at?.groupId) {
       items.push({
-        label: t("dock.stackWith", { panel: t(PANEL_LABEL[other]) }),
+        label: t("dock.stackWith", { panel: labelOf(other) }),
         onSelect: () => move(panel, otherAt.area, { targetGroupId: otherAt.groupId }),
       })
     }
@@ -343,7 +364,7 @@ export function DockRegion({ area }: { area: DockArea }) {
                         activeTab ? "bg-canvas text-ink" : "text-faint hover:text-ink"
                       }`}
                     >
-                      {t(PANEL_LABEL[id])}
+                      {labelOf(id)}
                     </button>
                   )
                 })}

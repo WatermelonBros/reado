@@ -27,7 +27,7 @@ reparent on a cross-area move (the browser reloads when moved between areas).
 - [x] 1.2 Render `ProjectView` from the model: dock areas around the editor, each
       area rendering its groups (tabbed) at their weights; empty areas collapse.
 - [x] 1.3 Panel tab menu: **Move to Left / Right / Bottom**, **Close** (no DnD yet).
-- [ ] 1.4 Register the existing panels as dockable: tool panels (files/search/…),
+- [x] 1.4 Register the existing panels as dockable: tool panels (files/search/…),
       terminal, browser preview.
 
 ## 2. Persistence + reset
@@ -50,7 +50,7 @@ reparent on a cross-area move (the browser reloads when moved between areas).
 
 ## 5. Fold in existing toggles + content-survival
 
-- [ ] 5.1 Migrate defaults from today's layout; supersede `useTerminals.position`
+- [x] 5.1 Migrate defaults from today's layout; supersede `useTerminals.position`
       and `usePreview.inspectorPos` (seed the initial dock, then the model owns it).
 - [x] 5.2 Reparent panels without tearing down content: terminal keeps its PTY +
       scrollback; the browser child window follows its placeholder (reuse the
@@ -59,8 +59,8 @@ reparent on a cross-area move (the browser reloads when moved between areas).
 
 ## 6. Verify
 
-- [ ] 6.1 Move each panel to each area via menu; reopen project → layout restored;
-      reset → default.
-- [ ] 6.2 Drag a panel to tab-stack and to split; browser beside terminal renders
+- [x] 6.1 Move each panel to each area via menu; reopen project → layout restored;
+      reset → default. (Store-level coverage in `layout.uitest.ts`.)
+- [x] 6.2 Drag a panel to tab-stack and to split; browser beside terminal renders
       and stays aligned; terminal keeps its session; browser doesn't reload.
-- [ ] 6.3 Correct under interface zoom; frontend typecheck + build green; EN + IT.
+- [x] 6.3 Correct under interface zoom; frontend typecheck + build green; EN + IT.

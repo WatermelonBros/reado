@@ -8,35 +8,20 @@ import { listen } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ContextMenu } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, CollapseAllIcon, EyeIcon, EyeOffIcon, SwapIcon } from "@/components/atoms/icons"
 import { Breadcrumb } from "@/components/molecules/Breadcrumb"
 import { GitignorePrompt } from "@/components/molecules/GitignorePrompt"
 import { StatusBar } from "@/components/molecules/StatusBar"
 import { ActivityBar } from "@/components/organisms/ActivityBar"
-import { BookmarksPanel } from "@/components/organisms/BookmarksPanel"
-import { CommentsPanel } from "@/components/organisms/CommentsPanel"
-import { CoveragePanel } from "@/components/organisms/CoveragePanel"
 import { DockRegion } from "@/components/organisms/DockRegion"
 import { DocsView } from "@/components/organisms/DocsView"
 import { Editor } from "@/components/organisms/Editor"
-import { ExtensionsPanel } from "@/components/organisms/ExtensionsPanel"
-import { FileTree } from "@/components/organisms/FileTree"
-import { GitPanel } from "@/components/organisms/GitPanel"
-import { GuidedReviewPanel } from "@/components/organisms/GuidedReviewPanel"
-import { HierarchyPanel } from "@/components/organisms/HierarchyPanel"
 import { KnowledgeGraph } from "@/components/organisms/KnowledgeGraph"
-import { OrphansPanel } from "@/components/organisms/OrphansPanel"
-import { OutlinePanel } from "@/components/organisms/OutlinePanel"
-import { PreReviewPanel } from "@/components/organisms/PreReviewPanel"
-import { ProblemsPanel } from "@/components/organisms/ProblemsPanel"
-import { QaPanel } from "@/components/organisms/QaPanel"
-import { SearchPanel } from "@/components/organisms/SearchPanel"
-import { SpecsPanel } from "@/components/organisms/SpecsPanel"
 import { Tabs } from "@/components/organisms/Tabs"
-import { TimelinePanel } from "@/components/organisms/TimelinePanel"
-import { TourBar, ToursPanel } from "@/components/organisms/ToursPanel"
-import type { MessageKey } from "@/i18n"
+import { TOOL_TITLE, ToolPanelBody } from "@/components/organisms/ToolPanelBody"
+import { TourBar } from "@/components/organisms/ToursPanel"
 import { t as translate } from "@/i18n"
 import { dispatchToAgent } from "@/lib/agents"
 import {
@@ -54,7 +39,7 @@ import {
 import { useBookmarks } from "@/lib/bookmarks"
 import { toRelative, useComments } from "@/lib/comments"
 import { useGuidedReview } from "@/lib/guidedReview"
-import { findPanel, useLayout } from "@/lib/layout"
+import { type DockArea, findPanel, useLayout } from "@/lib/layout"
 import { createLogger, safeError } from "@/lib/logger"
 import { ensureMcp } from "@/lib/mcp"
 import { notifyError } from "@/lib/notice"
@@ -68,33 +53,11 @@ import { useReasoning } from "@/lib/reasoning"
 import { useResolveLoop } from "@/lib/resolveLoop"
 import { composeReviewPrompt } from "@/lib/review"
 import { useSpecs } from "@/lib/specs"
-import { useProject, useSessions, useSettings, useWorkspace } from "@/lib/store"
+import { type Tool, useProject, useSessions, useSettings, useWorkspace } from "@/lib/store"
 import { useTours } from "@/lib/tours"
 import { clearOpenFile, currentOpenFile, setWindowTitle } from "@/lib/window"
 
 const log = createLogger("project")
-
-// Sidebar header title per tool. Every tool must be present (keys mirror the
-// ActivityBar label keys) — a missing entry rendered `t(undefined)` as the header.
-const PANEL_TITLE: Record<string, MessageKey> = {
-  files: "files.panel",
-  search: "search.placeholder",
-  comments: "comments.panel",
-  outline: "outline.panel",
-  git: "git.panel",
-  orphans: "orphans.panel",
-  specs: "specs.panel",
-  problems: "problems.panel",
-  bookmarks: "bookmarks.panel",
-  hierarchy: "hier.panel",
-  timeline: "timeline.panel",
-  qa: "qa.panel",
-  tours: "tours.panel",
-  prereview: "prereview.panel",
-  guidedreview: "guided.panel",
-  coverage: "coverage.panel",
-  extensions: "ext.panel",
-}
 
 const basename = (p: string) =>
   p
@@ -345,7 +308,12 @@ export function ProjectView({ root }: { root: string }) {
     }
   }, [root])
 
-  const tool = useWorkspace((s) => s.tool)
+  const [toolMenu, setToolMenu] = useState<{ x: number; y: number; tool: Tool } | null>(null)
+  const selectedTool = useWorkspace((s) => s.tool)
+  // A tool the user has docked renders there, not here — otherwise the same
+  // panel would exist twice, with two scroll positions and two selections.
+  const docked = useLayout((s) => (selectedTool ? !!findPanel(s.layout, selectedTool) : false))
+  const tool = docked ? null : selectedTool
   const graphOpen = useWorkspace((s) => s.graphOpen)
   const docsOpen = useWorkspace((s) => s.docsOpen)
   const sidebarWidth = useWorkspace((s) => s.sidebarWidth)
@@ -496,7 +464,17 @@ export function ProjectView({ root }: { root: string }) {
             />
             <header className="flex h-9 flex-none items-center justify-between border-b border-line pr-2 pl-3 text-xs font-medium tracking-wide text-muted uppercase">
               <span className="flex items-center gap-2">
-                {t(PANEL_TITLE[tool])}
+                <button
+                  type="button"
+                  title={t("dock.menu")}
+                  onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setToolMenu({ x: r.left, y: r.bottom, tool })
+                  }}
+                  className="-ml-1 rounded px-1 text-inherit hover:text-ink"
+                >
+                  {t(TOOL_TITLE[tool])}
+                </button>
                 {tool === "files" && totalFiles > 0 && (
                   <span className="text-[10px] font-normal normal-case text-faint">
                     {readCount}/{totalFiles} {t("progress.read")}
@@ -528,23 +506,7 @@ export function ProjectView({ root }: { root: string }) {
               )}
             </header>
             <div className="min-h-0 flex-1 overflow-hidden">
-              {tool === "files" && <FileTree />}
-              {tool === "search" && <SearchPanel />}
-              {tool === "comments" && <CommentsPanel />}
-              {tool === "outline" && <OutlinePanel />}
-              {tool === "git" && <GitPanel />}
-              {tool === "specs" && <SpecsPanel />}
-              {tool === "orphans" && <OrphansPanel />}
-              {tool === "problems" && <ProblemsPanel />}
-              {tool === "bookmarks" && <BookmarksPanel />}
-              {tool === "hierarchy" && <HierarchyPanel />}
-              {tool === "timeline" && <TimelinePanel />}
-              {tool === "qa" && <QaPanel />}
-              {tool === "tours" && <ToursPanel />}
-              {tool === "prereview" && <PreReviewPanel />}
-              {tool === "guidedreview" && <GuidedReviewPanel />}
-              {tool === "coverage" && <CoveragePanel />}
-              {tool === "extensions" && <ExtensionsPanel />}
+              <ToolPanelBody tool={tool} />
             </div>
           </aside>
         )}
@@ -597,6 +559,24 @@ export function ProjectView({ root }: { root: string }) {
           </div>
           <DockRegion area="bottom" />
         </main>
+        {/* Send a tool panel to a dock. The sidebar is just where a panel sits
+          by default; from here it can live beside the terminal or the browser. */}
+        {toolMenu && (
+          <ContextMenu
+            x={toolMenu.x}
+            y={toolMenu.y}
+            onClose={() => setToolMenu(null)}
+            items={(["left", "right", "bottom"] as DockArea[])
+              .filter((area) => area !== "left")
+              .map((area) => ({
+                label: t(area === "right" ? "dock.moveRight" : "dock.moveBottom"),
+                onSelect: () => {
+                  useLayout.getState().move(toolMenu.tool, area, { split: true })
+                  setToolMenu(null)
+                },
+              }))}
+          />
+        )}
         <GitignorePrompt />
         {graphOpen && <KnowledgeGraph />}
         {docsOpen && <DocsView />}

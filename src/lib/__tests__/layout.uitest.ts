@@ -2,6 +2,7 @@
 // minting, size clamps, drag state, reset. jsdom for the persist middleware.
 import { beforeEach, describe, expect, it } from "vitest"
 import { defaultLayout, findPanel, useLayout } from "@/lib/layout"
+import { useWorkspace } from "@/lib/store"
 
 beforeEach(() => {
   useLayout.setState({ layout: defaultLayout(), seq: 1, dragging: null })
@@ -62,5 +63,44 @@ describe("useLayout store", () => {
     const raw = localStorage.getItem("reado.layout")
     expect(raw).toBeTruthy()
     expect(raw).not.toContain("dragging")
+  })
+})
+
+describe("tool panels are dockable", () => {
+  it("places a tool panel like any other", () => {
+    const store = useLayout.getState()
+    store.reset()
+    store.move("search", "right")
+    expect(findPanel(useLayout.getState().layout, "search")?.area).toBe("right")
+  })
+
+  it("selecting a docked tool activates it instead of opening the sidebar", () => {
+    useLayout.getState().reset()
+    useLayout.getState().move("search", "bottom", { targetGroupId: "g-terminal" })
+    useWorkspace.setState({ tool: "files" })
+    useWorkspace.getState().selectTool("search")
+    // The sidebar is untouched; the dock brought the panel forward.
+    expect(useWorkspace.getState().tool).toBe("files")
+    const at = findPanel(useLayout.getState().layout, "search")
+    const group = useLayout
+      .getState()
+      .layout.areas[at?.area ?? "bottom"].groups.find((g) => g.id === at?.groupId)
+    expect(group?.active).toBe("search")
+  })
+
+  it("selecting an undocked tool still drives the sidebar", () => {
+    useLayout.getState().reset()
+    useWorkspace.setState({ tool: "files" })
+    useWorkspace.getState().selectTool("comments")
+    expect(useWorkspace.getState().tool).toBe("comments")
+  })
+
+  it("removing a docked tool returns it to the sidebar's control", () => {
+    useLayout.getState().reset()
+    useLayout.getState().move("search", "right")
+    useLayout.getState().remove("search")
+    expect(findPanel(useLayout.getState().layout, "search")).toBeNull()
+    useWorkspace.getState().selectTool("search")
+    expect(useWorkspace.getState().tool).toBe("search")
   })
 })

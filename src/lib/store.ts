@@ -12,6 +12,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { GitInfo } from "./api"
+import { findPanel, useLayout } from "./layout"
 
 export type ThemeName = "reado-dark" | "reado-light" | "reado-high-contrast" | "reado-sepia"
 
@@ -349,8 +350,15 @@ export const useWorkspace = create<WorkspaceState>()(
     (set) => ({
       tool: "files",
       lastTool: "files",
-      selectTool: (tool) =>
-        set((s) => (s.tool === tool ? { tool: null } : { tool, lastTool: tool })),
+      selectTool: (tool) => {
+        // A tool the user has docked lives there now: bring it forward in its
+        // dock group instead of a second copy appearing in the sidebar.
+        if (findPanel(useLayout.getState().layout, tool)) {
+          useLayout.getState().activate(tool)
+          return
+        }
+        set((s) => (s.tool === tool ? { tool: null } : { tool, lastTool: tool }))
+      },
       toggleSidebar: () => set((s) => (s.tool ? { tool: null } : { tool: s.lastTool })),
       pendingSearch: null,
       searchFor: (query) => set({ tool: "search", lastTool: "search", pendingSearch: query }),

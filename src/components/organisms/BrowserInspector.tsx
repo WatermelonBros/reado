@@ -24,7 +24,7 @@ import {
 } from "@/components/atoms/icons"
 import { dispatchToAgent } from "@/lib/agents"
 import { previewEval } from "@/lib/api"
-import { useLayout } from "@/lib/layout"
+import { findPanel, useLayout } from "@/lib/layout"
 import { type LogEntry, type LogLevel, type NetEntry, usePreview } from "@/lib/preview"
 
 type StoreKind = "cookie" | "local" | "session"
@@ -78,11 +78,18 @@ export function BrowserInspector({ docked = false }: { docked?: boolean } = {}) 
   const setInspectRequest = usePreview((s) => s.setInspectRequest)
   const inspectorPos = usePreview((s) => s.inspectorPos)
   const setInspectorPos = usePreview((s) => s.setInspectorPos)
-  // Pop the console out into the layout as its own dock panel (placed beside the
-  // terminal), or fold it back into the browser pane.
+  // Pop the console out into the layout as its own dock panel, or fold it back
+  // into the browser pane. Where it lands the first time follows where it sat
+  // inside the pane — right stays right — and from then on the layout model owns
+  // it: drag it elsewhere and detaching again keeps that.
   const detachInspector = () => {
     usePreview.getState().setInspectorDetached(true)
-    useLayout.getState().move("inspector", "bottom", { split: true })
+    const placed = findPanel(useLayout.getState().layout, "inspector")
+    if (!placed) {
+      useLayout
+        .getState()
+        .move("inspector", inspectorPos === "right" ? "right" : "bottom", { split: true })
+    }
   }
   const attachInspector = () => {
     usePreview.getState().setInspectorDetached(false)
