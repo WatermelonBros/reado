@@ -35,6 +35,8 @@ import {
   readFile,
   reanchorFile,
   rebuildIndex,
+  semanticRebuild,
+  semanticReindexFile,
   startWatching,
 } from "@/lib/api"
 import { useBookmarks } from "@/lib/bookmarks"
@@ -131,6 +133,11 @@ export function ProjectView({ root }: { root: string }) {
       .catch(() => setTotalFiles(0))
     // Build the SQLite index on open if missing/stale (rebuildable cache).
     rebuildIndex(root).catch((e) => log.warn("index rebuild failed", { error: safeError(e) }))
+    // And the semantic one, so "where do we…?" answers from the first keystroke
+    // rather than waiting on an agent.
+    semanticRebuild(root).catch((e) =>
+      log.warn("semantic index rebuild failed", { error: safeError(e) }),
+    )
     gitInfo(root)
       .then(setGit)
       .catch((e) => log.warn("git info failed", { error: safeError(e) }))
@@ -272,6 +279,11 @@ export function ProjectView({ root }: { root: string }) {
         reanchorFile(root, file)
           .then((list) => useComments.getState().replaceForFile(file, list))
           .catch(() => {})
+        // Keep the semantic index current, one file at a time — a full rebuild
+        // per keystroke-triggered save would be the wrong shape entirely.
+        semanticReindexFile(root, file).catch((e) =>
+          log.warn("semantic reindex failed", { error: safeError(e) }),
+        )
         // Re-list the tree so files created/moved/deleted on disk (or dragged in
         // from outside) show up without a manual refresh — coalesced so a burst
         // of edits only walks the tree once.

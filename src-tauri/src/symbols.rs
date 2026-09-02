@@ -257,6 +257,24 @@ fn list_symbols_in(cache: &SymbolCache, root: &str) -> Vec<Symbol> {
     out
 }
 
+/// Declared symbols keyed by (project-relative file, line) — the semantic index
+/// uses it to tell a declaration from a mention, which is most of its ranking.
+pub fn symbols_by_line(
+    cache: &SymbolCache,
+    root: &str,
+) -> std::collections::HashMap<(String, u32), String> {
+    let mut map = std::collections::HashMap::new();
+    for s in list_symbols_in(cache, root) {
+        let rel = std::path::Path::new(&s.path)
+            .strip_prefix(root)
+            .unwrap_or(std::path::Path::new(&s.path))
+            .to_string_lossy()
+            .replace('\\', "/");
+        map.insert((rel, s.line as u32), s.name);
+    }
+    map
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

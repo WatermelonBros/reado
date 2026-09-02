@@ -27,6 +27,7 @@ mod progress;
 mod pty;
 mod reasoning;
 mod search;
+mod semantic;
 mod sessions;
 mod symbols;
 mod watcher;
@@ -163,6 +164,9 @@ pub fn run() {
             git::git_stash_apply,
             git::git_stash_drop,
             search::search_text,
+            semantic::semantic_rebuild,
+            semantic::semantic_reindex_file,
+            semantic::semantic_query,
             search::replace_text,
             symbols::find_definition,
             symbols::list_symbols,

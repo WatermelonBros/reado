@@ -161,7 +161,12 @@
     "placeholder": "Descrivi cosa stai cercando…",
     "generating": "Ricerca… l'agente sta trovando le corrispondenze nel terminale.",
     "empty": "Nessuna corrispondenza per questa descrizione.",
-    "error": "Nessuna corrispondenza. Assicurati che un agente sia attivo nel terminale, poi riprova."
+    "error": "Nessuna corrispondenza. Assicurati che un agente sia attivo nel terminale, poi riprova.",
+    "searching": "Ricerca nel progetto…",
+    "asking": "Sto chiedendo all'agente — legge il codice, non solo le parole.",
+    "askAgent": "Chiedi all'agente",
+    "byAgent": "agente",
+    "localHint": "Risposto dall'indice locale mentre scrivi."
   },
   "mcp": {
     "title": "Reado MCP",

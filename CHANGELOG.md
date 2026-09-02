@@ -12,6 +12,17 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **Semantic search answers as you type.** "Where do we…?" went to the terminal
+  agent, which meant a round trip through an LLM for a question a full-text
+  index can usually answer in milliseconds — and no answer at all when no agent
+  was running. A local, rebuildable index over the project's symbols, paths and
+  prose now answers from the first keystroke, ranked with BM25 and a boost for a
+  hit on a declared symbol: a function *named* `parseConfig` beats a comment
+  that mentions it. The agent is still there as the explicit escalation, for the
+  questions that need the code read rather than matched — its answers are
+  badged as its own and cached for the session. Results take arrow keys and
+  Enter. The index keeps itself current as files change, and lives in `.reado/`
+  where deleting it costs nothing.
 - **A paired phone can watch the agent, and talk to it.** The Agent tab mirrors
   the desktop's agent terminal — its recent output, updated as it works — with a
   box to type back. The desktop keeps the only writer on that PTY; the phone

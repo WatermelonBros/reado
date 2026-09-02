@@ -161,7 +161,12 @@
     "placeholder": "Describe what you're looking for…",
     "generating": "Searching… the agent is finding matches in the terminal.",
     "empty": "Nothing matched that description.",
-    "error": "No matches yet. Make sure an agent is running in the terminal, then try again."
+    "error": "No matches yet. Make sure an agent is running in the terminal, then try again.",
+    "searching": "Searching the project…",
+    "asking": "Asking the agent — it reads the code, not just the words.",
+    "askAgent": "Ask the agent",
+    "byAgent": "agent",
+    "localHint": "Answered from the local index as you type."
   },
   "mcp": {
     "title": "Reado MCP",

@@ -1,122 +1,180 @@
-// Semantic-search store: dispatches a prompt to the terminal agent, then polls
-// `.reado/semantic.json`. Timers are faked to drive the poll loop deterministically.
+// Semantic search answers twice: the local index as you type, the agent on
+// request. These cover which one answers when, that a late local answer can't
+// overwrite the agent's, and that an agent answer is cached and badged. Timers
+// are faked to drive the typing debounce and the agent's poll loop.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("../api", () => ({ readFile: vi.fn() }))
+vi.mock("../api", () => ({ readFile: vi.fn(), semanticQuery: vi.fn() }))
 vi.mock("../agents", () => ({
-  dispatchToAgent: vi.fn(async () => {}),
+  dispatchToAgent: vi.fn(async () => true),
   sanitizePromptText: (s: string) => s,
 }))
 vi.mock("../store", () => ({ useProject: { getState: () => ({ root: "/root" }) } }))
 
 import { dispatchToAgent } from "@/lib/agents"
-import { readFile } from "@/lib/api"
+import { readFile, semanticQuery } from "@/lib/api"
 import { useSemanticSearch } from "@/lib/semanticSearch"
 
 const text = (t: string) => ({ kind: "text" as const, text: t })
+const hit = (file: string, over: Record<string, unknown> = {}) => ({
+  file,
+  line: 1,
+  snippet: "…",
+  ...over,
+})
+
+/** Let the typing debounce elapse and the local query settle. */
+const settleLocal = () => vi.advanceTimersByTimeAsync(200)
 
 beforeEach(() => {
   vi.clearAllMocks()
   vi.useFakeTimers()
-  useSemanticSearch.setState({ open: false, query: "", status: "loading", results: [] })
+  vi.mocked(semanticQuery).mockResolvedValue([])
+  vi.mocked(dispatchToAgent).mockResolvedValue(true)
+  useSemanticSearch.setState({
+    open: false,
+    query: "",
+    status: "loading",
+    results: [],
+    askingAgent: false,
+  })
 })
 afterEach(() => {
   useSemanticSearch.getState().close()
   vi.useRealTimers()
 })
 
-describe("run", () => {
-  it("opens the panel and dispatches a prompt to the agent", () => {
-    vi.mocked(readFile).mockResolvedValue(null as never)
+describe("the local index", () => {
+  it("answers as you type, without touching the agent", async () => {
+    vi.mocked(semanticQuery).mockResolvedValue([hit("src/auth.ts", { symbol: "signIn" })])
     useSemanticSearch.getState().run("where do we auth")
-    const s = useSemanticSearch.getState()
-    expect(s.open).toBe(true)
-    expect(s.query).toBe("where do we auth")
-    expect(s.status).toBe("loading")
-    expect(dispatchToAgent).toHaveBeenCalledOnce()
-    expect(vi.mocked(dispatchToAgent).mock.calls[0][0]).toContain("where do we auth")
-    expect(vi.mocked(dispatchToAgent).mock.calls[0][0]).toContain(".reado/semantic.json")
-  })
+    expect(useSemanticSearch.getState().open).toBe(true)
+    await settleLocal()
 
-  it("becomes ready with parsed hits when the agent writes results", async () => {
-    vi.mocked(readFile).mockResolvedValue(
-      text(JSON.stringify([{ file: "a.ts", line: 5, snippet: "x" }])),
-    )
-    useSemanticSearch.getState().run("q")
-    await vi.advanceTimersByTimeAsync(1500)
     const s = useSemanticSearch.getState()
     expect(s.status).toBe("ready")
-    expect(s.results).toEqual([{ file: "a.ts", line: 5, snippet: "x" }])
+    expect(s.results[0].file).toBe("src/auth.ts")
+    expect(s.results[0].symbol).toBe("signIn")
+    expect(dispatchToAgent).not.toHaveBeenCalled()
   })
 
-  it("defaults missing line/snippet fields and skips entries without a file", async () => {
-    vi.mocked(readFile).mockResolvedValue(
-      text(
-        JSON.stringify([{ file: "a.ts" }, { line: 3 }, { file: "b.ts", line: "no", snippet: 1 }]),
-      ),
-    )
-    useSemanticSearch.getState().run("q")
-    await vi.advanceTimersByTimeAsync(1500)
-    expect(useSemanticSearch.getState().results).toEqual([
-      { file: "a.ts", line: 1, snippet: "" },
-      { file: "b.ts", line: 1, snippet: "" },
-    ])
+  it("debounces: only the last keystroke's query runs", async () => {
+    useSemanticSearch.getState().run("wh")
+    useSemanticSearch.getState().run("whe")
+    useSemanticSearch.getState().run("where do we auth")
+    await settleLocal()
+    expect(semanticQuery).toHaveBeenCalledOnce()
+    expect(vi.mocked(semanticQuery).mock.calls[0][1]).toBe("where do we auth")
   })
 
-  it("is an error when the JSON is not an array", async () => {
-    vi.mocked(readFile).mockResolvedValue(text("42"))
-    useSemanticSearch.getState().run("q")
-    await vi.advanceTimersByTimeAsync(1500)
+  it("reports no matches as an answer, not a failure", async () => {
+    vi.mocked(semanticQuery).mockResolvedValue([])
+    useSemanticSearch.getState().run("quantum entanglement")
+    await settleLocal()
     const s = useSemanticSearch.getState()
-    expect(s.status).toBe("error")
+    expect(s.status).toBe("ready")
     expect(s.results).toEqual([])
   })
 
-  it("is an error when the results file is malformed JSON", async () => {
-    vi.mocked(readFile).mockResolvedValue(text("{ not json"))
-    useSemanticSearch.getState().run("q")
-    await vi.advanceTimersByTimeAsync(1500)
-    expect(useSemanticSearch.getState().status).toBe("error")
+  it("survives an index that isn't there yet", async () => {
+    vi.mocked(semanticQuery).mockRejectedValue(new Error("no index"))
+    useSemanticSearch.getState().run("anything")
+    await settleLocal()
+    // Empty, ready, and the agent is still one click away.
+    expect(useSemanticSearch.getState().status).toBe("ready")
+    expect(useSemanticSearch.getState().results).toEqual([])
   })
+})
 
-  it("keeps polling past empty/whitespace files, then errors out after the timeout", async () => {
-    // First poll: blank file (loop continues). Then a read error. Then nulls forever.
-    vi.mocked(readFile)
-      .mockResolvedValueOnce(text("   "))
-      .mockRejectedValueOnce(new Error("not yet"))
-      .mockResolvedValue(null as never)
-    useSemanticSearch.getState().run("q")
-    // 60 polls * 1500ms.
-    await vi.advanceTimersByTimeAsync(60 * 1500)
-    expect(useSemanticSearch.getState().status).toBe("error")
-  })
+describe("asking the agent", () => {
+  it("dispatches only when asked, and badges what comes back", async () => {
+    useSemanticSearch.getState().run("where do we auth")
+    await settleLocal()
+    expect(dispatchToAgent).not.toHaveBeenCalled()
 
-  it("a superseding run cancels the previous poll loop", async () => {
-    vi.mocked(readFile).mockResolvedValue(null as never)
-    useSemanticSearch.getState().run("first")
-    // New run bumps the token; the old loop should bail on its next tick.
     vi.mocked(readFile).mockResolvedValue(
-      text(JSON.stringify([{ file: "z.ts", line: 1, snippet: "" }])),
+      text(JSON.stringify([{ file: "src/session.ts", line: 12, snippet: "signIn()" }])) as never,
     )
-    useSemanticSearch.getState().run("second")
-    await vi.advanceTimersByTimeAsync(1500)
+    useSemanticSearch.getState().askAgent()
+    expect(useSemanticSearch.getState().askingAgent).toBe(true)
+    expect(dispatchToAgent).toHaveBeenCalledOnce()
+    expect(vi.mocked(dispatchToAgent).mock.calls[0][0]).toContain("where do we auth")
+
+    await vi.advanceTimersByTimeAsync(1600)
     const s = useSemanticSearch.getState()
-    expect(s.query).toBe("second")
     expect(s.status).toBe("ready")
-    expect(s.results).toEqual([{ file: "z.ts", line: 1, snippet: "" }])
+    expect(s.results[0].file).toBe("src/session.ts")
+    expect(s.results[0].fromAgent).toBe(true)
+    expect(s.askingAgent).toBe(false)
+  })
+
+  it("caches the answer, so the same question doesn't pay twice", async () => {
+    vi.mocked(readFile).mockResolvedValue(
+      text(JSON.stringify([{ file: "src/session.ts", line: 12, snippet: "x" }])) as never,
+    )
+    useSemanticSearch.getState().run("where do we auth")
+    await settleLocal()
+    useSemanticSearch.getState().askAgent()
+    await vi.advanceTimersByTimeAsync(1600)
+
+    // Ask the same thing again: the cached agent answer stands, and the local
+    // index isn't allowed to replace it with a worse one.
+    vi.mocked(semanticQuery).mockClear()
+    useSemanticSearch.getState().run("Where do we auth")
+    await settleLocal()
+    expect(semanticQuery).not.toHaveBeenCalled()
+    expect(useSemanticSearch.getState().results[0].fromAgent).toBe(true)
+  })
+
+  it("a local answer in flight can't land on top of the agent's", async () => {
+    let release: (v: unknown) => void = () => {}
+    vi.mocked(semanticQuery).mockReturnValue(
+      new Promise((r) => {
+        release = r
+      }) as never,
+    )
+    useSemanticSearch.getState().run("where do we auth")
+
+    vi.mocked(readFile).mockResolvedValue(
+      text(JSON.stringify([{ file: "src/agent.ts", line: 3, snippet: "y" }])) as never,
+    )
+    useSemanticSearch.getState().askAgent()
+    await vi.advanceTimersByTimeAsync(1600)
+    // The slow local query finally resolves — after the agent already answered.
+    release([hit("src/stale.ts")])
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(useSemanticSearch.getState().results[0].file).toBe("src/agent.ts")
+  })
+
+  it("does nothing without a question", () => {
+    useSemanticSearch.setState({ query: "   " })
+    useSemanticSearch.getState().askAgent()
+    expect(dispatchToAgent).not.toHaveBeenCalled()
+  })
+
+  it("surfaces a failed agent run as an error", async () => {
+    vi.mocked(readFile).mockResolvedValue(text("{ not json") as never)
+    useSemanticSearch.getState().run("where do we auth")
+    await settleLocal()
+    useSemanticSearch.getState().askAgent()
+    await vi.advanceTimersByTimeAsync(1600)
+    expect(useSemanticSearch.getState().status).toBe("error")
+    expect(useSemanticSearch.getState().askingAgent).toBe(false)
   })
 })
 
 describe("close", () => {
-  it("closes the panel and stops the in-flight poll loop", async () => {
-    vi.mocked(readFile).mockResolvedValue(
-      text(JSON.stringify([{ file: "a.ts", line: 1, snippet: "" }])),
-    )
-    useSemanticSearch.getState().run("q")
+  it("closes the panel and drops an in-flight query", async () => {
+    vi.mocked(semanticQuery).mockResolvedValue([hit("src/late.ts")])
+    // A question no earlier test asked the agent: the agent cache lives for the
+    // session by design, and a cached answer would short-circuit the local query
+    // this test is about.
+    useSemanticSearch.getState().run("where do we parse yaml")
     useSemanticSearch.getState().close()
     expect(useSemanticSearch.getState().open).toBe(false)
-    // The loop was cancelled, so the status never flips to ready.
-    await vi.advanceTimersByTimeAsync(1500)
-    expect(useSemanticSearch.getState().status).toBe("loading")
+    await settleLocal()
+    // The superseded query must not resurrect the panel's results.
+    expect(useSemanticSearch.getState().results).toEqual([])
   })
 })

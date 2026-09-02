@@ -92,6 +92,26 @@ export const cliInstalled = () => invoke<boolean>("cli_installed")
 export const readFile = (root: string, path: string, asText?: boolean, guardBytes?: number) =>
   invoke<FileContent>("read_file", { root, path, asText, guardBytes })
 
+/** One ranked answer from the local semantic index. */
+export interface SemanticHit {
+  file: string
+  line: number
+  snippet: string
+  /** The declared symbol the hit sits on, when it is one. */
+  symbol?: string
+}
+
+/** (Re)build the local semantic index over the project. */
+export const semanticRebuild = (root: string) => invoke<number>("semantic_rebuild", { root })
+
+/** Re-index one file after it changed on disk. */
+export const semanticReindexFile = (root: string, file: string) =>
+  invoke<number>("semantic_reindex_file", { root, file })
+
+/** Ask the local index. Empty when it hasn't been built yet. */
+export const semanticQuery = (root: string, q: string) =>
+  invoke<SemanticHit[]>("semantic_query", { root, q })
+
 /** Line ranges the working tree changes vs HEAD — the diff gutter's input. */
 export const gitWorkingDiffLines = (root: string, file: string) =>
   invoke<Array<[number, number]>>("git_working_diff_lines", { root, file })
