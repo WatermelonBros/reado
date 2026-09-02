@@ -6,7 +6,7 @@
  * didn't write".
  */
 import { create } from "zustand"
-import { dispatchToAgent } from "./agents"
+import { runAgentTask, useAgentTasks } from "./agentTask"
 import { createFile, readFile, writeFile } from "./api"
 import { useDocInfo } from "./docInfo"
 import { log, safeError } from "./logger"
@@ -30,8 +30,8 @@ const AI_SCRATCH = ".reado/ai-tour.json"
 let seq = 0
 const newId = () => `tour_${Date.now().toString(36)}_${seq++}`
 
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
-let aiToken = 0
+/** One task slot: generating again supersedes the run before it. */
+const TASK = "tours"
 
 async function load(root: string): Promise<Tour[]> {
   const c = await readFile(root, STORE).catch(() => null)
@@ -65,6 +65,8 @@ interface ToursState {
   stop: () => void
   go: (delta: number) => void
   generate: (root: string) => void
+  /** Stop watching for an in-flight AI tour. */
+  cancelGenerate: () => void
 }
 
 export const useTours = create<ToursState>((set, get) => ({
@@ -123,42 +125,42 @@ export const useTours = create<ToursState>((set, get) => ({
   },
 
   generate: (root) => {
-    const mine = ++aiToken
     set({ generating: true })
-    void dispatchToAgent(
-      `Create a guided reading tour of THIS repository for someone new to it: an ` +
-        `ordered list of steps, each pointing at a file + line with a one-sentence note ` +
-        `on what to read there and why (start at the entry points, then key modules). ` +
-        `Write JSON {"name": "...", "steps": [{"file": "rel/path", "line": 1, "note": ` +
-        `"..."}]} to \`${AI_SCRATCH}\`. Do not modify any other file.`,
-    )
     void (async () => {
-      for (let i = 0; i < 60; i++) {
-        await delay(1500)
-        if (aiToken !== mine) return
-        const c = await readFile(root, AI_SCRATCH).catch(() => null)
-        if (c && c.kind === "text" && c.text.trim()) {
+      const out = await runAgentTask({
+        id: TASK,
+        labelKey: "tours.panel",
+        prompt:
+          `Create a guided reading tour of THIS repository for someone new to it: an ` +
+          `ordered list of steps, each pointing at a file + line with a one-sentence note ` +
+          `on what to read there and why (start at the entry points, then key modules). ` +
+          `Write JSON {"name": "...", "steps": [{"file": "rel/path", "line": 1, "note": ` +
+          `"..."}]} to \`${AI_SCRATCH}\`. Do not modify any other file.`,
+        poll: async () => {
+          const c = await readFile(root, AI_SCRATCH)
+          return c.kind === "text" ? c.text : null
+        },
+        // The agent writes this file as it goes, so a payload that doesn't parse
+        // yet — or has no steps yet — means "keep watching", not "broken".
+        parse: (text) => {
+          let parsed: { name?: string; steps?: TourStep[] }
           try {
-            const parsed = JSON.parse(c.text) as { name?: string; steps?: TourStep[] }
-            if (Array.isArray(parsed.steps) && parsed.steps.length) {
-              const tour: Tour = {
-                id: newId(),
-                name: parsed.name || "AI tour",
-                steps: parsed.steps,
-              }
-              const tours = [...get().tours, tour]
-              set({ tours, generating: false })
-              void save(root, tours)
-              return
-            }
+            parsed = JSON.parse(text) as { name?: string; steps?: TourStep[] }
           } catch {
-            /* keep polling for valid JSON */
+            return undefined
           }
-        }
-      }
-      if (aiToken === mine) set({ generating: false })
+          if (!Array.isArray(parsed.steps) || !parsed.steps.length) return undefined
+          return { id: newId(), name: parsed.name || "AI tour", steps: parsed.steps } as Tour
+        },
+      })
+      if (out.status === "cancelled") return set({ generating: false })
+      if (out.status !== "done") return set({ generating: false })
+      const tours = [...get().tours, out.value]
+      set({ tours, generating: false })
+      void save(root, tours)
     })()
   },
+  cancelGenerate: () => useAgentTasks.getState().cancel(TASK),
 }))
 
 function openStep(step: TourStep) {

@@ -6,7 +6,7 @@
  * disk; "Regenerate" re-dispatches.
  */
 import { create } from "zustand"
-import { dispatchToAgent } from "./agents"
+import { runAgentTask, useAgentTasks } from "./agentTask"
 import { createFile, readFile, writeFile } from "./api"
 import { useProject } from "./store"
 
@@ -59,24 +59,34 @@ const prompt = (relPath: string, outPath: string) =>
   `symbols, and how it fits the codebase — as Markdown. Write it to \`${outPath}\` ` +
   `(create the directory if needed). Do not modify any other file.`
 
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+/** One task slot: opening a synopsis for another file supersedes the last one. */
+const TASK = "synopsis"
 
-// Cancels a stale poll when the user closes the modal or switches files.
-let token = 0
+/** Whether the modal is still showing the file a pending read was started for —
+ *  a late answer for a file the user has left (or closed) must not land. */
+const showing = (relPath: string) => {
+  const s = useSynopsis.getState()
+  return s.open && s.relPath === relPath
+}
 
-async function poll(root: string, relPath: string, mine: number) {
+/** Dispatch the agent and watch for the synopsis it writes. */
+async function generate(root: string, relPath: string) {
   const path = synopsisPath(relPath)
-  for (let i = 0; i < 40; i++) {
-    await delay(1500)
-    if (token !== mine) return // superseded / closed
-    const c = await readFile(root, path).catch(() => null)
-    if (c && c.kind === "text" && c.text.trim()) {
-      useSynopsis.setState({ status: "ready", text: c.text, stale: false })
-      void recordFreshness(root, relPath) // mark this source as the fresh baseline
-      return
-    }
-  }
-  if (token === mine) useSynopsis.setState({ status: "error" })
+  const out = await runAgentTask({
+    id: TASK,
+    labelKey: "synopsis.title",
+    prompt: prompt(relPath, path),
+    poll: async () => {
+      const c = await readFile(root, path)
+      return c.kind === "text" ? c.text : null
+    },
+    parse: (text) => text,
+    timeoutMs: 60_000,
+  })
+  if (out.status === "cancelled") return // superseded or the modal was closed
+  if (out.status !== "done") return useSynopsis.setState({ status: "error" })
+  useSynopsis.setState({ status: "ready", text: out.value, stale: false })
+  void recordFreshness(root, relPath) // mark this source as the fresh baseline
 }
 
 export const useSynopsis = create<SynopsisState>((set) => ({
@@ -86,37 +96,33 @@ export const useSynopsis = create<SynopsisState>((set) => ({
   text: "",
   stale: false,
   show: (relPath) => {
-    const mine = ++token
+    useAgentTasks.getState().cancel(TASK) // drop a watch for the file we left
     set({ open: true, relPath, status: "loading", text: "", stale: false })
     const root = useProject.getState().root
-    // Cache hit → show immediately (flagging staleness); else dispatch + poll.
+    // Cache hit → show immediately (flagging staleness); else dispatch + watch.
     readFile(root, synopsisPath(relPath))
       .then(async (c) => {
-        if (token !== mine) return
+        if (!showing(relPath)) return
         if (c.kind === "text" && c.text.trim()) {
           const stale = await checkStale(root, relPath)
-          if (token === mine) set({ status: "ready", text: c.text, stale })
+          if (showing(relPath)) set({ status: "ready", text: c.text, stale })
         } else {
           throw new Error("empty")
         }
       })
       .catch(() => {
-        if (token !== mine) return
-        void dispatchToAgent(prompt(relPath, synopsisPath(relPath)))
-        void poll(root, relPath, mine)
+        if (!showing(relPath)) return
+        void generate(root, relPath)
       })
   },
   regenerate: () => {
     const relPath = useSynopsis.getState().relPath
     if (!relPath) return
-    const mine = ++token
     set({ status: "loading", text: "", stale: false })
-    const root = useProject.getState().root
-    void dispatchToAgent(prompt(relPath, synopsisPath(relPath)))
-    void poll(root, relPath, mine)
+    void generate(useProject.getState().root, relPath)
   },
   close: () => {
-    token++ // cancel any in-flight poll
+    useAgentTasks.getState().cancel(TASK)
     set({ open: false })
   },
 }))

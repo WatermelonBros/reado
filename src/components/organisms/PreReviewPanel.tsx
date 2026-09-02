@@ -29,6 +29,11 @@ export function PreReviewPanel() {
           <SparkleIcon className="h-3 w-3" />
           {generating ? t("prereview.generating") : t("prereview.run")}
         </Button>
+        {generating && (
+          <Button size="sm" onClick={() => usePreReview.getState().cancel()}>
+            {t("agentTask.cancel")}
+          </Button>
+        )}
       </div>
 
       {drafts.length === 0 && error ? (

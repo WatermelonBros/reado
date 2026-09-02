@@ -5,7 +5,7 @@
  * never edits code and never posts comments directly — the human curates.
  */
 import { create } from "zustand"
-import { dispatchToAgent } from "./agents"
+import { runAgentTask, useAgentTasks } from "./agentTask"
 import { type CommentType, createFile, readFile, writeFile } from "./api"
 import { useComments } from "./comments"
 import { createLogger, safeError } from "./logger"
@@ -25,27 +25,35 @@ const TYPES: CommentType[] = ["bug", "refactor", "performance", "question", "not
 const normType = (t: unknown): CommentType =>
   typeof t === "string" && (TYPES as string[]).includes(t) ? (t as CommentType) : "note"
 
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
-let token = 0
+/** One task slot: re-running the pre-review supersedes the run before it. */
+const TASK = "prereview"
 
 async function persist(root: string, drafts: Draft[]) {
   await createFile(root, STORE).catch(() => {})
   await writeFile(root, STORE, JSON.stringify(drafts, null, 2)).catch(() => {})
 }
 
+/** Drafts as stored on disk. Throws on a malformed payload; `load` treats that
+ *  as an empty file, while a *generated* run reports it as a failure. */
 function parse(text: string): Draft[] {
+  const raw = JSON.parse(text) as Partial<Draft>[]
+  if (!Array.isArray(raw)) throw new Error("not an array")
+  return raw
+    .filter((d) => d && typeof d.file === "string" && d.body)
+    .map((d, i) => ({
+      id: `pr_${i}_${(d.file ?? "").replace(/[\\/]/g, "_")}_${d.line ?? 0}`,
+      file: d.file as string,
+      line: typeof d.line === "number" ? d.line : 1,
+      type: normType(d.type),
+      body: d.body as string,
+    }))
+}
+
+/** Parse a stored file, tolerating a corrupt one — reading the panel's own store
+ *  on open must never throw at the caller. */
+function parseStored(text: string): Draft[] {
   try {
-    const raw = JSON.parse(text) as Partial<Draft>[]
-    if (!Array.isArray(raw)) return []
-    return raw
-      .filter((d) => d && typeof d.file === "string" && d.body)
-      .map((d, i) => ({
-        id: `pr_${i}_${(d.file ?? "").replace(/[\\/]/g, "_")}_${d.line ?? 0}`,
-        file: d.file as string,
-        line: typeof d.line === "number" ? d.line : 1,
-        type: normType(d.type),
-        body: d.body as string,
-      }))
+    return parse(text)
   } catch (e) {
     log.warn("preReview: malformed drafts JSON, treating as empty", { error: safeError(e) })
     return []
@@ -60,6 +68,8 @@ interface PreReviewState {
   error: boolean
   load: (root: string) => Promise<void>
   generate: (root: string) => void
+  /** Stop an in-flight generation (the agent keeps its own work; we stop watching). */
+  cancel: () => void
   approve: (root: string, id: string) => Promise<void>
   discard: (root: string, id: string) => void
 }
@@ -70,33 +80,34 @@ export const usePreReview = create<PreReviewState>((set, get) => ({
   error: false,
   load: async (root) => {
     const c = await readFile(root, STORE).catch(() => null)
-    set({ drafts: c && c.kind === "text" ? parse(c.text) : [] })
+    set({ drafts: c && c.kind === "text" ? parseStored(c.text) : [] })
   },
   generate: (root) => {
-    const mine = ++token
     set({ generating: true, error: false })
-    void dispatchToAgent(
-      `Review the current uncommitted changes in this repo (run \`git diff\`). For each ` +
-        `risky or notable change, propose a short review comment. Write JSON to ` +
-        `\`${STORE}\`: an array of {"file": "rel/path", "line": N, "type": ` +
-        `"bug|refactor|performance|question|note", "body": "..."}. Do NOT modify any ` +
-        `source file — only write that JSON.`,
-    )
     void (async () => {
-      for (let i = 0; i < 60; i++) {
-        await delay(1500)
-        if (token !== mine) return
-        const c = await readFile(root, STORE).catch(() => null)
-        if (c && c.kind === "text" && c.text.trim()) {
-          set({ drafts: parse(c.text), generating: false })
-          return
-        }
-      }
-      // Timed out with nothing written: flag the error (mirrors qa.ts flipping to
-      // an error status) so the panel distinguishes this from a genuine no-result.
-      if (token === mine) set({ generating: false, error: true })
+      const out = await runAgentTask({
+        id: TASK,
+        labelKey: "prereview.panel",
+        prompt:
+          `Review the current uncommitted changes in this repo (run \`git diff\`). For each ` +
+          `risky or notable change, propose a short review comment. Write JSON to ` +
+          `\`${STORE}\`: an array of {"file": "rel/path", "line": N, "type": ` +
+          `"bug|refactor|performance|question|note", "body": "..."}. Do NOT modify any ` +
+          `source file — only write that JSON.`,
+        poll: async () => {
+          const c = await readFile(root, STORE)
+          return c.kind === "text" ? c.text : null
+        },
+        parse,
+      })
+      if (out.status === "cancelled") return set({ generating: false })
+      // Nothing written, or written badly: flag the error so the panel shows that
+      // instead of silently reverting to the empty state.
+      if (out.status !== "done") return set({ generating: false, error: true })
+      set({ drafts: out.value, generating: false })
     })()
   },
+  cancel: () => useAgentTasks.getState().cancel(TASK),
   approve: async (root, id) => {
     const draft = get().drafts.find((d) => d.id === id)
     if (!draft) return

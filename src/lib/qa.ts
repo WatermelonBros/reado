@@ -7,7 +7,8 @@
  * question-driven.
  */
 import { create } from "zustand"
-import { dispatchToAgent, sanitizePromptText } from "./agents"
+import { sanitizePromptText } from "./agents"
+import { runAgentTask, useAgentTasks } from "./agentTask"
 import { createFile, readFile, writeFile } from "./api"
 import { createLogger, safeError } from "./logger"
 import { useProject } from "./store"
@@ -35,8 +36,8 @@ const promptFor = (file: string, from: number, to: number, question: string, out
   `code as context. Write a Markdown note containing the question and your answer to ` +
   `\`${out}\` (create the directory if needed). Do not modify any other file.`
 
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
-let token = 0
+/** One task slot: asking again (or viewing another note) supersedes the last. */
+const TASK = "qa"
 
 async function loadIndex(root: string): Promise<QaNote[]> {
   const c = await readFile(root, INDEX).catch(() => null)
@@ -55,17 +56,21 @@ async function saveIndex(root: string, notes: QaNote[]) {
   await writeFile(root, INDEX, JSON.stringify(notes, null, 2)).catch(() => {})
 }
 
-async function poll(root: string, path: string, mine: number) {
-  for (let i = 0; i < 40; i++) {
-    await delay(1500)
-    if (token !== mine) return
-    const c = await readFile(root, path).catch(() => null)
-    if (c && c.kind === "text" && c.text.trim()) {
-      useQa.setState({ status: "ready", text: c.text })
-      return
-    }
-  }
-  if (token === mine) useQa.setState({ status: "error" })
+/** Dispatch the question and watch for the answer note the agent writes. */
+async function answer(root: string, path: string, prompt: string) {
+  const out = await runAgentTask({
+    id: TASK,
+    labelKey: "qa.title",
+    prompt,
+    poll: async () => {
+      const c = await readFile(root, path)
+      return c.kind === "text" ? c.text : null
+    },
+    parse: (text) => text,
+    timeoutMs: 60_000,
+  })
+  if (out.status === "cancelled") return
+  useQa.setState(out.status === "done" ? { status: "ready", text: out.value } : { status: "error" })
 }
 
 interface QaState {
@@ -93,7 +98,6 @@ export const useQa = create<QaState>((set, get) => ({
   notes: [],
   load: async (root) => set({ notes: await loadIndex(root) }),
   ask: (relPath, from, to, question) => {
-    const mine = ++token
     set({ open: true, relPath, status: "loading", text: "" })
     const root = useProject.getState().root
     const id = noteId(relPath, from)
@@ -105,19 +109,19 @@ export const useQa = create<QaState>((set, get) => ({
     ]
     set({ notes })
     void saveIndex(root, notes)
-    void dispatchToAgent(promptFor(relPath, from, to, sanitizePromptText(question), out))
-    void poll(root, out, mine)
+    void answer(root, out, promptFor(relPath, from, to, sanitizePromptText(question), out))
   },
   view: (note) => {
-    const mine = ++token
+    useAgentTasks.getState().cancel(TASK) // a pending answer is no longer on screen
     set({ open: true, relPath: note.file, status: "loading", text: "" })
+    const viewing = () => useQa.getState().open && useQa.getState().relPath === note.file
     readFile(useProject.getState().root, answerPath(note.id))
       .then((c) => {
-        if (token !== mine) return
+        if (!viewing()) return
         if (c.kind === "text" && c.text.trim()) set({ status: "ready", text: c.text })
         else set({ status: "error" })
       })
-      .catch(() => token === mine && set({ status: "error" }))
+      .catch(() => viewing() && set({ status: "error" }))
   },
   remove: (root, id) => {
     const notes = get().notes.filter((n) => n.id !== id)
@@ -125,7 +129,7 @@ export const useQa = create<QaState>((set, get) => ({
     void saveIndex(root, notes)
   },
   close: () => {
-    token++
+    useAgentTasks.getState().cancel(TASK)
     set({ open: false })
   },
 }))

@@ -4,8 +4,10 @@
  */
 
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 import { SearchIcon } from "@/components/atoms/icons"
 import { Modal } from "@/components/atoms/Modal"
+import { useAgentTasks } from "@/lib/agentTask"
 import { useSemanticSearch } from "@/lib/semanticSearch"
 import { useProject } from "@/lib/store"
 
@@ -35,10 +37,19 @@ export function SemanticModal() {
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {status === "loading" && (
-          <p className="px-5 py-3 text-sm text-muted">{t("semantic.generating")}</p>
+          <div className="flex items-center gap-3 px-5 py-3">
+            <p className="text-sm text-muted">{t("semantic.generating")}</p>
+            <Button size="sm" onClick={() => useAgentTasks.getState().cancel("semantic")}>
+              {t("agentTask.cancel")}
+            </Button>
+          </div>
         )}
         {status === "error" && (
           <p className="px-5 py-3 text-sm text-muted">{t("semantic.error")}</p>
+        )}
+        {/* A search that ran and matched nothing is an answer, not a failure. */}
+        {status === "ready" && results.length === 0 && (
+          <p className="px-5 py-3 text-sm text-muted">{t("semantic.empty")}</p>
         )}
         {status === "ready" &&
           results.map((h, i) => (

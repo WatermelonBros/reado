@@ -7,8 +7,10 @@
 import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { Button } from "@/components/atoms/Button"
 import { SparkleIcon } from "@/components/atoms/icons"
 import { Modal } from "@/components/atoms/Modal"
+import { useAgentTasks } from "@/lib/agentTask"
 import { useSynopsis } from "@/lib/synopsis"
 
 const baseName = (p: string | null) => (p ? (p.split(/[\\/]/).pop() ?? p) : "")
@@ -44,7 +46,14 @@ export function SynopsisModal() {
             {t("synopsis.stale")}
           </p>
         )}
-        {status === "loading" && <p className="text-sm text-muted">{t("synopsis.generating")}</p>}
+        {status === "loading" && (
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted">{t("synopsis.generating")}</p>
+            <Button size="sm" onClick={() => useAgentTasks.getState().cancel("synopsis")}>
+              {t("agentTask.cancel")}
+            </Button>
+          </div>
+        )}
         {status === "error" && <p className="text-sm text-muted">{t("synopsis.error")}</p>}
         {status === "ready" && (
           <div className="prose-reado max-w-none text-sm">

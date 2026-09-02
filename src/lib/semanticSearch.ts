@@ -6,9 +6,9 @@
  * is a possible future backend; this delivers the user-facing capability now.)
  */
 import { create } from "zustand"
-import { dispatchToAgent, sanitizePromptText } from "./agents"
+import { sanitizePromptText } from "./agents"
+import { runAgentTask, useAgentTasks } from "./agentTask"
 import { readFile } from "./api"
-import { log, safeError } from "./logger"
 import { useProject } from "./store"
 
 const STORE = ".reado/semantic.json"
@@ -21,24 +21,21 @@ export interface Hit {
 
 type Status = "loading" | "ready" | "error"
 
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
-let token = 0
+/** One task slot: a new query supersedes the one before it. */
+const TASK = "semantic"
 
+/** Results the agent wrote. Throws on anything that isn't a JSON array — a bad
+ *  write is a failure the user should see, not an empty result set. */
 function parse(text: string): Hit[] {
-  try {
-    const raw = JSON.parse(text) as Partial<Hit>[]
-    if (!Array.isArray(raw)) return []
-    return raw
-      .filter((h) => h && typeof h.file === "string")
-      .map((h) => ({
-        file: h.file as string,
-        line: typeof h.line === "number" ? h.line : 1,
-        snippet: typeof h.snippet === "string" ? h.snippet : "",
-      }))
-  } catch (e) {
-    log.warn("semanticSearch: malformed results JSON", { error: safeError(e) })
-    return []
-  }
+  const raw = JSON.parse(text) as Partial<Hit>[]
+  if (!Array.isArray(raw)) throw new Error("not an array")
+  return raw
+    .filter((h) => h && typeof h.file === "string")
+    .map((h) => ({
+      file: h.file as string,
+      line: typeof h.line === "number" ? h.line : 1,
+      snippet: typeof h.snippet === "string" ? h.snippet : "",
+    }))
 }
 
 interface SemanticState {
@@ -56,31 +53,31 @@ export const useSemanticSearch = create<SemanticState>((set) => ({
   status: "loading",
   results: [],
   run: (query) => {
-    const mine = ++token
     set({ open: true, query, status: "loading", results: [] })
     const root = useProject.getState().root
-    void dispatchToAgent(
-      `Search THIS codebase for what best matches: "${sanitizePromptText(query)}". Return the most ` +
-        `relevant locations as JSON, ranked best-first (max 20): ` +
-        `[{"file": "rel/path", "line": N, "snippet": "one line"}]. Write it to ` +
-        `\`${STORE}\`. Do not modify any other file.`,
-    )
     void (async () => {
-      for (let i = 0; i < 60; i++) {
-        await delay(1500)
-        if (token !== mine) return
-        const c = await readFile(root, STORE).catch(() => null)
-        if (c && c.kind === "text" && c.text.trim()) {
-          const results = parse(c.text)
-          set({ status: results.length ? "ready" : "error", results })
-          return
-        }
-      }
-      if (token === mine) set({ status: "error" })
+      const out = await runAgentTask({
+        id: TASK,
+        labelKey: "semantic.title",
+        prompt:
+          `Search THIS codebase for what best matches: "${sanitizePromptText(query)}". Return the most ` +
+          `relevant locations as JSON, ranked best-first (max 20): ` +
+          `[{"file": "rel/path", "line": N, "snippet": "one line"}]. Write it to ` +
+          `\`${STORE}\`. Do not modify any other file.`,
+        poll: async () => {
+          const c = await readFile(root, STORE)
+          return c.kind === "text" ? c.text : null
+        },
+        parse,
+      })
+      if (out.status === "cancelled") return
+      // A well-formed empty answer is "no matches", not a failure — the modal
+      // says so rather than blaming the agent.
+      set(out.status === "done" ? { status: "ready", results: out.value } : { status: "error" })
     })()
   },
   close: () => {
-    token++
+    useAgentTasks.getState().cancel(TASK)
     set({ open: false })
   },
 }))

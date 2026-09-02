@@ -43,6 +43,11 @@ export function ToursPanel() {
           <SparkleIcon className="h-3 w-3" />{" "}
           {generating ? t("tours.generating") : t("tours.generate")}
         </Button>
+        {generating && (
+          <Button variant="ghost" size="sm" onClick={() => useTours.getState().cancelGenerate()}>
+            {t("agentTask.cancel")}
+          </Button>
+        )}
       </div>
 
       {tours.length === 0 ? (

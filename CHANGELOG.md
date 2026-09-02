@@ -11,6 +11,17 @@ commit.
 
 ## [Unreleased]
 
+### Changed
+- **AI tasks have an honest state, and can be cancelled.** Synopsis, Q&A,
+  semantic search, pre-review and AI tours each re-implemented the same
+  hand-rolled poll loop, so a slow agent, a closed modal and a malformed result
+  file all came out as the same generic error — with no way to cancel and no
+  retry. They now run through one shared runner with states you can tell apart
+  (running, done, failed, cancelled, timed out), a Cancel button beside every
+  loading state, and failures that also reach the notice surface instead of
+  failing in silence. A semantic search that matches nothing now says so
+  instead of blaming the agent.
+
 ## [1.7.2] — 2026-09-02
 
 ### Added

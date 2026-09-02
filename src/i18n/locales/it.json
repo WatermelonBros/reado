@@ -158,6 +158,7 @@
     "search": "Ricerca semantica (linguaggio naturale)",
     "placeholder": "Descrivi cosa stai cercando…",
     "generating": "Ricerca… l'agente sta trovando le corrispondenze nel terminale.",
+    "empty": "Nessuna corrispondenza per questa descrizione.",
     "error": "Nessuna corrispondenza. Assicurati che un agente sia attivo nel terminale, poi riprova."
   },
   "mcp": {
@@ -193,6 +194,11 @@
     "approve": "Approva",
     "discard": "Scarta",
     "error": "L'agente non ha risposto — è in esecuzione nel terminale?"
+  },
+  "agentTask": {
+    "failed": "{label} non è riuscita — il risultato dell'agente non è leggibile.",
+    "timedOut": "{label} è scaduta — nessun risultato dall'agente.",
+    "cancel": "Annulla"
   },
   "guided": {
     "panel": "Revisione guidata",

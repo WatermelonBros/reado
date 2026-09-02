@@ -158,6 +158,7 @@
     "search": "Semantic search (natural language)",
     "placeholder": "Describe what you're looking for…",
     "generating": "Searching… the agent is finding matches in the terminal.",
+    "empty": "Nothing matched that description.",
     "error": "No matches yet. Make sure an agent is running in the terminal, then try again."
   },
   "mcp": {
@@ -193,6 +194,11 @@
     "approve": "Approve",
     "discard": "Discard",
     "error": "The agent didn't respond — is it running in the terminal?"
+  },
+  "agentTask": {
+    "failed": "{label} failed — the agent's result couldn't be read.",
+    "timedOut": "{label} timed out — no result from the agent.",
+    "cancel": "Cancel"
   },
   "guided": {
     "panel": "Guided Review",
