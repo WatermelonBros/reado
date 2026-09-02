@@ -62,6 +62,7 @@ export function ActivityBar() {
   const toggleDocs = useWorkspace((s) => s.toggleDocs);
   const toggleSettings = usePalette((s) => s.toggleSettings);
   const isRepo = useProject((s) => s.git.isRepo);
+  const changedFiles = useProject((s) => s.git.changedFiles);
   const openComments = useComments((s) => openCount(s.comments));
   const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length);
   const hasSpecs = useSpecs((s) => s.groups.length > 0);
@@ -119,17 +120,19 @@ export function ActivityBar() {
       : []),
   ];
   const badgeFor = (id: Tool) =>
-    id === "comments"
-      ? openComments
-      : id === "orphans"
-        ? orphanCount
-        : id === "problems"
-          ? problemCount
-          : id === "prereview"
-            ? preReviewCount
-            : id === "guidedreview"
-              ? guidedOpen
-              : 0;
+    id === "git"
+      ? changedFiles
+      : id === "comments"
+        ? openComments
+        : id === "orphans"
+          ? orphanCount
+          : id === "problems"
+            ? problemCount
+            : id === "prereview"
+              ? preReviewCount
+              : id === "guidedreview"
+                ? guidedOpen
+                : 0;
 
   // Apply the user's custom order: listed tools first (in that order), the rest
   // keep their natural order after (sort is stable). Drag reorders the list.
@@ -203,7 +206,10 @@ export function ActivityBar() {
               <Icon className="h-[18px] w-[18px]" weight={active ? "duotone" : "regular"} />
               {badge > 0 && (
                 <Badge
-                  tone="marker"
+                  // Accent (blue) for Source Control: a changed-file count is
+                  // information, not something demanding attention like an open
+                  // comment or a diagnostic, which stay on the marker red.
+                  tone={id === "git" ? "accent" : "marker"}
                   className="absolute top-1 right-1.5 h-3.5 min-w-3.5 text-[9px] font-bold"
                 >
                   {badge}

@@ -575,7 +575,7 @@ interface ProjectState {
 
 export const useProject = create<ProjectState>((set) => ({
   root: "",
-  git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false },
+  git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 },
   tabs: [],
   active: null,
   showHidden: false,

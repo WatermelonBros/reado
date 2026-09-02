@@ -126,7 +126,7 @@ export function ProjectView({ root }: { root: string }) {
     const session = useSettings.getState().restoreSession
       ? useSessions.getState().byRoot[root]
       : undefined;
-    init(root, { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false }, session);
+    init(root, { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 }, session);
     restored.current = true;
     // Opened from an OS file association: open the requested file, then drop the
     // hash param so a reload doesn't re-open it.
@@ -258,6 +258,12 @@ export function ProjectView({ root }: { root: string }) {
       treeTimer = setTimeout(() => {
         treeTimer = null;
         useProject.getState().bumpTree();
+        // Editing a file changes the working tree but touches nothing under
+        // `.git`, so no `git-changed` arrives — refresh here too, or the Source
+        // Control badge only catches up on the next commit or checkout.
+        gitInfo(root)
+          .then(setGit)
+          .catch((e) => log.warn("git info failed", { error: safeError(e) }));
       }, 250);
     };
     const offs = [

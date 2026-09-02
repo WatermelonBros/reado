@@ -42,7 +42,7 @@ const mkComment = (over: Partial<Comment> = {}): Comment =>
 beforeEach(() => {
   useWorkspace.setState({ tool: "files", toolOrder: [] });
   usePalette.setState({ settingsOpen: false });
-  useProject.setState({ git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false } });
+  useProject.setState({ git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 } });
   useComments.setState({ comments: [] });
   useSpecs.setState({ groups: [] });
   useDiagnostics.setState({ byFile: {} });
@@ -88,7 +88,7 @@ describe("ActivityBar", () => {
     render(<ActivityBar />);
     expect(screen.queryByRole("button", { name: "git.panel" })).not.toBeInTheDocument();
 
-    act(() => useProject.setState({ git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false } }));
+    act(() => useProject.setState({ git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 } }));
     expect(tool("git.panel")).toBeInTheDocument();
   });
 
@@ -104,6 +104,24 @@ describe("ActivityBar", () => {
     // Two open comments → the comments button shows the count "2".
     const commentsBtn = tool("comments.panel");
     expect(commentsBtn).toHaveTextContent("2");
+  });
+
+  it("badges Source Control with the number of changed files", () => {
+    act(() =>
+      useProject.setState({
+        git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 3 },
+      }),
+    );
+    render(<ActivityBar />);
+    expect(tool("git.panel")).toHaveTextContent("3");
+
+    // A clean tree carries no badge at all, rather than a "0".
+    act(() =>
+      useProject.setState({
+        git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 },
+      }),
+    );
+    expect(tool("git.panel")).not.toHaveTextContent("0");
   });
 
   it("selects a tool in the workspace store when its button is clicked", async () => {

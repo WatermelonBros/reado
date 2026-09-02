@@ -34,7 +34,15 @@ pub struct GitInfo {
     /// meaningful; a branch with a remote but no upstream can still be published
     /// by a first push).
     pub has_upstream: bool,
+    /// Files with working-tree or index changes, for the Source Control badge.
+    pub changed_files: u32,
 }
+
+/// Working-tree status, one line per path. `-uall` lists individual untracked
+/// files instead of collapsing an untracked directory to a single folder entry;
+/// `-c core.quotepath=false` stops git octal-escaping non-ASCII bytes (e.g.
+/// `na\303\257ve.rs`), so the paths match the real files on disk.
+const STATUS_ARGS: [&str; 5] = ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"];
 
 fn run_git(root: &Path, args: &[&str]) -> Option<String> {
     let output = command("git")
@@ -133,6 +141,15 @@ pub fn git_info(root: String) -> GitInfo {
         })
         .unwrap_or((0, 0, false));
 
+    // One porcelain line per path (a rename is still one line), so counting
+    // lines counts *files* — staged and unstaged edits to the same file must
+    // not badge as two.
+    let changed_files = is_repo
+        .then(|| run_git_raw(root, &STATUS_ARGS))
+        .flatten()
+        .map(|out| out.lines().count() as u32)
+        .unwrap_or(0);
+
     GitInfo {
         is_repo,
         branch,
@@ -140,6 +157,7 @@ pub fn git_info(root: String) -> GitInfo {
         behind,
         has_remote,
         has_upstream,
+        changed_files,
     }
 }
 
@@ -278,20 +296,7 @@ fn expand_status_line(line: &str) -> Vec<GitChange> {
 /// two status columns, so the leading space of an unstaged-only change matters.)
 #[tauri::command]
 pub fn git_status(root: String) -> Vec<GitChange> {
-    // `-uall` lists individual untracked files instead of collapsing an
-    // untracked directory to a single folder entry. `-c core.quotepath=false`
-    // stops git from octal-escaping non-ASCII bytes (e.g. `na\303\257ve.rs`),
-    // so the paths we hand to git_stage/unstage/discard match the real files.
-    let Some(out) = run_git_raw(
-        Path::new(&root),
-        &[
-            "-c",
-            "core.quotepath=false",
-            "status",
-            "--porcelain",
-            "-uall",
-        ],
-    ) else {
+    let Some(out) = run_git_raw(Path::new(&root), &STATUS_ARGS) else {
         return Vec::new();
     };
     out.lines().flat_map(expand_status_line).collect()

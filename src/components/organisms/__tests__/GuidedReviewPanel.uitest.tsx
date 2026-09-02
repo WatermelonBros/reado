@@ -25,7 +25,7 @@ const start = vi.fn(async () => null);
 beforeEach(() => {
   start.mockClear();
   useGuidedReview.setState({ sessions: [], currentId: null, busy: false, start });
-  useProject.setState({ root: "/repo", git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false }, open: vi.fn() });
+  useProject.setState({ root: "/repo", git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 }, open: vi.fn() });
   useSettings.setState({ reviewObjective: "bug_risk" });
 });
 

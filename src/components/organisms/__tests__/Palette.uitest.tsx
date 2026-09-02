@@ -142,7 +142,7 @@ describe("Palette", () => {
       useProject.setState({
         root: "/proj",
         active: null,
-        git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false },
+        git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 },
         navStack: [],
         navIndex: -1,
         closedTabs: [],
@@ -171,7 +171,7 @@ describe("Palette", () => {
     });
 
     it("shows file commands with a file open, but selection commands only with a selection", () => {
-      useProject.setState({ root: "/proj", active: "/proj/a.ts", git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false } });
+      useProject.setState({ root: "/proj", active: "/proj/a.ts", git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 } });
       useDocInfo.setState({ view: view(true) }); // file open, caret only (no selection)
       const { rerender } = render(<Palette />);
       expect(screen.getByText("editor.format")).toBeInTheDocument(); // file → shown

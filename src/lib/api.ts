@@ -36,6 +36,8 @@ export interface GitInfo {
   hasRemote: boolean;
   /** Whether the current branch tracks an upstream. */
   hasUpstream: boolean;
+  /** Files with working-tree or index changes (the Source Control badge). */
+  changedFiles: number;
 }
 
 /** Result of a sync (pull + push). */

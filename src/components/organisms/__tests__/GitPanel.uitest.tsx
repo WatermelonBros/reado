@@ -63,7 +63,7 @@ beforeEach(() => {
   gitPush.mockReset().mockResolvedValue(undefined);
   gitSync.mockReset().mockResolvedValue({ conflicted: [] });
   useNotice.setState({ notices: [] });
-  useProject.setState({ root: ROOT, git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: true, hasUpstream: false } });
+  useProject.setState({ root: ROOT, git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: true, hasUpstream: false, changedFiles: 0 } });
 });
 
 // Grab the <li> row for a given filename (basename is rendered as its own span).
@@ -153,7 +153,7 @@ describe("GitPanel", () => {
   it("gates fetch/pull/push/sync on what the remote state allows", async () => {
     // No remote → nothing to fetch/pull/push/sync.
     useProject.setState({
-      git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false },
+      git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 },
     });
     render(<GitPanel />);
     await screen.findByLabelText("git.fetch");
@@ -165,7 +165,7 @@ describe("GitPanel", () => {
     // Tracking branch, nothing ahead → push is dead (nothing to push), but sync
     // is live (it can still pull) and shows the behind count.
     useProject.setState({
-      git: { isRepo: true, branch: "main", ahead: 0, behind: 2, hasRemote: true, hasUpstream: true },
+      git: { isRepo: true, branch: "main", ahead: 0, behind: 2, hasRemote: true, hasUpstream: true, changedFiles: 0 },
     });
     await waitFor(() => expect(screen.getByLabelText("git.push")).toBeDisabled());
     expect(screen.getByLabelText("git.pull")).toBeEnabled();
@@ -173,7 +173,7 @@ describe("GitPanel", () => {
 
     // Commits to push → push re-enables.
     useProject.setState({
-      git: { isRepo: true, branch: "main", ahead: 3, behind: 0, hasRemote: true, hasUpstream: true },
+      git: { isRepo: true, branch: "main", ahead: 3, behind: 0, hasRemote: true, hasUpstream: true, changedFiles: 0 },
     });
     await waitFor(() => expect(screen.getByLabelText("git.push")).toBeEnabled());
   });
@@ -181,7 +181,7 @@ describe("GitPanel", () => {
   it("syncs (pull+push) and reports conflicts left to resolve", async () => {
     gitSync.mockResolvedValue({ conflicted: ["src/conflict.ts", "src/other.ts"] });
     useProject.setState({
-      git: { isRepo: true, branch: "main", ahead: 1, behind: 1, hasRemote: true, hasUpstream: true },
+      git: { isRepo: true, branch: "main", ahead: 1, behind: 1, hasRemote: true, hasUpstream: true, changedFiles: 0 },
     });
     render(<GitPanel />);
     await screen.findByRole("button", { name: /git\.sync/ });

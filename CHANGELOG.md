@@ -11,6 +11,12 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **Source Control carries a badge.** Its icon in the tool rail shows how many
+  files have working-tree or index changes, in accent blue — the count is
+  information, so it doesn't borrow the red the open-comment and diagnostic
+  badges use. It updates as files change on disk, not only on a commit.
+
 ## [1.7.0] — 2026-09-02
 
 ### Added

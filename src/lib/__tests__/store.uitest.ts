@@ -182,7 +182,7 @@ describe("useProject — history & split", () => {
     expect(P().splitPath).toBeNull();
   });
   it("init seeds tabs/active/history from a session", () => {
-    P().init("/root", { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false }, { id: "s", tabs: ["x.ts"], active: "x.ts" } as never);
+    P().init("/root", { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 }, { id: "s", tabs: ["x.ts"], active: "x.ts" } as never);
     expect(P().root).toBe("/root");
     expect(P().git.branch).toBe("main");
     expect(P().tabs).toEqual(["x.ts"]);

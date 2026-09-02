@@ -13,7 +13,7 @@ const api = vi.hoisted(() => ({
     remote: ["origin/main"],
   })),
   gitCheckout: vi.fn(async () => {}),
-  gitInfo: vi.fn(async () => ({ isRepo: true, branch: "dev", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false })),
+  gitInfo: vi.fn(async () => ({ isRepo: true, branch: "dev", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 })),
 }));
 vi.mock("../../../lib/api", () => api);
 
@@ -36,7 +36,7 @@ function setActiveFile() {
   useProject.setState({
     root: "/repo",
     active: "/repo/src/app/main.ts",
-    git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false },
+    git: { isRepo: true, branch: "main", ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 },
   });
 }
 
@@ -46,7 +46,7 @@ beforeEach(() => {
   useProject.setState({
     root: "/repo",
     active: null,
-    git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false },
+    git: { isRepo: false, branch: null, ahead: 0, behind: 0, hasRemote: false, hasUpstream: false, changedFiles: 0 },
   });
   useCursor.setState({ line: 1, col: 1 });
   useComments.setState({ comments: [] });
