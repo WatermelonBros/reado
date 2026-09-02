@@ -79,6 +79,12 @@ export interface SettingsState {
   trimTrailingWhitespace: boolean
   /** Ensure a single final newline on save (never on read). */
   insertFinalNewline: boolean
+  /** Don't open a text file above this many MB without asking; 0 disables. */
+  largeFileGuardMb: number
+  /** Annotate the cursor's line with who last changed it, and when. */
+  inlineBlame: boolean
+  /** Mark lines changed since the last commit in the editor gutter. */
+  diffGutter: boolean
   /** Soft-focus the rest of the file around the cursor. */
   focusMode: boolean
   /** Wrap long lines instead of scrolling horizontally. */
@@ -144,6 +150,11 @@ export const useSettings = create<SettingsState>()(
       restoreSession: true,
       trimTrailingWhitespace: false,
       insertFinalNewline: false,
+      // 2 MB: comfortably above any file written by hand, comfortably below the
+      // generated bundles and fixtures that make the editor crawl.
+      largeFileGuardMb: 2,
+      inlineBlame: false,
+      diffGutter: false,
       focusMode: false,
       wrap: true,
       stickyScroll: true,

@@ -15,13 +15,14 @@ import {
   type Context,
   findDefinition,
   gitBlame,
+  gitWorkingDiffLines,
   readFile,
   writeFile,
 } from "@/lib/api"
-import { blameGutter } from "@/lib/blameGutter"
+import { blameGutter, inlineBlame } from "@/lib/blameGutter"
 import { bookmarkGutter } from "@/lib/bookmarkGutter"
 import { useBookmarks } from "@/lib/bookmarks"
-import { changedLinesHighlight } from "@/lib/changedLines"
+import { changedLinesHighlight, diffGutter } from "@/lib/changedLines"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
 import { toRelative, useComments } from "@/lib/comments"
 import { useDiagnostics } from "@/lib/diagnostics"
@@ -116,7 +117,10 @@ export function CodeView({
   const tabSizeComp = useMemo(() => new Compartment(), [])
   const lspComp = useMemo(() => new Compartment(), [])
   const changedComp = useMemo(() => new Compartment(), [])
+  const diffComp = useMemo(() => new Compartment(), [])
   const blame = useEditorActions((s) => s.blame)
+  const inlineBlameOn = useSettings((s) => s.inlineBlame)
+  const diffGutterOn = useSettings((s) => s.diffGutter)
   const indentSize = useDocInfo((s) => s.indentSize)
   const languageOverride = useDocInfo((s) => s.languageOverride)
   const stickyScroll = useSettings((s) => s.stickyScroll)
@@ -440,6 +444,7 @@ export function CodeView({
         changedComp,
         bookmarkComp,
         blameComp,
+        diffComp,
         lspComp,
         tabSizeComp,
         wrapComp,
@@ -648,24 +653,46 @@ export function CodeView({
     })
   }, [bookmarkLines, toggleBookmarkLine, bookmarkComp])
 
-  // Fetch and show the blame gutter when blame mode is on; clear it when off.
+  // The blame column (breadcrumb toggle) and the inline, cursor-line annotation
+  // (a setting) read the same `git_blame`, so one fetch serves both. The column
+  // wins when both are on — showing the same fact twice on one line is noise.
   useEffect(() => {
-    if (!blame) {
+    if (!blame && !inlineBlameOn) {
       viewRef.current?.dispatch({ effects: blameComp.reconfigure([]) })
       return
     }
     let cancelled = false
     gitBlame(useProject.getState().root, relPath)
       .then((lines) => {
-        if (!cancelled && lines.length) {
-          viewRef.current?.dispatch({ effects: blameComp.reconfigure(blameGutter(lines)) })
+        if (cancelled || !lines.length) return
+        const ext = blame ? blameGutter(lines) : inlineBlame(lines)
+        viewRef.current?.dispatch({ effects: blameComp.reconfigure(ext) })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [blame, inlineBlameOn, relPath, blameComp])
+
+  // Mark the lines this working tree changes since HEAD. Refreshed when the file
+  // is saved or changes on disk (`revision`), so the marks track real edits.
+  useEffect(() => {
+    if (!diffGutterOn) {
+      viewRef.current?.dispatch({ effects: diffComp.reconfigure([]) })
+      return
+    }
+    let cancelled = false
+    gitWorkingDiffLines(useProject.getState().root, relPath)
+      .then((ranges) => {
+        if (!cancelled) {
+          viewRef.current?.dispatch({ effects: diffComp.reconfigure(diffGutter(ranges)) })
         }
       })
       .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [blame, relPath, blameComp])
+  }, [diffGutterOn, relPath, diffComp])
 
   // Highlight the anchored block while its thread is open.
   useEffect(() => {

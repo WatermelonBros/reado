@@ -94,7 +94,9 @@
     "edit": "Toggle editing",
     "save": "Save",
     "saveError": "Couldn't save — the file may be read-only or the disk full.",
-    "unsaved": "Unsaved changes"
+    "unsaved": "Unsaved changes",
+    "large": "This file is {size} — above your large-file guard.",
+    "openAnyway": "Open anyway"
   },
   "pdf": {
     "zoomIn": "Zoom in",
@@ -681,7 +683,14 @@
     "fileIconsOff": "Off — generic icon",
     "fileIconsMono": "On — monochrome",
     "fileIconsColored": "On — colored by type",
-    "fileIconsHint": "Show a distinct icon for each file type in the tree."
+    "fileIconsHint": "Show a distinct icon for each file type in the tree.",
+    "largeFileGuard": "Large-file guard (MB)",
+    "largeFileGuardHint": "Ask before opening a text file above this size, instead of loading it. 0 turns the guard off.",
+    "gitSignals": "Git signals",
+    "inlineBlame": "Inline blame",
+    "inlineBlameHint": "Annotate the line the cursor is on with who last changed it, and when.",
+    "diffGutter": "Diff gutter",
+    "diffGutterHint": "Mark lines in the editor that differ from the last commit."
   },
   "defaultApp": {
     "title": "Default app for text files",

@@ -56,6 +56,8 @@ export interface CodeExtensionsCtx {
   indentGuidesComp: Compartment
   gutterComp: Compartment
   changedComp: Compartment
+  /** The diff gutter (lines changed since HEAD), empty when the setting is off. */
+  diffComp: Compartment
   bookmarkComp: Compartment
   blameComp: Compartment
   lspComp: Compartment
@@ -208,6 +210,7 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     keymap.of([{ key: "Alt-F12", run: () => ctx.peekDefinition() }]),
     ctx.gutterComp.of(commentGutter(ctx.lineComments, ctx.openThreadAtLine)),
     ctx.changedComp.of(changedLinesHighlight(ctx.changedLines)),
+    ctx.diffComp.of([]),
     ctx.bookmarkComp.of(bookmarkGutter(ctx.bookmarkLines, ctx.toggleBookmarkLine)),
     ctx.blameComp.of([]),
     ctx.lspComp.of([]),

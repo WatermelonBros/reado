@@ -24,6 +24,9 @@ export type FileContent =
   | { kind: "image"; dataUrl: string }
   | { kind: "pdf"; dataUrl: string }
   | { kind: "binary"; size: number }
+  /** Text, but past the large-file guard — not read. Re-read with `guardBytes: 0`
+   *  to open it anyway. */
+  | { kind: "large"; size: number }
 
 export interface GitInfo {
   isRepo: boolean
@@ -83,8 +86,15 @@ export const cliInstalled = () => invoke<boolean>("cli_installed")
 /** Read a file for display (text, image data URL, or binary placeholder).
  * `asText` forces text decoding for formats that would otherwise render as an
  * image (e.g. SVG), so they can be edited as source. */
-export const readFile = (root: string, path: string, asText?: boolean) =>
-  invoke<FileContent>("read_file", { root, path, asText })
+/** Read a file for display. `guardBytes` applies the user's large-file guard;
+ *  pass 0 to bypass it ("open anyway"), and omit it where the guard shouldn't
+ *  apply at all (agent results, sidecars — files Reado itself wrote). */
+export const readFile = (root: string, path: string, asText?: boolean, guardBytes?: number) =>
+  invoke<FileContent>("read_file", { root, path, asText, guardBytes })
+
+/** Line ranges the working tree changes vs HEAD — the diff gutter's input. */
+export const gitWorkingDiffLines = (root: string, file: string) =>
+  invoke<Array<[number, number]>>("git_working_diff_lines", { root, file })
 
 /** Write UTF-8 text back to a file (manual editing). */
 export const writeFile = (root: string, path: string, content: string) =>

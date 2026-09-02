@@ -279,6 +279,31 @@
     opacity: 0.7;
   }
 
+  /* Inline blame: one annotation, on the cursor's line, set well away from the
+     code so it never reads as part of it. */
+  .reado-inline-blame {
+    padding-left: 2.5ch;
+    color: var(--text-faint);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    opacity: 0.75;
+    user-select: none;
+    pointer-events: none;
+    white-space: pre;
+  }
+
+  /* Diff gutter: a bar per line changed since the last commit. Accent-coloured
+     rather than the marker red — an edit of your own is information, not alarm. */
+  .reado-diff-gutter {
+    width: 3px;
+  }
+  .reado-diff-mark {
+    width: 3px;
+    height: var(--code-line-height);
+    background: var(--accent);
+    opacity: 0.55;
+  }
+
   /* Reading bookmarks: a quiet accent pin, distinct from the comment dot. The
      whole gutter column is clickable to toggle, so give it a hover affordance. */
   .reado-bookmark-gutter {

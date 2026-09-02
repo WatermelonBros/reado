@@ -15,6 +15,7 @@ import { listen } from "@tauri-apps/api/event"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
+import { Button } from "@/components/atoms/Button"
 import { DocsIcon, EditIcon } from "@/components/atoms/icons"
 import { Welcome } from "@/components/molecules/Welcome"
 import { DiffView } from "@/components/organisms/DiffView"
@@ -99,22 +100,29 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   // mode the bytes come from the ref (`git show`), falling back to the working
   // tree if the path isn't in the ref (e.g. a binary or deleted file).
   const forceText = useTextView((s) => s.force)
+  const guardMb = useSettings((s) => s.largeFileGuardMb)
+  // Files the user chose to open anyway — the guard is a speed bump, not a wall,
+  // and it must not re-appear every time the file reloads.
+  const [bypassed, setBypassed] = useState<Set<string>>(() => new Set())
+  const guardBytes = active && bypassed.has(active) ? 0 : Math.round(guardMb * 1024 * 1024)
   useEffect(() => {
     if (!active) return
     let cancelled = false
     const rel = toRelative(root, active)
     const load: Promise<FileContent> = prRef
       ? gitShowRef(root, rel, prRef).then((text) =>
-          text == null ? readFile(root, active, forceText.has(active)) : { kind: "text", text },
+          text == null
+            ? readFile(root, active, forceText.has(active), guardBytes)
+            : { kind: "text", text },
         )
-      : readFile(root, active, forceText.has(active))
+      : readFile(root, active, forceText.has(active), guardBytes)
     load
       .then((c) => !cancelled && setLoaded({ path: active, content: c }))
       .catch((e) => !cancelled && setError({ path: active, message: String(e) }))
     return () => {
       cancelled = true
     }
-  }, [root, active, forceText, prRef])
+  }, [root, active, forceText, prRef, guardBytes])
 
   // Recompute this file's comment anchors on open (spec: recompute on open).
   // Skipped in PR mode: reanchoring reads the working tree, but the shown bytes
@@ -136,7 +144,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
     const un = listen<{ file: string }>("file-changed", (e) => {
       // In PR mode the shown bytes come from the ref, not disk — ignore writes.
       if (e.payload.file !== rel || useEditorActions.getState().dirty || prRef) return
-      readFile(root, active, forceText.has(active))
+      readFile(root, active, forceText.has(active), guardBytes)
         // Guard staleness: if the user switched files while this read was in
         // flight, applying it would strand the editor on the loading placeholder
         // (loaded.path !== the new active), so drop it — like the main load.
@@ -190,6 +198,23 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
     return (
       <div className={PLACEHOLDER} role="status">
         {t("editor.binary", { size: human(content.size) })}
+      </div>
+    )
+  }
+  // Past the guard: say how big it is and let the user overrule it. Opening is
+  // one click, so the guard costs a moment, not access.
+  if (content.kind === "large") {
+    return (
+      <div className={PLACEHOLDER} role="status">
+        <p>{t("editor.large", { size: human(content.size) })}</p>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="mt-3"
+          onClick={() => setBypassed((prev) => new Set(prev).add(active))}
+        >
+          {t("editor.openAnyway")}
+        </Button>
       </div>
     )
   }

@@ -1,9 +1,25 @@
 /**
- * A CodeMirror gutter that shows per-line git blame: the author and a relative
- * date, with the full commit in the tooltip. Toggled from the breadcrumb; built
- * from `git_blame` output. Quiet by design — it reads, it doesn't shout.
+ * Git blame in the editor, in two strengths.
+ *
+ * `blameGutter` is the full column: every line annotated, toggled from the
+ * breadcrumb when you want to read a file's history all at once.
+ *
+ * `inlineBlame` is the quiet one, for leaving on: only the line the cursor is
+ * on gets an annotation, at the end of the line, in the dimmest colour that
+ * still reads. A whole column of names beside code you are trying to read is a
+ * lot of noise for a question you only ask about one line at a time.
  */
-import { GutterMarker, gutter } from "@codemirror/view"
+import { RangeSetBuilder } from "@codemirror/state"
+import {
+  Decoration,
+  type DecorationSet,
+  type EditorView,
+  GutterMarker,
+  gutter,
+  ViewPlugin,
+  type ViewUpdate,
+  WidgetType,
+} from "@codemirror/view"
 import type { BlameLine } from "./api"
 
 class BlameMarker extends GutterMarker {
@@ -66,4 +82,74 @@ export function blameGutter(lines: BlameLine[]) {
     // The marker set only changes when we rebuild the gutter (new blame data).
     lineMarkerChange: () => false,
   })
+}
+
+/** The end-of-line annotation itself: not editable, not selectable, and out of
+ *  the accessibility tree — it is scenery beside the code, not content. */
+class InlineBlameWidget extends WidgetType {
+  constructor(private readonly text: string) {
+    super()
+  }
+
+  eq(other: InlineBlameWidget) {
+    return other.text === this.text
+  }
+
+  toDOM() {
+    const el = document.createElement("span")
+    el.className = "reado-inline-blame"
+    el.textContent = this.text
+    el.setAttribute("aria-hidden", "true")
+    return el
+  }
+
+  ignoreEvent() {
+    return true
+  }
+}
+
+/** The annotation for one blame line, or null when there is nothing to say. */
+export function inlineBlameText(b: BlameLine | undefined): string | null {
+  if (!b) return null
+  if (isUncommitted(b.hash)) return "You · uncommitted"
+  const author = b.author.split(" ")[0] || b.author
+  return `${author} · ${relativeAge(b.time)} · ${b.summary}`
+}
+
+/**
+ * Annotate only the cursor's line. Rebuilt on selection change, which is the
+ * whole point: it follows you rather than covering the file.
+ */
+export function inlineBlame(lines: BlameLine[]) {
+  const byLine = new Map<number, BlameLine>()
+  for (const b of lines) byLine.set(b.line, b)
+
+  const build = (view: EditorView): DecorationSet => {
+    const builder = new RangeSetBuilder<Decoration>()
+    const head = view.state.selection.main.head
+    const line = view.state.doc.lineAt(head)
+    // An empty line has nowhere to put it without looking like content.
+    if (line.length === 0) return builder.finish()
+    const text = inlineBlameText(byLine.get(line.number))
+    if (!text) return builder.finish()
+    builder.add(
+      line.to,
+      line.to,
+      Decoration.widget({ widget: new InlineBlameWidget(text), side: 1 }),
+    )
+    return builder.finish()
+  }
+
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+      constructor(view: EditorView) {
+        this.decorations = build(view)
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.selectionSet || u.viewportChanged) this.decorations = build(u.view)
+      }
+    },
+    { decorations: (v) => v.decorations },
+  )
 }

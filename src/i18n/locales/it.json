@@ -94,7 +94,9 @@
     "edit": "Attiva/disattiva modifica",
     "save": "Salva",
     "saveError": "Impossibile salvare — il file potrebbe essere in sola lettura o il disco pieno.",
-    "unsaved": "Modifiche non salvate"
+    "unsaved": "Modifiche non salvate",
+    "large": "Questo file è {size} — oltre la soglia file grandi.",
+    "openAnyway": "Apri comunque"
   },
   "pdf": {
     "zoomIn": "Ingrandisci",
@@ -681,7 +683,14 @@
     "fileIconsOff": "Off — icona generica",
     "fileIconsMono": "On — monocromatiche",
     "fileIconsColored": "On — colorate per tipo",
-    "fileIconsHint": "Mostra un'icona distinta per ogni tipo di file nell'albero."
+    "fileIconsHint": "Mostra un'icona distinta per ogni tipo di file nell'albero.",
+    "largeFileGuard": "Soglia file grandi (MB)",
+    "largeFileGuardHint": "Chiedi prima di aprire un file di testo oltre questa dimensione, invece di caricarlo. 0 disattiva la soglia.",
+    "gitSignals": "Segnali git",
+    "inlineBlame": "Blame in linea",
+    "inlineBlameHint": "Annota la riga del cursore con chi l'ha modificata l'ultima volta, e quando.",
+    "diffGutter": "Barra delle modifiche",
+    "diffGutterHint": "Segna nell'editor le righe diverse dall'ultimo commit."
   },
   "defaultApp": {
     "title": "App predefinita per i file di testo",

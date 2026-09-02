@@ -26,6 +26,7 @@ import {
   type ThemeMode,
   type ThemeName,
   usePalette,
+  useProject,
   useSettings,
 } from "@/lib/store"
 import { useTourGuide } from "@/lib/tour"
@@ -419,6 +420,7 @@ function InterfaceTab() {
 
 function FilesTab() {
   const settings = useSettings()
+  const isRepo = useProject((s) => s.git.isRepo)
   const { t } = useTranslation()
 
   return (
@@ -432,6 +434,15 @@ function FilesTab() {
         onChange={(v) => settings.set({ restoreSession: v })}
         label={t("settings.restoreSession")}
         hint={t("settings.restoreSessionHint")}
+      />
+      <NumberField
+        label={t("settings.largeFileGuard")}
+        value={settings.largeFileGuardMb}
+        min={0}
+        max={64}
+        step={1}
+        onCommit={(v) => settings.set({ largeFileGuardMb: v })}
+        hint={t("settings.largeFileGuardHint")}
       />
       <Section title={t("settings.onSave")}>
         <ToggleField
@@ -447,6 +458,24 @@ function FilesTab() {
           hint={t("settings.insertFinalNewlineHint")}
         />
       </Section>
+      {/* Repo-gated: both read git, so outside a repository they would be two
+        switches that do nothing. */}
+      {isRepo && (
+        <Section title={t("settings.gitSignals")}>
+          <ToggleField
+            checked={settings.inlineBlame}
+            onChange={(v) => settings.set({ inlineBlame: v })}
+            label={t("settings.inlineBlame")}
+            hint={t("settings.inlineBlameHint")}
+          />
+          <ToggleField
+            checked={settings.diffGutter}
+            onChange={(v) => settings.set({ diffGutter: v })}
+            label={t("settings.diffGutter")}
+            hint={t("settings.diffGutterHint")}
+          />
+        </Section>
+      )}
     </>
   )
 }

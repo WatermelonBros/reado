@@ -203,6 +203,10 @@ pub enum FileContent {
     },
     /// Binary, non-image file — rendered as an unsupported-preview placeholder.
     Binary { size: u64 },
+    /// Text, but past the user's large-file guard. Not read: the point of the
+    /// guard is that a 40 MB minified bundle never reaches the editor unless the
+    /// user asks for it, and reading it "just to be sure" would defeat that.
+    Large { size: u64 },
 }
 
 /// Largest text file we load eagerly (8 MiB). Larger files are still read; the
@@ -286,8 +290,18 @@ pub fn create_file(root: String, path: String) -> Result<String> {
 
 /// Read a file for display. Detects images (returned as data URLs) and binary
 /// files (returned as a size-only placeholder); everything else is UTF-8 text.
+///
+/// `guard_bytes` is the user's large-file guard: a text file above it comes back
+/// as `Large` without being read, so the editor can offer "open anyway" instead
+/// of freezing on a generated bundle. `None` or `0` turns the guard off — which
+/// is what the bypass passes.
 #[tauri::command]
-pub fn read_file(root: String, path: String, as_text: Option<bool>) -> Result<FileContent> {
+pub fn read_file(
+    root: String,
+    path: String,
+    as_text: Option<bool>,
+    guard_bytes: Option<u64>,
+) -> Result<FileContent> {
     let root = PathBuf::from(&root);
     let path = ensure_within(&root, &PathBuf::from(&path))?;
     let metadata = std::fs::metadata(&path)?;
@@ -336,6 +350,16 @@ pub fn read_file(root: String, path: String, as_text: Option<bool>) -> Result<Fi
         return Ok(FileContent::Binary {
             size: metadata.len(),
         });
+    }
+
+    // The user's own, lower threshold: checked on metadata for the same reason,
+    // and reported as `Large` so the UI can offer to open it anyway.
+    if let Some(guard) = guard_bytes.filter(|g| *g > 0) {
+        if metadata.len() > guard {
+            return Ok(FileContent::Large {
+                size: metadata.len(),
+            });
+        }
     }
 
     let bytes = std::fs::read(&path)?;
@@ -784,21 +808,21 @@ mod tests {
 
         // Plain UTF-8 text → Text with the exact content.
         fs::write(root.join("hello.txt"), "hello world\n").unwrap();
-        match super::read_file(s(root.into()), s(root.join("hello.txt")), None).unwrap() {
+        match super::read_file(s(root.into()), s(root.join("hello.txt")), None, None).unwrap() {
             FileContent::Text { text } => assert_eq!(text, "hello world\n"),
             other => panic!("expected Text, got {other:?}"),
         }
 
         // A NUL byte in the first 8 KiB → Binary.
         fs::write(root.join("blob.dat"), b"abc\0def").unwrap();
-        match super::read_file(s(root.into()), s(root.join("blob.dat")), None).unwrap() {
+        match super::read_file(s(root.into()), s(root.join("blob.dat")), None, None).unwrap() {
             FileContent::Binary { size } => assert_eq!(size, 7),
             other => panic!("expected Binary, got {other:?}"),
         }
 
         // Image extension → data URL (mime keyed off the extension, not the bytes).
         fs::write(root.join("pic.png"), b"\x89PNG\r\n\x1a\n").unwrap();
-        match super::read_file(s(root.into()), s(root.join("pic.png")), None).unwrap() {
+        match super::read_file(s(root.into()), s(root.join("pic.png")), None, None).unwrap() {
             FileContent::Image { data_url } => {
                 assert!(data_url.starts_with("data:image/png;base64,"));
             }
@@ -806,7 +830,7 @@ mod tests {
         }
 
         // `as_text = Some(true)` decodes an image-renderable format as source text.
-        match super::read_file(s(root.into()), s(root.join("pic.png")), Some(true)).unwrap() {
+        match super::read_file(s(root.into()), s(root.join("pic.png")), Some(true), None).unwrap() {
             // The bytes aren't valid UTF-8, so it falls through to Binary — the
             // point is that the image data-URL branch was bypassed.
             FileContent::Binary { .. } => {}
@@ -825,9 +849,81 @@ mod tests {
         // without decoding the whole file.
         let size = MAX_TEXT_BYTES + 1;
         fs::write(root.join("big.txt"), vec![b'a'; size as usize]).unwrap();
-        match super::read_file(s(root.into()), s(root.join("big.txt")), None).unwrap() {
+        match super::read_file(s(root.into()), s(root.join("big.txt")), None, None).unwrap() {
             FileContent::Binary { size: reported } => assert_eq!(reported, size),
             other => panic!("expected Binary by size, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_large_file_guard_reports_without_reading() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        fs::write(root.join("bundle.js"), vec![b'a'; 4096]).unwrap();
+
+        match super::read_file(s(root.into()), s(root.join("bundle.js")), None, Some(1024)).unwrap()
+        {
+            FileContent::Large { size } => assert_eq!(size, 4096),
+            other => panic!("expected Large, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_file_under_the_guard_is_read_normally() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        fs::write(root.join("small.txt"), "hello").unwrap();
+
+        match super::read_file(s(root.into()), s(root.join("small.txt")), None, Some(1024)).unwrap()
+        {
+            FileContent::Text { text } => assert_eq!(text, "hello"),
+            other => panic!("expected Text, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_zero_guard_opens_anything_the_hard_cap_allows() {
+        // This is the "open anyway" bypass: the user asked for it explicitly.
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        fs::write(root.join("bundle.js"), vec![b'a'; 4096]).unwrap();
+
+        for guard in [None, Some(0)] {
+            match super::read_file(s(root.into()), s(root.join("bundle.js")), None, guard).unwrap()
+            {
+                FileContent::Text { text } => assert_eq!(text.len(), 4096),
+                other => panic!("expected Text with guard {guard:?}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn the_hard_cap_still_wins_over_a_looser_guard() {
+        // A guard above MAX_TEXT_BYTES must not talk the reader into slurping a
+        // multi-gigabyte file into memory.
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        let size = MAX_TEXT_BYTES + 1;
+        fs::write(root.join("huge.txt"), vec![b'a'; size as usize]).unwrap();
+
+        match super::read_file(
+            s(root.into()),
+            s(root.join("huge.txt")),
+            None,
+            Some(MAX_TEXT_BYTES * 4),
+        )
+        .unwrap()
+        {
+            FileContent::Binary { size: reported } => assert_eq!(reported, size),
+            other => panic!("expected Binary by hard cap, got {other:?}"),
         }
     }
 

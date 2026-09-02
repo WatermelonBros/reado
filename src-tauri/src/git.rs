@@ -1002,6 +1002,29 @@ pub fn git_show_ref(root: String, file: String, base: String) -> Option<String> 
     }
 }
 
+/// Line ranges the working tree changes relative to HEAD, for the diff gutter.
+///
+/// Distinct from `git_diff_lines`, which compares two refs: the gutter is about
+/// what *you* have touched and not committed, so the right-hand side is the file
+/// on disk, not another commit. Ranges are 1-based and inclusive, on the working
+/// copy's numbering, which is what the editor is showing.
+#[tauri::command]
+pub fn git_working_diff_lines(root: String, file: String) -> Vec<[u32; 2]> {
+    let output = match command("git")
+        .arg("-C")
+        .arg(&root)
+        // `HEAD` (not `--cached`) so both staged and unstaged edits are marked:
+        // the gutter answers "is this line different from the last commit".
+        .args(["diff", "--unified=0", "HEAD", "--", &file])
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        // Not a repo, or a file git has never seen — no marks, not an error.
+        _ => return Vec::new(),
+    };
+    parse_diff_hunks(&String::from_utf8_lossy(&output.stdout))
+}
+
 /// The line ranges a file gained or changed between two refs (`base...head`,
 /// merge-base semantics — a PR's own changes). Each `[start, end]` is 1-based and
 /// inclusive on the *head* side, for inline change markers in the reader. Empty

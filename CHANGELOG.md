@@ -12,6 +12,18 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **A large file asks before it opens.** A generated bundle or a huge fixture
+  used to load straight into the editor and take it with them. A text file over
+  the guard (2 MB by default, adjustable in Settings → Files, 0 to turn it off)
+  now shows its size and an "Open anyway" button instead, and the file is read
+  only if you ask — the guard is a speed bump, not a wall, and it remembers what
+  you overruled.
+- **Two git signals in the editor, off by default.** *Inline blame* annotates
+  only the line the cursor is on with who last changed it and when — a whole
+  column of names beside code you're reading is a lot of noise for a question
+  you ask one line at a time. *Diff gutter* marks the lines that differ from the
+  last commit. Both live under Settings → Files, and only appear inside a git
+  repository.
 - **Every tool panel can be docked.** Files, Search, Comments, Git, Problems and
   the rest lived only in the left sidebar, because the sidebar was the one thing
   that knew how to draw them. Their bodies are now shared, so any of them can be

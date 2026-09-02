@@ -7,7 +7,7 @@
  */
 
 import { RangeSetBuilder } from "@codemirror/state"
-import { Decoration, type DecorationSet, EditorView } from "@codemirror/view"
+import { Decoration, type DecorationSet, EditorView, GutterMarker, gutter } from "@codemirror/view"
 
 const changedLine = Decoration.line({ class: "cm-pr-changed" })
 
@@ -26,5 +26,39 @@ export function changedLinesHighlight(ranges: Array<[number, number]>) {
         builder.add(view.state.doc.line(n).from, view.state.doc.line(n).from, changedLine)
     }
     return builder.finish()
+  })
+}
+
+/** A thin bar in the gutter, coloured by the theme. No glyph, no number: the
+ *  question it answers is "did I touch this line", which is a yes/no. */
+class ChangeMarker extends GutterMarker {
+  toDOM() {
+    const el = document.createElement("div")
+    el.className = "reado-diff-mark"
+    return el
+  }
+}
+
+const CHANGE_MARKER = new ChangeMarker()
+
+/**
+ * The diff gutter: mark every line that differs from the last commit.
+ *
+ * Ranges come from `git_working_diff_lines` (working tree vs HEAD) — not the
+ * two-ref `git_diff_lines` above, which answers a different question: this is
+ * about what *you* have changed and not committed.
+ */
+export function diffGutter(ranges: Array<[number, number]>) {
+  const marked = new Set<number>()
+  for (const [start, end] of ranges) {
+    for (let n = start; n <= end; n++) marked.add(n)
+  }
+  if (marked.size === 0) return []
+  return gutter({
+    class: "reado-diff-gutter",
+    lineMarker: (view, block) =>
+      marked.has(view.state.doc.lineAt(block.from).number) ? CHANGE_MARKER : null,
+    // The set only changes when we rebuild it from fresh ranges.
+    lineMarkerChange: () => false,
   })
 }
