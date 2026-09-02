@@ -603,7 +603,7 @@ fn find_by_suffix(root: &Path, spec: &str) -> Option<PathBuf> {
         }
         if best
             .as_ref()
-            .map_or(true, |b| b.as_os_str().len() > path.as_os_str().len())
+            .is_none_or(|b| b.as_os_str().len() > path.as_os_str().len())
         {
             best = Some(path.to_path_buf());
         }
@@ -629,7 +629,9 @@ pub fn clipboard_image_to_temp(app: tauri::AppHandle) -> Result<Option<String>> 
         .ok_or_else(|| Error::Other("clipboard image has an unexpected size".into()))?;
     let dir = std::env::temp_dir().join("reado-clipboard");
     std::fs::create_dir_all(&dir)?;
-    let name = chrono::Local::now().format("clip-%Y%m%d-%H%M%S%.3f.png").to_string();
+    let name = chrono::Local::now()
+        .format("clip-%Y%m%d-%H%M%S%.3f.png")
+        .to_string();
     let path = dir.join(name);
     buf.save(&path).map_err(|e| Error::Other(e.to_string()))?;
     Ok(Some(path.to_string_lossy().into_owned()))

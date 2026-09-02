@@ -42,7 +42,13 @@ pub struct GitInfo {
 /// files instead of collapsing an untracked directory to a single folder entry;
 /// `-c core.quotepath=false` stops git octal-escaping non-ASCII bytes (e.g.
 /// `na\303\257ve.rs`), so the paths match the real files on disk.
-const STATUS_ARGS: [&str; 5] = ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"];
+const STATUS_ARGS: [&str; 5] = [
+    "-c",
+    "core.quotepath=false",
+    "status",
+    "--porcelain",
+    "-uall",
+];
 
 fn run_git(root: &Path, args: &[&str]) -> Option<String> {
     let output = command("git")
