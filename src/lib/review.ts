@@ -125,10 +125,50 @@ export function composeGuidedPlanPrompt(sessionId: string, scopeDesc: string, pr
   return (
     `READO GUIDED REVIEW — planning pass for session ${sessionId} (scope: ${scopeDesc}). ` +
     `Run \`reado session show ${sessionId} --json\` for context, ${inspect}then propose an ordered review route. ` +
-    `Emit it with \`reado review plan ${sessionId} --route '<json>'\` where <json> is an array of ` +
+    // The route is only as good as what informed it: the project states its own
+    // intent in its specs and docs, and a file that contradicts the spec it
+    // implements is exactly what a route should surface early.
+    "Before ranking, read what the project says about itself: any `openspec/` or " +
+    "`.specify/` change proposals and capability specs that cover this scope, the " +
+    "README and `docs/**`, and the existing Reado comments (`reado comment list --json`). " +
+    "Weigh a file higher when it implements a documented capability, when it " +
+    "contradicts one, or when it is referenced from several of those documents. " +
+    `Emit the route with \`reado review plan ${sessionId} --route '<json>'\` where <json> is an array of ` +
     '{"file","priority","reason","suggestedReviewMode":"quick|normal|deep","relatedFiles":[...]} ' +
-    "ranked by risk (diff size, role, dependents, files with comments). Do NOT review deeply yet " +
+    "ranked by risk (diff size, role, dependents, files with comments, documented intent). " +
+    "Cite which document moved a file up in its `reason`. Do NOT review deeply yet " +
     "and do NOT change any code — just plan the route."
+  )
+}
+
+/**
+ * The Big Pass: step back from the file-by-file walk and look at the whole
+ * subsystem at once.
+ *
+ * The incremental route is deliberately narrow — one file, its context, its
+ * proposals — which is what keeps it honest, and also what makes it blind to
+ * the findings that only exist between files: a pattern repeated in five
+ * places, a drift from the spec, a suite that no longer passes. This is the
+ * explicit, user-triggered widening, never automatic: it costs a lot of agent
+ * time and the human decides when the narrow pass has earned it.
+ */
+export function composeGuidedWidenPrompt(sessionId: string, files: string[]): string {
+  const scope = files.length
+    ? `the subsystem around: ${files.slice(0, 12).join(", ")}`
+    : "the whole reviewed scope"
+  return (
+    `READO GUIDED REVIEW — WIDE PASS for session ${sessionId}. ` +
+    `Run \`reado session show ${sessionId} --json\` first to see what the narrow pass already found. ` +
+    `Now widen to ${scope} and look for what a file-by-file walk cannot see:\n` +
+    "1. Repeated patterns — the same mistake, workaround or duplication in several files.\n" +
+    "2. Drift from the documented intent — compare against the project's specs " +
+    "(`openspec/`, `.specify/`) and docs; a capability that says one thing while the code does another.\n" +
+    "3. Structural risk — a boundary crossed in one place only, state owned in two, a dependency going the wrong way.\n" +
+    "4. Evidence — run the project's tests and typecheck; report what actually fails rather than what might.\n" +
+    `Propose what you find as session artifacts (\`reado review propose-comment ${sessionId} …\`, ` +
+    `or \`reado review propose ${sessionId} --kind question …\`), and record the overall read with ` +
+    `\`reado session summarize ${sessionId} "<what the wide pass found>"\`. ` +
+    "Do NOT change any code and do NOT accept anything — the human disposes of every proposal."
   )
 }
 

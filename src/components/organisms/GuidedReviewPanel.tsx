@@ -454,6 +454,14 @@ function SessionView({ root, session }: { root: string; session: Session }) {
               >
                 {t("guided.action.respond")}
               </Action>
+              {/* Deliberately user-triggered: the wide pass is expensive, and it
+                  only earns its keep once the narrow walk has found its share. */}
+              <Action
+                title={t("guided.action.widenHint")}
+                onClick={() => void store().widen(root, session.id)}
+              >
+                {t("guided.action.widen")}
+              </Action>
             </div>
           </div>
         </section>

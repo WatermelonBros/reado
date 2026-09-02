@@ -11,6 +11,21 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **A guided review can step back and take a wide pass.** The file-by-file walk
+  is deliberately narrow, which is what keeps it honest — and also what makes it
+  blind to the findings that only exist between files. "Wide pass" widens to the
+  subsystem around the route and looks for the four things a single file can't
+  show: the same mistake repeated across several files, drift from what the
+  specs say the code should do, structural risk, and what the tests actually
+  report when run. It is never automatic — it costs real agent time, and you
+  decide when the narrow pass has earned it.
+- **The review route knows what the project says about itself.** Planning ranked
+  files on diff size, role and existing comments; it now also reads the
+  `openspec/`/`.specify/` proposals and capability specs, the README and
+  `docs/**`, and weighs a file up when it implements a documented capability —
+  or contradicts one. Each route entry cites the document that moved it.
+
 ### Fixed
 - **A review loop that never started says so.** If the prompt never reached an
   agent — none installed, or the terminal gone — the loop sat at "Resolving…"

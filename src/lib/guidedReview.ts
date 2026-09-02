@@ -38,6 +38,7 @@ import {
   composeGuidedFilePrompt,
   composeGuidedPlanPrompt,
   composeGuidedRespondPrompt,
+  composeGuidedWidenPrompt,
   type PrRefs,
 } from "./review"
 import { useProject } from "./store"
@@ -129,6 +130,8 @@ interface GuidedReviewState {
   focusFile: (root: string, id: string, file: string) => Promise<void>
   reviewFile: (root: string, id: string, file: string) => Promise<void>
   challenge: (root: string, id: string, file: string) => Promise<void>
+  /** The Big Pass: widen from the file-by-file walk to the whole subsystem. */
+  widen: (root: string, id: string) => Promise<void>
   /** Reply to the comments already on a file (always available — not a new review). */
   respond: (root: string, id: string, file: string) => Promise<void>
   /** Set a file's state then advance to the next unfinished file and open it. */
@@ -234,6 +237,15 @@ export const useGuidedReview = create<GuidedReviewState>((set, get) => ({
   challenge: async (_root, id, file) => {
     set({ busy: true })
     void dispatchToAgent(composeGuidedChallengePrompt(id, file)).finally(() => set({ busy: false }))
+  },
+
+  widen: async (_root, id) => {
+    const session = get().sessions.find((x) => x.id === id)
+    // Anchor the wide pass on the files the route already knows about, so it
+    // widens around the review rather than wandering the whole repository.
+    const files = (session?.route ?? []).map((e) => e.file)
+    set({ busy: true })
+    void dispatchToAgent(composeGuidedWidenPrompt(id, files)).finally(() => set({ busy: false }))
   },
 
   respond: async (_root, id, file) => {

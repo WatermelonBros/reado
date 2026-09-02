@@ -24,6 +24,7 @@ vi.mock("../review", () => ({
   composeGuidedFilePrompt: vi.fn(() => "file-prompt"),
   composeGuidedPlanPrompt: vi.fn(() => "plan-prompt"),
   composeGuidedRespondPrompt: vi.fn(() => "respond-prompt"),
+  composeGuidedWidenPrompt: vi.fn(() => "widen-prompt"),
 }))
 const commentsState = { load: vi.fn(() => Promise.resolve()) }
 vi.mock("../comments", () => ({ useComments: { getState: () => commentsState } }))
@@ -47,6 +48,7 @@ import {
   composeGuidedFilePrompt,
   composeGuidedPlanPrompt,
   composeGuidedRespondPrompt,
+  composeGuidedWidenPrompt,
 } from "@/lib/review"
 
 const flush = () => new Promise((r) => setTimeout(r))
@@ -288,6 +290,23 @@ describe("reviewFile / challenge / respond", () => {
     expect(dispatchToAgent).toHaveBeenCalledWith("respond-prompt")
     await flush()
     expect(useGuidedReview.getState().busy).toBe(false)
+  })
+
+  it("widen anchors the wide pass on the route's files", async () => {
+    const s = session({ id: "s1", route: [entry("a.ts"), entry("b.ts")] })
+    useGuidedReview.setState({ sessions: [s] })
+    await useGuidedReview.getState().widen("/p", "s1")
+    // Widening around the review, not wandering the whole repository.
+    expect(composeGuidedWidenPrompt).toHaveBeenCalledWith("s1", ["a.ts", "b.ts"])
+    expect(dispatchToAgent).toHaveBeenCalledWith("widen-prompt")
+    await flush()
+    expect(useGuidedReview.getState().busy).toBe(false)
+  })
+
+  it("widen still runs for an unknown session, with no files to anchor on", async () => {
+    useGuidedReview.setState({ sessions: [] })
+    await useGuidedReview.getState().widen("/p", "nope")
+    expect(composeGuidedWidenPrompt).toHaveBeenCalledWith("nope", [])
   })
 })
 

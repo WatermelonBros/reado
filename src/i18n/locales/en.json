@@ -258,7 +258,9 @@
       "respond": "Respond to comments",
       "respondHint": "Ask the agent to reply to the comments already on this file",
       "reviewed": "Mark reviewed",
-      "skip": "Skip"
+      "skip": "Skip",
+      "widen": "Wide pass",
+      "widenHint": "Step back from this file: look across the subsystem for repeated patterns, drift from the specs, and what the tests actually say."
     },
     "openFile": "Show {file}",
     "proposals": "Proposals",
