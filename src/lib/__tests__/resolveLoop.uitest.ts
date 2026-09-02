@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("../api", () => ({
+  anywhereNotify: vi.fn(() => Promise.resolve()),
   anywherePublishLoop: vi.fn(() => Promise.resolve()),
   createFile: vi.fn(() => Promise.resolve()),
   readFile: vi.fn(() => Promise.resolve(null)),

@@ -12,6 +12,16 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **A paired phone can watch the agent, and talk to it.** The Agent tab mirrors
+  the desktop's agent terminal — its recent output, updated as it works — with a
+  box to type back. The desktop keeps the only writer on that PTY; the phone
+  sends keystrokes through it rather than opening a competing session. (The
+  Shell tab is unchanged: that one is the phone's own terminal.)
+- **Reado Anywhere finishes its review loop.** From the phone you can now
+  approve or discard the AI pre-review's draft comments, resolve threads, and
+  mark a file read — the same `.reado/` the desktop writes. And the desk pushes
+  notices (the loop finished, the agent is waiting on you) to any paired phone,
+  so walking away from the desk no longer means finding out later.
 - **"Done" now comes with evidence.** A resolved task records who resolved it
   (agent and model), which diff did it, and what a verification command said —
   `reado task done <id> --capture --verify "pnpm test"`. A passing check marks

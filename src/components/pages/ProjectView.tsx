@@ -31,6 +31,7 @@ import {
   listFiles,
   type Objective,
   previewClose,
+  ptyWrite,
   readFile,
   reanchorFile,
   rebuildIndex,
@@ -54,6 +55,7 @@ import { useResolveLoop } from "@/lib/resolveLoop"
 import { composeReviewPrompt } from "@/lib/review"
 import { useSpecs } from "@/lib/specs"
 import { type Tool, useProject, useSessions, useSettings, useWorkspace } from "@/lib/store"
+import { useTerminals } from "@/lib/terminals"
 import { useTours } from "@/lib/tours"
 import { clearOpenFile, currentOpenFile, setWindowTitle } from "@/lib/window"
 
@@ -169,6 +171,16 @@ export function ProjectView({ root }: { root: string }) {
       }),
       listen<string>("anywhere://prereview", (e) => {
         if (e.payload === root) usePreReview.getState().generate(root)
+      }),
+      // Keystrokes from a paired phone, typed into the agent terminal here. The
+      // desktop owns the PTY, so it does the write — one writer, no interleaving.
+      listen<string>("anywhere://agent-input", (e) => {
+        const term = useTerminals.getState()
+        const target =
+          term.activeId && term.agentTerminals.includes(term.activeId)
+            ? term.activeId
+            : term.agentTerminals[0]
+        if (target) void ptyWrite(target, e.payload).catch(() => {})
       }),
       // A paired phone triggered a guided-review agent action — run it here (the
       // agent lives on this desktop). Disposals the phone does hit disk directly.

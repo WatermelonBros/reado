@@ -29,6 +29,7 @@ import { useTranslation } from "react-i18next"
 import { Input } from "@/components/atoms/Input"
 import { ChevronIcon, CloseIcon, SearchIcon } from "@/components/atoms/icons"
 import {
+  anywherePublishAgent,
   clipboardImageToTemp,
   ptyKill,
   ptyResize,
@@ -38,7 +39,7 @@ import {
 } from "@/lib/api"
 import { notify, notifyError } from "@/lib/notice"
 import { useProject, useSettings } from "@/lib/store"
-import { shellQuote, terminalLinks } from "@/lib/terminals"
+import { shellQuote, terminalLinks, useTerminals } from "@/lib/terminals"
 import { xtermFontFamily, xtermLinkColor, xtermTheme } from "@/lib/xtermTheme"
 
 const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
@@ -50,6 +51,26 @@ interface Props {
   id: string
   cwd: string
   active: boolean
+}
+
+/** The mirrored tail, per terminal. Bounded: a phone wants the last screenful of
+ *  an agent working, not an unbounded transcript. */
+const MIRROR_CHARS = 8000
+const mirrorTail = new Map<string, string>()
+let mirrorPending: ReturnType<typeof setTimeout> | null = null
+
+/** Append to the mirror and publish, coalesced — an agent emits output in bursts
+ *  and a publish per chunk would be a command per byte. */
+function mirrorToPhone(id: string, bytes: Uint8Array) {
+  // The mirror carries text, not the raw stream: the phone renders it into its
+  // own terminal, which does its own decoding.
+  const next = (mirrorTail.get(id) ?? "") + new TextDecoder().decode(bytes)
+  mirrorTail.set(id, next.length > MIRROR_CHARS ? next.slice(-MIRROR_CHARS) : next)
+  if (mirrorPending) return
+  mirrorPending = setTimeout(() => {
+    mirrorPending = null
+    void anywherePublishAgent(id, mirrorTail.get(id) ?? "").catch(() => {})
+  }, 400)
 }
 
 export function Terminal({ id, cwd, active }: Props) {
@@ -215,7 +236,16 @@ export function Terminal({ id, cwd, active }: Props) {
       }
       if (disposed) return
 
-      unlisten.push(await listen<string>(`pty-output-${id}`, (e) => term.write(decode(e.payload))))
+      unlisten.push(
+        await listen<string>(`pty-output-${id}`, (e) => {
+          const text = decode(e.payload)
+          term.write(text)
+          // Mirror an agent pane to any paired phone. Best-effort and rate-limited
+          // by the tail buffer below: Anywhere may be off, and a phone watching an
+          // agent work wants the recent output, not every byte re-sent.
+          if (useTerminals.getState().agentTerminals.includes(id)) mirrorToPhone(id, text)
+        }),
+      )
       unlisten.push(
         await listen(`pty-exit-${id}`, () => term.write("\r\n\x1b[2m[process exited]\x1b[0m\r\n")),
       )

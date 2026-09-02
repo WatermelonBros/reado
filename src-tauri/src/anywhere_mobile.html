@@ -92,6 +92,7 @@
   .crumb { padding: 9px 16px; font-size: 13px; color: var(--faint); font-family: ui-monospace, Menlo, monospace;
     overflow-x: auto; white-space: nowrap; border-bottom: 1px solid var(--border); }
   .filehint { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 7px;
+    /* The mark-read button sits at the far end of the hint strip. */
     padding: 8px 16px; font-size: 12px; color: var(--faint);
     background: color-mix(in oklch, var(--bg) 90%, transparent); backdrop-filter: blur(8px);
     border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
@@ -114,8 +115,14 @@
   .badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-strong);
     color: var(--muted); font-family: ui-monospace, Menlo, monospace; flex: none; }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .filehint .markread { margin-left: auto; padding: 5px 10px; font-size: 12px; }
   .mini { flex: none; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; color: var(--muted); }
   .mini:active { background: var(--elevated); } .mini.totask { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 40%, var(--border)); }
+  /* Agent mirror: the desk's terminal, watched from here. */
+  .agentout { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 12px 16px; }
+  .composer { display: flex; flex: none; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--elevated); }
+  .composer input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--bright); font: inherit; }
+  .composer .send { flex: none; padding: 10px 16px; border-radius: 10px; border: 0; background: var(--accent); color: var(--bg); font: inherit; font-weight: 600; }
 
   /* Terminal */
   #termwrap { display: flex; flex-direction: column; height: 100%; }
@@ -286,16 +293,35 @@
   }
   function showTabs(proj, active) {
     els.tabs.hidden = false;
-    const defs = [["files", "Files", "files"], ["changes", "Changes", "diff"], ["review", "Review", "review"], ["terminal", "Terminal", "terminal"], ["notes", "Notes", "notes"]];
+    const defs = [["files", "Files", "files"], ["changes", "Changes", "diff"], ["review", "Review", "review"], ["agent", "Agent", "terminal"], ["terminal", "Shell", "terminal"], ["notes", "Notes", "notes"]];
     els.tabs.innerHTML = defs.map(([t, label, icon]) =>
       '<button data-t="' + t + '" class="' + (t === active ? "on" : "") + '">' +
       '<span class="ti">' + ic(icon, 21) + "</span>" + label + "</button>").join("");
     els.tabs.querySelectorAll("button").forEach((b) => b.onclick = () => go({ proj, tab: b.dataset.t }));
   }
 
+  // The desk pushes notices (loop finished, the agent is waiting on you) into a
+  // bounded ring; we poll it and surface what we haven't shown yet. A phone is
+  // usually not on this screen when the interesting thing happens.
+  let lastNotice = Number(localStorage.getItem("reado_anywhere_notice") || 0);
+  async function pollNotices() {
+    if (!token()) return;
+    try {
+      const list = await api("/api/notices");
+      for (const n of list || []) {
+        if (n.id <= lastNotice) continue;
+        lastNotice = n.id;
+        localStorage.setItem("reado_anywhere_notice", String(n.id));
+        toast(n.text);
+      }
+    } catch { /* the desk may be off; try again next tick */ }
+  }
+  setInterval(pollNotices, 5000);
+
   async function render() {
     detachTerm();
     clearReviewPoll();
+    clearAgentPoll();
     els.main.className = "";
     // A fresh scan carries a pairing secret rather than a credential: spend it,
     // then drop it from the URL so a shared link or a screenshot carries nothing.
@@ -316,6 +342,7 @@
     const tab = r.tab || "files";
     if (tab === "changes") return renderChanges(r.proj);
     if (tab === "review") return renderReview(r.proj);
+    if (tab === "agent") return renderAgent(r.proj);
     if (tab === "terminal") return renderTerminal(r.proj);
     if (tab === "notes") return renderNotes(r.proj);
     return renderFiles(r.proj, r.dir || "");
@@ -392,7 +419,15 @@
         '"><span class="ln">' + (i + 1) + "</span>" + (highlight(l) || " ") + "</div>").join("");
       els.main.innerHTML = "";
       const hint = document.createElement("div"); hint.className = "filehint";
-      hint.innerHTML = ic("notes", 13) + "<span>Tap a line to add a note</span>";
+      hint.innerHTML = ic("notes", 13) + '<span>Tap a line to add a note</span>' +
+        '<button class="mini markread">Mark read</button>';
+      hint.querySelector(".markread").onclick = async (ev) => {
+        try {
+          await api("/api/mark-read", { method: "POST", body: JSON.stringify({ project: proj, file, read: true }) });
+          ev.target.textContent = "Read ✓";
+          ev.target.disabled = true;
+        } catch (e) { toast(e.message); }
+      };
       els.main.appendChild(hint); els.main.appendChild(pre);
       pre.querySelectorAll(".line").forEach((d) => d.onclick = () => openSheet(proj, file, +d.dataset.line));
     } catch (e) { els.main.innerHTML = fail(e); }
@@ -468,21 +503,91 @@
   // Identical to the desktop's TYPE_COLOR mapping.
   const TYPE_COLOR = { bug: "var(--marker)", refactor: "var(--syn-keyword)", performance: "var(--syn-number)",
     question: "var(--syn-control)", note: "var(--muted)" };
+  let agentPoll = null;
+
+  function clearAgentPoll() {
+    if (agentPoll) { clearInterval(agentPoll); agentPoll = null; }
+  }
+
+  /** Watch the agent working on the desktop, and type into it.
+   *
+   *  This is a mirror, not a second shell: the desktop owns that PTY, publishes
+   *  its recent output, and performs our keystrokes. The "Shell" tab is the
+   *  phone's own terminal; this one is the desk's. */
+  async function renderAgent(proj) {
+    showTabs(proj, "agent");
+    setChrome({ title: nameOf(proj), proj, hact: { label: "Run agent", fn: () => runAgent(proj) } });
+    els.main.innerHTML =
+      '<pre class="code agentout" style="white-space:pre-wrap"></pre>' +
+      '<div class="composer"><input class="agentin" placeholder="Type to the agent…" autocapitalize="off" autocorrect="off" spellcheck="false">' +
+      '<button class="send">Send</button></div>';
+    const out = els.main.querySelector(".agentout");
+    const input = els.main.querySelector(".agentin");
+    let seen = -1;
+
+    const draw = async () => {
+      try {
+        const m = await api("/api/agent-mirror");
+        if (m.seq === seen) return;              // nothing new since last poll
+        seen = m.seq;
+        out.textContent = m.terminal ? m.text : "No agent running on the desktop.";
+        out.scrollTop = out.scrollHeight;
+      } catch { /* the desk may be asleep; the next tick retries */ }
+    };
+    await draw();
+    clearAgentPoll();
+    agentPoll = setInterval(draw, 900);
+
+    const send = async (data) => {
+      try { await api("/api/agent-input", { method: "POST", body: JSON.stringify({ data }) }); }
+      catch (e) { toast(e.message); }
+    };
+    els.main.querySelector(".send").onclick = async () => {
+      const text = input.value;
+      if (!text) return;
+      input.value = "";
+      await send(text + "\r");
+      setTimeout(draw, 300);
+    };
+    input.onkeydown = (e) => { if (e.key === "Enter") els.main.querySelector(".send").click(); };
+  }
+
   async function renderNotes(proj) {
     showTabs(proj, "notes");
     setChrome({ title: nameOf(proj), proj, hact: { label: "Run agent", fn: () => runAgent(proj) } });
     els.main.innerHTML = '<div class="pad faint">Loading…</div>';
     try {
-      const list = await api("/api/comments?project=" + enc(proj));
+      const [list, drafts] = await Promise.all([
+        api("/api/comments?project=" + enc(proj)),
+        api("/api/prereview-drafts?project=" + enc(proj)).catch(() => []),
+      ]);
       const open = list.filter((c) => c.state === "open" || c.state === "in-progress");
-      if (!open.length) { els.main.innerHTML = '<div class="center"><p>No open notes. Open a file and tap a line to add one.</p></div>'; return; }
-      els.main.innerHTML = open.map((c) => '<div class="row note" data-id="' + esc(c.id) + '" data-file="' + esc(c.anchor.file) +
+      // Drafts first: they are the ones waiting on a decision.
+      const draftHtml = (drafts || []).map((d) =>
+        '<div class="row draft" data-id="' + esc(d.id) + '">' +
+        '<span class="dot" style="background:' + (TYPE_COLOR[d.type] || "var(--muted)") + '"></span>' +
+        '<span class="grow"><div class="title">' + esc(d.body || "") + "</div>" +
+        '<div class="sub">' + esc(d.file || "") + ":" + (d.line || 1) + " · draft</div></span>" +
+        '<button class="mini totask approve">✓</button><button class="mini discard">✕</button></div>').join("");
+      if (!open.length && !draftHtml) { els.main.innerHTML = '<div class="center"><p>No open notes. Open a file and tap a line to add one.</p></div>'; return; }
+      els.main.innerHTML = draftHtml + open.map((c) => '<div class="row note" data-id="' + esc(c.id) + '" data-file="' + esc(c.anchor.file) +
         '" data-line="' + c.anchor.startLine + '">' +
         '<span class="dot" style="background:' + (TYPE_COLOR[c.type] || "var(--muted)") + '"></span>' +
         '<span class="grow open"><div class="title">' + esc(c.messages[0] ? c.messages[0].body : "") + "</div>" +
         '<div class="sub">' + esc(c.anchor.file) + ":" + c.anchor.startLine + "</div></span>" +
         (c.kind === "task" ? '<span class="badge">task</span>' : '<button class="mini totask">→ task</button>') +
         '<button class="mini done">✓</button></div>').join("");
+      els.main.querySelectorAll(".draft").forEach((row) => {
+        const id = row.dataset.id;
+        const decide = async (approve) => {
+          try {
+            await api("/api/prereview-approve", { method: "POST", body: JSON.stringify({ project: proj, id, approve }) });
+          } catch (e) { toast(e.message); }
+          renderNotes(proj);
+        };
+        row.querySelector(".approve").onclick = () => decide(true);
+        row.querySelector(".discard").onclick = () => decide(false);
+      });
       els.main.querySelectorAll(".note").forEach((row) => {
         const id = row.dataset.id;
         row.querySelector(".open").onclick = () => go({ proj, file: row.dataset.file });

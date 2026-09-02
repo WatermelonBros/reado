@@ -100,6 +100,40 @@ struct Running {
 /// it. `None` means no loop is active.
 type Loop = Arc<Mutex<Option<String>>>;
 
+/// A mirror of the desktop's agent terminal, so a phone can watch the agent work
+/// on the desk rather than a second shell of its own.
+///
+/// The desktop publishes here (it already receives the PTY's output as an event);
+/// the server only carries it. That keeps one owner for the PTY — duplicating
+/// ownership in the server thread is how two readers start stealing each other's
+/// bytes.
+#[derive(Default, Clone, Serialize)]
+pub struct AgentMirror {
+    /// Rolling tail of the agent terminal's output, already decoded.
+    pub text: String,
+    /// Bumped on every publish, so a phone can poll cheaply and skip no-ops.
+    pub seq: u64,
+    /// The terminal the mirror belongs to; `None` when no agent is running.
+    pub terminal: Option<String>,
+}
+
+type Agent = Arc<Mutex<AgentMirror>>;
+
+/// Notices the desktop wants paired phones to see (loop lifecycle, agent needs
+/// you). A bounded ring: a phone that has been asleep gets the recent ones, not
+/// an unbounded backlog.
+#[derive(Clone, Serialize)]
+pub struct Notice {
+    pub id: u64,
+    pub kind: String,
+    pub text: String,
+    pub at: u64,
+}
+
+const MAX_NOTICES: usize = 50;
+
+type Notices = Arc<Mutex<Vec<Notice>>>;
+
 /// The paired-device store, shared between the Tauri commands (the device list,
 /// revocation) and the server (authentication), so revoking a phone takes effect
 /// on the next request rather than at the next restart.
@@ -120,6 +154,37 @@ pub struct AnywhereState {
     recents: Recents,
     terminals: Terminals,
     loop_state: Loop,
+    agent: Agent,
+    notices: Notices,
+}
+
+/// The shared state the server needs, cloned out of `AnywhereState` in one go —
+/// nine positional arguments is a call nobody can read.
+struct Deps {
+    devices: Devices,
+    pairing: Pairing,
+    projects: Projects,
+    recents: Recents,
+    terminals: Terminals,
+    loop_state: Loop,
+    agent: Agent,
+    notices: Notices,
+}
+
+impl AnywhereState {
+    /// Everything the server borrows from the managed state.
+    fn deps(&self, devices: Devices) -> Deps {
+        Deps {
+            devices,
+            pairing: self.pairing.clone(),
+            projects: self.projects.clone(),
+            recents: self.recents.clone(),
+            terminals: self.terminals.clone(),
+            loop_state: self.loop_state.clone(),
+            agent: self.agent.clone(),
+            notices: self.notices.clone(),
+        }
+    }
 }
 
 /// Shared state handed to the axum handlers.
@@ -133,6 +198,8 @@ struct Api {
     recents: Recents,
     terminals: Terminals,
     loop_state: Loop,
+    agent: Agent,
+    notices: Notices,
     app: AppHandle,
 }
 
@@ -309,15 +376,17 @@ fn bind_address(chosen: Option<&str>) -> Result<IpAddr, String> {
 
 /// Build the cert, bind the TLS server, spawn it, and return its handle + info.
 /// Shared by the `anywhere_enable` command and the dev autostart.
-async fn start_server(
-    app: AppHandle,
-    devices: Devices,
-    pairing_slot: Pairing,
-    projects: Projects,
-    recents: Recents,
-    terminals: Terminals,
-    loop_state: Loop,
-) -> Result<(Handle, AnywhereInfo), String> {
+async fn start_server(app: AppHandle, deps: Deps) -> Result<(Handle, AnywhereInfo), String> {
+    let Deps {
+        devices,
+        pairing: pairing_slot,
+        projects,
+        recents,
+        terminals,
+        loop_state,
+        agent,
+        notices,
+    } = deps;
     install_crypto();
 
     let (bind, mdns_on) = {
@@ -356,6 +425,8 @@ async fn start_server(
         recents,
         terminals,
         loop_state,
+        agent,
+        notices,
         app,
     };
 
@@ -372,6 +443,12 @@ async fn start_server(
         .route("/api/run-agent", post(run_agent))
         .route("/api/prereview", post(prereview))
         .route("/api/loop", get(loop_get))
+        .route("/api/agent-mirror", get(agent_mirror_get))
+        .route("/api/agent-input", post(agent_input))
+        .route("/api/notices", get(notices_get))
+        .route("/api/mark-read", post(mark_read))
+        .route("/api/prereview-drafts", get(prereview_drafts))
+        .route("/api/prereview-approve", post(prereview_approve))
         .route("/api/sessions", get(sessions_get))
         .route("/api/session-accept", post(session_accept))
         .route("/api/session-discard", post(session_discard))
@@ -514,16 +591,8 @@ pub async fn anywhere_enable(
         return Ok(running.info.clone());
     }
     let devices = devices(&app, &state)?;
-    let (handle, info) = start_server(
-        app,
-        devices,
-        state.pairing.clone(),
-        state.projects.clone(),
-        state.recents.clone(),
-        state.terminals.clone(),
-        state.loop_state.clone(),
-    )
-    .await?;
+    let deps = state.deps(devices);
+    let (handle, info) = start_server(app, deps).await?;
     *state.running.lock().map_err(|e| e.to_string())? = Some(Running {
         handle,
         info: info.clone(),
@@ -551,11 +620,8 @@ pub fn dev_autostart(app: &AppHandle) {
             return;
         }
     };
-    let pairing_slot = state.pairing.clone();
-    let projects = state.projects.clone();
-    let recents = state.recents.clone();
-    let terminals = state.terminals.clone();
-    let loop_state = state.loop_state.clone();
+    let deps = state.deps(devices);
+    let projects = deps.projects.clone();
     // For testing without clicking the native UI, seed a project from
     // READO_ANYWHERE_PROJECT so the phone has something to browse immediately.
     if let Ok(root) = std::env::var("READO_ANYWHERE_PROJECT") {
@@ -574,15 +640,7 @@ pub fn dev_autostart(app: &AppHandle) {
             );
         }
     }
-    match tauri::async_runtime::block_on(start_server(
-        app.clone(),
-        devices,
-        pairing_slot,
-        projects,
-        recents,
-        terminals,
-        loop_state,
-    )) {
+    match tauri::async_runtime::block_on(start_server(app.clone(), deps)) {
         Ok((handle, info)) => {
             crate::log::info(
                 "anywhere",
@@ -685,6 +743,43 @@ pub fn anywhere_set_recents(
 pub fn anywhere_publish_loop(state: TauriState<'_, AnywhereState>, json: Option<String>) {
     if let Ok(mut g) = state.loop_state.lock() {
         *g = json;
+    }
+}
+
+/// Mirror the agent terminal's output for paired phones.
+///
+/// The desktop publishes because it already receives the PTY's output as an
+/// event and owns the session; a second reader in the server thread would race
+/// it for the same bytes. `text` is a rolling tail, not the whole scrollback.
+#[tauri::command]
+pub fn anywhere_publish_agent(
+    state: TauriState<'_, AnywhereState>,
+    terminal: Option<String>,
+    text: String,
+) {
+    if let Ok(mut mirror) = state.agent.lock() {
+        mirror.seq = mirror.seq.wrapping_add(1);
+        mirror.terminal = terminal;
+        mirror.text = text;
+    }
+}
+
+/// Push a notice to paired phones (loop finished, the agent is waiting on you).
+/// Bounded so a long session can't grow the ring without limit.
+#[tauri::command]
+pub fn anywhere_notify(state: TauriState<'_, AnywhereState>, kind: String, text: String) {
+    if let Ok(mut notices) = state.notices.lock() {
+        let id = notices.last().map(|n| n.id + 1).unwrap_or(1);
+        notices.push(Notice {
+            id,
+            kind,
+            text,
+            at: chrono::Utc::now().timestamp_millis() as u64,
+        });
+        let overflow = notices.len().saturating_sub(MAX_NOTICES);
+        if overflow > 0 {
+            notices.drain(0..overflow);
+        }
     }
 }
 
@@ -1441,6 +1536,145 @@ async fn comment_update(
     Ok(StatusCode::OK)
 }
 
+/// The agent terminal's mirrored output. The phone polls this with the `seq` it
+/// last saw; an unchanged `seq` means nothing new to draw.
+async fn agent_mirror_get(State(api): State<Api>) -> Json<AgentMirror> {
+    Json(
+        api.agent
+            .lock()
+            .map(|m| m.clone())
+            .unwrap_or_else(|_| AgentMirror::default()),
+    )
+}
+
+#[derive(Deserialize)]
+struct AgentInput {
+    data: String,
+}
+
+/// Keystrokes from the phone, forwarded to the desktop's agent terminal. The
+/// desktop owns the PTY and does the write; this only carries the bytes, which
+/// is what keeps a single writer on that terminal.
+async fn agent_input(State(api): State<Api>, Json(b): Json<AgentInput>) -> StatusCode {
+    let _ = api.app.emit("anywhere://agent-input", b.data);
+    StatusCode::OK
+}
+
+/// Recent notices for a paired phone. Bounded, so a phone that has been asleep
+/// for an hour gets the tail rather than an unbounded backlog.
+async fn notices_get(State(api): State<Api>) -> Json<Vec<Notice>> {
+    Json(api.notices.lock().map(|n| n.clone()).unwrap_or_default())
+}
+
+#[derive(Deserialize)]
+struct MarkReadBody {
+    project: String,
+    file: String,
+    #[serde(default)]
+    read: bool,
+}
+
+/// Mark a file read (or unread) from the phone. Reading progress lives in
+/// `.reado/`, so this writes the same store the desktop does.
+async fn mark_read(
+    State(api): State<Api>,
+    Json(b): Json<MarkReadBody>,
+) -> Result<StatusCode, StatusCode> {
+    let root = api.root(&b.project).ok_or(StatusCode::NOT_FOUND)?;
+    // No content snapshot from the phone: the read-delta baseline should be the
+    // bytes the reader actually saw, and the phone renders its own rendition.
+    crate::progress::set_read(root, b.file, b.read, None)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
+}
+
+/// The AI pre-review's draft comments, so the phone can curate them. The store is
+/// the same `.reado/pre-review.json` the desktop panel reads.
+async fn prereview_drafts(
+    State(api): State<Api>,
+    Query(q): Query<ProjectQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let root = api.root(&q.project).ok_or(StatusCode::NOT_FOUND)?;
+    let path = Path::new(&root).join(".reado").join("pre-review.json");
+    let text = std::fs::read_to_string(path).unwrap_or_else(|_| "[]".into());
+    Ok(Json(
+        serde_json::from_str(&text).unwrap_or(serde_json::Value::Array(vec![])),
+    ))
+}
+
+#[derive(Deserialize)]
+struct DraftDecision {
+    project: String,
+    id: String,
+    /// True to turn the draft into a real anchored comment, false to discard it.
+    approve: bool,
+}
+
+/// Approve or discard one pre-review draft. Approving materialises a real
+/// anchored task comment — the same thing the desktop's Approve button does —
+/// and either way the draft leaves the store.
+async fn prereview_approve(
+    State(api): State<Api>,
+    Json(b): Json<DraftDecision>,
+) -> Result<StatusCode, StatusCode> {
+    let root = api.root(&b.project).ok_or(StatusCode::NOT_FOUND)?;
+    let path = Path::new(&root).join(".reado").join("pre-review.json");
+    let text = std::fs::read_to_string(&path).map_err(|_| StatusCode::NOT_FOUND)?;
+    let drafts: Vec<serde_json::Value> = serde_json::from_str(&text).unwrap_or_default();
+
+    let Some(draft) = drafts
+        .iter()
+        .find(|d| d.get("id").and_then(|v| v.as_str()) == Some(b.id.as_str()))
+    else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    if b.approve {
+        let file = draft
+            .get("file")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let line = draft.get("line").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+        let body = draft
+            .get("body")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let comment_type = draft
+            .get("type")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or(CommentType::Note);
+        core::create_comment(
+            &root,
+            NewComment {
+                file,
+                scope: Scope::Range,
+                start_line: line.max(1),
+                end_line: line.max(1),
+                comment_type,
+                kind: CommentKind::Task,
+                body,
+                context: core::Context::default(),
+                url: None,
+                x: None,
+                y: None,
+            },
+            "human",
+            None,
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    let remaining: Vec<_> = drafts
+        .into_iter()
+        .filter(|d| d.get("id").and_then(|v| v.as_str()) != Some(b.id.as_str()))
+        .collect();
+    let out = serde_json::to_string_pretty(&remaining).unwrap_or_else(|_| "[]".into());
+    std::fs::write(&path, out).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
+}
+
 /// Emit a desktop event so the focused window dispatches the agent / pre-review.
 fn signal(api: &Api, event: &str, root: String) -> StatusCode {
     let _ = api.app.emit(event, root);
@@ -1638,6 +1872,42 @@ mod tests {
         if let Ok(addr) = bind_address(None) {
             assert_ne!(addr.to_string(), "0.0.0.0");
         }
+    }
+
+    #[test]
+    fn the_notice_ring_keeps_the_most_recent() {
+        // A phone asleep for an hour should get the tail, not an unbounded
+        // backlog, and the ids must stay monotonic across the eviction.
+        let mut notices: Vec<Notice> = Vec::new();
+        for i in 0..(MAX_NOTICES + 10) {
+            let id = notices.last().map(|n: &Notice| n.id + 1).unwrap_or(1);
+            notices.push(Notice {
+                id,
+                kind: "test".into(),
+                text: format!("n{i}"),
+                at: 0,
+            });
+            let overflow = notices.len().saturating_sub(MAX_NOTICES);
+            if overflow > 0 {
+                notices.drain(0..overflow);
+            }
+        }
+        assert_eq!(notices.len(), MAX_NOTICES);
+        assert_eq!(
+            notices.last().unwrap().text,
+            format!("n{}", MAX_NOTICES + 9)
+        );
+        assert!(notices.windows(2).all(|w| w[1].id == w[0].id + 1));
+    }
+
+    #[test]
+    fn an_unpublished_agent_mirror_reads_as_no_agent() {
+        // `terminal: None` is what the phone renders as "nothing running", so
+        // the default must not look like an agent with an empty screen.
+        let mirror = AgentMirror::default();
+        assert!(mirror.terminal.is_none());
+        assert_eq!(mirror.seq, 0);
+        assert!(mirror.text.is_empty());
     }
 
     #[test]

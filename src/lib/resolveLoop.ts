@@ -12,8 +12,9 @@
  * Delivery is Anywhere's job; this store only produces the events.
  */
 import { create } from "zustand"
+import { t } from "@/i18n"
 import { dispatchToAgent } from "./agents"
-import { anywherePublishLoop, createFile, readFile, writeFile } from "./api"
+import { anywhereNotify, anywherePublishLoop, createFile, readFile, writeFile } from "./api"
 import { useComments } from "./comments"
 import { log, safeError } from "./logger"
 import { notifyResolved } from "./notify"
@@ -194,6 +195,7 @@ export const useResolveLoop = create<ResolveLoopState>((set, get) => ({
     const next: LoopState = { ...active, status: "failed" }
     set({ active: next })
     void persist(root, next)
+    void anywhereNotify("failed", t("loop.failed")).catch(() => {})
   },
 
   sync: (root) => {
@@ -218,7 +220,12 @@ export const useResolveLoop = create<ResolveLoopState>((set, get) => ({
     }
     set({ active: next })
     void persist(root, next)
-    if (finished) void notifyResolved(0)
+    if (finished) {
+      void notifyResolved(0)
+      // A paired phone is the reason to care that this finished: the human who
+      // started the loop has usually walked away from the desk.
+      void anywhereNotify("finished", t("loop.finished")).catch(() => {})
+    }
   },
 
   tick: (root) => {
@@ -228,6 +235,7 @@ export const useResolveLoop = create<ResolveLoopState>((set, get) => ({
       const next = { ...active, status: "needs_approval" as const }
       set({ active: next })
       void persist(root, next)
+      void anywhereNotify("needs-approval", t("loop.needsApproval")).catch(() => {})
     }
   },
 

@@ -672,6 +672,15 @@ export const sessionDelete = (root: string, id: string) =>
   invoke<void>("session_delete", { root, id })
 
 /** Publish (or clear with null) the resolve-loop state for paired phones. */
+/** Mirror the agent terminal's recent output for paired phones. The desktop
+ *  publishes because it owns the PTY; a second reader would race it. */
+export const anywherePublishAgent = (terminal: string | null, text: string) =>
+  invoke<void>("anywhere_publish_agent", { terminal, text })
+
+/** Push a notice to paired phones (loop finished, the agent needs you). */
+export const anywhereNotify = (kind: string, text: string) =>
+  invoke<void>("anywhere_notify", { kind, text })
+
 export const anywherePublishLoop = (json: string | null) =>
   invoke<void>("anywhere_publish_loop", { json })
 

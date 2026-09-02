@@ -37,7 +37,9 @@
 ## 4. Mobile PWA — review actions
 
 - [x] 4.1 Leave anchored comments (tap a line → sheet → POST to `.reado/`). (Replies deferred.)
-- [ ] 4.2 Approve drafts / resolve threads / mark read — deferred.
+- [x] 4.2 Approve/discard AI pre-review drafts (`/api/prereview-drafts`,
+      `/api/prereview-approve`), resolve threads (the ✓ on a note), and mark a
+      file read (`/api/mark-read`).
 - [~] 4.3 Phone writes to the same `.reado/`; the desktop picks it up via its file
       watcher. (Live push the other way is part of the notifications slice.)
 - [x] 4.4 Trigger AI pre-review from the phone (desktop runs it via an event). (Curation deferred.)
@@ -46,19 +48,23 @@
 
 - [x] 5.1 "Run the agent" from the phone → desktop event → `dispatchToAgent`,
       scoped to the selected project.
-- [ ] 5.2 Stream the agent terminal's PTY output to the phone in real time — deferred.
-- [ ] 5.3 Send phone input back to the agent's PTY — deferred.
+- [x] 5.2 The desktop mirrors its agent terminal's output (it owns the PTY);
+      `/api/agent-mirror` serves the rolling tail with a `seq` the phone polls.
+- [x] 5.3 `/api/agent-input` → `anywhere://agent-input` → the desktop writes it
+      to the agent's PTY, so that terminal keeps a single writer.
 
 ## 6. Notifications (in-app channel)
 
-- [ ] 6.1 In-app notification channel — deferred (pairs with the Async Review Loop events).
+- [x] 6.1 A bounded notice ring (`anywhere_notify` → `/api/notices`) carrying the
+      resolve loop's lifecycle; the phone polls it and toasts what it hasn't shown.
 
 ## 7. Desktop surface
 
 - [x] 7.1 "Reado Anywhere" dialog (Modal): enable/disable + the QR (token +
       fingerprint payload), URL copy, fingerprint shown. Command-palette entry to
       open it. Themed with the app's tokens.
-- [ ] 7.2 Paired-devices list with per-device revoke. (with the pairing slice)
+- [x] 7.2 Paired-devices list with per-device revoke — landed with
+      `anywhere-hardening`, which owns the credential model.
 
 ## 8. Glue
 

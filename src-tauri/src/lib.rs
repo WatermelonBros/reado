@@ -230,6 +230,8 @@ pub fn run() {
             anywhere::anywhere_clear_project,
             anywhere::anywhere_set_recents,
             anywhere::anywhere_publish_loop,
+            anywhere::anywhere_publish_agent,
+            anywhere::anywhere_notify,
             anywhere::anywhere_devices,
             anywhere::anywhere_revoke,
             anywhere::anywhere_revoke_all,
