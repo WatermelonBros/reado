@@ -335,7 +335,9 @@
       "start": "Risolvi i task aperti"
     },
     "failed": "Il ciclo si è fermato — non sta girando nulla",
-    "failedHint": "Il prompt non è arrivato a nessun agente. Avvia un agente nel terminale, poi rimanda la revisione."
+    "failedHint": "Il prompt non è arrivato a nessun agente. Avvia un agente nel terminale, poi rimanda la revisione.",
+    "unverified_one": "{count} è stato risolto senza controlli — vale la pena guardarlo.",
+    "unverified_other": "{count} sono stati risolti senza controlli — vale la pena guardarli."
   },
   "forge": {
     "noAdapter": "Il round-trip con l'host non è ancora disponibile per {provider} — revisiona in locale.",
@@ -726,7 +728,8 @@
       "in-progress": "In corso",
       "done": "Risolto",
       "discarded": "Scartato",
-      "blocked": "Bloccato"
+      "blocked": "Bloccato",
+      "resolved-unverified": "Risolto (non verificato)"
     },
     "task": "Task",
     "note": "Nota",
@@ -752,7 +755,12 @@
     "answer": "Rispondi",
     "answerPlaceholder": "Rispondi all'agente…",
     "attempts_one": "{count} tentativo fallito",
-    "attempts_other": "{count} tentativi falliti"
+    "attempts_other": "{count} tentativi falliti",
+    "resolvedBy": "Risolto da {agent}",
+    "verifyPassed": "Verificato: {cmd}",
+    "verifyFailed": "Controllo fallito: {cmd}",
+    "noVerify": "Nessun controllo l'ha verificato",
+    "diffRef": "Diff {ref}"
   },
   "terminal": {
     "new": "Nuovo terminale",

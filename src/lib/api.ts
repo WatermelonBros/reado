@@ -346,7 +346,14 @@ export const formatFile = (root: string, path: string, content: string) =>
 // ---- Annotations ---------------------------------------------------------
 
 export type CommentType = "bug" | "refactor" | "performance" | "question" | "note"
-export type CommentState = "open" | "in-progress" | "done" | "discarded" | "blocked"
+export type CommentState =
+  | "open"
+  | "in-progress"
+  | "done"
+  | "discarded"
+  | "blocked"
+  /** The agent says it fixed this and nothing checked — a claim, not a proof. */
+  | "resolved-unverified"
 export type CommentKind = "task" | "note"
 export type Scope = "range" | "file" | "project" | "web"
 
@@ -374,6 +381,21 @@ export interface Message {
   body: string
 }
 
+/** What a verification command reported. */
+export interface Verification {
+  cmd: string
+  passed: boolean
+}
+
+/** Provenance for a resolved task — the evidence behind "done". */
+export interface Resolution {
+  agent: string
+  model?: string
+  diffRef?: string
+  verify?: Verification
+  at: number
+}
+
 export interface Comment {
   id: string
   type: CommentType
@@ -395,6 +417,9 @@ export interface Comment {
   blockedReason?: string
   /** Failed agent attempts; the task blocks itself once the budget is spent. */
   attempts?: number
+  /** How the task was resolved: who, with what, against which diff, and whether
+   *  anything checked. */
+  resolution?: Resolution
   createdAt: number
   updatedAt: number
   messages: Message[]

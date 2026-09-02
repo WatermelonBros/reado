@@ -12,6 +12,19 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **"Done" now comes with evidence.** A resolved task records who resolved it
+  (agent and model), which diff did it, and what a verification command said —
+  `reado task done <id> --capture --verify "pnpm test"`. A passing check marks
+  the task done; anything else, including no check at all, leaves it
+  **Resolved (unverified)**: an agent's claim and a proof are different facts,
+  and collapsing them meant a reviewer couldn't tell which one they had. The
+  comment thread shows the provenance, and the review-loop bar says how many
+  resolutions nothing checked.
+- **The MCP server can close the loop, not just read it.** Alongside the
+  read-only resources it now exposes `task_done`, `task_fail`, `task_block`,
+  `comment_add` and `comment_reply`, each returning the id and the resulting
+  state rather than a bare success — so an agent can work through Reado's review
+  loop without shelling out to the CLI.
 - **A task can be blocked instead of failing forever.** An agent that hits a
   question it can't answer used to hand the task back as "open", which is
   indistinguishable from a task nobody has looked at — so the next loop sent it

@@ -243,7 +243,49 @@ fn tool_list() -> serde_json::Value {
         { "name": "browser_type", "description": "Set an input's value and fire input/change.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "selector": { "type": "string" }, "text": { "type": "string" } }, "required": ["selector", "text"] }) },
         { "name": "browser_scroll", "description": "Scroll the page to (x, y).", "inputSchema": serde_json::json!({ "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } }) },
         { "name": "browser_frame", "description": "Capture the current preview render as a PNG image.", "inputSchema": empty },
+        // Mutating: the review loop's own verbs, so an agent can close the loop
+        // through MCP instead of shelling out to the CLI. Each returns the id and
+        // the resulting state, not just "ok".
+        { "name": "task_done", "description": "Resolve a task, recording how. With `verify` the command decides: passing marks it done, otherwise it stays resolved-but-unverified for a human.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "diffRef": { "type": "string" }, "verify": { "type": "string" }, "model": { "type": "string" } }, "required": ["id"] }) },
+        { "name": "task_fail", "description": "Record a failed attempt on a task, with a note. Past the attempt budget the task blocks itself.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "note": { "type": "string" } }, "required": ["id"] }) },
+        { "name": "task_block", "description": "Block a task: you cannot proceed without a human answering first.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "reason": { "type": "string" } }, "required": ["id", "reason"] }) },
+        { "name": "comment_add", "description": "Add a comment anchored to a file and line. `kind` is task (sent to the AI batch) or note.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "file": { "type": "string" }, "line": { "type": "number" }, "end": { "type": "number" }, "type": { "type": "string" }, "kind": { "type": "string" }, "body": { "type": "string" } }, "required": ["file", "line", "body"] }) },
+        { "name": "comment_reply", "description": "Reply in a comment's thread.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "body": { "type": "string" } }, "required": ["id", "body"] }) },
     ])
+}
+
+/// A comment type by name, defaulting to `note` for anything unrecognised —
+/// an agent's typo should not fail the write.
+fn parse_type(name: &str) -> core::CommentType {
+    match name {
+        "bug" => core::CommentType::Bug,
+        "refactor" => core::CommentType::Refactor,
+        "performance" => core::CommentType::Performance,
+        "question" => core::CommentType::Question,
+        _ => core::CommentType::Note,
+    }
+}
+
+/// The agent identity mutations are attributed to. Same source as the CLI's, so
+/// a task resolved over MCP and one resolved from a shell read the same.
+fn agent_id() -> String {
+    std::env::var("READO_AGENT")
+        .ok()
+        .filter(|a| !a.is_empty())
+        .unwrap_or_else(|| "agent".to_string())
+}
+
+/// A structured result for a mutating tool: what changed, and what it is now.
+fn mutation_result(c: &core::Comment, action: &str) -> Result<String, (i64, String)> {
+    serde_json::to_string_pretty(&serde_json::json!({
+        "action": action,
+        "id": c.meta.id,
+        "state": c.meta.state,
+        "attempts": c.meta.attempts,
+        "blockedReason": c.meta.blocked_reason,
+        "resolution": c.meta.resolution,
+    }))
+    .map_err(|e| (-32603, e.to_string()))
 }
 
 /// Send a command to the running preview pane over the file queue and wait for its
@@ -343,6 +385,94 @@ fn call_tool(
             "(()=>{{window.scrollTo({x},{y});return'scrolled';}})()",
             x = narg("x"), y = narg("y"))),
         "browser_frame" => send_command(root, "frame", ""),
+
+        // ---- Mutating tools: the review loop's verbs ----
+        "task_done" => {
+            let verify = sarg("verify");
+            let verification = (!verify.is_empty()).then(|| core::Verification {
+                passed: crate::run_verify(root, &verify),
+                cmd: verify,
+            });
+            let model = {
+                let m = sarg("model");
+                if m.is_empty() {
+                    std::env::var("READO_MODEL").ok().filter(|v| !v.is_empty())
+                } else {
+                    Some(m)
+                }
+            };
+            let diff_ref = {
+                let d = sarg("diffRef");
+                (!d.is_empty()).then_some(d)
+            };
+            let c = core::resolve_comment(
+                root,
+                &sarg("id"),
+                core::Resolution {
+                    agent: agent_id(),
+                    model,
+                    diff_ref,
+                    verify: verification,
+                    at: crate::now_millis(),
+                },
+            )
+            .map_err(|e| (-32603, e.to_string()))?;
+            mutation_result(&c, "task_done")
+        }
+        "task_fail" => {
+            let note = sarg("note");
+            if !note.is_empty() {
+                core::add_reply(root, &sarg("id"), "agent", Some(agent_id()), note)
+                    .map_err(|e| (-32603, e.to_string()))?;
+            }
+            let c = core::fail_attempt(root, &sarg("id")).map_err(|e| (-32603, e.to_string()))?;
+            mutation_result(&c, "task_fail")
+        }
+        "task_block" => {
+            let c = core::block_comment(root, &sarg("id"), &sarg("reason"))
+                .map_err(|e| (-32603, e.to_string()))?;
+            mutation_result(&c, "task_block")
+        }
+        "comment_add" => {
+            let line = narg("line") as u32;
+            let end = narg("end") as u32;
+            let kind = if sarg("kind") == "task" {
+                CommentKind::Task
+            } else {
+                CommentKind::Note
+            };
+            let created = core::create_comment(
+                root,
+                core::NewComment {
+                    file: sarg("file"),
+                    scope: core::Scope::Range,
+                    start_line: line.max(1),
+                    end_line: if end >= line.max(1) { end } else { line.max(1) },
+                    comment_type: parse_type(&sarg("type")),
+                    kind,
+                    body: sarg("body"),
+                    context: core::Context::default(),
+                    url: None,
+                    x: None,
+                    y: None,
+                },
+                "agent",
+                Some(agent_id()),
+            )
+            .map_err(|e| (-32603, e.to_string()))?;
+            mutation_result(&created.comment, "comment_add")
+        }
+        "comment_reply" => {
+            let c = core::add_reply(
+                root,
+                &sarg("id"),
+                "agent",
+                Some(agent_id()),
+                sarg("body"),
+            )
+            .map_err(|e| (-32603, e.to_string()))?;
+            mutation_result(&c, "comment_reply")
+        }
         "browser_errors" => {
             if !Path::new(root).join(".reado").join("preview-console.json").exists() {
                 return Ok("No preview pane running — open the browser preview in Reado.".to_string());
@@ -439,7 +569,7 @@ mod tests {
         assert_eq!(result["cacheScope"], "public");
         assert!(result["ttlMs"].as_i64().unwrap() > 0);
         assert_eq!(result["_meta"][META_SERVER_INFO]["name"], "reado");
-        assert_eq!(result["tools"].as_array().unwrap().len(), 12);
+        assert_eq!(result["tools"].as_array().unwrap().len(), 17);
     }
 
     #[test]
@@ -491,7 +621,21 @@ mod tests {
                 "missing tool {expected} in {names:?}"
             );
         }
-        assert_eq!(names.len(), 12);
+        // The mutating half: the review loop's verbs, so an agent can close a
+        // task through MCP rather than shelling out to the CLI.
+        for expected in [
+            "task_done",
+            "task_fail",
+            "task_block",
+            "comment_add",
+            "comment_reply",
+        ] {
+            assert!(
+                names.contains(&expected),
+                "missing tool {expected} in {names:?}"
+            );
+        }
+        assert_eq!(names.len(), 17);
     }
 
     #[test]
@@ -540,6 +684,143 @@ mod tests {
         .unwrap();
         let out = call_tool(&root_str(&dir), "browser_errors", None).unwrap();
         assert_eq!(out, "No errors captured.");
+    }
+
+    #[test]
+    fn a_mutating_tool_returns_the_new_state_not_just_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        std::fs::write(dir.path().join("src.rs"), "fn main() {}\n").unwrap();
+
+        let added = call_tool(
+            &root,
+            "comment_add",
+            Some(&serde_json::json!({
+                "file": "src.rs", "line": 1, "kind": "task", "type": "bug", "body": "leaks"
+            })),
+        )
+        .unwrap();
+        let added: serde_json::Value = serde_json::from_str(&added).unwrap();
+        assert_eq!(added["action"], "comment_add");
+        assert_eq!(added["state"], "open");
+        let id = added["id"].as_str().unwrap().to_string();
+
+        // Resolving without a verification is a claim, not a proof, and the
+        // result says so rather than reporting a bare success.
+        let done = call_tool(&root, "task_done", Some(&serde_json::json!({ "id": id }))).unwrap();
+        let done: serde_json::Value = serde_json::from_str(&done).unwrap();
+        assert_eq!(done["state"], "resolved-unverified");
+        assert_eq!(done["resolution"]["agent"], agent_id());
+    }
+
+    #[test]
+    fn a_verified_resolution_is_done_and_carries_its_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        std::fs::write(dir.path().join("src.rs"), "fn main() {}\n").unwrap();
+        let added = call_tool(
+            &root,
+            "comment_add",
+            Some(&serde_json::json!({ "file": "src.rs", "line": 1, "kind": "task", "body": "x" })),
+        )
+        .unwrap();
+        let id = serde_json::from_str::<serde_json::Value>(&added).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let done = call_tool(
+            &root,
+            "task_done",
+            Some(&serde_json::json!({ "id": id, "verify": "exit 0", "diffRef": "abc123" })),
+        )
+        .unwrap();
+        let done: serde_json::Value = serde_json::from_str(&done).unwrap();
+        assert_eq!(done["state"], "done");
+        assert_eq!(done["resolution"]["verify"]["passed"], true);
+        assert_eq!(done["resolution"]["verify"]["cmd"], "exit 0");
+        assert_eq!(done["resolution"]["diffRef"], "abc123");
+    }
+
+    #[test]
+    fn a_failing_verification_leaves_the_task_unverified() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        std::fs::write(dir.path().join("src.rs"), "fn main() {}\n").unwrap();
+        let added = call_tool(
+            &root,
+            "comment_add",
+            Some(&serde_json::json!({ "file": "src.rs", "line": 1, "kind": "task", "body": "x" })),
+        )
+        .unwrap();
+        let id = serde_json::from_str::<serde_json::Value>(&added).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let done = call_tool(
+            &root,
+            "task_done",
+            Some(&serde_json::json!({ "id": id, "verify": "exit 1" })),
+        )
+        .unwrap();
+        let done: serde_json::Value = serde_json::from_str(&done).unwrap();
+        assert_eq!(done["state"], "resolved-unverified");
+        assert_eq!(done["resolution"]["verify"]["passed"], false);
+    }
+
+    #[test]
+    fn task_fail_reports_the_attempt_count_it_reached() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        std::fs::write(dir.path().join("src.rs"), "fn main() {}\n").unwrap();
+        let added = call_tool(
+            &root,
+            "comment_add",
+            Some(&serde_json::json!({ "file": "src.rs", "line": 1, "kind": "task", "body": "x" })),
+        )
+        .unwrap();
+        let id = serde_json::from_str::<serde_json::Value>(&added).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let failed = call_tool(
+            &root,
+            "task_fail",
+            Some(&serde_json::json!({ "id": id, "note": "cannot tell which anchor" })),
+        )
+        .unwrap();
+        let failed: serde_json::Value = serde_json::from_str(&failed).unwrap();
+        assert_eq!(failed["attempts"], 1);
+        assert_eq!(failed["state"], "open");
+    }
+
+    #[test]
+    fn task_block_reports_the_reason_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        std::fs::write(dir.path().join("src.rs"), "fn main() {}\n").unwrap();
+        let added = call_tool(
+            &root,
+            "comment_add",
+            Some(&serde_json::json!({ "file": "src.rs", "line": 1, "kind": "task", "body": "x" })),
+        )
+        .unwrap();
+        let id = serde_json::from_str::<serde_json::Value>(&added).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let blocked = call_tool(
+            &root,
+            "task_block",
+            Some(&serde_json::json!({ "id": id, "reason": "which anchor?" })),
+        )
+        .unwrap();
+        let blocked: serde_json::Value = serde_json::from_str(&blocked).unwrap();
+        assert_eq!(blocked["state"], "blocked");
+        assert_eq!(blocked["blockedReason"], "which anchor?");
     }
 
     #[test]

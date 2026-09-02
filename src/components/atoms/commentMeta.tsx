@@ -14,6 +14,7 @@ export const COMMENT_STATES: CommentState[] = [
   "open",
   "in-progress",
   "blocked",
+  "resolved-unverified",
   "done",
   "discarded",
 ]

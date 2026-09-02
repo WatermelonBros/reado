@@ -141,6 +141,36 @@ export function CommentThread({ comment, top, onClose }: Props) {
         </div>
       )}
 
+      {/* Provenance for a resolved task: which agent, which model, which diff,
+        and what the check said. "Done" alone asks the reviewer to take a claim
+        on faith; this gives them something to read. */}
+      {comment.resolution && (
+        <div className="flex flex-col gap-0.5 border-b border-line px-3 py-2 text-[10px] leading-relaxed text-faint">
+          <span>
+            {t("comment.resolvedBy", {
+              agent: comment.resolution.model
+                ? `${comment.resolution.agent} · ${comment.resolution.model}`
+                : comment.resolution.agent,
+            })}
+          </span>
+          {comment.resolution.diffRef && (
+            <span className="font-mono">
+              {t("comment.diffRef", { ref: comment.resolution.diffRef })}
+            </span>
+          )}
+          <span className={comment.resolution.verify?.passed ? "text-accent" : "text-marker"}>
+            {comment.resolution.verify
+              ? t(
+                  comment.resolution.verify.passed
+                    ? "comment.verifyPassed"
+                    : "comment.verifyFailed",
+                  { cmd: comment.resolution.verify.cmd },
+                )
+              : t("comment.noVerify")}
+          </span>
+        </div>
+      )}
+
       {/* Blocked: show the agent's question and take the answer here, so the
         human's reply and the return to open are one action rather than two. */}
       {comment.state === "blocked" && (

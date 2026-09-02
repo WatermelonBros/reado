@@ -78,6 +78,44 @@ pub enum CommentState {
     /// has been picked up, attempted, and handed back with a reason — sending it
     /// round the loop again would just burn the same attempt.
     Blocked,
+    /// The agent says it fixed this, and nothing checked. Distinct from `Done`
+    /// because "an agent claims it works" and "a command proved it works" are
+    /// different facts, and collapsing them means the reviewer can't tell which
+    /// resolutions still need a human to look.
+    ResolvedUnverified,
+}
+
+/// What a verification command reported.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Verification {
+    /// The command as run, so the reviewer can run it themselves.
+    pub cmd: String,
+    pub passed: bool,
+}
+
+/// How a task was resolved: who did it, with what, against which diff, and
+/// whether anything checked.
+///
+/// The point is provenance. "Done" on its own asks the reviewer to trust that
+/// some agent, at some point, with some model, changed something correct. This
+/// records which agent, which model, which diff, and what the verification
+/// command said — so reviewing a resolution is reading evidence, not taking a
+/// claim on faith.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Resolution {
+    /// The agent id (`$READO_AGENT`), e.g. "claude-code".
+    pub agent: String,
+    /// The model, when the agent reports one (`$READO_MODEL` or `--model`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// A git ref or range naming the change that resolved this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verify: Option<Verification>,
+    pub at: u64,
 }
 
 /// Whether a comment is an actionable task (eligible for the AI review batch)
@@ -177,6 +215,10 @@ pub struct CommentMeta {
     /// retrying is not working.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub attempts: u32,
+    /// How this task was resolved, when it was. Additive: a task resolved before
+    /// this existed simply has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution: Option<Resolution>,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -532,6 +574,7 @@ pub fn create_comment(
         orphan: false,
         blocked_reason: None,
         attempts: 0,
+        resolution: None,
         created_at: now,
         updated_at: now,
     };
@@ -689,6 +732,45 @@ pub fn set_comment_state(root: &str, id: &str, state: CommentState) -> Result<Co
     Ok(comment)
 }
 
+/// Resolve a task with its provenance attached.
+///
+/// A resolution with a passing verification is `Done`; anything else —
+/// no verification run, or one that failed — is `ResolvedUnverified`, because
+/// the agent's claim and a proof are not the same fact and the reviewer needs to
+/// know which one they have.
+pub fn resolve_comment(root: &str, id: &str, resolution: Resolution) -> Result<Comment> {
+    let verified = resolution.verify.as_ref().is_some_and(|v| v.passed);
+    let state = if verified {
+        CommentState::Done
+    } else {
+        CommentState::ResolvedUnverified
+    };
+
+    let _lock = ReadoLock::acquire(root)?;
+    let (path, archived) = locate(root, id).ok_or_else(|| Error::NotFound(id.to_string()))?;
+    let mut comment = read_comment(&path, archived)?;
+    comment.meta.state = state;
+    comment.meta.resolution = Some(resolution);
+    comment.meta.blocked_reason = None;
+    comment.meta.updated_at = now_millis();
+
+    // Only a verified resolution archives: an unverified one stays in the active
+    // list, because it is still waiting on a human to look at it.
+    let should_archive = verified;
+    if should_archive != archived {
+        write_comment(
+            &dir_for(root, should_archive),
+            &comment.meta,
+            &comment.messages,
+        )?;
+        std::fs::remove_file(&path)?;
+        comment.archived = should_archive;
+    } else {
+        write_comment(&dir_for(root, archived), &comment.meta, &comment.messages)?;
+    }
+    Ok(comment)
+}
+
 /// Block a task: record why the agent cannot proceed and take it out of the
 /// resolvable set until a human answers. Idempotent — blocking an already
 /// blocked task just replaces the reason.
@@ -804,6 +886,7 @@ pub fn upsert_host_comment(
                 orphan: false,
                 blocked_reason: None,
                 attempts: 0,
+                resolution: None,
                 created_at: now,
                 updated_at: now,
             };
@@ -1184,6 +1267,7 @@ mod tests {
             orphan: false,
             blocked_reason: None,
             attempts: 0,
+            resolution: None,
             created_at: 1000,
             updated_at: 1000,
         }
@@ -1489,7 +1573,8 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
         let c = task(&root, "fix the drift");
 
-        let blocked = super::block_comment(&root, &c.meta.id, "  which of the two anchors?  ").unwrap();
+        let blocked =
+            super::block_comment(&root, &c.meta.id, "  which of the two anchors?  ").unwrap();
         assert_eq!(blocked.meta.state, CommentState::Blocked);
         assert_eq!(
             blocked.meta.blocked_reason.as_deref(),
@@ -1500,7 +1585,10 @@ mod tests {
         // Re-read from disk: the state and reason are in the `.md`, not just in memory.
         let reread = super::get_comment(&root, &c.meta.id).unwrap();
         assert_eq!(reread.meta.state, CommentState::Blocked);
-        assert_eq!(reread.meta.blocked_reason.as_deref(), Some("which of the two anchors?"));
+        assert_eq!(
+            reread.meta.blocked_reason.as_deref(),
+            Some("which of the two anchors?")
+        );
     }
 
     #[test]
@@ -1521,7 +1609,11 @@ mod tests {
 
         let after = super::fail_attempt(&root, &c.meta.id).unwrap();
         assert_eq!(after.meta.attempts, 1);
-        assert_eq!(after.meta.state, CommentState::Open, "still worth another try");
+        assert_eq!(
+            after.meta.state,
+            CommentState::Open,
+            "still worth another try"
+        );
     }
 
     #[test]
@@ -1559,7 +1651,10 @@ mod tests {
             "the agent is being given something new; the old failures don't count"
         );
         assert!(
-            answered.messages.iter().any(|m| m.body.contains("the second one")),
+            answered
+                .messages
+                .iter()
+                .any(|m| m.body.contains("the second one")),
             "the answer is in the thread, not just discarded"
         );
     }
@@ -1570,7 +1665,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().to_string_lossy().to_string();
         let c = task(&root, "fix the drift");
-        let path = dir.path().join(".reado/comments").join(format!("{}.md", c.meta.id));
+        let path = dir
+            .path()
+            .join(".reado/comments")
+            .join(format!("{}.md", c.meta.id));
         let text = std::fs::read_to_string(&path).unwrap();
         let stripped: String = text
             .lines()
@@ -1582,5 +1680,108 @@ mod tests {
         let reread = super::get_comment(&root, &c.meta.id).unwrap();
         assert_eq!(reread.meta.attempts, 0);
         assert_eq!(reread.meta.blocked_reason, None);
+    }
+
+    #[test]
+    fn a_verified_resolution_is_done_and_archived() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+
+        let resolved = super::resolve_comment(
+            &root,
+            &c.meta.id,
+            Resolution {
+                agent: "claude-code".into(),
+                model: Some("opus".into()),
+                diff_ref: Some("abc123".into()),
+                verify: Some(Verification {
+                    cmd: "cargo test".into(),
+                    passed: true,
+                }),
+                at: 42,
+            },
+        )
+        .unwrap();
+        assert_eq!(resolved.meta.state, CommentState::Done);
+        assert!(resolved.archived, "a proved fix belongs in history");
+
+        let reread = super::get_comment(&root, &c.meta.id).unwrap();
+        let record = reread.meta.resolution.unwrap();
+        assert_eq!(record.agent, "claude-code");
+        assert_eq!(record.model.as_deref(), Some("opus"));
+        assert_eq!(record.diff_ref.as_deref(), Some("abc123"));
+        assert!(record.verify.unwrap().passed);
+    }
+
+    #[test]
+    fn an_unchecked_resolution_is_a_claim_and_stays_in_the_active_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+
+        let resolved = super::resolve_comment(
+            &root,
+            &c.meta.id,
+            Resolution {
+                agent: "claude-code".into(),
+                model: None,
+                diff_ref: None,
+                verify: None,
+                at: 42,
+            },
+        )
+        .unwrap();
+        assert_eq!(resolved.meta.state, CommentState::ResolvedUnverified);
+        assert!(!resolved.archived, "still waiting on a human to look");
+    }
+
+    #[test]
+    fn a_failing_check_is_not_done_either() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+
+        let resolved = super::resolve_comment(
+            &root,
+            &c.meta.id,
+            Resolution {
+                agent: "claude-code".into(),
+                model: None,
+                diff_ref: None,
+                verify: Some(Verification {
+                    cmd: "cargo test".into(),
+                    passed: false,
+                }),
+                at: 42,
+            },
+        )
+        .unwrap();
+        assert_eq!(resolved.meta.state, CommentState::ResolvedUnverified);
+    }
+
+    #[test]
+    fn resolving_clears_a_previous_block() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let c = task(&root, "fix the drift");
+        super::block_comment(&root, &c.meta.id, "which anchor?").unwrap();
+
+        let resolved = super::resolve_comment(
+            &root,
+            &c.meta.id,
+            Resolution {
+                agent: "claude-code".into(),
+                model: None,
+                diff_ref: None,
+                verify: Some(Verification {
+                    cmd: "true".into(),
+                    passed: true,
+                }),
+                at: 42,
+            },
+        )
+        .unwrap();
+        assert_eq!(resolved.meta.blocked_reason, None);
     }
 }

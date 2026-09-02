@@ -335,7 +335,9 @@
       "start": "Resolve open tasks"
     },
     "failed": "The loop stopped — nothing is running",
-    "failedHint": "The prompt never reached an agent. Start an agent in the terminal, then send the review again."
+    "failedHint": "The prompt never reached an agent. Start an agent in the terminal, then send the review again.",
+    "unverified_one": "{count} was resolved without a check — worth a look.",
+    "unverified_other": "{count} were resolved without a check — worth a look."
   },
   "forge": {
     "noAdapter": "Host round-trip isn't available for {provider} yet — review locally.",
@@ -726,7 +728,8 @@
       "in-progress": "In progress",
       "done": "Done",
       "discarded": "Discarded",
-      "blocked": "Blocked"
+      "blocked": "Blocked",
+      "resolved-unverified": "Resolved (unverified)"
     },
     "task": "Task",
     "note": "Note",
@@ -752,7 +755,12 @@
     "answer": "Answer",
     "answerPlaceholder": "Answer the agent…",
     "attempts_one": "{count} failed attempt",
-    "attempts_other": "{count} failed attempts"
+    "attempts_other": "{count} failed attempts",
+    "resolvedBy": "Resolved by {agent}",
+    "verifyPassed": "Verified: {cmd}",
+    "verifyFailed": "Check failed: {cmd}",
+    "noVerify": "Nothing checked this",
+    "diffRef": "Diff {ref}"
   },
   "terminal": {
     "new": "New terminal",

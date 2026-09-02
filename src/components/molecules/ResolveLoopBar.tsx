@@ -65,6 +65,12 @@ export function ResolveLoopBar() {
         />
       </div>
       {waiting && <p className="mt-1 text-[10px] leading-snug text-faint">{t("loop.hint")}</p>}
+      {/* "Resolved" and "proved" are different facts; say which one you have. */}
+      {!!active.unverifiedIds?.length && (
+        <p className="mt-1 text-[10px] leading-snug text-faint">
+          {t("loop.unverified", { count: active.unverifiedIds.length })}
+        </p>
+      )}
       {failed && <p className="mt-1 text-[10px] leading-snug text-faint">{t("loop.failedHint")}</p>}
     </div>
   )

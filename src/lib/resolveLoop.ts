@@ -32,6 +32,9 @@ export interface LoopState {
   ids: string[]
   /** Of those, the ones resolved so far. */
   resolvedIds: string[]
+  /** Of those, the ones the agent resolved with nothing checking — still a
+   *  claim, so the bar flags them for a human to look at. */
+  unverifiedIds?: string[]
   status: LoopStatus
   startedAt: number
   /** Last time a queued comment resolved — drives the idle heuristic. */
@@ -51,6 +54,14 @@ async function persist(root: string, active: LoopState | null) {
   void anywherePublishLoop(active ? JSON.stringify(active) : null).catch(() => {})
 }
 
+/** Task ids the agent resolved without anything checking. They are not open —
+ *  the loop is finished with them — but they are not settled either, so the bar
+ *  says how many of the "resolved" ones are still only a claim. */
+function unverifiedIds(ids: string[]): string[] {
+  const byId = new Map(useComments.getState().comments.map((c) => [c.id, c]))
+  return ids.filter((id) => byId.get(id)?.state === "resolved-unverified")
+}
+
 /** Comment ids that are still open tasks (i.e. not yet resolved by the agent). */
 function openTaskIds(): Set<string> {
   return new Set(
@@ -58,7 +69,15 @@ function openTaskIds(): Set<string> {
       .getState()
       // Blocked tasks are excluded: the agent already tried and handed each one
       // back with a question. Queueing them would send it round the same wall.
-      .comments.filter((c) => c.kind === "task" && c.state !== "done" && c.state !== "blocked")
+      // Resolved-unverified ones are excluded too — the agent is finished with
+      // them; what remains is a human deciding whether to believe it.
+      .comments.filter(
+        (c) =>
+          c.kind === "task" &&
+          c.state !== "done" &&
+          c.state !== "blocked" &&
+          c.state !== "resolved-unverified",
+      )
       .map((c) => c.id),
   )
 }
@@ -193,6 +212,7 @@ export const useResolveLoop = create<ResolveLoopState>((set, get) => ({
     const next: LoopState = {
       ...active,
       resolvedIds,
+      unverifiedIds: unverifiedIds(active.ids),
       status: finished ? "finished" : "running",
       lastProgressAt: progressed ? Date.now() : active.lastProgressAt,
     }

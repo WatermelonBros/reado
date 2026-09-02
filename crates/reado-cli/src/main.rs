@@ -319,8 +319,24 @@ enum TaskCmd {
     List,
     /// Show a task and its full thread.
     Show { id: String },
-    /// Mark a task done (archives it as history).
-    Done { id: String },
+    /// Mark a task done, recording how it was resolved. With `--verify` the
+    /// command decides: a passing check archives it as done, anything else
+    /// leaves it resolved-but-unverified for a human to look at.
+    Done {
+        id: String,
+        /// The git ref or range that resolved it (e.g. `HEAD~1..HEAD`).
+        #[arg(long)]
+        diff: Option<String>,
+        /// Capture the current working diff's ref instead of naming one.
+        #[arg(long)]
+        capture: bool,
+        /// A command that proves the fix (run in the project root).
+        #[arg(long)]
+        verify: Option<String>,
+        /// The model that did the work (defaults to $READO_MODEL).
+        #[arg(long)]
+        model: Option<String>,
+    },
     /// Record a failed attempt and return the task to open with a note. Past the
     /// attempt budget the task blocks itself.
     Fail { id: String, note: Option<String> },
@@ -930,9 +946,41 @@ fn task(
                 print_task_full(&c);
             }
         }
-        TaskCmd::Done { id } => {
-            let c = core::set_comment_state(root, id, CommentState::Done)?;
-            report(cli, &c, "done");
+        TaskCmd::Done {
+            id,
+            diff,
+            capture,
+            verify,
+            model,
+        } => {
+            let diff_ref = match diff {
+                Some(d) => Some(d.clone()),
+                // `--capture` names what is on disk right now. HEAD is the honest
+                // ref for "the working tree as it differs from the last commit".
+                None if *capture => Some(current_head(root).unwrap_or_else(|| "HEAD".into())),
+                None => None,
+            };
+            let verification = verify.as_ref().map(|cmd| core::Verification {
+                cmd: cmd.clone(),
+                passed: run_verify(root, cmd),
+            });
+            let resolution = core::Resolution {
+                agent: _agent.to_string(),
+                model: model
+                    .clone()
+                    .or_else(|| std::env::var("READO_MODEL").ok())
+                    .filter(|m| !m.is_empty()),
+                diff_ref,
+                verify: verification,
+                at: now_millis(),
+            };
+            let c = core::resolve_comment(root, id, resolution)?;
+            let verb = if c.meta.state == CommentState::Done {
+                "done (verified)"
+            } else {
+                "resolved (unverified — needs a human)"
+            };
+            report(cli, &c, verb);
         }
         TaskCmd::Fail { id, note } => {
             if let Some(note) = note {
@@ -1018,6 +1066,49 @@ fn comment(
 }
 
 // ---- Output helpers ------------------------------------------------------
+
+/// Milliseconds since the epoch, matching the core's timestamps.
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// The current commit, for `--capture`. `None` outside a repository.
+fn current_head(root: &str) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let head = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!head.is_empty()).then_some(head)
+}
+
+/// Run the verification command in the project root and report whether it
+/// succeeded. A command that cannot even start counts as failed — an unrunnable
+/// check has proved nothing.
+fn run_verify(root: &str, cmd: &str) -> bool {
+    let mut command = if cfg!(windows) {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", cmd]);
+        c
+    } else {
+        let mut c = std::process::Command::new("sh");
+        c.args(["-c", cmd]);
+        c
+    };
+    command
+        .current_dir(root)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
 
 fn report(cli: &Cli, c: &Comment, verb: &str) {
     if cli.json {

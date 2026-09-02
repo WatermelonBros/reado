@@ -144,6 +144,31 @@ describe("blocked tasks", () => {
   })
 })
 
+describe("unverified resolutions", () => {
+  it("are not queued: the agent is finished, the human is not", async () => {
+    commentsState.comments = [
+      { id: "a", kind: "task", state: "open" },
+      { id: "b", kind: "task", state: "resolved-unverified" },
+    ]
+    await useResolveLoop.getState().start("/p", [])
+    expect(useResolveLoop.getState().active?.ids).toEqual(["a"])
+  })
+
+  it("are counted separately from the resolved ones", () => {
+    useResolveLoop.setState({ active: loop({ ids: ["a", "b"] }) })
+    commentsState.comments = [
+      { id: "a", kind: "task", state: "done" },
+      { id: "b", kind: "task", state: "resolved-unverified" },
+    ]
+    useResolveLoop.getState().sync("/p")
+    const active = useResolveLoop.getState().active
+    // `b` is not a resolution the loop can vouch for, so it isn't counted as one.
+    expect(active?.resolvedIds).toEqual(["a"])
+    expect(active?.unverifiedIds).toEqual(["b"])
+    expect(active?.status).toBe("finished")
+  })
+})
+
 describe("resume", () => {
   it("re-dispatches only the tasks still outstanding", async () => {
     useResolveLoop.setState({ active: loop({ ids: ["a", "b", "c"] }) })
