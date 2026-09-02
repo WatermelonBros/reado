@@ -77,6 +77,18 @@ jobs:
         shell: bash
         run: bash scripts/bundle-cli.sh ${{ matrix.rust_target }}
 
+      # The release page describes what actually shipped: the CHANGELOG section
+      # for this tag, which the release commit already carries.
+      - name: Collect the release notes
+        id: notes
+        shell: bash
+        run: |
+          {
+            echo "body<<RELEASE_NOTES_EOF"
+            bash scripts/release-notes.sh "${GITHUB_REF_NAME}"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -96,7 +108,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Reado ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download and install Reado for your platform. Reado updates itself automatically from signed releases."
+          releaseBody: ${{ steps.notes.outputs.body }}
           # Publish immediately (not a draft) so the updater's `latest.json` under
           # /releases/latest actually advances — a draft never becomes "Latest",
           # so clients never see the new version. The serialized matrix above
