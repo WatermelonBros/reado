@@ -20,8 +20,17 @@ export function ResolveLoopBar() {
   const pct = total ? (resolved / total) * 100 : 0
   const done = active.status === "finished"
   const waiting = active.status === "needs_approval"
+  const failed = active.status === "failed"
+  // A failed loop is over, so it offers "dismiss" like a finished one.
+  const over = done || failed
 
-  const tone = done ? "text-accent" : waiting ? "text-marker" : "text-muted"
+  const tone = failed
+    ? "text-marker"
+    : done
+      ? "text-accent"
+      : waiting
+        ? "text-marker"
+        : "text-muted"
 
   return (
     <div className="flex-none border-b border-line bg-surface px-3 py-2">
@@ -30,7 +39,13 @@ export function ResolveLoopBar() {
           className={`h-3 w-3 flex-none ${tone} ${active.status === "running" ? "animate-pulse" : ""}`}
         />
         <span className={`min-w-0 flex-1 truncate text-xs ${tone}`}>
-          {done ? t("loop.finished") : waiting ? t("loop.needsApproval") : t("loop.running")}
+          {failed
+            ? t("loop.failed")
+            : done
+              ? t("loop.finished")
+              : waiting
+                ? t("loop.needsApproval")
+                : t("loop.running")}
         </span>
         <span className="flex-none text-[10px] tabular-nums text-faint">
           {t("loop.progress", { resolved, total })}
@@ -40,16 +55,17 @@ export function ResolveLoopBar() {
           onClick={() => useResolveLoop.getState().clear(root)}
           className="flex-none rounded px-1.5 py-0.5 text-[10px] text-faint hover:text-ink"
         >
-          {done ? t("loop.dismiss") : t("loop.cancel")}
+          {over ? t("loop.dismiss") : t("loop.cancel")}
         </button>
       </div>
       <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-overlay">
         <div
-          className={`h-full rounded-full transition-[width] duration-300 ${done ? "bg-accent" : waiting ? "bg-marker" : "bg-muted"}`}
+          className={`h-full rounded-full transition-[width] duration-300 ${failed ? "bg-marker" : done ? "bg-accent" : waiting ? "bg-marker" : "bg-muted"}`}
           style={{ width: `${pct}%` }}
         />
       </div>
       {waiting && <p className="mt-1 text-[10px] leading-snug text-faint">{t("loop.hint")}</p>}
+      {failed && <p className="mt-1 text-[10px] leading-snug text-faint">{t("loop.failedHint")}</p>}
     </div>
   )
 }

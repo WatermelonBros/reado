@@ -8,7 +8,7 @@ vi.mock("../api", () => ({
   readFile: vi.fn(() => Promise.resolve(null)),
   writeFile: vi.fn(() => Promise.resolve()),
 }))
-vi.mock("../agents", () => ({ dispatchToAgent: vi.fn(() => Promise.resolve()) }))
+vi.mock("../agents", () => ({ dispatchToAgent: vi.fn(() => Promise.resolve(true)) }))
 vi.mock("../review", () => ({
   composeReviewPromptForIds: vi.fn((ids: string[]) => `prompt:${ids.join(",")}`),
 }))
@@ -42,7 +42,7 @@ beforeEach(() => {
   vi.mocked(createFile).mockResolvedValue(undefined as never)
   vi.mocked(writeFile).mockResolvedValue(undefined as never)
   vi.mocked(anywherePublishLoop).mockResolvedValue(undefined as never)
-  vi.mocked(dispatchToAgent).mockResolvedValue(undefined as never)
+  vi.mocked(dispatchToAgent).mockResolvedValue(true)
   vi.mocked(notifyResolved).mockResolvedValue(undefined as never)
   commentsState.comments = []
   useResolveLoop.setState({ active: null })
@@ -118,6 +118,55 @@ describe("start", () => {
     await useResolveLoop.getState().start("/p", [])
     expect(useResolveLoop.getState().active).toBeNull()
     expect(dispatchToAgent).not.toHaveBeenCalled()
+  })
+})
+
+describe("failure", () => {
+  it("fails the loop when the prompt never reached an agent", async () => {
+    // No agent installed: dispatchToAgent reports it did not send.
+    vi.mocked(dispatchToAgent).mockResolvedValue(false)
+    commentsState.comments = [{ id: "a", kind: "task", state: "open" }]
+    await useResolveLoop.getState().start("/p", ["a"])
+    await flush()
+    expect(useResolveLoop.getState().active?.status).toBe("failed")
+  })
+
+  it("fails the loop when the dispatch throws", async () => {
+    vi.mocked(dispatchToAgent).mockRejectedValue(new Error("terminal gone"))
+    commentsState.comments = [{ id: "a", kind: "task", state: "open" }]
+    await useResolveLoop.getState().start("/p", ["a"])
+    await flush()
+    expect(useResolveLoop.getState().active?.status).toBe("failed")
+  })
+
+  it("persists the failure so a restart does not resume a dead loop", async () => {
+    vi.mocked(dispatchToAgent).mockResolvedValue(false)
+    commentsState.comments = [{ id: "a", kind: "task", state: "open" }]
+    await useResolveLoop.getState().start("/p", ["a"])
+    await flush()
+    const calls = vi.mocked(writeFile).mock.calls
+    const written = calls[calls.length - 1]?.[2] as string
+    expect(JSON.parse(written).status).toBe("failed")
+  })
+
+  it("a failed loop stops tracking progress", () => {
+    useResolveLoop.setState({ active: loop({ status: "failed" }) })
+    commentsState.comments = [{ id: "a", kind: "task", state: "done" }]
+    useResolveLoop.getState().sync("/p")
+    // Not resurrected into "finished" by comments resolving later.
+    expect(useResolveLoop.getState().active?.status).toBe("failed")
+  })
+
+  it("does not fail a loop that already finished", () => {
+    useResolveLoop.setState({ active: loop({ status: "finished" }) })
+    useResolveLoop.getState().fail("/p", "dispatch")
+    expect(useResolveLoop.getState().active?.status).toBe("finished")
+  })
+
+  it("is a no-op without an active loop", () => {
+    useResolveLoop.setState({ active: null })
+    useResolveLoop.getState().fail("/p", "dispatch")
+    expect(useResolveLoop.getState().active).toBeNull()
   })
 })
 

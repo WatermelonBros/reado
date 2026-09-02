@@ -329,7 +329,9 @@
     "hint": "The agent has gone quiet — check the terminal and answer it.",
     "cmd": {
       "start": "Resolve open tasks"
-    }
+    },
+    "failed": "The loop stopped — nothing is running",
+    "failedHint": "The prompt never reached an agent. Start an agent in the terminal, then send the review again."
   },
   "forge": {
     "noAdapter": "Host round-trip isn't available for {provider} yet — review locally.",

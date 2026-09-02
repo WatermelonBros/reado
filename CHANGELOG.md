@@ -11,6 +11,13 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+- **A review loop that never started says so.** If the prompt never reached an
+  agent — none installed, or the terminal gone — the loop sat at "Resolving…"
+  forever, waiting on work nobody was doing. `dispatchToAgent` now reports
+  whether it actually sent, and a loop that didn't start fails immediately with
+  a line telling you to start an agent first.
+
 ### Changed
 - **Reado Anywhere gives each phone its own credential.** Pairing used to hand
   every device the same session token: revoking one revoked all of them, nothing

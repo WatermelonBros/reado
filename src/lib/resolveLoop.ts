@@ -82,6 +82,8 @@ interface ResolveLoopState {
   sync: (root: string) => void
   /** Idle check: flag needs-approval when the agent has gone quiet. */
   tick: (root: string) => void
+  /** Give up on the loop: nothing is coming, so say so rather than spin. */
+  fail: (root: string, reason: string) => void
   /** Clear the loop (cancel, or dismiss a finished one). */
   clear: (root: string) => void
 }
@@ -118,7 +120,26 @@ export const useResolveLoop = create<ResolveLoopState>((set, get) => ({
     }
     set({ active })
     void persist(root, active)
+    // A dispatch that never reached an agent means nobody is going to resolve
+    // anything: fail the loop now rather than let it sit "running" forever.
     void dispatchToAgent(composeReviewPromptForIds(queue))
+      .then((sent) => {
+        if (!sent) get().fail(root, "dispatch")
+      })
+      .catch((e) => {
+        log.warn("resolveLoop: dispatch threw", { error: safeError(e) })
+        get().fail(root, "dispatch")
+      })
+  },
+
+  fail: (root, reason) => {
+    const active = get().active
+    // Only a live loop can fail; a finished one keeps its outcome.
+    if (!active || active.status === "finished" || active.status === "failed") return
+    log.warn("resolveLoop: loop failed", { reason })
+    const next: LoopState = { ...active, status: "failed" }
+    set({ active: next })
+    void persist(root, next)
   },
 
   sync: (root) => {

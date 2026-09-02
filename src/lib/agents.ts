@@ -229,19 +229,23 @@ async function pasteAndSubmit(id: string, prompt: string): Promise<void> {
 /** Send an AI prompt to the agent. If the active terminal already has an agent,
  *  send it there; otherwise launch one first — the last-used agent, or Claude
  *  Code by default — and send the prompt once it has actually booted. We never
- *  write an AI prompt to a bare shell: it would just be run as a (broken) command. */
-export async function dispatchToAgent(prompt: string): Promise<void> {
+ *  write an AI prompt to a bare shell: it would just be run as a (broken) command.
+ *
+ *  Resolves `false` when the prompt never reached an agent (the binary isn't
+ *  installed), so a caller waiting on the result — a review loop, say — can say
+ *  it failed instead of waiting out a timeout for an answer nobody is writing. */
+export async function dispatchToAgent(prompt: string): Promise<boolean> {
   const term = useTerminals.getState()
   const id = term.activeId ?? term.add()
   if (term.agentTerminals.includes(id)) {
     await pasteAndSubmit(id, prompt)
     void noticeSent()
-    return
+    return true
   }
   // Reuse the last agent, else auto-pick the first one actually installed.
   const agent = (term.lastAgent as Agent | null) ?? (await firstInstalledAgent())
   // Never launch-and-paste into a shell where the agent binary is missing.
-  if (!(await ensureAgentInstalled(AGENT_BIN[agent]))) return
+  if (!(await ensureAgentInstalled(AGENT_BIN[agent]))) return false
   const shell = await ptyDefaultShell().catch(() => null)
   if (agent === "claude-code") await syncClaudeTheme(useProject.getState().root).catch(() => {})
   submitToTerminal(id, agentLaunchCommand(shellFamily(shell), agent, AGENT_BIN[agent]), 0)
@@ -250,4 +254,5 @@ export async function dispatchToAgent(prompt: string): Promise<void> {
   await waitForAgentReady(id)
   await pasteAndSubmit(id, prompt)
   void noticeSent()
+  return true
 }

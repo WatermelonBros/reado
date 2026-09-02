@@ -329,7 +329,9 @@
     "hint": "L'agente si è fermato — controlla il terminale e rispondigli.",
     "cmd": {
       "start": "Risolvi i task aperti"
-    }
+    },
+    "failed": "Il ciclo si è fermato — non sta girando nulla",
+    "failedHint": "Il prompt non è arrivato a nessun agente. Avvia un agente nel terminale, poi rimanda la revisione."
   },
   "forge": {
     "noAdapter": "Il round-trip con l'host non è ancora disponibile per {provider} — revisiona in locale.",
