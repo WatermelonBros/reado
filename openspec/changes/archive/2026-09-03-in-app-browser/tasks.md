@@ -82,11 +82,11 @@
 
 ## 11. Verify
 
-- [ ] 11.1 Pane opens/loads/navigates; detach → second window → re-dock, page state
+- [x] 11.1 Pane opens/loads/navigates; detach → second window → re-dock, page state
       intact.
-- [ ] 11.2 Inspector: console shows an uncaught error + evaluate works; network
+- [x] 11.2 Inspector: console shows an uncaught error + evaluate works; network
       lists a request with detail and flags a failure.
-- [ ] 11.3 With MCP enabled: agent captures a frame, reads DOM, reads console
+- [x] 11.3 With MCP enabled: agent captures a frame, reads DOM, reads console
       errors + network failures, scrubs an animation, drives click/type; "send to
       agent" delivers an error; disallowed-origin navigation refused; tools absent
       when disabled and error cleanly when no pane.

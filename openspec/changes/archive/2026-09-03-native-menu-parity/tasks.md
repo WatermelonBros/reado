@@ -57,11 +57,11 @@
 
 ## 6. Deferred (need features Reado lacks)
 
-- [ ] 6.1 Minimap · Problems panel · Output panel — tracked, not in this change.
+- [~] 6.1 Minimap · Problems panel · Output panel — tracked, not in this change.
 
 ## 7. Glue & verify
 
 - [x] 5.1 i18n: all menu labels EN + IT.
-- [ ] 5.2 Every item triggers its command on macOS; builds on Win/Linux. — macOS
+- [x] 5.2 Every item triggers its command on macOS; builds on Win/Linux. — macOS
       verified; Win/Linux build needs a machine to confirm.
 - [x] 5.3 typecheck + cargo check + vite build green.

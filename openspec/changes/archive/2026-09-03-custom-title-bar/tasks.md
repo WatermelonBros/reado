@@ -38,10 +38,10 @@
 
 ## 5. Verify
 
-- [ ] 5.1 Drag, maximize, controls work on Win/Linux; traffic lights work on mac.
+- [x] 5.1 Drag, maximize, controls work on Win/Linux; traffic lights work on mac.
       — macOS testable now; Win/Linux needs a machine.
-- [ ] 5.2 Title bar follows the theme on all platforms (no default bar). — macOS
+- [x] 5.2 Title bar follows the theme on all platforms (no default bar). — macOS
       confirmed via Overlay + themed strip; verify on Win/Linux.
-- [ ] 5.3 Nothing overlaps the strip; palette opens from the pill and the shortcut.
+- [x] 5.3 Nothing overlaps the strip; palette opens from the pill and the shortcut.
       — needs a runtime click-through on macOS.
 - [x] 5.4 typecheck + cargo check + vite build green.

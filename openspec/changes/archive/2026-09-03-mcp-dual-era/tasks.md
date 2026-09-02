@@ -38,7 +38,7 @@
       the supported set; a bogus version yields `-32022`.
 - [x] 4.2 Piped smoke test both ways: an `initialize`-first exchange and a
       `_meta`-carrying stateless exchange against the same process.
-- [ ] 4.3 Confirm against a real dual-era client once one ships (none of the five
+- [~] 4.3 Confirm against a real dual-era client once one ships (none of the five
       agents in `src/lib/mcp.ts` speak the modern era yet).
 
 ## 5. Ship

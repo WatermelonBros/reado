@@ -40,14 +40,14 @@
 
 ## 4. Verify
 
-- [ ] 4.1 A fresh machine can discover + install a server from the marketplace
+- [x] 4.1 A fresh machine can discover + install a server from the marketplace
       and get LSP features without touching a shell manually. (Live check.)
-- [ ] 4.2 Packaged `.app` (Finder-launched) detects and spawns PATH-installed
+- [x] 4.2 Packaged `.app` (Finder-launched) detects and spawns PATH-installed
       servers; graceful fallback when absent; no code executed from manifests.
       (Live check.)
 - [x] 4.3 typecheck + cargo check + build green.
 
 ## 5. Later phases (tracked, not Phase 1)
 
-- [ ] 5.1 Additional declarative kinds: themes, snippets, syntax grammars.
-- [ ] 5.2 (Gated) sandboxed code-running extensions — only if a real need appears.
+- [~] 5.1 Additional declarative kinds: themes, snippets, syntax grammars.
+- [~] 5.2 (Gated) sandboxed code-running extensions — only if a real need appears.

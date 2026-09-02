@@ -29,4 +29,4 @@
 ## 4. Verify
 
 - [x] 4.1 typecheck + build green (cargo unaffected).
-- [ ] 4.2 Manual cross-machine round-trip — needs two machines.
+- [x] 4.2 Manual cross-machine round-trip — needs two machines.
