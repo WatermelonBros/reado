@@ -11,6 +11,27 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **Biome formats and lints the frontend.** One toolchain for formatting, lint
+  and import order (`pnpm lint`, `pnpm lint:fix`), on a curated rule set: the
+  rules that stay on are ones the code obeys, and the few that are off say why
+  in `biome.jsonc`. The whole `src/` tree was brought in line — no semicolons,
+  double quotes, 100 columns, imports organized.
+- **Imports go through the `@/…` alias.** A module's location no longer leaks
+  into every importer as `../../..`; siblings stay relative.
+- **A PR can't merge on red.** Lint, typecheck, tests and the Rust suites are
+  required checks on `main`, and lint runs as its own job.
+- **Release notes come from the changelog.** The GitHub release page for a tag
+  is built from that version's `CHANGELOG.md` section instead of a fixed
+  sentence, so a release describes what actually shipped.
+
+### Fixed
+- **The terminal can't be dragged off the screen.** Resizing a dock had a floor
+  but no ceiling, so pulling the terminal's edge to the top of the window pushed
+  its own bottom — where the agent's prompt sits — out of view. A dock now stops
+  with the editor still visible behind it, and a size saved from a bigger window
+  is capped the same way.
+
 ## [1.7.1] — 2026-09-02
 
 ### Added
