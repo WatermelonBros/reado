@@ -4535,6 +4535,7 @@ dependencies = [
  "core-foundation",
  "futures-util",
  "ignore",
+ "image",
  "libc",
  "local-ip-address",
  "notify",

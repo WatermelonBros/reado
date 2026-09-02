@@ -18,6 +18,29 @@ function resolve(varName: string): string {
   return color || "#000";
 }
 
+/**
+ * The accent colour as `#RRGGBB` — the only format xterm decorations accept
+ * (they parse no `rgb(…)`, and a webview may hand back `oklch(…)` besides).
+ * A 1×1 canvas normalises whatever the token computes to; if that's blocked,
+ * fall back to a blue that reads as a link in either theme.
+ */
+export function xtermLinkColor(): string {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return LINK_FALLBACK;
+    ctx.fillStyle = resolve("--accent");
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+  } catch {
+    return LINK_FALLBACK;
+  }
+}
+
+const LINK_FALLBACK = "#4d9fff";
+
 /** Last-resort stack if neither CSS custom property resolves. */
 const CODE_FONT_FALLBACK =
   '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace';

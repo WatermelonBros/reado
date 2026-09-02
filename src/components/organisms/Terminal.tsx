@@ -7,18 +7,25 @@
  *
  * Output is navigable: `path:line:col` tokens are clickable (open the file in
  * the editor) and URLs open in the browser. Cmd+F searches the scrollback.
+ *
+ * Files get *in* the same way they get out: dropping files on the terminal, or
+ * pasting an image, types their paths at the cursor — an agent running in the
+ * PTY can only be handed a file by name.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Terminal as XTerm, type ILink } from "@xterm/xterm";
+import { Terminal as XTerm, type ILink, type IDisposable } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { readText as clipboardReadText, writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { ptySpawn, ptyWrite, ptyResize, ptyKill, resolvePath } from "../../lib/api";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { ptySpawn, ptyWrite, ptyResize, ptyKill, resolvePath, clipboardImageToTemp } from "../../lib/api";
+import { notify, notifyError } from "../../lib/notice";
 import { useProject, useSettings } from "../../lib/store";
-import { xtermTheme, xtermFontFamily } from "../../lib/xtermTheme";
+import { shellQuote, terminalLinks } from "../../lib/terminals";
+import { xtermTheme, xtermFontFamily, xtermLinkColor } from "../../lib/xtermTheme";
 import { useTranslation } from "react-i18next";
 import { SearchIcon, ChevronIcon, CloseIcon } from "../atoms/icons";
 import { Input } from "../atoms/Input";
@@ -27,11 +34,6 @@ const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0
 
 /** Terminal font size at 100% interface zoom (multiplied by the zoom factor). */
 const BASE_FONT_SIZE = 13;
-
-// A file path printed in output, with an optional :line:col or (line,col) suffix.
-// Requires a real extension so we don't underline arbitrary words.
-const PATH_RE =
-  /(\/?[\w.\-~/@]*[\w\-]+\.[A-Za-z][\w]*)(?::(\d+)(?::\d+)?|\((\d+),\d+\))?/g;
 
 interface Props {
   id: string;
@@ -90,47 +92,95 @@ export function Terminal({ id, cwd, active }: Props) {
     fitRef.current = fit;
     searchRef.current = search;
 
+    // Resolving the link colour walks the DOM, and links are repainted as often
+    // as the output changes — so resolve it once, alongside the theme.
+    let linkColor = xtermLinkColor();
+
     // xtermTheme() resolves tokens to concrete colours once, so re-apply them
     // (and the code font) whenever the active theme changes on <html>.
     const themeObserver = new MutationObserver(() => {
       term.options.theme = xtermTheme();
       term.options.fontFamily = useSettings.getState().codeFont || xtermFontFamily();
+      linkColor = xtermLinkColor();
+      paintedKey = ""; // the layout is unchanged; force the recolour through
+      paintLinks();
     });
     themeObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["data-theme"],
     });
 
-    // Make `path:line:col` tokens clickable → open the file in the editor.
+    // Make `path:line:col` tokens open the file in the editor, and scheme-less
+    // addresses open in the browser.
     term.registerLinkProvider({
       provideLinks(y, cb) {
         const buf = term.buffer.active.getLine(y - 1);
         if (!buf) return cb(undefined);
-        const text = buf.translateToString(true);
-        const links: ILink[] = [];
-        PATH_RE.lastIndex = 0;
-        let m: RegExpExecArray | null;
-        while ((m = PATH_RE.exec(text))) {
-          // Skip matches that are actually the tail of a URL (WebLinks owns those).
-          if (/[a-zA-Z][\w+.-]*:\/\/\S*$/.test(text.slice(0, m.index))) continue;
-          const full = m[0];
-          const path = m[1];
-          const lineNo = m[2] ? +m[2] : m[3] ? +m[3] : undefined;
-          const startX = m.index + 1;
-          links.push({
-            text: full,
-            range: { start: { x: startX, y }, end: { x: startX + full.length - 1, y } },
-            activate: () => {
-              const root = useProject.getState().root;
-              resolvePath(root, path)
-                .then((abs) => abs && useProject.getState().open(abs, lineNo))
-                .catch(() => {});
-            },
-          });
-        }
+        const links: ILink[] = terminalLinks(buf.translateToString(true)).map((l) => ({
+          text: l.text,
+          range: { start: { x: l.start + 1, y }, end: { x: l.start + l.length, y } },
+          activate: () => {
+            if (l.url) return void openUrl(l.url);
+            const root = useProject.getState().root;
+            const path = l.path!;
+            // `search`: agents print `Terminal.tsx:104`, not the path from the
+            // project root, so the plain root-join misses almost every time.
+            resolvePath(root, path, true)
+              .then((abs) =>
+                abs
+                  ? useProject.getState().open(abs, l.line)
+                  : notify("info", t("terminal.noFile", { path })),
+              )
+              .catch((e) => notifyError("terminal", t("terminal.noFile", { path }), e));
+          },
+        }));
         cb(links.length ? links : undefined);
       },
     });
+
+    // Colour every link in the viewport, not just the hovered one: xterm
+    // underlines on hover and does nothing otherwise, so output gives no hint
+    // that it can be clicked. A decoration recolours the cells it covers, which
+    // is the only way to restyle text the terminal has already drawn.
+    // ponytail: viewport only, redrawn whenever the link layout changes — the
+    // scrollback isn't decorated until it scrolls back into view.
+    const painted: IDisposable[] = [];
+    let paintedKey = "";
+    const paintLinks = () => {
+      const buf = term.buffer.active;
+      const found: { offset: number; x: number; width: number }[] = [];
+      let key = "";
+      for (let row = 0; row < term.rows; row++) {
+        const abs = buf.viewportY + row;
+        const line = buf.getLine(abs);
+        if (!line) continue;
+        for (const l of terminalLinks(line.translateToString(true))) {
+          found.push({ offset: abs - (buf.baseY + buf.cursorY), x: l.start, width: l.length });
+          key += `${abs}:${l.start}:${l.text}|`;
+        }
+      }
+      // Registering a decoration schedules another render, which lands straight
+      // back here: bail unless the links themselves moved or changed.
+      if (key === paintedKey) return;
+      paintedKey = key;
+      painted.forEach((d) => d.dispose());
+      painted.length = 0;
+      for (const { offset, x, width } of found) {
+        const marker = term.registerMarker(offset);
+        if (!marker) continue;
+        painted.push(marker);
+        // `bottom` so a selection still paints over the link.
+        const d = term.registerDecoration({
+          marker,
+          x,
+          width,
+          foregroundColor: linkColor,
+          layer: "bottom",
+        });
+        if (d) painted.push(d);
+      }
+    };
+    term.onRender(paintLinks);
 
     const unlisten: UnlistenFn[] = [];
     let disposed = false;
@@ -184,7 +234,16 @@ export function Terminal({ id, cwd, active }: Props) {
           e.preventDefault();
           // Native clipboard read (not navigator.clipboard) so Windows WebView2
           // doesn't prompt for clipboard permission on every paste.
-          void clipboardReadText().then((t) => t && term.paste(t)).catch(() => {});
+          void clipboardReadText()
+            .catch(() => "")
+            .then(async (text) => {
+              if (text) return term.paste(text);
+              // No text: an image on the clipboard becomes a temp PNG whose path
+              // is typed instead — a PTY can't carry the bytes.
+              const file = await clipboardImageToTemp();
+              if (file) term.paste(`${shellQuote(file)} `);
+            })
+            .catch((err) => notifyError("terminal", t("terminal.pasteImageFailed"), err));
           return false;
         }
         // Cmd+F (or Ctrl+Shift+F) opens search — Ctrl+F alone stays readline's.
@@ -236,6 +295,33 @@ export function Terminal({ id, cwd, active }: Props) {
       observer.disconnect();
     };
   }, [syncSize]);
+
+  // Files dropped on the terminal are typed as quoted paths at the cursor — the
+  // way you hand a file to an agent running in the PTY. OS drops arrive through
+  // Tauri (HTML5 drop events never fire with the OS handler on) with a
+  // physical-pixel position, so hit-test it against this pane: every terminal
+  // stays mounted, and only the one under the cursor should take the drop.
+  useEffect(() => {
+    const un = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type !== "drop" || !event.payload.paths.length) return;
+      const host = hostRef.current;
+      const term = termRef.current;
+      if (!host || !term) return;
+      const dpr = window.devicePixelRatio || 1;
+      const { x, y } = event.payload.position;
+      const el = document.elementFromPoint(x / dpr, y / dpr);
+      if (!el || !host.contains(el)) return;
+      // `paste` (not ptyWrite) so bracketed-paste mode is honoured and a TUI
+      // agent reads it as a paste rather than as fast typing.
+      term.paste(`${event.payload.paths.map(shellQuote).join(" ")} `);
+      term.focus();
+    });
+    return () => {
+      // Terminals unmount on pane close; swallow a rejecting unlisten so it
+      // doesn't surface as an unhandled rejection.
+      void un.then((f) => f()).catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -335,7 +421,7 @@ export function Terminal({ id, cwd, active }: Props) {
         className="absolute top-0 left-0 origin-top-left"
         style={{ transform: `scale(${1 / zoom})`, width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
       >
-        <div ref={hostRef} className="h-full w-full" />
+        <div ref={hostRef} data-terminal-id={id} className="h-full w-full" />
       </div>
     </div>
   );

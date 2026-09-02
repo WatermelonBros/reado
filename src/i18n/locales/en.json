@@ -737,7 +737,9 @@
     "noTasks": "No open tasks to send.",
     "search": "Search…",
     "searchPrev": "Previous match",
-    "searchNext": "Next match"
+    "searchNext": "Next match",
+    "noFile": "{path} isn't in this project.",
+    "pasteImageFailed": "Couldn't paste the clipboard image."
   },
   "review": {
     "title": "Send review",

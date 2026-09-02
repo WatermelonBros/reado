@@ -112,9 +112,15 @@ export const resolveImport = (root: string, fromFile: string, spec: string) =>
   invoke<string | null>("resolve_import", { root, fromFile, spec });
 
 /** Resolve a path printed in the terminal (project-relative or absolute) to an
- * existing file inside the project; returns the absolute path or null. */
-export const resolvePath = (root: string, spec: string) =>
-  invoke<string | null>("resolve_path", { root, spec });
+ * existing file inside the project; returns the absolute path or null. With
+ * `search`, a spec that isn't root-relative is matched by suffix against the
+ * project's files — terminal output rarely names paths from the root. */
+export const resolvePath = (root: string, spec: string, search = false) =>
+  invoke<string | null>("resolve_path", { root, spec, search });
+
+/** Save the clipboard image to a temp PNG and return its path (null if the
+ * clipboard holds no image) — the only way to hand one to an agent in a PTY. */
+export const clipboardImageToTemp = () => invoke<string | null>("clipboard_image_to_temp");
 
 /** Allow the webview to load files under `root` through the `asset:` protocol,
  *  so markdown previews can show a README's own images. */

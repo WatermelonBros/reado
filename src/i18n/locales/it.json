@@ -737,7 +737,9 @@
     "noTasks": "Nessun task aperto da inviare.",
     "search": "Cerca…",
     "searchPrev": "Risultato precedente",
-    "searchNext": "Risultato successivo"
+    "searchNext": "Risultato successivo",
+    "noFile": "{path} non è in questo progetto.",
+    "pasteImageFailed": "Impossibile incollare l'immagine dagli appunti."
   },
   "review": {
     "title": "Invia revisione",

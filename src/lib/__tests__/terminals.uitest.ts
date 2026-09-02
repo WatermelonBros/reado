@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 vi.mock("../logger", () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }));
 
-import { useTerminals } from "../terminals";
+import { useTerminals, terminalLinks, shellQuote } from "../terminals";
 
 const T = () => useTerminals.getState();
 
@@ -158,5 +158,48 @@ describe("useTerminals — active & layout", () => {
     expect(T().open).toBe(false);
     T().toggle(true);
     expect(T().open).toBe(true);
+  });
+});
+
+// The link matcher decides what in a line of output is clickable: get it wrong
+// and either nothing is a link (the bug this replaced) or prose turns blue.
+describe("terminalLinks", () => {
+  const one = (text: string) => {
+    const links = terminalLinks(text);
+    expect(links).toHaveLength(1);
+    return links[0];
+  };
+
+  it("links a dev server and a bare domain, choosing the scheme", () => {
+    expect(one("  ➜  Local:   localhost:5173/").url).toBe("http://localhost:5173/");
+    expect(one("serving on 127.0.0.1:8080").url).toBe("http://127.0.0.1:8080");
+    expect(one("see google.com for details").url).toBe("https://google.com");
+    expect(one("docs at reado.watermelon-studio.it/guide").url).toBe(
+      "https://reado.watermelon-studio.it/guide",
+    );
+  });
+
+  it("links a file path, with its line number when printed", () => {
+    const l = one("edited src/lib/api.ts:42:7");
+    expect([l.path, l.line]).toEqual(["src/lib/api.ts", 42]);
+    expect(one("at Terminal.tsx(104,3)").line).toBe(104);
+    // A bare filename is the common case: agents rarely print root-relative.
+    expect(one("look at Terminal.tsx").path).toBe("Terminal.tsx");
+  });
+
+  it("leaves alone what only looks like a link", () => {
+    // `localhost` with no port, and a TLD that is really a file extension.
+    expect(terminalLinks("run it on localhost then")).toEqual([]);
+    expect(one("bash deploy.sh").path).toBe("deploy.sh");
+    // An email is neither a site nor a file — claimed by neither pass.
+    expect(terminalLinks("Author: Ada <ada@example.com>")).toEqual([]);
+    // Scheme-ful URLs belong to WebLinksAddon, which runs first.
+    expect(terminalLinks("open https://google.com/a")).toEqual([]);
+  });
+
+  it("quotes paths only when the shell needs it", () => {
+    expect(shellQuote("/tmp/a-b.png")).toBe("/tmp/a-b.png");
+    expect(shellQuote("/tmp/my shot.png")).toBe("'/tmp/my shot.png'");
+    expect(shellQuote("/tmp/it's.png")).toBe(`'/tmp/it'\\''s.png'`);
   });
 });

@@ -15,6 +15,7 @@ import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { listDir, listFiles, movePath, importPaths, type DirEntry } from "../../lib/api";
+import { dropPathsIntoTerminal } from "../../lib/terminals";
 import { useProject, useEditorActions, useSettings } from "../../lib/store";
 import { useTextView } from "../../lib/textView";
 import { useReadProgress, LAST_READ_BASE } from "../../lib/readProgress";
@@ -153,6 +154,9 @@ export function FileTree() {
       window.addEventListener("click", stopClick, true);
       const dest = destAt(e.clientX, e.clientY);
       if (dest) void move(s.path, dest);
+      // Dropped outside the tree: if a terminal is under the cursor, type the
+      // path there instead — that's how you hand a file to an agent in the PTY.
+      else dropPathsIntoTerminal(e.clientX, e.clientY, [s.path]);
     };
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);

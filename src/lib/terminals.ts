@@ -16,8 +16,107 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { createLogger } from "./logger";
 import { useSettings } from "./store";
+import { ptyWrite } from "./api";
 
 const log = createLogger("terminals");
+
+/**
+ * A clickable span found in one line of terminal output: either a web address
+ * (opened in the browser) or a file path (opened in the editor).
+ */
+export interface TermLink {
+  /** 0-based offset of the span in the line, and its length. */
+  start: number;
+  length: number;
+  text: string;
+  /** Set for a web address; `path` is set instead for a file. */
+  url?: string;
+  path?: string;
+  line?: number;
+}
+
+// An address printed without a scheme, which `WebLinksAddon` (it only knows
+// `scheme://…`) leaves behind: a dev server (`localhost:3000`, `127.0.0.1:8080`)
+// or a bare domain. A host:port needs the port, so the word "localhost" in prose
+// isn't a link; a domain needs a known TLD, so `Terminal.tsx` stays a file.
+// ponytail: hand-picked TLDs, chosen not to collide with file extensions
+// (no `.sh`, `.app`, `.ai`) — swap in a public-suffix list if it starts missing.
+const HOST_RE =
+  /\b(?:(?:localhost|\d{1,3}(?:\.\d{1,3}){3})(?::\d{2,5})|(?:www\.)?[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|io|dev|edu|gov|info|xyz|it)(?::\d{2,5})?)(?:\/[\w\-./~%&=?#+@:]*)?/gi;
+
+// An email address, and a URL that already carries its scheme — both matched
+// only so the passes below skip them (`WebLinksAddon` owns scheme-ful URLs).
+const EMAIL_RE = /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g;
+const URL_RE = /\b[a-zA-Z][\w+.-]*:\/\/\S+/g;
+
+// A file path printed in output, with an optional :line:col or (line,col)
+// suffix. Requires a real extension so we don't underline arbitrary words.
+const PATH_RE =
+  /(\/?[\w.\-~/@]*[\w\-]+\.[A-Za-z][\w]*)(?::(\d+)(?::\d+)?|\((\d+),\d+\))?/g;
+
+/**
+ * Find the clickable spans in one line of terminal output.
+ *
+ * Order matters, and each pass claims its span so the next leaves it alone:
+ * `a@b.com` and `google.com` both parse as filenames with an extension, and an
+ * email is neither a file nor a site — it is claimed but never linked, and so
+ * is a `scheme://…` URL, which `WebLinksAddon` already owns.
+ */
+export function terminalLinks(text: string): TermLink[] {
+  const links: TermLink[] = [];
+  const claimed: [number, number][] = [];
+  const taken = (i: number) => claimed.some(([from, to]) => i >= from && i < to);
+  let m: RegExpExecArray | null;
+  const claimAll = (re: RegExp) => {
+    re.lastIndex = 0;
+    while ((m = re.exec(text))) claimed.push([m.index, m.index + m[0].length]);
+  };
+
+  claimAll(URL_RE);
+  claimAll(EMAIL_RE);
+
+  HOST_RE.lastIndex = 0;
+  while ((m = HOST_RE.exec(text))) {
+    if (taken(m.index)) continue;
+    claimed.push([m.index, m.index + m[0].length]);
+    // A dev server is plain http; anything named by domain is https.
+    const scheme = /^(?:localhost|\d)/.test(m[0]) ? "http" : "https";
+    links.push({ start: m.index, length: m[0].length, text: m[0], url: `${scheme}://${m[0]}` });
+  }
+
+  PATH_RE.lastIndex = 0;
+  while ((m = PATH_RE.exec(text))) {
+    if (taken(m.index)) continue;
+    const line = m[2] ? +m[2] : m[3] ? +m[3] : undefined;
+    links.push({ start: m.index, length: m[0].length, text: m[0], path: m[1], line });
+  }
+  return links;
+}
+
+/**
+ * Quote a path for the shell (or an agent's prompt) so spaces survive.
+ * POSIX quoting: on Windows `cmd` wants double quotes, but a space in a dropped
+ * path is rare enough there that the extra platform branch isn't worth it.
+ */
+export const shellQuote = (p: string) =>
+  /^[\w@%+=:,./-]+$/.test(p) ? p : `'${p.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * Type `paths` into the terminal pane under a client point; false if none is
+ * there. Handing a file to an agent running in a PTY means naming it, so both
+ * drag sources end here — OS drops (Tauri) and drags from the file tree, which
+ * are pointer events and never reach Tauri's drag-drop channel.
+ */
+export function dropPathsIntoTerminal(clientX: number, clientY: number, paths: string[]): boolean {
+  const host = document
+    .elementFromPoint(clientX, clientY)
+    ?.closest<HTMLElement>("[data-terminal-id]");
+  const id = host?.dataset.terminalId;
+  if (!id || !paths.length) return false;
+  void ptyWrite(id, `${paths.map(shellQuote).join(" ")} `);
+  host?.querySelector<HTMLTextAreaElement>("textarea.xterm-helper-textarea")?.focus();
+  return true;
+}
 
 export interface TermSession {
   id: string;

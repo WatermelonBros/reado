@@ -132,6 +132,7 @@ pub fn run() {
             fs::allow_project_assets,
             fs::resolve_import,
             fs::resolve_path,
+            fs::clipboard_image_to_temp,
             git::git_info,
             git::git_branches,
             git::git_checkout,

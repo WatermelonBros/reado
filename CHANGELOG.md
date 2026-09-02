@@ -11,7 +11,32 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **Files reach the terminal by dropping them.** Dragging files onto a terminal —
+  from the file tree or from outside Reado — types their quoted paths at the
+  cursor, which is how you hand a file to an agent running in the pane.
+- **Links in terminal output are always coloured.** They used to underline on
+  hover and look like ordinary text otherwise, so nothing suggested the output
+  could be clicked at all. Every link in view now takes the accent colour.
+- **Pasting an image in the terminal pastes a path.** A terminal carries text
+  only, so an image on the clipboard is written to a temporary PNG and its path
+  is typed instead, ready for an agent that reads image files.
+
 ### Fixed
+- **Images show in the knowledge base.** A document rendered there resolved its
+  own images against the webview's origin rather than the project, so a README's
+  screenshots and diagrams came out as broken-image placeholders — the editor's
+  preview already rewrote them, the knowledge base didn't.
+- **Scheme-less addresses in terminal output are clickable.** A dev server
+  (`localhost:3000`) or a bare domain has no `https://` for the URL matcher to
+  latch onto, so the most-clicked link in the terminal wasn't a link at all — and
+  a domain was misread as a filename. Both now open in the browser, and emails
+  are left alone instead of being taken for a file.
+- **Clicking a path in terminal output opens the file.** Agents and build tools
+  print paths relative to wherever they ran (`Terminal.tsx:104`), not to the
+  project root, so almost every click resolved to nothing at all. Paths are now
+  matched by suffix across the project, shallowest match first, and a path that
+  really isn't there says so instead of failing silently.
 - **Reado Anywhere confines paths properly.** The LAN endpoint a paired phone
   talks to guarded its file and directory requests with a `..` scan of its own,
   which an absolute path walked straight past and a symlink out of the project
