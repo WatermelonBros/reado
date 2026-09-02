@@ -165,8 +165,32 @@
   "use strict";
   const KEY = "reado_anywhere_token";
   const h = new URLSearchParams(location.hash.slice(1));
-  if (h.get("token")) { localStorage.setItem(KEY, h.get("token")); history.replaceState(null, "", location.pathname + "#"); }
   const token = () => localStorage.getItem(KEY);
+
+  // A name the desktop shows in its paired-device list. Best effort from the UA
+  // (the desktop sanitizes it anyway); the phone never sees this again.
+  const deviceName = () => {
+    const ua = navigator.userAgent || "";
+    if (/iPad/.test(ua)) return "iPad";
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/Android/.test(ua)) return "Android phone";
+    return "Phone";
+  };
+
+  // Redeem the QR's single-use pairing secret for this device's own credential.
+  // The secret is never stored: only the credential the desktop mints for us.
+  const pair = async (secret) => {
+    const res = await fetch("/api/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret, name: deviceName() }),
+    });
+    if (!res.ok) return false;
+    const { token } = await res.json();
+    if (!token) return false;
+    localStorage.setItem(KEY, token);
+    return true;
+  };
 
   const api = async (path, opts = {}) => {
     const res = await fetch(path, { ...opts, headers: {
@@ -273,6 +297,15 @@
     detachTerm();
     clearReviewPoll();
     els.main.className = "";
+    // A fresh scan carries a pairing secret rather than a credential: spend it,
+    // then drop it from the URL so a shared link or a screenshot carries nothing.
+    const secret = h.get("pair");
+    if (secret) {
+      h.delete("pair");
+      history.replaceState(null, "", location.pathname + "#");
+      if (!(await pair(secret))) return gate("That pairing code has already been used or expired. Show a new QR on the desktop.");
+      return render();
+    }
     if (!token()) return gate();
     const r = route();
     // Remember where we are so a reload/reconnect lands back here.
@@ -288,12 +321,12 @@
     return renderFiles(r.proj, r.dir || "");
   }
 
-  function gate() {
+  function gate(message) {
     els.tabs.hidden = true;
     setChrome({ title: "Reado" });
     els.refresh.hidden = true;
     els.main.innerHTML = '<div class="center"><div><h2 style="color:var(--bright)">Reado Anywhere</h2>' +
-      '<p>Open this by scanning the QR from Reado on your desktop.</p></div></div>';
+      '<p>' + esc(message || "Open this by scanning the QR from Reado on your desktop.") + '</p></div></div>';
   }
 
   async function renderProjects() {

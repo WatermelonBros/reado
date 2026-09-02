@@ -769,11 +769,39 @@ export const ptyKill = (id: string) => invoke<void>("pty_kill", { id })
 // ---- Reado Anywhere: opt-in LAN server (phone review) ---------------------
 
 /** What the desktop shows for pairing: the HTTPS LAN address, the certificate
- * fingerprint to verify, and a single-use pairing token. */
+ * fingerprint to verify, and a single-use pairing secret. The secret is not an
+ * API credential — the phone spends it once to mint its own. */
 export interface AnywhereInfo {
   url: string
   fingerprint: string
-  token: string
+  pairing: string
+}
+
+/** A phone paired with this desktop. No credential material crosses this
+ * boundary — the backend keeps only a hash, and doesn't send even that. */
+export interface AnywhereDevice {
+  id: string
+  name: string
+  /** Unix seconds. */
+  created: number
+  lastSeen: number
+}
+
+/** Anywhere's persisted preferences (the device list is fetched separately). */
+export interface AnywhereConfig {
+  /** Days a credential survives unused; 0 disables the check. */
+  idleDays: number
+  /** Days a credential survives at all; 0 disables the check. */
+  maxDays: number
+  /** Interface address to bind, or null for the machine's LAN address. */
+  bind: string | null
+  mdns: boolean
+}
+
+/** A network interface Anywhere can bind to. */
+export interface AnywhereIface {
+  name: string
+  addr: string
 }
 
 /** Start the Reado Anywhere LAN server (idempotent); returns the pairing info. */
@@ -784,6 +812,34 @@ export const anywhereDisable = () => invoke<void>("anywhere_disable")
 
 /** The running server's info, or null when Reado Anywhere is off. */
 export const anywhereStatus = () => invoke<AnywhereInfo | null>("anywhere_status")
+
+/** The phones paired with this desktop, newest first. */
+export const anywhereDevices = () => invoke<AnywhereDevice[]>("anywhere_devices")
+
+/** Revoke one device; returns whether it was paired. Takes effect immediately. */
+export const anywhereRevoke = (id: string) => invoke<boolean>("anywhere_revoke", { id })
+
+/** Revoke every paired device at once; returns how many were dropped. */
+export const anywhereRevokeAll = () => invoke<number>("anywhere_revoke_all")
+
+/** Mint a fresh single-use pairing secret (to pair another phone). */
+export const anywhereNewPairing = () => invoke<AnywhereInfo>("anywhere_new_pairing")
+
+/** Anywhere's persisted preferences. */
+export const anywhereConfig = () => invoke<AnywhereConfig>("anywhere_config")
+
+/** Set how long a device credential lives (0 disables a check). */
+export const anywhereSetLifetimes = (idleDays: number, maxDays: number) =>
+  invoke<void>("anywhere_set_lifetimes", { idleDays, maxDays })
+
+/** The machine's IPv4 interfaces, LAN addresses first. */
+export const anywhereInterfaces = () => invoke<AnywhereIface[]>("anywhere_interfaces")
+
+/** Choose the interface to bind; applies at the next enable. */
+export const anywhereSetBind = (bind: string | null) => invoke<void>("anywhere_set_bind", { bind })
+
+/** Toggle mDNS advertisement; applies at the next enable. */
+export const anywhereSetMdns = (on: boolean) => invoke<void>("anywhere_set_mdns", { on })
 
 /** Register this window's open project so a paired phone can pick it. */
 export const anywhereSetProject = (id: string, root: string, name: string) =>

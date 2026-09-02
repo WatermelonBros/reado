@@ -5,20 +5,21 @@
 //! app, shared across windows) that, when the user enables Reado Anywhere, serves
 //! a self-contained mobile PWA over HTTPS plus a small JSON API.
 //!
-//! Auth is deliberately simple: the QR carries a session token, and the phone
-//! sends it as a `Bearer` credential. The server checks it against the running
-//! session's token. Regenerating the server (disable/enable) mints a new token,
-//! which revokes every phone. Stable, persisted device credentials are a later
-//! refinement.
+//! Auth is per device. The QR carries a **single-use pairing secret**; the phone
+//! spends it at `/api/pair` and gets its own long-lived credential, which it
+//! then sends as a `Bearer` token. Credentials persist across restarts, expire
+//! on their own, and are revocable one at a time — see [`crate::pairing`], which
+//! owns the trust model. Failed attempts are rate-limited per peer address.
 
+use crate::pairing::{self, Denied, DeviceInfo, PairingSecret, RateLimiter};
 use crate::proc::command;
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Once};
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Query, Request, State};
+use axum::extract::{ConnectInfo, Query, Request, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
@@ -27,7 +28,6 @@ use axum::{Json, Router};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use futures_util::{SinkExt, StreamExt};
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, State as TauriState};
@@ -84,8 +84,9 @@ pub struct AnywhereInfo {
     pub url: String,
     /// SHA-256 of the server certificate (uppercase hex, colon-separated).
     pub fingerprint: String,
-    /// Session token: the phone sends it back as a `Bearer` credential.
-    pub token: String,
+    /// Single-use pairing secret. The phone spends it at `/api/pair` to mint its
+    /// own credential; it is never itself an API credential.
+    pub pairing: String,
 }
 
 /// A running server: the info we handed out, plus the handle that shuts it down.
@@ -99,10 +100,22 @@ struct Running {
 /// it. `None` means no loop is active.
 type Loop = Arc<Mutex<Option<String>>>;
 
+/// The paired-device store, shared between the Tauri commands (the device list,
+/// revocation) and the server (authentication), so revoking a phone takes effect
+/// on the next request rather than at the next restart.
+type Devices = Arc<Mutex<pairing::Store>>;
+
+/// The live pairing secret, if the desktop is currently showing a QR.
+type Pairing = Arc<Mutex<Option<PairingSecret>>>;
+
 /// Tauri-managed state: the server, the open-project registry, and the recents.
+/// `devices` is an Option because the store's path comes from the app handle,
+/// which does not exist when this is constructed.
 #[derive(Default)]
 pub struct AnywhereState {
     running: Mutex<Option<Running>>,
+    devices: Mutex<Option<Devices>>,
+    pairing: Pairing,
     projects: Projects,
     recents: Recents,
     terminals: Terminals,
@@ -112,7 +125,10 @@ pub struct AnywhereState {
 /// Shared state handed to the axum handlers.
 #[derive(Clone)]
 struct Api {
-    token: String,
+    devices: Devices,
+    pairing: Pairing,
+    /// Per-address failure tracking for the auth middleware.
+    limiter: Arc<Mutex<RateLimiter>>,
     projects: Projects,
     recents: Recents,
     terminals: Terminals,
@@ -151,11 +167,51 @@ fn fingerprint(der: &[u8]) -> String {
         .join(":")
 }
 
-/// A fresh session token (192 random bits, hex).
-fn mint_token() -> String {
-    let mut bytes = [0u8; 24];
-    rand::thread_rng().fill_bytes(&mut bytes);
-    bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
+/// Where the paired devices and the Anywhere preferences live: the app's own
+/// config dir, not the project — a project directory is shared and committed.
+fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
+    use tauri::Manager;
+    Ok(app
+        .path()
+        .app_config_dir()
+        .map_err(|e| e.to_string())?
+        .join("anywhere.json"))
+}
+
+/// The paired-device store, loaded from disk on first use. Shared as an `Arc` so
+/// the running server and the desktop commands see the same list.
+fn devices(app: &AppHandle, state: &AnywhereState) -> Result<Devices, String> {
+    let mut guard = state.devices.lock().map_err(|e| e.to_string())?;
+    if guard.is_none() {
+        let mut store = pairing::Store::load(&config_path(app)?);
+        // Drop credentials that would be refused anyway, so the device list
+        // never shows a phone that can no longer connect.
+        if store.prune() > 0 {
+            let _ = store.save();
+        }
+        *guard = Some(Arc::new(Mutex::new(store)));
+    }
+    Ok(guard.as_ref().expect("just loaded").clone())
+}
+
+/// Run `f` against the store and persist whatever it changed — one funnel, so a
+/// mutation cannot forget to save.
+fn with_devices<T>(
+    app: &AppHandle,
+    state: &AnywhereState,
+    f: impl FnOnce(&mut pairing::Store) -> T,
+) -> Result<T, String> {
+    let devices = devices(app, state)?;
+    let mut store = devices.lock().map_err(|e| e.to_string())?;
+    let out = f(&mut store);
+    if let Err(e) = store.save() {
+        crate::log::warn(
+            "anywhere",
+            "could not persist paired devices",
+            serde_json::json!({ "error": e.to_string() }),
+        );
+    }
+    Ok(out)
 }
 
 /// Join a project-relative path to its root, rejecting traversal (`..`). An
@@ -229,16 +285,34 @@ fn shell() -> (String, Vec<String>) {
 
 // ---- Server lifecycle ------------------------------------------------------
 
-/// The full pairing URL a phone can open directly (address + token + fingerprint
-/// in the fragment). The desktop QR encodes exactly this.
+/// The full pairing URL a phone can open directly (address + the single-use
+/// pairing secret + fingerprint in the fragment). The desktop QR encodes exactly
+/// this. The secret is spent on the first pair and expires shortly after.
 pub fn pairing_url(info: &AnywhereInfo) -> String {
-    format!("{}/#token={}&fp={}", info.url, info.token, info.fingerprint)
+    format!(
+        "{}/#pair={}&fp={}",
+        info.url, info.pairing, info.fingerprint
+    )
+}
+
+/// The address to listen on: the user's chosen interface, else the machine's LAN
+/// address. Never `0.0.0.0` — binding every interface is the most open choice
+/// available, so it is not the default.
+fn bind_address(chosen: Option<&str>) -> Result<IpAddr, String> {
+    match chosen {
+        Some(addr) => addr
+            .parse()
+            .map_err(|_| format!("not a valid interface address: {addr}")),
+        None => local_ip_address::local_ip().map_err(|e| e.to_string()),
+    }
 }
 
 /// Build the cert, bind the TLS server, spawn it, and return its handle + info.
 /// Shared by the `anywhere_enable` command and the dev autostart.
 async fn start_server(
     app: AppHandle,
+    devices: Devices,
+    pairing_slot: Pairing,
     projects: Projects,
     recents: Recents,
     terminals: Terminals,
@@ -246,7 +320,11 @@ async fn start_server(
 ) -> Result<(Handle, AnywhereInfo), String> {
     install_crypto();
 
-    let ip = local_ip_address::local_ip().map_err(|e| e.to_string())?;
+    let (bind, mdns_on) = {
+        let store = devices.lock().map_err(|e| e.to_string())?;
+        (store.config().bind.clone(), store.config().mdns)
+    };
+    let ip = bind_address(bind.as_deref())?;
     let port = free_port().map_err(|e| e.to_string())?;
 
     let cert = rcgen::generate_simple_self_signed(vec![ip.to_string(), "localhost".into()])
@@ -259,14 +337,21 @@ async fn start_server(
     .await
     .map_err(|e| e.to_string())?;
 
+    // A fresh single-use secret per server start; the desktop can mint another
+    // to pair a second device.
+    let (secret, clear) = PairingSecret::mint();
+    *pairing_slot.lock().map_err(|e| e.to_string())? = Some(secret);
+
     let info = AnywhereInfo {
         url: format!("https://{ip}:{port}"),
         fingerprint: fp,
-        token: mint_token(),
+        pairing: clear,
     };
 
     let api = Api {
-        token: info.token.clone(),
+        devices,
+        pairing: pairing_slot,
+        limiter: Arc::new(Mutex::new(RateLimiter::default())),
         projects,
         recents,
         terminals,
@@ -320,16 +405,19 @@ async fn start_server(
         .route("/vendor/xterm.js", js(XTERM_JS, "text/javascript"))
         .route("/vendor/xterm.css", js(XTERM_CSS, "text/css"))
         .route("/vendor/addon-fit.js", js(XTERM_FIT, "text/javascript"))
-        // The terminal WebSocket validates its token from the query string
+        // The terminal WebSocket validates its credential from the query string
         // (browsers can't set headers on a WS handshake), so it lives outside the
         // bearer-header middleware.
         .route("/api/term", get(term))
+        // Pairing is necessarily unauthenticated — it is how a phone gets its
+        // credential — but it demands the single-use secret from the QR.
+        .route("/api/pair", post(pair))
         .merge(protected)
         .with_state(api);
 
     let handle = Handle::new();
     let serve_handle = handle.clone();
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = SocketAddr::new(ip, port);
     // Note: the cert fingerprint is intentionally not logged — the `fingerprint`
     // field name is on the redaction denylist, so it would only ever write
     // `<redacted>`. The address is enough to confirm the listener came up.
@@ -339,13 +427,81 @@ async fn start_server(
         serde_json::json!({ "addr": addr.to_string() }),
     );
     tauri::async_runtime::spawn(async move {
+        // `with_connect_info` so the auth middleware can see the peer address and
+        // rate-limit per source rather than globally.
         let _ = axum_server::bind_rustls(addr, config)
             .handle(serve_handle)
-            .serve(router.into_make_service())
+            .serve(router.into_make_service_with_connect_info::<SocketAddr>())
             .await;
     });
 
+    if mdns_on {
+        advertise(ip, port);
+    }
+
     Ok((handle, info))
+}
+
+/// Advertise the server over mDNS as `_reado._tcp.local.`, so a paired phone can
+/// find the desk again without a fresh QR. Off unless the user asks for it, and
+/// compiled in only with `--features mdns` — discovery is a convenience, and the
+/// dependency should not ride along in builds that never use it.
+///
+/// The advertisement carries the address only. It is not a credential: a phone
+/// that finds the desk this way still authenticates with the credential it got
+/// when it paired.
+#[cfg(feature = "mdns")]
+fn advertise(ip: IpAddr, port: u16) {
+    let Ok(daemon) = mdns_sd::ServiceDaemon::new() else {
+        crate::log::warn(
+            "anywhere",
+            "mDNS daemon unavailable",
+            serde_json::Value::Null,
+        );
+        return;
+    };
+    let host = format!("reado-{}", port);
+    let service = match mdns_sd::ServiceInfo::new(
+        "_reado._tcp.local.",
+        &host,
+        &format!("{host}.local."),
+        ip,
+        port,
+        None,
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            crate::log::warn(
+                "anywhere",
+                "mDNS service could not be described",
+                serde_json::json!({ "error": e.to_string() }),
+            );
+            return;
+        }
+    };
+    if let Err(e) = daemon.register(service) {
+        crate::log::warn(
+            "anywhere",
+            "mDNS registration failed",
+            serde_json::json!({ "error": e.to_string() }),
+        );
+        return;
+    }
+    // The daemon stops advertising when it drops, and the advertisement should
+    // outlive this call, so it is deliberately leaked for the process lifetime.
+    std::mem::forget(daemon);
+    crate::log::info("anywhere", "advertising over mDNS", serde_json::Value::Null);
+}
+
+/// Without the `mdns` feature the toggle is inert: the setting persists, and a
+/// build that includes the feature honours it.
+#[cfg(not(feature = "mdns"))]
+fn advertise(_ip: IpAddr, _port: u16) {
+    crate::log::info(
+        "anywhere",
+        "mDNS requested but this build has no mdns feature",
+        serde_json::Value::Null,
+    );
 }
 
 /// Start the LAN server (idempotent: returns the existing info if already up).
@@ -357,8 +513,11 @@ pub async fn anywhere_enable(
     if let Some(running) = state.running.lock().map_err(|e| e.to_string())?.as_ref() {
         return Ok(running.info.clone());
     }
+    let devices = devices(&app, &state)?;
     let (handle, info) = start_server(
         app,
+        devices,
+        state.pairing.clone(),
         state.projects.clone(),
         state.recents.clone(),
         state.terminals.clone(),
@@ -381,6 +540,18 @@ pub fn dev_autostart(app: &AppHandle) {
     }
     use tauri::Manager;
     let state = app.state::<AnywhereState>();
+    let devices = match devices(app, &state) {
+        Ok(d) => d,
+        Err(e) => {
+            crate::log::error(
+                "anywhere",
+                "dev autostart could not load devices",
+                serde_json::json!({ "error": e }),
+            );
+            return;
+        }
+    };
+    let pairing_slot = state.pairing.clone();
     let projects = state.projects.clone();
     let recents = state.recents.clone();
     let terminals = state.terminals.clone();
@@ -405,6 +576,8 @@ pub fn dev_autostart(app: &AppHandle) {
     }
     match tauri::async_runtime::block_on(start_server(
         app.clone(),
+        devices,
+        pairing_slot,
         projects,
         recents,
         terminals,
@@ -417,8 +590,9 @@ pub fn dev_autostart(app: &AppHandle) {
                 serde_json::json!({ "url": info.url }),
             );
             // Intentional dev-only stdout (gated by READO_ANYWHERE_AUTOSTART): the
-            // pairing URL carries the session token, so it is printed for the
-            // developer's terminal but never written to the (shareable) log file.
+            // pairing URL carries the single-use pairing secret, so it is printed
+            // for the developer's terminal but never written to the (shareable)
+            // log file.
             println!(
                 "\n[reado-anywhere] open on your phone:\n[reado-anywhere] {}\n",
                 pairing_url(&info)
@@ -514,6 +688,143 @@ pub fn anywhere_publish_loop(state: TauriState<'_, AnywhereState>, json: Option<
     }
 }
 
+// ---- Device management (desktop side) --------------------------------------
+
+/// The paired devices, newest first. Credential hashes never cross this
+/// boundary — see `pairing::DeviceInfo`.
+#[tauri::command]
+pub fn anywhere_devices(
+    app: AppHandle,
+    state: TauriState<'_, AnywhereState>,
+) -> Result<Vec<DeviceInfo>, String> {
+    with_devices(&app, &state, |store| {
+        let mut list = store.devices();
+        list.sort_by_key(|d| std::cmp::Reverse(d.created));
+        list
+    })
+}
+
+/// Revoke one device. The next request it makes is refused — the store is shared
+/// with the running server, so this does not wait for a restart.
+#[tauri::command]
+pub fn anywhere_revoke(
+    app: AppHandle,
+    state: TauriState<'_, AnywhereState>,
+    id: String,
+) -> Result<bool, String> {
+    let removed = with_devices(&app, &state, |store| store.revoke(&id))?;
+    if removed {
+        crate::log::info("anywhere", "device revoked", serde_json::Value::Null);
+    }
+    Ok(removed)
+}
+
+/// Revoke every paired device. Returns how many were dropped.
+#[tauri::command]
+pub fn anywhere_revoke_all(
+    app: AppHandle,
+    state: TauriState<'_, AnywhereState>,
+) -> Result<usize, String> {
+    let count = with_devices(&app, &state, |store| store.revoke_all())?;
+    if count > 0 {
+        crate::log::info(
+            "anywhere",
+            "all devices revoked",
+            serde_json::json!({ "count": count }),
+        );
+    }
+    Ok(count)
+}
+
+/// Mint a fresh single-use pairing secret and return the QR payload, so a second
+/// phone can pair without disturbing the first.
+#[tauri::command]
+pub fn anywhere_new_pairing(state: TauriState<'_, AnywhereState>) -> Result<AnywhereInfo, String> {
+    let mut running = state.running.lock().map_err(|e| e.to_string())?;
+    let Some(r) = running.as_mut() else {
+        return Err("Reado Anywhere is not running".into());
+    };
+    let (secret, clear) = PairingSecret::mint();
+    *state.pairing.lock().map_err(|e| e.to_string())? = Some(secret);
+    r.info.pairing = clear;
+    Ok(r.info.clone())
+}
+
+/// How long a credential lives: idle days, then absolute days. 0 turns a check
+/// off. Takes effect on the next request.
+#[tauri::command]
+pub fn anywhere_set_lifetimes(
+    app: AppHandle,
+    state: TauriState<'_, AnywhereState>,
+    idle_days: i64,
+    max_days: i64,
+) -> Result<(), String> {
+    with_devices(&app, &state, |store| {
+        store.set_lifetimes(idle_days, max_days)
+    })
+}
+
+/// The Anywhere preferences the dialog renders (lifetimes, interface, mDNS).
+#[tauri::command]
+pub fn anywhere_config(
+    app: AppHandle,
+    state: TauriState<'_, AnywhereState>,
+) -> Result<pairing::Config, String> {
+    // Clone without the device list: the dialog reads devices through
+    // `anywhere_devices`, and this keeps credential hashes out of the payload.
+    with_devices(&app, &state, |store| pairing::Config {
+        devices: Vec::new(),
+        ..store.config().clone()
+    })
+}
+
+/// A bindable network interface, as the dialog lists them.
+#[derive(Serialize)]
+pub struct Iface {
+    pub name: String,
+    pub addr: String,
+}
+
+/// The machine's IPv4 interfaces. Loopback is included but listed last: binding
+/// there makes Anywhere reachable only from this machine, which is a legitimate
+/// (if quiet) choice.
+#[tauri::command]
+pub fn anywhere_interfaces() -> Result<Vec<Iface>, String> {
+    let mut list: Vec<Iface> = local_ip_address::list_afinet_netifas()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|(_, addr)| addr.is_ipv4())
+        .map(|(name, addr)| Iface {
+            name,
+            addr: addr.to_string(),
+        })
+        .collect();
+    list.sort_by_key(|i| (i.addr.starts_with("127."), i.addr.clone()));
+    list.dedup_by(|a, b| a.addr == b.addr);
+    Ok(list)
+}
+
+/// Choose the interface to bind (`None` = the machine's LAN address). Applies at
+/// the next enable, since the listener is already bound.
+#[tauri::command]
+pub fn anywhere_set_bind(
+    app: AppHandle,
+    state: TauriState<'_, AnywhereState>,
+    bind: Option<String>,
+) -> Result<(), String> {
+    with_devices(&app, &state, |store| store.set_bind(bind))
+}
+
+/// Turn mDNS advertisement on or off. Applies at the next enable.
+#[tauri::command]
+pub fn anywhere_set_mdns(
+    app: AppHandle,
+    state: TauriState<'_, AnywhereState>,
+    on: bool,
+) -> Result<(), String> {
+    with_devices(&app, &state, |store| store.set_mdns(on))
+}
+
 /// Drop a project from the registry when its window closes.
 #[tauri::command]
 pub fn anywhere_clear_project(
@@ -528,27 +839,146 @@ pub fn anywhere_clear_project(
     Ok(())
 }
 
-// ---- Auth middleware -------------------------------------------------------
+// ---- Auth ------------------------------------------------------------------
 
-/// Gate `/api/*` on the session token presented as `Authorization: Bearer …`.
-async fn auth(State(api): State<Api>, req: Request, next: Next) -> Response {
-    let ok = req
+impl Api {
+    /// Check a device credential, moving the device's `last_seen` on success and
+    /// counting the failure against the peer on refusal. The caller turns any
+    /// `Denied` into the same 401 — telling a client *why* it was refused would
+    /// be an oracle for probing which credentials exist.
+    fn authenticate(&self, secret: &str, peer: IpAddr) -> Result<String, Denied> {
+        {
+            let limiter = self.limiter.lock().map_err(|_| Denied::RateLimited)?;
+            if !limiter.allowed(peer) {
+                return Err(Denied::RateLimited);
+            }
+        }
+        let mut store = self.devices.lock().map_err(|_| Denied::Unknown)?;
+        match store.verify(secret) {
+            Ok(id) => {
+                // Persist the touched `last_seen` so an idle timeout measures
+                // real use rather than time since the app started.
+                let _ = store.save();
+                if let Ok(mut limiter) = self.limiter.lock() {
+                    limiter.succeed(peer);
+                }
+                Ok(id)
+            }
+            Err(denied) => {
+                if let Ok(mut limiter) = self.limiter.lock() {
+                    limiter.fail(peer);
+                }
+                Err(denied)
+            }
+        }
+    }
+}
+
+// A poisoned lock is not a credential problem, but it must not fail *open*.
+impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, RateLimiter>>> for Denied {
+    fn from(_: std::sync::PoisonError<std::sync::MutexGuard<'_, RateLimiter>>) -> Self {
+        Denied::RateLimited
+    }
+}
+
+/// Gate `/api/*` on a device credential presented as `Authorization: Bearer …`.
+async fn auth(
+    State(api): State<Api>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let presented = req
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|t| t == api.token)
-        .unwrap_or(false);
-    if ok {
-        next.run(req).await
-    } else {
+        .unwrap_or("");
+    match api.authenticate(presented, peer.ip()) {
+        Ok(_) => next.run(req).await,
+        Err(denied) => {
+            crate::log::warn(
+                "anywhere",
+                "client auth rejected",
+                serde_json::json!({ "path": req.uri().path(), "reason": format!("{denied:?}") }),
+            );
+            // A throttled caller is told so; everything else is a flat 401.
+            if denied == Denied::RateLimited {
+                StatusCode::TOO_MANY_REQUESTS.into_response()
+            } else {
+                StatusCode::UNAUTHORIZED.into_response()
+            }
+        }
+    }
+}
+
+/// What a phone sends to redeem the QR's single-use secret.
+#[derive(Deserialize)]
+struct PairBody {
+    secret: String,
+    /// A name the phone proposes for itself; sanitized before it is stored.
+    #[serde(default)]
+    name: String,
+}
+
+/// The credential a freshly paired phone stores and sends from then on.
+#[derive(Serialize)]
+struct PairedBody {
+    token: String,
+}
+
+/// Redeem the pairing secret from the QR for a device credential of the phone's
+/// own. The secret is single-use and short-lived, so a photographed QR stops
+/// being useful once a phone has spent it.
+async fn pair(
+    State(api): State<Api>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(body): Json<PairBody>,
+) -> Response {
+    let peer = peer.ip();
+    // Pairing is unauthenticated by nature, so it is rate-limited like auth —
+    // otherwise it would be the one endpoint free to guess against.
+    {
+        let Ok(limiter) = api.limiter.lock() else {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        };
+        if !limiter.allowed(peer) {
+            return StatusCode::TOO_MANY_REQUESTS.into_response();
+        }
+    }
+
+    let Ok(mut slot) = api.pairing.lock() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let accepted = slot.as_ref().map(|p| p.accepts(&body.secret)) == Some(true);
+    if !accepted {
+        if let Ok(mut limiter) = api.limiter.lock() {
+            limiter.fail(peer);
+        }
+        crate::log::warn("anywhere", "pairing rejected", serde_json::Value::Null);
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    // Spend it: one QR, one device.
+    *slot = None;
+    drop(slot);
+
+    let Ok(mut store) = api.devices.lock() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let token = store.pair(&body.name);
+    if let Err(e) = store.save() {
         crate::log::warn(
             "anywhere",
-            "client auth rejected",
-            serde_json::json!({ "path": req.uri().path() }),
+            "paired device could not be persisted",
+            serde_json::json!({ "error": e.to_string() }),
         );
-        StatusCode::UNAUTHORIZED.into_response()
     }
+    if let Ok(mut limiter) = api.limiter.lock() {
+        limiter.succeed(peer);
+    }
+    crate::log::info("anywhere", "device paired", serde_json::Value::Null);
+    let _ = api.app.emit("anywhere-devices-changed", ());
+    Json(PairedBody { token }).into_response()
 }
 
 // ---- API handlers ----------------------------------------------------------
@@ -826,16 +1256,23 @@ fn get_or_create_term(terminals: &Terminals, key: &str, root: &str) -> Option<Ar
 /// the shell — a reconnect reattaches and the scrollback is replayed.
 async fn term(
     State(api): State<Api>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Query(q): Query<TermQuery>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    if q.token != api.token {
+    // Same credential check as the bearer middleware, including the rate limit —
+    // the WebSocket is not a softer door because the token rides in the query.
+    if let Err(denied) = api.authenticate(&q.token, peer.ip()) {
         crate::log::warn(
             "anywhere",
             "terminal ws auth rejected",
-            serde_json::Value::Null,
+            serde_json::json!({ "reason": format!("{denied:?}") }),
         );
-        return StatusCode::UNAUTHORIZED.into_response();
+        return if denied == Denied::RateLimited {
+            StatusCode::TOO_MANY_REQUESTS.into_response()
+        } else {
+            StatusCode::UNAUTHORIZED.into_response()
+        };
     }
     let root = match api.root(&q.project) {
         Some(r) => r,
@@ -1151,13 +1588,56 @@ mod tests {
                 .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_lowercase())));
     }
 
+    fn info() -> AnywhereInfo {
+        AnywhereInfo {
+            url: "https://192.168.1.10:4443".into(),
+            fingerprint: "AA:BB".into(),
+            pairing: "s3cr3t".into(),
+        }
+    }
+
     #[test]
-    fn tokens_are_unique_hex() {
-        let a = mint_token();
-        let b = mint_token();
-        assert_ne!(a, b);
-        assert_eq!(a.len(), 48); // 24 bytes → 48 hex chars
-        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+    fn the_qr_carries_a_pairing_secret_not_a_credential() {
+        let url = pairing_url(&info());
+        assert!(url.contains("#pair=s3cr3t"));
+        // The old shape handed out a long-lived API token in the fragment; a
+        // scan must never again be a credential by itself.
+        assert!(!url.contains("token="));
+    }
+
+    #[test]
+    fn the_qr_puts_its_secrets_in_the_fragment() {
+        // A fragment is not sent to the server and does not land in logs or
+        // Referer headers the way a query string would.
+        let url = pairing_url(&info());
+        let (_, fragment) = url.split_once('#').expect("a fragment");
+        assert!(fragment.contains("s3cr3t"));
+        assert!(!url[..url.find('#').unwrap()].contains("s3cr3t"));
+    }
+
+    #[test]
+    fn a_chosen_interface_is_bound_verbatim() {
+        assert_eq!(
+            bind_address(Some("192.168.1.10")).unwrap().to_string(),
+            "192.168.1.10"
+        );
+    }
+
+    #[test]
+    fn a_bogus_interface_is_refused_rather_than_falling_back() {
+        // Falling back to the LAN address would silently bind wider than the
+        // user asked for — the whole point of choosing an interface.
+        assert!(bind_address(Some("not-an-address")).is_err());
+        assert!(bind_address(Some("0.0.0.0.0")).is_err());
+    }
+
+    #[test]
+    fn the_default_bind_is_never_all_interfaces() {
+        // `local_ip()` can legitimately fail on a machine with no network; what
+        // must never happen is a silent 0.0.0.0.
+        if let Ok(addr) = bind_address(None) {
+            assert_ne!(addr.to_string(), "0.0.0.0");
+        }
     }
 
     #[test]

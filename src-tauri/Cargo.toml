@@ -22,6 +22,11 @@ tempfile = "3"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+default = []
+# Advertise the Reado Anywhere server over mDNS (see `anywhere::advertise`).
+mdns = ["dep:mdns-sd"]
+
 [dependencies]
 # `protocol-asset` serves project files (markdown-preview images) to the webview
 # through `asset:`; the scope stays empty until a project grants its own root.
@@ -68,8 +73,13 @@ rustls = { version = "0.23", features = ["ring"] }
 sha2 = "0.10"
 # Single-use pairing tokens.
 rand = "0.8"
-# Discover the machine's LAN IP to put in the QR.
+# Discover the machine's LAN IP to put in the QR, and enumerate the interfaces
+# the user can bind Anywhere to.
 local-ip-address = "0.6"
+# Optional mDNS advertisement so a paired phone rediscovers the desk without a
+# fresh QR. Behind the `mdns` feature: discovery is a convenience, and the
+# dependency should not ride along in builds that never advertise.
+mdns-sd = { version = "0.11", optional = true }
 # Stream/Sink helpers for the WebSocket terminal bridge.
 futures-util = "0.3"
 tauri-plugin-clipboard-manager = "2.3.2"

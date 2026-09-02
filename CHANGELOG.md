@@ -12,6 +12,18 @@ commit.
 ## [Unreleased]
 
 ### Changed
+- **Reado Anywhere gives each phone its own credential.** Pairing used to hand
+  every device the same session token: revoking one revoked all of them, nothing
+  survived a restart, and a token never expired. Now the QR carries a
+  **single-use pairing secret** — not a credential — that a phone spends once to
+  mint its own, which persists across restarts and can be revoked on its own
+  from a paired-devices list in the Anywhere dialog. Credentials expire after an
+  idle stretch (30 days) or an absolute age (90 days), both adjustable, and
+  failed authentication is rate-limited per address so nothing on the network can
+  grind through the keyspace. The server also stops binding every interface: it
+  listens on the machine's LAN address by default, or one you choose. Optional
+  mDNS advertisement lets a paired phone find the desk again without a new QR
+  (builds with `--features mdns`; the announcement carries the address only).
 - **AI tasks have an honest state, and can be cancelled.** Synopsis, Q&A,
   semantic search, pre-review and AI tours each re-implemented the same
   hand-rolled poll loop, so a slow agent, a closed modal and a malformed result

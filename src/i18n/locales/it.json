@@ -184,7 +184,21 @@
     "fingerprint": "Fingerprint",
     "statusOn": "attivo",
     "statusOff": "spento",
-    "qrLabel": "Codice QR"
+    "qrLabel": "Codice QR",
+    "pairAnother": "Associa un altro dispositivo",
+    "devices": "Dispositivi associati",
+    "noDevices": "Nessun telefono associato. Attiva Reado Anywhere e inquadra il QR.",
+    "revoke": "Revoca {name}",
+    "security": "Sicurezza",
+    "iface": "Interfaccia di rete",
+    "ifaceAuto": "Indirizzo LAN di questa macchina",
+    "ifaceHint": "Anywhere ascolta solo su questo indirizzo, non su tutte le interfacce. Vale dal prossimo avvio.",
+    "idleDays": "Giorni di inattività",
+    "maxDays": "Giorni massimi",
+    "lifetimeHint": "Un telefono associato deve riassociarsi dopo questo tempo senza usarlo, o dopo questo tempo in totale. 0 disattiva il limite.",
+    "mdns": "Annuncia sulla rete locale (mDNS)",
+    "mdnsHint": "Permette a un telefono già associato di ritrovare questo desktop senza un nuovo QR. L'annuncio porta solo l'indirizzo — al telefono serve comunque la sua credenziale.",
+    "revokeAll": "Revoca tutti"
   },
   "prereview": {
     "panel": "Revisione AI",

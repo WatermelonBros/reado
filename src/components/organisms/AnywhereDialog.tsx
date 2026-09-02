@@ -3,30 +3,74 @@
  *
  * Enable the opt-in LAN server, then scan the QR with a phone on the same
  * network (or VPN) to review from it. No account, no cloud. The QR encodes the
- * HTTPS address plus the pairing token and certificate fingerprint (the phone
- * uses the fingerprint to verify it's reaching the right desktop).
+ * HTTPS address, the certificate fingerprint (the phone verifies it is reaching
+ * the right desktop) and a **single-use pairing secret** — not a credential: the
+ * phone spends it once at `/api/pair` to mint its own, which is what this dialog
+ * then lists and can revoke one at a time.
  */
-import { useEffect, useState } from "react"
+import { listen } from "@tauri-apps/api/event"
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { Checkbox } from "@/components/atoms/Checkbox"
+import { IconButton } from "@/components/atoms/IconButton"
+import { Input } from "@/components/atoms/Input"
+import { TrashIcon } from "@/components/atoms/icons"
 import { Modal } from "@/components/atoms/Modal"
 import { QrCode } from "@/components/atoms/QrCode"
-import { type AnywhereInfo, anywhereDisable, anywhereEnable, anywhereStatus } from "@/lib/api"
+import { Select } from "@/components/atoms/Select"
+import {
+  type AnywhereConfig,
+  type AnywhereDevice,
+  type AnywhereIface,
+  type AnywhereInfo,
+  anywhereConfig,
+  anywhereDevices,
+  anywhereDisable,
+  anywhereEnable,
+  anywhereInterfaces,
+  anywhereNewPairing,
+  anywhereRevoke,
+  anywhereRevokeAll,
+  anywhereSetBind,
+  anywhereSetLifetimes,
+  anywhereSetMdns,
+  anywhereStatus,
+} from "@/lib/api"
 import { currentOS } from "@/lib/extensions"
 import { usePalette } from "@/lib/store"
 
-/** The QR payload: the address with the token + fingerprint in the fragment, so
- * the mobile client can pair without the values ever hitting a query string. */
+/** The QR payload: the address with the pairing secret + fingerprint in the
+ * fragment, so neither ever hits a query string (or a server log). */
 const payload = (i: AnywhereInfo) =>
-  `${i.url}/#token=${i.token}&fp=${encodeURIComponent(i.fingerprint)}`
+  `${i.url}/#pair=${i.pairing}&fp=${encodeURIComponent(i.fingerprint)}`
+
+/** "3 days ago", in the user's locale. `Intl` already knows every language we
+ * ship, so the phrasing is not ours to translate. */
+function lastSeen(seconds: number, locale: string): string {
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+  const delta = seconds - Date.now() / 1000
+  const mins = delta / 60
+  if (Math.abs(mins) < 60) return rtf.format(Math.round(mins), "minute")
+  const hours = mins / 60
+  if (Math.abs(hours) < 24) return rtf.format(Math.round(hours), "hour")
+  return rtf.format(Math.round(hours / 24), "day")
+}
+
+/** The interface the backend picks when nothing is chosen. */
+const AUTO = "auto"
 
 const PRIMED_KEY = "reado.anywhere.primed"
 
 export function AnywhereDialog() {
   const open = usePalette((s) => s.anywhereOpen)
   const toggle = usePalette((s) => s.toggleAnywhere)
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   const [info, setInfo] = useState<AnywhereInfo | null>(null)
+  const [devices, setDevices] = useState<AnywhereDevice[]>([])
+  const [config, setConfig] = useState<AnywhereConfig | null>(null)
+  const [ifaces, setIfaces] = useState<AnywhereIface[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -34,6 +78,13 @@ export function AnywhereDialog() {
   // server binds. We can't restyle that dialog, but we can explain it first with
   // our own step so it isn't a surprise — then let it fire.
   const [priming, setPriming] = useState(false)
+
+  // The paired devices survive the server being off, so they load either way.
+  const refresh = useCallback(() => {
+    anywhereDevices()
+      .then(setDevices)
+      .catch(() => setDevices([]))
+  }, [])
 
   // Reflect the real server state whenever the dialog opens.
   useEffect(() => {
@@ -43,7 +94,24 @@ export function AnywhereDialog() {
     anywhereStatus()
       .then(setInfo)
       .catch(() => setInfo(null))
-  }, [open])
+    refresh()
+    anywhereConfig()
+      .then(setConfig)
+      .catch(() => setConfig(null))
+    anywhereInterfaces()
+      .then(setIfaces)
+      .catch(() => setIfaces([]))
+  }, [open, refresh])
+
+  // A phone that pairs while this dialog is open appears straight away — the
+  // server emits when it mints a credential, so there is nothing to poll.
+  useEffect(() => {
+    if (!open) return
+    const pending = listen("anywhere-devices-changed", refresh)
+    return () => {
+      void pending.then((off) => off())
+    }
+  }, [open, refresh])
 
   const enable = async () => {
     setBusy(true)
@@ -76,6 +144,46 @@ export function AnywhereDialog() {
     }
   }
 
+  const revoke = async (id: string) => {
+    try {
+      await anywhereRevoke(id)
+      refresh()
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  const revokeAll = async () => {
+    try {
+      await anywhereRevokeAll()
+      refresh()
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  const pairAnother = async () => {
+    setBusy(true)
+    try {
+      setInfo(await anywhereNewPairing())
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Persist one preference and keep the local copy in step. */
+  const patch = async (change: Partial<AnywhereConfig>, save: () => Promise<void>) => {
+    if (!config) return
+    setConfig({ ...config, ...change })
+    try {
+      await save()
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   const copyUrl = () => {
     if (!info) return
     void navigator.clipboard.writeText(info.url).then(() => {
@@ -89,7 +197,7 @@ export function AnywhereDialog() {
       open={open}
       onOpenChange={(o) => toggle(o)}
       ariaLabel={t("anywhere.title")}
-      className="flex w-[min(440px,92vw)] flex-col"
+      className="flex max-h-[86vh] w-[min(480px,92vw)] flex-col"
     >
       <header className="flex flex-none items-center justify-between gap-3 border-b border-line px-5 py-3">
         <h2 className="m-0 flex items-center gap-2 text-sm font-medium">
@@ -102,7 +210,7 @@ export function AnywhereDialog() {
         </h2>
       </header>
 
-      <div className="flex flex-col items-center px-6 py-6 text-center">
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 py-6 text-center">
         {info ? (
           <>
             <div className="rounded-xl bg-[var(--qr-surface)] p-4 shadow-[var(--shadow)]">
@@ -141,6 +249,120 @@ export function AnywhereDialog() {
           </div>
         )}
         {error && <p className="mt-4 text-xs text-marker">{error}</p>}
+
+        {info && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={pairAnother}
+            disabled={busy}
+            className="mt-5"
+          >
+            {t("anywhere.pairAnother")}
+          </Button>
+        )}
+
+        <section className="mt-6 w-full border-t border-line pt-5 text-left">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="m-0 text-xs font-medium tracking-wide text-faint uppercase">
+              {t("anywhere.devices")}
+            </h3>
+            {devices.length > 1 && (
+              <Button variant="danger" size="sm" onClick={() => void revokeAll()}>
+                {t("anywhere.revokeAll")}
+              </Button>
+            )}
+          </div>
+          {devices.length === 0 ? (
+            <p className="mt-2 text-xs leading-relaxed text-faint">{t("anywhere.noDevices")}</p>
+          ) : (
+            <ul className="m-0 mt-2 list-none p-0">
+              {devices.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center gap-2 border-b border-line/60 py-1.5 last:border-b-0"
+                >
+                  <span className="min-w-0 flex-1 truncate text-sm text-ink">{d.name}</span>
+                  <span className="flex-none text-[10px] text-faint">
+                    {lastSeen(d.lastSeen, i18n.language)}
+                  </span>
+                  <IconButton
+                    label={t("anywhere.revoke", { name: d.name })}
+                    icon={<TrashIcon className="h-3.5 w-3.5" />}
+                    onClick={() => void revoke(d.id)}
+                    size="sm"
+                    danger
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {config && (
+          <section className="mt-5 w-full border-t border-line pt-5 text-left">
+            <h3 className="m-0 text-xs font-medium tracking-wide text-faint uppercase">
+              {t("anywhere.security")}
+            </h3>
+
+            <label className="mt-3 flex items-center justify-between gap-3 text-sm text-ink">
+              <span className="min-w-0">{t("anywhere.iface")}</span>
+              <Select
+                value={config.bind ?? AUTO}
+                ariaLabel={t("anywhere.iface")}
+                options={[
+                  { value: AUTO, label: t("anywhere.ifaceAuto") },
+                  ...ifaces.map((i) => ({ value: i.addr, label: `${i.name} · ${i.addr}` })),
+                ]}
+                onChange={(v) => {
+                  const bind = v === AUTO ? null : v
+                  void patch({ bind }, () => anywhereSetBind(bind))
+                }}
+              />
+            </label>
+            <p className="mt-1 text-[10px] leading-relaxed text-faint">{t("anywhere.ifaceHint")}</p>
+
+            <div className="mt-4 flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <span>{t("anywhere.idleDays")}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={config.idleDays}
+                  onChange={(e) => {
+                    const idleDays = Number(e.target.value) || 0
+                    void patch({ idleDays }, () => anywhereSetLifetimes(idleDays, config.maxDays))
+                  }}
+                  className="w-16 px-2 py-1 text-sm"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <span>{t("anywhere.maxDays")}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={config.maxDays}
+                  onChange={(e) => {
+                    const maxDays = Number(e.target.value) || 0
+                    void patch({ maxDays }, () => anywhereSetLifetimes(config.idleDays, maxDays))
+                  }}
+                  className="w-16 px-2 py-1 text-sm"
+                />
+              </label>
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-faint">
+              {t("anywhere.lifetimeHint")}
+            </p>
+
+            <Checkbox
+              className="mt-4 text-sm text-ink"
+              checked={config.mdns}
+              onChange={(on) => void patch({ mdns: on }, () => anywhereSetMdns(on))}
+              label={t("anywhere.mdns")}
+            />
+            <p className="mt-1 text-[10px] leading-relaxed text-faint">{t("anywhere.mdnsHint")}</p>
+          </section>
+        )}
       </div>
 
       <footer className="flex flex-none items-center justify-end gap-2 border-t border-line px-5 py-3">

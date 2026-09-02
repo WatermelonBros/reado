@@ -20,6 +20,7 @@ mod index;
 mod log;
 mod lsp;
 mod menu;
+mod pairing;
 mod preview;
 mod proc;
 mod progress;
@@ -226,6 +227,15 @@ pub fn run() {
             anywhere::anywhere_clear_project,
             anywhere::anywhere_set_recents,
             anywhere::anywhere_publish_loop,
+            anywhere::anywhere_devices,
+            anywhere::anywhere_revoke,
+            anywhere::anywhere_revoke_all,
+            anywhere::anywhere_new_pairing,
+            anywhere::anywhere_set_lifetimes,
+            anywhere::anywhere_config,
+            anywhere::anywhere_interfaces,
+            anywhere::anywhere_set_bind,
+            anywhere::anywhere_set_mdns,
             log::log_record,
             log::log_path,
             log::log_set_config,

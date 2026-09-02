@@ -184,7 +184,21 @@
     "fingerprint": "Fingerprint",
     "statusOn": "on",
     "statusOff": "off",
-    "qrLabel": "QR code"
+    "qrLabel": "QR code",
+    "pairAnother": "Pair another device",
+    "devices": "Paired devices",
+    "noDevices": "No phone is paired yet. Enable Reado Anywhere and scan the QR.",
+    "revoke": "Revoke {name}",
+    "security": "Security",
+    "iface": "Network interface",
+    "ifaceAuto": "This machine's LAN address",
+    "ifaceHint": "Anywhere listens on this address only, not on every interface. Applies the next time you start it.",
+    "idleDays": "Idle days",
+    "maxDays": "Max days",
+    "lifetimeHint": "A paired phone must pair again after this long unused, or this long in total. 0 turns a limit off.",
+    "mdns": "Announce on the local network (mDNS)",
+    "mdnsHint": "Lets a paired phone find this desktop again without a fresh QR. The announcement carries the address only — a phone still needs its credential.",
+    "revokeAll": "Revoke all"
   },
   "prereview": {
     "panel": "AI Review",
