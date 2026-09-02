@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "reado": {
+      "command": "reado",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}
