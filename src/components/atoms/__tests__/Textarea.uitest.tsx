@@ -38,4 +38,13 @@ describe("Textarea", () => {
     expect(el.className).toContain("bg-canvas")
     expect(el.className).not.toContain("bg-surface")
   })
+
+  it("shows focus on every variant a reader can tab into", () => {
+    // `filled` has no border to darken, so without a ring it was the one field
+    // in the app that gave no sign it had focus.
+    const { rerender } = render(<Textarea aria-label="body" variant="bordered" />)
+    expect(screen.getByLabelText("body").className).toMatch(/focus:/)
+    rerender(<Textarea aria-label="body" variant="filled" />)
+    expect(screen.getByLabelText("body").className).toMatch(/focus:/)
+  })
 })

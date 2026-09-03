@@ -43,6 +43,16 @@ commit.
   that suits you isn't limited to our list.
 
 ### Fixed
+- **The commit box looks like every other field.** Source Control's message box
+  and its new-branch input used the borderless "filled" surface meant for a
+  field sitting inside an already-bordered container — on the panel background
+  they read as text on a slab rather than as fields, and neither showed anything
+  when focused. They use the same bordered field the rest of the app does, and
+  the filled variant now shows a focus ring wherever it is still used.
+- **The commit buttons are the shared buttons.** They were hand-styled markup
+  re-deriving what the Button atom already does, down to a different focus ring
+  from every other button in the app.
+
 - **The diff follows your theme.** The merge view was unstyled, so it rendered
   `@codemirror/merge`'s own hardcoded green and red on every theme — the one
   surface in Reado that ignored the palette, and the worst possible pair for

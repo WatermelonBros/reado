@@ -37,4 +37,13 @@ describe("Input", () => {
     render(<Input aria-label="q" ref={ref} readOnly />)
     expect(ref.current).toBe(screen.getByLabelText("q"))
   })
+
+  it("shows focus on every variant a reader can tab into", () => {
+    // `filled` has no border to darken, so without a ring it was the one field
+    // in the app that gave no sign it had focus.
+    const { rerender } = render(<Input aria-label="field" variant="bordered" />)
+    expect(screen.getByLabelText("field").className).toMatch(/focus:/)
+    rerender(<Input aria-label="field" variant="filled" />)
+    expect(screen.getByLabelText("field").className).toMatch(/focus:/)
+  })
 })

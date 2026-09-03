@@ -15,7 +15,9 @@ export type InputVariant = "bordered" | "filled" | "plain"
 
 const VARIANT: Record<InputVariant, string> = {
   bordered: "border border-line bg-surface focus:border-line-strong",
-  filled: "bg-surface",
+  // A filled field has no border to darken on focus, so it says so with a ring
+  // instead. Every field you can tab into has to show that you have.
+  filled: "bg-surface focus:ring-1 focus:ring-line-strong",
   plain: "bg-transparent",
 }
 

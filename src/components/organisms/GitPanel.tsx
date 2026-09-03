@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
 import {
@@ -523,7 +524,6 @@ export function GitPanel() {
       {branchName !== null && (
         <div className="flex flex-none items-center gap-1 border-b border-line px-2 py-1.5">
           <Input
-            variant="filled"
             autoFocus
             value={branchName}
             onChange={(e) => setBranchName(e.target.value)}
@@ -576,8 +576,10 @@ export function GitPanel() {
 
       {/* Commit box */}
       <div className="flex-none border-b border-line p-2">
+        {/* A standalone composer, so it takes the bordered field the rest of the
+          app uses — `filled` is for a field sitting inside an already-bordered
+          container, which this isn't. */}
         <Textarea
-          variant="filled"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onSubmit={commit}
@@ -585,25 +587,27 @@ export function GitPanel() {
           rows={1}
           className="max-h-32 min-h-8"
         />
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={commit}
           disabled={busy || !message.trim() || staged.length === 0}
           title={staged.length === 0 ? t("git.nothingStaged") : t("git.commit")}
-          className="mt-1.5 w-full rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-50"
+          className="mt-1.5 h-7 w-full"
         >
           {busy ? t("git.committing") : t("git.commit")}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={aiCommit}
           disabled={changes.length === 0}
           title={changes.length === 0 ? t("git.clean") : t("git.aiCommit")}
-          className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:border-line-strong disabled:opacity-50"
+          className="mt-1.5 h-7 w-full"
         >
           <SparkleIcon className="h-3.5 w-3.5" />
           {t("git.aiCommit")}
-        </button>
+        </Button>
       </div>
 
       {changes.length === 0 ? (
