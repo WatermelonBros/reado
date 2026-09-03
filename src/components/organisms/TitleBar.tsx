@@ -14,6 +14,7 @@ import { openUrl } from "@tauri-apps/plugin-opener"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CloseIcon, DiscordIcon, MinusIcon, SearchIcon } from "@/components/atoms/icons"
+import { LayoutControls } from "@/components/molecules/LayoutControls"
 import { MenuBar } from "@/components/molecules/MenuBar"
 import { currentOS } from "@/lib/extensions"
 import { mod } from "@/lib/shortcuts"
@@ -124,7 +125,7 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
       type="button"
       onClick={openPalette}
       title={t("titlebar.search")}
-      className="pointer-events-auto flex h-6 min-w-[200px] max-w-[44vw] items-center gap-2 rounded-md border border-line bg-surface/70 px-2.5 text-xs text-muted transition-colors hover:border-accent/40 hover:bg-surface hover:text-ink"
+      className="pointer-events-auto flex h-6 w-[min(560px,52vw)] min-w-[280px] items-center gap-2 rounded-md border border-line bg-surface/70 px-2.5 text-xs text-muted transition-colors hover:border-accent/40 hover:bg-surface hover:text-ink"
     >
       <SearchIcon className="h-3 w-3 flex-none opacity-70" />
       <span className="truncate">{projectName}</span>
@@ -145,6 +146,10 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
         // macOS: traffic lights sit top-left; the pill floats centered on the
         // window; Discord sits top-right (ml-auto pushes it to the edge).
         <>
+          {/* The layout toggles sit after the traffic lights, where VS Code puts
+            them; the pill stays centred on the window, not on the space left
+            over, so it doesn't shift as the controls change width. */}
+          {projectName && <LayoutControls />}
           <div className="pointer-events-none absolute inset-x-0 flex justify-center">{pill}</div>
           <DiscordButton className="ml-auto" />
         </>
@@ -156,6 +161,7 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
         // bare region.
         <>
           <MenuBar />
+          {projectName && <LayoutControls />}
           <DiscordButton />
           <div data-tauri-drag-region className="flex min-w-0 flex-1 justify-center px-3">
             {pill}

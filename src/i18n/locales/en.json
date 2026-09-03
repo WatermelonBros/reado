@@ -457,6 +457,15 @@
     "split": "Beside",
     "dropHere": "Drop to dock here"
   },
+  "layout": {
+    "primarySidebar": "Primary sidebar",
+    "panel": "Panel",
+    "secondarySidebar": "Secondary sidebar",
+    "more": "Layout",
+    "sidebarSide": "Primary sidebar position",
+    "left": "Left",
+    "right": "Right"
+  },
   "reasoning": {
     "title": "Reasoning",
     "clear": "Clear feed",

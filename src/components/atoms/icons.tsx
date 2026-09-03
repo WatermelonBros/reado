@@ -86,6 +86,7 @@ import {
   PlusIcon as Plus,
   PuzzlePieceIcon as PuzzlePiece,
   RobotIcon as Robot,
+  SidebarSimpleIcon as SidebarSimple,
   SignpostIcon as Signpost,
   SparkleIcon as Sparkle,
   SquareSplitHorizontalIcon as SquareSplitHorizontal,
@@ -144,6 +145,10 @@ export const SparkleIcon = wrap(Sparkle)
 export const RouteIcon = wrap(Signpost)
 export const SwapIcon = wrap(Swap)
 export const SplitIcon = wrap(SquareSplitHorizontal)
+/** The panel glyph. One shape for all three regions, rotated at the call site —
+ *  a sidebar turned on its side reads as a bottom panel, which is how every
+ *  editor draws these. */
+export const PanelIcon = wrap(SidebarSimple)
 export const LayoutIcon = wrap(Layout)
 export const DetachIcon = wrap(ArrowSquareOut)
 export const CodeIcon = wrap(Code)

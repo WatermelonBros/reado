@@ -12,6 +12,16 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **The window's shape is in the title bar.** Three toggles for the regions
+  people hide most — primary sidebar, panel, secondary sidebar — each showing
+  whether its region is on screen, plus a Layout popover for the activity bar,
+  status bar, breadcrumbs, and **which side the primary sidebar sits on**. The
+  layout was always adjustable; it was just spread across two shortcuts and a
+  Settings tab, with nothing on screen saying so. These drive the same settings
+  Settings does, so the two never disagree. Hiding a dock keeps its panels — the
+  terminal is still there when you bring it back.
+- **A wider command bar.** The pill is the search field and the strip around it
+  was empty.
 - **Letter spacing for the code surface.** Wider spacing between characters is
   the one typographic change with direct evidence behind it for dyslexic
   readers — [Zorzi et al. (PNAS 2012)](https://www.pnas.org/doi/10.1073/pnas.1205566109)

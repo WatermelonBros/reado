@@ -5,7 +5,12 @@ import { defaultLayout, findPanel, useLayout } from "@/lib/layout"
 import { useWorkspace } from "@/lib/store"
 
 beforeEach(() => {
-  useLayout.setState({ layout: defaultLayout(), seq: 1, dragging: null })
+  useLayout.setState({
+    layout: defaultLayout(),
+    seq: 1,
+    dragging: null,
+    hidden: { left: false, right: false, bottom: false },
+  })
 })
 
 describe("useLayout store", () => {
@@ -102,5 +107,29 @@ describe("tool panels are dockable", () => {
     expect(findPanel(useLayout.getState().layout, "search")).toBeNull()
     useWorkspace.getState().selectTool("search")
     expect(useWorkspace.getState().tool).toBe("search")
+  })
+})
+
+describe("hiding a dock area", () => {
+  it("keeps the area's panels so reopening gives them back", () => {
+    useLayout.getState().toggleArea("bottom")
+    expect(useLayout.getState().hidden.bottom).toBe(true)
+    // Hiding the dock is not closing the terminal that lives in it.
+    expect(findPanel(useLayout.getState().layout, "terminal")?.area).toBe("bottom")
+    useLayout.getState().toggleArea("bottom")
+    expect(useLayout.getState().hidden.bottom).toBe(false)
+  })
+
+  it("takes an explicit state, for a control that isn't a toggle", () => {
+    useLayout.getState().toggleArea("right", true)
+    useLayout.getState().toggleArea("right", true)
+    expect(useLayout.getState().hidden.right).toBe(true)
+  })
+
+  it("hides one area without touching the others", () => {
+    useLayout.getState().toggleArea("right")
+    expect(useLayout.getState().hidden.right).toBe(true)
+    expect(useLayout.getState().hidden.bottom).toBe(false)
+    expect(useLayout.getState().hidden.left).toBe(false)
   })
 })

@@ -167,6 +167,12 @@ export function panelsInArea(layout: Layout, area: DockArea): PanelId[] {
 
 interface LayoutStore {
   layout: Layout
+  /** Dock areas the user has collapsed. Distinct from "no panel is placed
+   *  there": a hidden area keeps its panels and gives them back on reopen, so
+   *  hiding the terminal dock isn't the same as closing every terminal. */
+  hidden: Record<DockArea, boolean>
+  /** Show or hide a dock area; without `on`, flips it. */
+  toggleArea: (area: DockArea, on?: boolean) => void
   /** Monotonic id source for new groups (deterministic; survives persist). */
   seq: number
   /** The panel being dragged, or null — transient (not persisted), shared across
@@ -195,6 +201,9 @@ export const useLayout = create<LayoutStore>()(
   persist(
     (set, get) => ({
       layout: defaultLayout(),
+      hidden: { left: false, right: false, bottom: false },
+      toggleArea: (area, on) =>
+        set((s) => ({ hidden: { ...s.hidden, [area]: on ?? !s.hidden[area] } })),
       seq: 1,
       dragging: null,
       setDragging: (panel) => set({ dragging: panel }),
@@ -227,6 +236,9 @@ export const useLayout = create<LayoutStore>()(
       reset: () => set({ layout: defaultLayout(), seq: get().seq + 1 }),
     }),
     // Persist only the arrangement, never the transient drag state.
-    { name: "reado.layout", partialize: (s) => ({ layout: s.layout, seq: s.seq }) },
+    {
+      name: "reado.layout",
+      partialize: (s) => ({ layout: s.layout, seq: s.seq, hidden: s.hidden }),
+    },
   ),
 )

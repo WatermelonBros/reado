@@ -109,6 +109,8 @@ export interface SettingsState {
   /** Automatically write edits to disk: never / after a short pause / on blur. */
   autoSave: "off" | "afterDelay" | "onFocusChange"
   /** Chrome visibility toggles (View menu). */
+  /** Which edge the tool sidebar (and its activity bar) lives on. */
+  sidebarSide: "left" | "right"
   showActivityBar: boolean
   showStatusBar: boolean
   showBreadcrumbs: boolean
@@ -171,6 +173,7 @@ export const useSettings = create<SettingsState>()(
       gitignoreDontAsk: false,
       completionSound: false,
       autoSave: "afterDelay",
+      sidebarSide: "left",
       showActivityBar: true,
       showStatusBar: true,
       showBreadcrumbs: true,

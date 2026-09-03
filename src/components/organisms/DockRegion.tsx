@@ -110,6 +110,7 @@ export function DockRegion({ area }: { area: DockArea }) {
   const activate = useLayout((s) => s.activate)
   const dragging = useLayout((s) => s.dragging)
   const dropTarget = useLayout((s) => s.dropTarget)
+  const hidden = useLayout((s) => s.hidden[area])
   const terminalOpen = useTerminals((s) => s.open)
   const browserOpen = usePreview((s) => s.open)
   // The console shows as a dock panel only when it's both on and detached.
@@ -194,6 +195,10 @@ export function DockRegion({ area }: { area: DockArea }) {
     window.addEventListener("pointermove", onMove)
     window.addEventListener("pointerup", onUp)
   }
+
+  // Collapsed from the title bar: the area keeps its panels, it just isn't on
+  // screen. A drag still opens it, so a panel can be dropped into a hidden dock.
+  if (hidden && !dragging) return null
 
   // Empty area: normally nothing, but while dragging show a rail so a lone panel
   // can be dragged here (e.g. terminal in the bottom → the empty right area).

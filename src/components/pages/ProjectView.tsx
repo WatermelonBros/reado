@@ -333,6 +333,7 @@ export function ProjectView({ root }: { root: string }) {
   }, [root])
 
   const [toolMenu, setToolMenu] = useState<{ x: number; y: number; tool: Tool } | null>(null)
+  const onRight = useSettings((s) => s.sidebarSide) === "right"
   const selectedTool = useWorkspace((s) => s.tool)
   // A tool the user has docked renders there, not here — otherwise the same
   // panel would exist twice, with two scroll positions and two selections.
@@ -423,8 +424,13 @@ export function ProjectView({ root }: { root: string }) {
     e.preventDefault()
     let latest = sidebarWidth
     const zoom = useSettings.getState().zoom || 1
+    // The sidebar is measured from its own outer edge, so on the right the
+    // pointer is subtracted from the viewport rather than added from zero —
+    // otherwise dragging inward would narrow it.
+    const rail = showActivityBar ? 48 : 0
     const onMove = (ev: PointerEvent) => {
-      latest = ev.clientX / zoom - 48
+      const x = ev.clientX / zoom
+      latest = onRight ? window.innerWidth / zoom - x - rail : x - rail
       setDragWidth(latest)
     }
     const onUp = () => {
@@ -455,22 +461,44 @@ export function ProjectView({ root }: { root: string }) {
           // Pinned: the activity bar takes a grid column (`auto` tracks its width
           // under interface zoom). Auto-hide: it leaves the grid entirely — 3 → 2
           // columns — and overlays on the left edge, revealed on hover (below).
-          gridTemplateColumns: showActivityBar
-            ? tool
-              ? `auto ${appliedSidebarWidth}px 1fr`
-              : "auto 1fr"
-            : tool
-              ? `${appliedSidebarWidth}px 1fr`
-              : "1fr",
+          // The sidebar edge is one unit: the activity bar and the tool panel
+          // move together, and the editor keeps the middle either way. Column
+          // order is reversed for the right edge and the children carry an
+          // explicit `order`, so the DOM stays in reading order.
+          gridTemplateColumns: onRight
+            ? showActivityBar
+              ? tool
+                ? `1fr ${appliedSidebarWidth}px auto`
+                : "1fr auto"
+              : tool
+                ? `1fr ${appliedSidebarWidth}px`
+                : "1fr"
+            : showActivityBar
+              ? tool
+                ? `auto ${appliedSidebarWidth}px 1fr`
+                : "auto 1fr"
+              : tool
+                ? `${appliedSidebarWidth}px 1fr`
+                : "1fr",
         }}
       >
-        {showActivityBar && <ActivityBar />}
+        {showActivityBar && (
+          <div className="contents" style={{ order: onRight ? 3 : 1 }}>
+            <ActivityBar />
+          </div>
+        )}
         {/* Auto-hide: the bar overlays the left edge, collapsed to a thin sliver
           you hover to reveal — so tools/Settings stay reachable without a column. */}
         {!showActivityBar && (
           <div
-            className="absolute inset-y-0 left-0 z-30 transition-transform duration-200 ease-out"
-            style={{ transform: railHover ? "translateX(0)" : "translateX(calc(-100% + 10px))" }}
+            className={`absolute inset-y-0 z-30 transition-transform duration-200 ease-out ${
+              onRight ? "right-0" : "left-0"
+            }`}
+            style={{
+              transform: railHover
+                ? "translateX(0)"
+                : `translateX(calc(${onRight ? "" : "-"}100% ${onRight ? "-" : "+"} 10px))`,
+            }}
             onMouseEnter={() => setRailHover(true)}
             onMouseLeave={() => setRailHover(false)}
           >
@@ -480,11 +508,18 @@ export function ProjectView({ root }: { root: string }) {
           </div>
         )}
         {tool && (
-          <aside className="relative flex min-w-0 flex-col overflow-hidden border-r border-line bg-surface">
-            {/* Resize handle straddling the right border. */}
+          <aside
+            style={{ order: 2 }}
+            className={`relative flex min-w-0 flex-col overflow-hidden bg-surface ${
+              onRight ? "border-l border-line" : "border-r border-line"
+            }`}
+          >
+            {/* Resize handle straddling the border that faces the editor. */}
             <div
               onPointerDown={startSidebarResize}
-              className="absolute top-0 -right-1 bottom-0 z-10 w-2 cursor-col-resize"
+              className={`absolute top-0 bottom-0 z-10 w-2 cursor-col-resize ${
+                onRight ? "-left-1" : "-right-1"
+              }`}
             />
             <header className="flex h-9 flex-none items-center justify-between border-b border-line pr-2 pl-3 text-xs font-medium tracking-wide text-muted uppercase">
               <span className="flex items-center gap-2">
@@ -534,7 +569,7 @@ export function ProjectView({ root }: { root: string }) {
             </div>
           </aside>
         )}
-        <main className="flex min-w-0 flex-col overflow-hidden">
+        <main style={{ order: onRight ? 1 : 3 }} className="flex min-w-0 flex-col overflow-hidden">
           <Tabs />
           {showBreadcrumbs && <Breadcrumb />}
           {/* Editor + optional split pane + terminal (right dock). The primary

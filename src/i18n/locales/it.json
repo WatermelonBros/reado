@@ -457,6 +457,15 @@
     "split": "Affianca",
     "dropHere": "Rilascia per agganciare"
   },
+  "layout": {
+    "primarySidebar": "Barra laterale principale",
+    "panel": "Pannello",
+    "secondarySidebar": "Barra laterale secondaria",
+    "more": "Layout",
+    "sidebarSide": "Posizione barra laterale principale",
+    "left": "Sinistra",
+    "right": "Destra"
+  },
   "reasoning": {
     "title": "Ragionamento",
     "clear": "Svuota feed",
