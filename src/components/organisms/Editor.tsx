@@ -162,12 +162,19 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
     }
   }, [root, active, forceText, prRef])
 
-  // Each file opens with a clean default view: reset the dirty and diff state.
+  // Each file opens with a clean default view — unless the thing that opened it
+  // asked for a specific one. Source Control opens a file *as its diff*, and
+  // that request arrives with the open, so it is honoured here rather than
+  // being wiped by the reset a moment later.
   // Only the primary pane owns this shared state.
   useEffect(() => {
     if (!primary) return
-    useEditorActions.getState().setDirty(false)
-    useEditorActions.getState().setDiffing(false)
+    const actions = useEditorActions.getState()
+    actions.setDirty(false)
+    const requested = actions.takePendingView()
+    if (requested === "diff") actions.setDiffing(true)
+    else if (requested === "conflict") actions.setResolvingConflict(true)
+    else actions.setDiffing(false)
   }, [active, primary])
 
   if (!active) {

@@ -42,7 +42,7 @@ vi.mock("../../../lib/api", async (orig) => ({
 
 import { GitPanel } from "@/components/organisms/GitPanel"
 import { useNotice } from "@/lib/notice"
-import { useProject } from "@/lib/store"
+import { useEditorActions, useProject } from "@/lib/store"
 
 const ROOT = "/repo"
 
@@ -237,5 +237,29 @@ describe("GitPanel", () => {
         true,
       ),
     )
+  })
+
+  it("opens a file as its diff, in one click", async () => {
+    // The bug this guards: the view was requested *after* the open, and the
+    // editor's own "new file starts plain" reset wiped it — so the diff only
+    // appeared on a second click, when the file was already active.
+    const open = vi.fn()
+    useProject.setState({ open })
+    useEditorActions.setState({ pendingView: null })
+    render(<GitPanel />)
+
+    await userEvent.click(await screen.findByText("unstaged.ts"))
+    expect(open).toHaveBeenCalledOnce()
+    expect(useEditorActions.getState().pendingView).toBe("diff")
+  })
+
+  it("opens a conflicted file in the resolver instead", async () => {
+    const open = vi.fn()
+    useProject.setState({ open })
+    useEditorActions.setState({ pendingView: null })
+    render(<GitPanel />)
+
+    await userEvent.click(await screen.findByText("conflict.ts"))
+    expect(useEditorActions.getState().pendingView).toBe("conflict")
   })
 })

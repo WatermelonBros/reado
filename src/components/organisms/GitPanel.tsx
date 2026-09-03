@@ -77,7 +77,6 @@ export function GitPanel() {
   const open = useProject((s) => s.open)
   const git = useProject((s) => s.git)
   const setGit = useProject((s) => s.setGit)
-  const setDiffing = useEditorActions((s) => s.setDiffing)
   const activeTerminal = useTerminals((s) => s.activeId)
   const addTerminal = useTerminals((s) => s.add)
   const { t } = useTranslation()
@@ -138,16 +137,16 @@ export function GitPanel() {
   const staged = changes.filter((c) => c.staged)
   const unstaged = changes.filter((c) => !c.staged)
 
+  // Clicking a file here means "show me what changed", the way it does in every
+  // other git client — so it opens as its diff, not as the plain file. The view
+  // is requested before the open so the editor lands in it directly, instead of
+  // opening plain and being switched a render later.
   const select = (c: GitChange) => {
     if (c.status === "deleted") return
-    open(`${root}/${c.path}`)
     // A conflicted file opens in the resolver: its diff against HEAD is mostly
     // conflict markers, which is not the thing to read.
-    if (c.status === "conflicted") {
-      useEditorActions.getState().setResolvingConflict(true)
-      return
-    }
-    setDiffing(true)
+    useEditorActions.getState().requestView(c.status === "conflicted" ? "conflict" : "diff")
+    open(`${root}/${c.path}`)
   }
 
   // Run a mutation, then refresh — optimism isn't worth a stale index here.

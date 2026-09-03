@@ -43,6 +43,15 @@ commit.
   that suits you isn't limited to our list.
 
 ### Fixed
+- **A file from Source Control opens as its diff, in one click.** Clicking a
+  changed file means "show me what changed" — that is what it does in every
+  other git client — but it took two clicks to get there. Opening the file and
+  asking for the diff were two separate writes, and the editor's own "a newly
+  opened file starts in the plain view" reset landed in between and wiped the
+  request; the second click worked only because the file was already open, so
+  the reset didn't fire. The view is now part of the open, so there is nothing
+  to race.
+
 - **The commit box looks like every other field.** Source Control's message box
   and its new-branch input used the borderless "filled" surface meant for a
   field sitting inside an already-bordered container — on the panel background

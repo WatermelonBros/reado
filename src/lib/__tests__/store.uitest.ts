@@ -433,3 +433,33 @@ describe("useProject — toggleDir (tree drill-down)", () => {
     expect(P().expandedDirs).toEqual([])
   })
 })
+
+describe("the view a file opens in", () => {
+  beforeEach(() => {
+    useEditorActions.setState({ pendingView: null, diffing: false, resolvingConflict: false })
+  })
+
+  it("hands the request over exactly once", () => {
+    // The editor consumes it when the file opens; the file after that must get
+    // the plain view, not inherit this one.
+    useEditorActions.getState().requestView("diff")
+    expect(useEditorActions.getState().takePendingView()).toBe("diff")
+    expect(useEditorActions.getState().takePendingView()).toBeNull()
+  })
+
+  it("reports nothing when no view was asked for", () => {
+    expect(useEditorActions.getState().takePendingView()).toBeNull()
+  })
+
+  it("carries a conflict request as distinct from a diff", () => {
+    useEditorActions.getState().requestView("conflict")
+    expect(useEditorActions.getState().takePendingView()).toBe("conflict")
+  })
+
+  it("a later request replaces an unconsumed one", () => {
+    // Two clicks before a render: the second is what the user meant.
+    useEditorActions.getState().requestView("diff")
+    useEditorActions.getState().requestView("conflict")
+    expect(useEditorActions.getState().takePendingView()).toBe("conflict")
+  })
+})

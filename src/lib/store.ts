@@ -485,6 +485,20 @@ interface EditorActionsState {
   /** Show the conflict resolver for the active file instead of the editor. */
   resolvingConflict: boolean
   setResolvingConflict: (on: boolean) => void
+  /**
+   * The view the *next* opened file should land in, consumed once by the
+   * editor.
+   *
+   * Opening a file and choosing its view are one intent, but two state writes:
+   * the editor resets to the plain view whenever the active file changes, so a
+   * caller that opened a file and then asked for the diff had its request wiped
+   * by that reset — and only stuck on a second click, when the file was already
+   * active and the reset didn't fire. Saying it up front removes the race.
+   */
+  pendingView: "diff" | "conflict" | null
+  requestView: (view: "diff" | "conflict") => void
+  /** Take the pending view, if any, leaving nothing behind for the next file. */
+  takePendingView: () => "diff" | "conflict" | null
   /** The git ref the diff compares against (HEAD, a branch, or a commit hash). */
   diffBase: string
   setDiffBase: (base: string) => void
@@ -499,7 +513,7 @@ interface EditorActionsState {
  *  the transient nonces / dirty / diffing / editing flags are not. */
 export const useEditorActions = create<EditorActionsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       composeNonce: 0,
       requestCompose: () => set((s) => ({ composeNonce: s.composeNonce + 1 })),
       explainNonce: 0,
@@ -516,6 +530,13 @@ export const useEditorActions = create<EditorActionsState>()(
       setDiffing: (diffing) => set({ diffing, resolvingConflict: false }),
       resolvingConflict: false,
       setResolvingConflict: (resolvingConflict) => set({ resolvingConflict, diffing: false }),
+      pendingView: null,
+      requestView: (pendingView) => set({ pendingView }),
+      takePendingView: () => {
+        const view = get().pendingView
+        if (view) set({ pendingView: null })
+        return view
+      },
       diffBase: "HEAD",
       setDiffBase: (base) => set({ diffBase: base }),
       blame: false,
