@@ -7,9 +7,11 @@ import { toRelative } from "./comments"
 import { formatDocument, nextProblem, prevProblem } from "./docInfo"
 import { useExtensions } from "./extensions"
 import { useFileUndo } from "./fileUndo"
+import { toggleDockArea } from "./panels"
 import { useReadProgress } from "./readProgress"
 import {
   type ThemeName,
+  toggleZenMode,
   useEditorActions,
   usePalette,
   useProject,
@@ -18,6 +20,7 @@ import {
 } from "./store"
 import { useTerminals } from "./terminals"
 import { checkForUpdates } from "./updater"
+import { toggleFullscreen } from "./window"
 
 /** Toggle the read/unread state of the active file (⌘⌥R). Read progress is keyed
  *  by project-relative path, so convert the absolute active path first. */
@@ -186,6 +189,13 @@ export function useGlobalShortcuts(): void {
         void formatDocument()
         return
       }
+      // Full screen on Windows/Linux, where ⌃⌘F doesn't exist and Ctrl+F is
+      // Find. macOS gets ⌃⌘F below; F11 works there too, and costs nothing.
+      if (e.key === "F11") {
+        e.preventDefault()
+        toggleFullscreen()
+        return
+      }
       // Next / previous problem (F8 / Shift+F8), like VS Code — no modifier.
       if (e.key === "F8") {
         e.preventDefault()
@@ -196,6 +206,25 @@ export function useGlobalShortcuts(): void {
       const mod = e.metaKey || e.ctrlKey
       if (!mod) return
       const key = e.key.toLowerCase()
+      // Full screen (⌃⌘F), like VS Code. Both modifiers, checked before the
+      // plain Cmd/Ctrl block below, or `f` alone would be read as Find.
+      if (key === "f" && e.ctrlKey && e.metaKey) {
+        e.preventDefault()
+        toggleFullscreen()
+        return
+      }
+      // Zen mode. VS Code puts this on the ⌘K chord, which Reado can't have —
+      // ⌘K is the command palette and opens on the first key, so the second
+      // would land in its input. ⌥⌘Z instead (Ctrl+Alt+Z off macOS): one shape
+      // that exists on every keyboard, unbound in Reado, and checked before the
+      // plain Cmd/Ctrl+Z undo below.
+      // `e.code`, not `e.key`: with Option held macOS composes (⌥Z is "Ω"), and
+      // only the physical key is stable across layouts.
+      if (e.code === "KeyZ" && e.altKey) {
+        e.preventDefault()
+        toggleZenMode()
+        return
+      }
       // Ctrl+Tab / Ctrl+Shift+Tab cycle the open tabs (Ctrl, not Cmd, on macOS
       // too — matching editors).
       if (e.ctrlKey && key === "tab") {
@@ -252,6 +281,11 @@ export function useGlobalShortcuts(): void {
         // Toggle the integrated terminal.
         e.preventDefault()
         useTerminals.getState().toggle()
+      } else if (e.code === "KeyB" && e.altKey) {
+        // Toggle the secondary sidebar (the right dock), as ⌥⌘B does elsewhere.
+        // Physical key again — ⌥B composes to "∫" on macOS.
+        e.preventDefault()
+        toggleDockArea("right")
       } else if (key === "b") {
         // Toggle the sidebar.
         e.preventDefault()

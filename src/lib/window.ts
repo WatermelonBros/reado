@@ -10,6 +10,7 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog"
+import { useEffect, useState } from "react"
 import { t } from "@/i18n"
 import { currentOS } from "./extensions"
 import { useProject, useRecents } from "./store"
@@ -140,4 +141,51 @@ export async function setWindowTitle(title: string): Promise<void> {
   } catch {
     /* non-fatal in the browser dev context */
   }
+}
+
+/** Flip the window in or out of full screen. A no-op where there is no window
+ *  API (tests, the browser dev context) rather than a throw. */
+export function toggleFullscreen(on?: boolean): void {
+  try {
+    const win = getCurrentWindow()
+    void win
+      .isFullscreen()
+      .then((cur) => win.setFullscreen(on ?? !cur))
+      .catch(() => {})
+  } catch {
+    /* no window API */
+  }
+}
+
+/** Live "is the window full screen?", so a menu can show it as a checked mode.
+ *  Tauri reports it on demand, so we ask on mount and on every resize — a full
+ *  screen transition is a resize, including the ones started outside our UI
+ *  (the green button, the system menu). */
+export function useFullscreen(): [boolean, (on?: boolean) => void] {
+  const [full, setFull] = useState(false)
+  useEffect(() => {
+    try {
+      const win = getCurrentWindow()
+      const read = () =>
+        win
+          .isFullscreen()
+          .then(setFull)
+          .catch(() => {})
+      read()
+      const un = win.onResized(read)
+      return () => void un.then((f) => f()).catch(() => {})
+    } catch {
+      /* no window API */
+    }
+  }, [])
+  return [
+    full,
+    (on) => {
+      toggleFullscreen(on)
+      // `onResized` reports the change too, but only once the window has
+      // finished animating — setting it here keeps a menu's checkmark in step
+      // with the click that caused it.
+      setFull(on ?? !full)
+    },
+  ]
 }

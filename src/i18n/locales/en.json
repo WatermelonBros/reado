@@ -458,6 +458,26 @@
     "dropHere": "Drop to dock here"
   },
   "layout": {
+    "panelAlignment": "Panel alignment",
+    "align": {
+      "left": "Left",
+      "center": "Center",
+      "right": "Right",
+      "justify": "Justify"
+    },
+    "quickInput": "Quick input position",
+    "quick": {
+      "top": "Top",
+      "center": "Center"
+    },
+    "modes": "Modes",
+    "fullScreen": "Full screen",
+    "zenMode": "Zen mode",
+    "centeredLayout": "Centered layout",
+    "visibility": "Visibility",
+    "activityBar": "Activity bar",
+    "statusBar": "Status bar",
+    "breadcrumbs": "Breadcrumbs",
     "primarySidebar": "Primary sidebar",
     "panel": "Panel",
     "secondarySidebar": "Secondary sidebar",

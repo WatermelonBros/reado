@@ -23,15 +23,37 @@ commit.
   blindness at once and survives a greyscale screenshot, so it is on for
   everyone, not behind the setting. The markers aren't part of the copied text.
 - **The window's shape is in the title bar.** Three toggles for the regions
-  people hide most — primary sidebar, panel, secondary sidebar — each showing
-  whether its region is on screen, plus a Layout popover for the activity bar,
-  status bar, breadcrumbs, and **which side the primary sidebar sits on**. The
+  people hide most — primary sidebar, panel, secondary sidebar — each drawn as
+  the window with that region's edge filled, and each showing whether its region
+  is on screen. Beside them a Layout menu lists every region with its state and
+  the key that toggles it, plus **which side the primary sidebar sits on**. The
   layout was always adjustable; it was just spread across two shortcuts and a
   Settings tab, with nothing on screen saying so. These drive the same settings
   Settings does, so the two never disagree. Hiding a dock keeps its panels — the
-  terminal is still there when you bring it back.
+  terminal is still there when you bring it back. The controls sit at the
+  trailing edge of the strip, where an editor puts them; the leading edge belongs
+  to the window's own buttons.
+- **A key for the secondary sidebar.** `⌥⌘B` (`Alt+Ctrl+B`), alongside `⌘B` for
+  the primary one — the right-hand dock had no binding at all.
+- **Panel alignment.** The bottom panel can run under the editor only (the
+  default), out to either edge of the workbench, or the full width. The two docks
+  are grid regions of their own now rather than children of the editor column,
+  which is what makes anything but "center" expressible at all.
+- **Centered layout.** Holds the text to a readable measure on a wide display and
+  gives the slack back as margin.
+- **Zen mode**, on `⌥⌘Z` (`Ctrl+Alt+Z`). One switch that puts the chrome away and
+  centres what is left. It records what it hid and replays it on the way out, so
+  leaving zen returns the window you had rather than a default one. Not VS Code's
+  `⌘K Z`: `⌘K` is Reado's command palette and opens on the first key, so the
+  second would land in its input.
+- **Full screen**, on `⌃⌘F` and `F11`.
+- **Quick input position.** The command palette can sit centred in the window
+  instead of pinned near the top.
 - **A wider command bar.** The pill is the search field and the strip around it
   was empty.
+- **One key cap.** The bordered chip that names a shortcut is a `Kbd` atom now,
+  so the layout menu and the palette show a combo the same way instead of each
+  drawing its own.
 - **Letter spacing for the code surface.** Wider spacing between characters is
   the one typographic change with direct evidence behind it for dyslexic
   readers — [Zorzi et al. (PNAS 2012)](https://www.pnas.org/doi/10.1073/pnas.1205566109)
@@ -43,6 +65,21 @@ commit.
   that suits you isn't limited to our list.
 
 ### Fixed
+- **The panel and secondary-sidebar toggles do something.** A dock area's
+  visibility and its panels' own open/closed flags were two switches in two
+  stores, and the toggles flipped only the first — so pressing one revealed an
+  empty region and then reported itself *active*, because "not hidden" was being
+  read as "on screen". They now open what lives in the region on the way in,
+  close it on the way out, and light up only when something is actually there.
+- **`⌘J` works when the panel is hidden.** Hiding the panel and toggling the
+  terminal were two switches that could disagree: the terminal would open into a
+  region nothing was drawing, so the key did nothing. Opening the terminal now
+  reveals the dock it lives in.
+- **The pending-commit count is on the Sync button.** It was a bare number
+  between four icon buttons, which read as a fifth, dead icon. It is a badge on
+  the button it belongs to; the tooltip still spells out the split (`↓2 ↑1`).
+- **The Layout menu has a background.** It named a colour that isn't in the
+  theme, so it rendered transparent over whatever was behind it.
 - **A file from Source Control opens as its diff, in one click.** Clicking a
   changed file means "show me what changed" — that is what it does in every
   other git client — but it took two clicks to get there. Opening the file and

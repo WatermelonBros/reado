@@ -29,6 +29,11 @@ const BUNDLE_VERSION = 1
 export const SETTINGS_EXCLUDED: ReadonlySet<keyof SettingsState> = new Set([
   "set",
   "defaultAppsDismissed",
+  // Zen is a session mode, and `zenRestore` is a snapshot of *this* machine's
+  // chrome. Carrying them over would land the other machine in zen with a
+  // restore point it never chose.
+  "zenMode",
+  "zenRestore",
 ])
 
 /** The settings fields that travel between machines, derived from live state. */

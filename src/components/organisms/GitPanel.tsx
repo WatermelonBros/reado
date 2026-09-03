@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Badge } from "@/components/atoms/Badge"
 import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
@@ -314,12 +315,15 @@ export function GitPanel() {
     label: string,
     Icon: typeof PlusIcon,
     disabled?: boolean,
+    overlay?: React.ReactNode,
   ) => (
     <IconButton
       key={key}
       onClick={onClick}
       disabled={busy || disabled}
       label={label}
+      className={overlay ? "relative" : undefined}
+      overlay={overlay}
       icon={<Icon className="h-4 w-4" />}
     />
   )
@@ -333,14 +337,26 @@ export function GitPanel() {
     .filter(Boolean)
     .join(" ")
   const syncLabel = counts ? `${t("git.sync")} (${counts})` : t("git.sync")
+  // One number on the badge — the tooltip already spells out the split.
+  const pending = ahead + behind
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Repo toolbar: fetch / pull / push, plus a "more" menu */}
       <div className="relative flex flex-none items-center gap-0.5 border-b border-line px-2 py-1.5">
-        {toolButton("sync", sync, syncLabel, SyncIcon, !canSync)}
-        {counts && (
-          <span className="mr-0.5 font-mono text-[11px] text-muted tabular-nums">{counts}</span>
+        {toolButton(
+          "sync",
+          sync,
+          syncLabel,
+          SyncIcon,
+          !canSync,
+          // The pending count belongs to Sync, so it rides on that button as a
+          // badge. As a bare number beside it, it read as a fourth (dead) icon.
+          pending > 0 ? (
+            <Badge className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 text-[9px] font-bold">
+              {pending}
+            </Badge>
+          ) : undefined,
         )}
         {toolButton("fetch", () => runRepo(gitFetch(root)), t("git.fetch"), FetchIcon, !hasRemote)}
         {toolButton("pull", () => runRepo(gitPull(root)), t("git.pull"), PullIcon, !hasRemote)}

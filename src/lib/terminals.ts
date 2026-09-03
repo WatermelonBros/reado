@@ -344,7 +344,15 @@ export const useTerminals = create<TerminalsState>()(
           sessions: s.sessions.map((t) => (t.id === id ? { ...t, title } : t)),
         })),
 
-      toggle: (open) =>
+      toggle: (open) => {
+        // Opening the terminal has to reveal the dock it lives in as well:
+        // hiding the panel is a separate switch, and without this ⌘J (and the
+        // menu item, and the status bar) is a dead key while the panel is
+        // hidden — it flips `open` on a region nothing is drawing.
+        if (open ?? !get().open) {
+          const at = findPanel(useLayout.getState().layout, "terminal")
+          if (at) useLayout.getState().toggleArea(at.area, false)
+        }
         set((s) => {
           const next = open ?? !s.open
           if (next && s.groups.length === 0) {
@@ -359,7 +367,8 @@ export const useTerminals = create<TerminalsState>()(
             }
           }
           return { open: next }
-        }),
+        })
+      },
     }),
     {
       // Persist only the layout preferences — sessions/groups reference live PTYs

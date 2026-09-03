@@ -458,6 +458,26 @@
     "dropHere": "Rilascia per agganciare"
   },
   "layout": {
+    "panelAlignment": "Allineamento del pannello",
+    "align": {
+      "left": "Sinistra",
+      "center": "Centro",
+      "right": "Destra",
+      "justify": "Giustificato"
+    },
+    "quickInput": "Posizione della palette",
+    "quick": {
+      "top": "In alto",
+      "center": "Al centro"
+    },
+    "modes": "Modalità",
+    "fullScreen": "Schermo intero",
+    "zenMode": "Modalità zen",
+    "centeredLayout": "Layout centrato",
+    "visibility": "Visibilità",
+    "activityBar": "Activity bar",
+    "statusBar": "Status bar",
+    "breadcrumbs": "Breadcrumb",
     "primarySidebar": "Barra laterale principale",
     "panel": "Pannello",
     "secondarySidebar": "Barra laterale secondaria",

@@ -13,6 +13,12 @@ export const alt = isMacUA ? "⌥" : "Alt"
 export const ctrl = isMacUA ? "⌃" : "Ctrl"
 export const shift = isMacUA ? "⇧" : "Shift"
 
+/** Full screen and zen mode need a platform split: a ⌃⌘ pair doesn't exist off
+ *  macOS, where Ctrl already *is* the mod key. Named here so the menu, the
+ *  shortcuts dialog and `lib/hooks.ts` can't drift apart. */
+export const FULLSCREEN_COMBO = isMacUA ? `${ctrl}${mod}F` : "F11"
+export const ZEN_COMBO = isMacUA ? `${alt}${mod}Z` : `${mod}${alt}Z`
+
 export interface Shortcut {
   labelKey: MessageKey
   /** Display combo, e.g. "⌘P" or "CtrlP". */
@@ -72,7 +78,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     titleKey: "sc.view",
     items: [
       { label: "Toggle Sidebar", combo: `${mod}B` },
+      { label: "Toggle Secondary Sidebar", combo: `${alt}${mod}B` },
       { label: "Toggle Terminal", combo: `${mod}J` },
+      { label: "Zen Mode", combo: ZEN_COMBO },
+      { label: "Full Screen", combo: FULLSCREEN_COMBO },
       { label: "Split Editor", combo: `${mod}\\` },
       { label: "Zoom In / Out / Reset", combo: `${mod}+ / ${mod}- / ${mod}0` },
       { label: "Settings", combo: `${mod},` },

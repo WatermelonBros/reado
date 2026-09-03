@@ -39,6 +39,9 @@ export const LETTER_SPACING_RANGE = { min: 0, max: 0.4, default: 0 } as const
 export const clampRange = (n: number, r: { min: number; max: number; default: number }): number =>
   Number.isFinite(n) ? Math.min(r.max, Math.max(r.min, n)) : r.default
 
+/** How far the bottom panel runs across the window. See `panelAlignment`. */
+export type PanelAlignment = "left" | "center" | "right" | "justify"
+
 export interface SettingsState {
   /** Theme used when mode is "manual". */
   theme: ThemeName
@@ -117,6 +120,25 @@ export interface SettingsState {
   showActivityBar: boolean
   showStatusBar: boolean
   showBreadcrumbs: boolean
+  /** How wide the bottom panel runs: under the editor only (`center`), out to
+   *  one edge of the workbench, or the full width (`justify`). The activity bar
+   *  is never covered — it is the window's spine, not a region. */
+  panelAlignment: PanelAlignment
+  /** Where the command palette opens: pinned near the top, or centred. */
+  quickInputPosition: "top" | "center"
+  /** Zen mode: everything but the editor steps back. The chrome it hides is
+   *  restored from `zenRestore` on the way out, so leaving zen returns the
+   *  window you had rather than a default one. */
+  zenMode: boolean
+  zenRestore: {
+    showActivityBar: boolean
+    showStatusBar: boolean
+    showBreadcrumbs: boolean
+    centeredLayout: boolean
+    tool: string | null
+  } | null
+  /** Hold the editor to a readable measure, with the slack as margin. */
+  centeredLayout: boolean
   /** Show spaces/tabs as faint marks in the editor. */
   renderWhitespace: boolean
   /** Show the structure ribbon (symbols/comments/diagnostics overview column). */
@@ -181,6 +203,11 @@ export const useSettings = create<SettingsState>()(
       showActivityBar: true,
       showStatusBar: true,
       showBreadcrumbs: true,
+      panelAlignment: "center",
+      quickInputPosition: "top",
+      zenMode: false,
+      zenRestore: null,
+      centeredLayout: false,
       renderWhitespace: false,
       showRibbon: true,
       fileIcons: "colored",
@@ -785,3 +812,51 @@ export const useProject = create<ProjectState>((set) => ({
     set({ showHidden: show })
   },
 }))
+
+/**
+ * Zen mode: one switch that puts everything but the editor away, and gives it
+ * all back on the way out.
+ *
+ * The chrome it hides is chrome you may have set deliberately, so entering
+ * records the current state and leaving replays it — otherwise a reader who runs
+ * without a status bar would find one waiting for them every time they left zen.
+ */
+export function toggleZenMode(on?: boolean) {
+  const settings = useSettings.getState()
+  const next = on ?? !settings.zenMode
+  if (next === settings.zenMode) return
+  if (next) {
+    settings.set({
+      zenMode: true,
+      zenRestore: {
+        showActivityBar: settings.showActivityBar,
+        showStatusBar: settings.showStatusBar,
+        showBreadcrumbs: settings.showBreadcrumbs,
+        centeredLayout: settings.centeredLayout,
+        tool: useWorkspace.getState().tool,
+      },
+      showActivityBar: false,
+      showStatusBar: false,
+      showBreadcrumbs: false,
+      centeredLayout: true,
+    })
+    useWorkspace.setState({ tool: null })
+    return
+  }
+  const back = settings.zenRestore
+  settings.set({
+    zenMode: false,
+    zenRestore: null,
+    // No record (zen was persisted from an older build, say) → leave the chrome
+    // as it is rather than inventing a state the reader never chose.
+    ...(back
+      ? {
+          showActivityBar: back.showActivityBar,
+          showStatusBar: back.showStatusBar,
+          showBreadcrumbs: back.showBreadcrumbs,
+          centeredLayout: back.centeredLayout,
+        }
+      : {}),
+  })
+  if (back) useWorkspace.setState({ tool: back.tool as Tool | null })
+}

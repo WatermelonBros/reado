@@ -5,12 +5,14 @@ import {
   clampRange,
   FONT_SIZE_RANGE,
   LINE_HEIGHT_RANGE,
+  toggleZenMode,
   useCursor,
   useEditorActions,
   usePalette,
   useProject,
   useRecents,
   useSessions,
+  useSettings,
   useWorkspace,
 } from "@/lib/store"
 
@@ -461,5 +463,58 @@ describe("the view a file opens in", () => {
     useEditorActions.getState().requestView("diff")
     useEditorActions.getState().requestView("conflict")
     expect(useEditorActions.getState().takePendingView()).toBe("conflict")
+  })
+})
+
+// Zen mode has to be reversible: it moves four chrome switches and the sidebar
+// at once, and a reader who runs without a status bar must not be handed one
+// back on the way out.
+describe("zen mode", () => {
+  beforeEach(() => {
+    useSettings.getState().set({
+      zenMode: false,
+      zenRestore: null,
+      showActivityBar: true,
+      showStatusBar: false,
+      showBreadcrumbs: true,
+      centeredLayout: false,
+    })
+    useWorkspace.setState({ tool: "files", lastTool: "files" })
+  })
+
+  it("puts the chrome away and gives back exactly what it took", () => {
+    toggleZenMode(true)
+    const inZen = useSettings.getState()
+    expect(inZen.zenMode).toBe(true)
+    expect(inZen.showActivityBar).toBe(false)
+    expect(inZen.showBreadcrumbs).toBe(false)
+    expect(inZen.centeredLayout).toBe(true)
+    expect(useWorkspace.getState().tool).toBeNull()
+
+    toggleZenMode(false)
+    const out = useSettings.getState()
+    expect(out.zenMode).toBe(false)
+    expect(out.showActivityBar).toBe(true)
+    // Off before zen, so off after it — not "restored" to a default it never had.
+    expect(out.showStatusBar).toBe(false)
+    expect(out.showBreadcrumbs).toBe(true)
+    expect(out.centeredLayout).toBe(false)
+    expect(useWorkspace.getState().tool).toBe("files")
+    expect(out.zenRestore).toBeNull()
+  })
+
+  it("entering twice doesn't overwrite the restore point", () => {
+    toggleZenMode(true)
+    const snapshot = useSettings.getState().zenRestore
+    toggleZenMode(true)
+    expect(useSettings.getState().zenRestore).toEqual(snapshot)
+  })
+
+  it("leaving without a restore point leaves the chrome alone", () => {
+    // A zen flag persisted by an older build, with nothing recorded to go back to.
+    useSettings.getState().set({ zenMode: true, zenRestore: null, showActivityBar: false })
+    toggleZenMode(false)
+    expect(useSettings.getState().zenMode).toBe(false)
+    expect(useSettings.getState().showActivityBar).toBe(false)
   })
 })

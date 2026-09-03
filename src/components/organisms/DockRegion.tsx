@@ -15,7 +15,7 @@
  * come from `ToolPanelBody`, so the same panel renders in the sidebar or in a
  * dock without either surface owning the list.
  */
-import { Fragment, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
@@ -145,6 +145,26 @@ export function DockRegion({ area }: { area: DockArea }) {
   // on screen. Wider for the side dock, where a sliver of editor is useless.
   const reserve = horizontal ? MIN_EDITOR_PX : MIN_EDITOR_W
   const areaState = layout.areas[area]
+
+  // Hold the stored size to what the window can actually give, for the cases the
+  // drag can't police: a size persisted from a bigger window, or the window
+  // shrunk under the dock. This was a CSS `max-*: calc(100% - reserve)`; each
+  // dock is its own grid region now, so its box no longer has a parent whose
+  // height a percentage could resolve against.
+  useEffect(() => {
+    const clamp = () => {
+      const box = regionRef.current?.closest("[data-workbench]")?.getBoundingClientRect()
+      if (!box) return
+      const z = useSettings.getState().zoom || 1
+      const available = (horizontal ? box.height : box.width) / z
+      const max = Math.max(MIN_AREA_PX, available - reserve)
+      const cur = useLayout.getState().layout.areas[area].size
+      if (cur > max) setAreaSize(area, max)
+    }
+    clamp()
+    window.addEventListener("resize", clamp)
+    return () => window.removeEventListener("resize", clamp)
+  }, [area, horizontal, reserve, setAreaSize])
   // Only render groups that have at least one *open* panel; keep their real ids so
   // resize/move act on the model, but hide closed tabs — and re-point `active` to a
   // still-open tab so we never render a panel that's actually closed.
@@ -231,7 +251,11 @@ export function DockRegion({ area }: { area: DockArea }) {
     // its container and its own *bottom* edge — where a terminal's prompt sits —
     // slides off screen. Clamping the stored size (rather than only the rendered
     // one) keeps the drag from developing a dead zone on the way back.
-    const parent = regionRef.current?.parentElement
+    // Measure against the workbench, not the immediate parent: each dock is its
+    // own grid region now, so its parent is a wrapper the same size as the dock
+    // — against which it could never grow.
+    const parent =
+      regionRef.current?.closest("[data-workbench]") ?? regionRef.current?.parentElement
     const rect = parent?.getBoundingClientRect()
     const available = rect ? (horizontal ? rect.height : rect.width) / z : Number.POSITIVE_INFINITY
     const max = Math.max(MIN_AREA_PX, available - reserve)
@@ -327,13 +351,7 @@ export function DockRegion({ area }: { area: DockArea }) {
     <div
       ref={regionRef}
       className={`relative flex flex-none ${horizontal ? "flex-row border-t" : "flex-col border-l"} border-line`}
-      // The same cap in CSS, for the sizes the drag can't police: a persisted
-      // size from a larger window, or the window being shrunk under the dock.
-      style={
-        horizontal
-          ? { height: areaState.size, maxHeight: `calc(100% - ${reserve}px)` }
-          : { width: areaState.size, maxWidth: `calc(100% - ${reserve}px)` }
-      }
+      style={horizontal ? { height: areaState.size } : { width: areaState.size }}
     >
       {/* Resize the whole area (straddles its inner edge toward the editor). */}
       <div

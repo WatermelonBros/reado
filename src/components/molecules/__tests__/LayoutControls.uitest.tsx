@@ -1,12 +1,14 @@
 // Title-bar layout controls: each toggle drives the store that owns its region
-// and reflects its state, and the popover's controls are the same settings the
-// Settings tab writes — not a second copy of them.
+// and reflects its state, and the menu's rows are the same settings the Settings
+// tab writes — not a second copy of them.
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it } from "vitest"
 import { LayoutControls } from "@/components/molecules/LayoutControls"
 import { defaultLayout, useLayout } from "@/lib/layout"
+import { usePreview } from "@/lib/preview"
 import { useSettings, useWorkspace } from "@/lib/store"
+import { useTerminals } from "@/lib/terminals"
 
 beforeEach(() => {
   useLayout.setState({
@@ -14,6 +16,10 @@ beforeEach(() => {
     hidden: { left: false, right: false, bottom: false },
   })
   useWorkspace.setState({ tool: "files", lastTool: "files" })
+  // The regions start placed but empty — the state the toggles used to lie
+  // about, reporting "on" for a dock with nothing in it.
+  useTerminals.setState({ open: false })
+  usePreview.setState({ open: false })
   useSettings.getState().set({
     showActivityBar: true,
     showStatusBar: true,
@@ -40,29 +46,45 @@ describe("region toggles", () => {
     expect(useWorkspace.getState().tool).toBe("files")
   })
 
-  it("hides the panel without closing what lives there", async () => {
+  it("shows the panel by opening what lives in it", async () => {
     render(<LayoutControls />)
-    await userEvent.click(screen.getByRole("button", { name: "layout.panel" }))
+    const btn = screen.getByRole("button", { name: "layout.panel" })
+    // Placed but empty is not "showing" — the region would be a bare strip.
+    expect(btn).toHaveAttribute("aria-pressed", "false")
+    await userEvent.click(btn)
+    expect(useTerminals.getState().open).toBe(true)
+    expect(useLayout.getState().hidden.bottom).toBe(false)
+    expect(btn).toHaveAttribute("aria-pressed", "true")
+  })
+
+  it("hides the panel without forgetting what lives there", async () => {
+    render(<LayoutControls />)
+    const btn = screen.getByRole("button", { name: "layout.panel" })
+    await userEvent.click(btn) // show
+    await userEvent.click(btn) // hide
     expect(useLayout.getState().hidden.bottom).toBe(true)
-    // The dock keeps its panels — hiding is not the same as closing them.
+    expect(useTerminals.getState().open).toBe(false)
+    // The dock keeps its panels — hiding is not the same as forgetting them.
     expect(useLayout.getState().layout.areas.bottom.groups.length).toBeGreaterThan(0)
   })
 
-  it("hides the secondary sidebar independently of the panel", async () => {
+  it("shows the secondary sidebar independently of the panel", async () => {
     render(<LayoutControls />)
     await userEvent.click(screen.getByRole("button", { name: "layout.secondarySidebar" }))
-    expect(useLayout.getState().hidden.right).toBe(true)
-    expect(useLayout.getState().hidden.bottom).toBe(false)
+    expect(usePreview.getState().open).toBe(true)
+    expect(useLayout.getState().hidden.right).toBe(false)
+    // The panel is a separate region and stays as it was.
+    expect(useTerminals.getState().open).toBe(false)
   })
 })
 
-describe("the layout popover", () => {
+describe("the layout menu", () => {
   const open = () => userEvent.click(screen.getByRole("button", { name: "layout.more" }))
 
   it("drives the same settings the Settings tab writes", async () => {
     render(<LayoutControls />)
     await open()
-    await userEvent.click(await screen.findByText("settings.showStatusBar"))
+    await userEvent.click(await screen.findByText("layout.statusBar"))
     expect(useSettings.getState().showStatusBar).toBe(false)
   })
 
@@ -77,7 +99,31 @@ describe("the layout popover", () => {
     useSettings.getState().set({ showBreadcrumbs: false })
     render(<LayoutControls />)
     await open()
-    const box = (await screen.findByText("settings.showBreadcrumbs")).closest("label")
-    expect(box).toHaveAttribute("data-state", "unchecked")
+    const row = (await screen.findByText("layout.breadcrumbs")).closest('[role="menuitemcheckbox"]')
+    expect(row).toHaveAttribute("data-state", "unchecked")
+  })
+
+  it("names the shortcut that toggles each region, as VS Code does", async () => {
+    render(<LayoutControls />)
+    await open()
+    const combo = async (label: string) =>
+      (await screen.findByText(label)).closest('[role="menuitemcheckbox"]')?.textContent
+    expect(await combo("layout.primarySidebar")).toMatch(/B$/)
+    // The secondary sidebar's binding, and the panel's, are real — see
+    // lib/hooks.ts. A menu that named keys nothing listens for would be worse
+    // than one that named none.
+    expect(await combo("layout.secondarySidebar")).toMatch(/B$/)
+    expect(await combo("layout.panel")).toMatch(/J$/)
+  })
+
+  it("stays open while regions are flipped", async () => {
+    render(<LayoutControls />)
+    await open()
+    await userEvent.click(await screen.findByText("layout.activityBar"))
+    expect(useSettings.getState().showActivityBar).toBe(false)
+    // A control panel that dismissed itself per click would make the second
+    // change cost another trip to the trigger.
+    await userEvent.click(await screen.findByText("layout.statusBar"))
+    expect(useSettings.getState().showStatusBar).toBe(false)
   })
 })

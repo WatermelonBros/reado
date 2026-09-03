@@ -149,11 +149,117 @@ export const SparkleIcon = wrap(Sparkle)
 export const RouteIcon = wrap(Signpost)
 export const SwapIcon = wrap(Swap)
 export const SplitIcon = wrap(SquareSplitHorizontal)
-/** The panel glyph. One shape for all three regions, rotated at the call site —
- *  a sidebar turned on its side reads as a bottom panel, which is how every
- *  editor draws these. */
+/** The panel glyph, for anywhere a region is named rather than placed. */
 export const PanelIcon = wrap(SidebarSimple)
+
+/** A layout region: the window as an outline with one edge filled — the way
+ *  VS Code says *which* region a control means, and whether it is on screen.
+ *  Rotating one sidebar glyph could say the edge but not the state, and read as
+ *  a tipped-over sidebar rather than a bottom panel. */
+export function RegionIcon({
+  side,
+  thin = false,
+  on = true,
+  className,
+}: {
+  side: "left" | "right" | "top" | "bottom"
+  /** A strip rather than a panel — the activity bar, the status bar, the
+   *  breadcrumb. Same edge, a thinner band, so the two read as different
+   *  regions of the same window at a glance. */
+  thin?: boolean
+  on?: boolean
+  className?: string
+}) {
+  const t = thin ? 2.5 : 4.5
+  const band = {
+    left: { x: 2, y: 2, width: t, height: 12 },
+    right: { x: 14 - t, y: 2, width: t, height: 12 },
+    top: { x: 2, y: 2, width: 12, height: t },
+    bottom: { x: 2, y: 14 - t, width: 12, height: t },
+  }[side]
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" className={className} aria-hidden="true">
+      <rect
+        x="1.5"
+        y="1.5"
+        width="13"
+        height="13"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+      />
+      {/* Filled when the region is showing, ghosted when it is hidden — so the
+        glyph carries the state without relying on colour alone. */}
+      <rect {...band} rx="1" fill="currentColor" opacity={on ? 0.9 : 0.2} />
+    </svg>
+  )
+}
 export const LayoutIcon = wrap(Layout)
+
+/** The frame every layout glyph is drawn in, so they read as one family. */
+const FRAME = (
+  <rect
+    x="1.5"
+    y="1.5"
+    width="13"
+    height="13"
+    rx="2"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.25"
+  />
+)
+
+/** How far the bottom panel runs across the window — the four values of Panel
+ *  alignment, drawn rather than named. */
+export function PanelAlignIcon({
+  align,
+  className,
+}: {
+  align: "left" | "center" | "right" | "justify"
+  className?: string
+}) {
+  const band = { left: [2, 8], center: [4, 8], right: [6, 8], justify: [2, 12] }[align]
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" className={className} aria-hidden="true">
+      {FRAME}
+      <rect
+        x={band[0]}
+        y="9.5"
+        width={band[1]}
+        height="4.5"
+        rx="1"
+        fill="currentColor"
+        opacity="0.9"
+      />
+    </svg>
+  )
+}
+
+/** Where the command palette opens in the window. */
+export function QuickInputIcon({
+  position,
+  className,
+}: {
+  position: "top" | "center"
+  className?: string
+}) {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" className={className} aria-hidden="true">
+      {FRAME}
+      <rect
+        x="3.5"
+        y={position === "center" ? 6.5 : 3.5}
+        width="9"
+        height="3"
+        rx="1"
+        fill="currentColor"
+        opacity="0.9"
+      />
+    </svg>
+  )
+}
 export const DetachIcon = wrap(ArrowSquareOut)
 export const CodeIcon = wrap(Code)
 export const DevicesIcon = wrap(Devices)

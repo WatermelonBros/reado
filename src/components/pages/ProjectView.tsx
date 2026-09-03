@@ -351,6 +351,8 @@ export function ProjectView({ root }: { root: string }) {
   const [railHover, setRailHover] = useState(false)
   const showStatusBar = useSettings((s) => s.showStatusBar)
   const showBreadcrumbs = useSettings((s) => s.showBreadcrumbs)
+  const panelAlignment = useSettings((s) => s.panelAlignment)
+  const centeredLayout = useSettings((s) => s.centeredLayout)
   // A native preview webview can outlive a full frontend reload (dev HMR, or any
   // reload); if the pane isn't open when the workspace mounts, close the orphan so
   // it can't sit on top of the UI.
@@ -453,38 +455,59 @@ export function ProjectView({ root }: { root: string }) {
     window.innerWidth / zoom - MIN_EDITOR_WIDTH,
   )
 
+  // The workbench columns, in the order they appear on screen. `aux` is always
+  // emitted: an `auto` track whose region draws nothing is zero wide, which is
+  // cheaper than threading DockRegion's own "should I render?" test up here.
+  const columns = [
+    ...(showActivityBar && !onRight ? [{ name: "act", size: "auto" }] : []),
+    ...(tool && !onRight ? [{ name: "side", size: `${appliedSidebarWidth}px` }] : []),
+    { name: "edit", size: "minmax(0, 1fr)" },
+    { name: "aux", size: "auto" },
+    ...(tool && onRight ? [{ name: "side", size: `${appliedSidebarWidth}px` }] : []),
+    ...(showActivityBar && onRight ? [{ name: "act", size: "auto" }] : []),
+  ]
+  // Panel alignment, as VS Code means it: the panel always covers the editor,
+  // and the setting says how much further out it runs. The activity bar is
+  // never covered — it is the window's spine, not a region of the workbench —
+  // so the span is measured over the other columns only. With the sidebar moved
+  // to the right edge the editor *is* the leftmost column, and "left"
+  // correctly collapses to "center".
+  const body = columns.map((c, i) => ({ ...c, i })).filter((c) => c.name !== "act")
+  const editAt = body.findIndex((c) => c.name === "edit")
+  const toLeft = panelAlignment === "left" || panelAlignment === "justify"
+  const toRight = panelAlignment === "right" || panelAlignment === "justify"
+  const from = body[toLeft ? 0 : editAt].i
+  const to = body[toRight ? body.length - 1 : editAt].i
+  const rowRegions = columns.map((c) => c.name).join(" ")
+  const rowPanel = columns
+    .map((c, i) => (c.name !== "act" && i >= from && i <= to ? "panel" : c.name))
+    .join(" ")
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <h1 className="sr-only">{root.split(/[\\/]/).filter(Boolean).pop() ?? root}</h1>
       <div
+        data-workbench
         className="relative grid min-h-0 flex-1 overflow-hidden"
         style={{
-          // Pinned: the activity bar takes a grid column (`auto` tracks its width
-          // under interface zoom). Auto-hide: it leaves the grid entirely — 3 → 2
-          // columns — and overlays on the left edge, revealed on hover (below).
-          // The sidebar edge is one unit: the activity bar and the tool panel
-          // move together, and the editor keeps the middle either way. Column
-          // order is reversed for the right edge and the children carry an
-          // explicit `order`, so the DOM stays in reading order.
-          gridTemplateColumns: onRight
-            ? showActivityBar
-              ? tool
-                ? `1fr ${appliedSidebarWidth}px auto`
-                : "1fr auto"
-              : tool
-                ? `1fr ${appliedSidebarWidth}px`
-                : "1fr"
-            : showActivityBar
-              ? tool
-                ? `auto ${appliedSidebarWidth}px 1fr`
-                : "auto 1fr"
-              : tool
-                ? `${appliedSidebarWidth}px 1fr`
-                : "1fr",
+          // The workbench is a two-row grid: the regions across the top, the
+          // bottom panel underneath. Naming the areas rather than counting
+          // column indices is what keeps the alignment maths below readable
+          // while the activity bar, the sidebar and the secondary sidebar come
+          // and go.
+          //
+          // Pinned: the activity bar takes a column (`auto` tracks its width
+          // under interface zoom). Auto-hide: it leaves the grid entirely and
+          // overlays the edge, revealed on hover (below). The sidebar edge is
+          // one unit — activity bar and tool panel move together — so on the
+          // right edge both swap sides while the DOM stays in reading order.
+          gridTemplateColumns: columns.map((c) => c.size).join(" "),
+          gridTemplateRows: "minmax(0, 1fr) auto",
+          gridTemplateAreas: `"${rowRegions}" "${rowPanel}"`,
         }}
       >
         {showActivityBar && (
-          <div className="contents" style={{ order: onRight ? 3 : 1 }}>
+          <div style={{ gridArea: "act" }} className="flex min-h-0">
             <ActivityBar />
           </div>
         )}
@@ -510,7 +533,7 @@ export function ProjectView({ root }: { root: string }) {
         )}
         {tool && (
           <aside
-            style={{ order: 2 }}
+            style={{ gridArea: "side" }}
             className={`relative flex min-w-0 flex-col overflow-hidden bg-surface ${
               onRight ? "border-l border-line" : "border-r border-line"
             }`}
@@ -570,14 +593,21 @@ export function ProjectView({ root }: { root: string }) {
             </div>
           </aside>
         )}
-        <main style={{ order: onRight ? 1 : 3 }} className="flex min-w-0 flex-col overflow-hidden">
+        <main style={{ gridArea: "edit" }} className="flex min-w-0 flex-col overflow-hidden">
           <Tabs />
           {showBreadcrumbs && <Breadcrumb />}
           {/* Editor + optional split pane + terminal (right dock). The primary
             (left) pane is the one with the breadcrumb/tabs above it; the split
             pane carries its own compact header — that asymmetry signals which
             pane drives the status bar, no loud accent needed. */}
-          <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* Centered layout: hold the text to a readable measure and give the
+            slack back as margin, rather than letting a line run the width of a
+            wide display. */}
+          <div
+            className={`flex min-h-0 flex-1 overflow-hidden ${
+              centeredLayout ? "mx-auto w-full max-w-[min(100%,980px)]" : ""
+            }`}
+          >
             <div className="relative min-w-0 flex-1 overflow-hidden">
               <Editor />
               <TourBar />
@@ -609,10 +639,17 @@ export function ProjectView({ root }: { root: string }) {
                 </div>
               </div>
             )}
-            <DockRegion area="right" />
           </div>
-          <DockRegion area="bottom" />
         </main>
+        {/* The secondary sidebar and the panel are grid regions of their own —
+          which is what lets the panel run under one, the other, both or neither
+          (Panel alignment). Inside `main` it could only ever be "center". */}
+        <div style={{ gridArea: "aux" }} className="flex min-h-0">
+          <DockRegion area="right" />
+        </div>
+        <div style={{ gridArea: "panel" }} className="flex min-w-0 flex-col">
+          <DockRegion area="bottom" />
+        </div>
         {/* Send a tool panel to a dock. The sidebar is just where a panel sits
           by default; from here it can live beside the terminal or the browser. */}
         {toolMenu && (

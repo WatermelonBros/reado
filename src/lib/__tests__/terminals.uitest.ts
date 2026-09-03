@@ -164,6 +164,16 @@ describe("useTerminals — active & layout", () => {
     T().toggle(true)
     expect(T().open).toBe(true)
   })
+
+  it("opening the terminal reveals the dock it lives in", () => {
+    const at = findPanel(useLayout.getState().layout, "terminal")
+    if (!at) throw new Error("the terminal should be placed in a dock by default")
+    useLayout.getState().toggleArea(at.area, true) // hide it
+    T().toggle(true)
+    // Without this, the panel's visibility switch silently defeats the
+    // terminal's: `open` flips on a region nothing is drawing.
+    expect(useLayout.getState().hidden[at.area]).toBe(false)
+  })
 })
 
 // The link matcher decides what in a line of output is clickable: get it wrong

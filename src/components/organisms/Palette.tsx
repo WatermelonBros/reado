@@ -14,6 +14,7 @@ import type { TFunction } from "i18next"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Input } from "@/components/atoms/Input"
+import { Kbd } from "@/components/atoms/Kbd"
 import type { MessageKey } from "@/i18n"
 import { clearTerminal, restartTerminal } from "@/lib/agents"
 import {
@@ -367,7 +368,11 @@ export function Palette() {
   return (
     <div
       onMouseDown={close}
-      className="animate-fade reado-scrim fixed inset-0 z-[100] flex items-start justify-center pt-[14vh]"
+      // Quick input position: pinned near the top (the default — it stays put as
+      // the result list grows or shrinks) or centred in the window.
+      className={`animate-fade reado-scrim fixed inset-0 z-[100] flex justify-center ${
+        settings.quickInputPosition === "center" ? "items-center" : "items-start pt-[14vh]"
+      }`}
     >
       <div
         role="dialog"
@@ -415,11 +420,7 @@ export function Palette() {
                     {row.detail}
                   </span>
                 )}
-                {row.hint && (
-                  <kbd className="ml-auto flex-none rounded border border-line bg-canvas px-1.5 py-0.5 font-mono text-xs text-muted">
-                    {row.hint}
-                  </kbd>
-                )}
+                {row.hint && <Kbd className="ml-auto">{row.hint}</Kbd>}
               </div>
             ))}
           </div>

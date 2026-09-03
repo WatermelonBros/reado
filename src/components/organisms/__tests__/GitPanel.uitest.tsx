@@ -211,6 +211,26 @@ describe("GitPanel", () => {
     await waitFor(() => expect(screen.getByLabelText("git.push")).toBeEnabled())
   })
 
+  it("carries the pending count as a badge on Sync, not as a glyph beside it", async () => {
+    useProject.setState({
+      git: {
+        isRepo: true,
+        branch: "main",
+        ahead: 1,
+        behind: 2,
+        hasRemote: true,
+        hasUpstream: true,
+        changedFiles: 0,
+      },
+    })
+    render(<GitPanel />)
+    const sync = await screen.findByRole("button", { name: /git\.sync/ })
+    // The number lives inside the button (so it is the button's affordance),
+    // and the split stays in the label.
+    expect(sync.textContent).toContain("3")
+    expect(sync).toHaveAccessibleName(expect.stringContaining("↓2 ↑1"))
+  })
+
   it("syncs (pull+push) and reports conflicts left to resolve", async () => {
     gitSync.mockResolvedValue({ conflicted: ["src/conflict.ts", "src/other.ts"] })
     useProject.setState({

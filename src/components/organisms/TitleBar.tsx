@@ -161,12 +161,15 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
         // macOS: traffic lights sit top-left; the pill floats centered on the
         // window; Discord sits top-right (ml-auto pushes it to the edge).
         <>
-          {/* The layout toggles sit after the traffic lights, where VS Code puts
-            them; the pill stays centred on the window, not on the space left
-            over, so it doesn't shift as the controls change width. */}
-          {projectName && <LayoutControls />}
+          {/* The pill stays centred on the window, not on the space left over,
+            so it doesn't shift as the controls change width. The layout toggles
+            sit at the trailing edge, where VS Code puts them — the leading edge
+            belongs to the traffic lights. */}
           <div className="pointer-events-none absolute inset-x-0 flex justify-center">{pill}</div>
-          <DiscordButton className="ml-auto" />
+          <div className="ml-auto flex flex-none items-center gap-0.5">
+            <DiscordButton />
+            {projectName && <LayoutControls />}
+          </div>
         </>
       ) : (
         // Win/Linux: menu bar + Discord (left) · pill (center) · window controls
@@ -176,11 +179,11 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
         // bare region.
         <>
           <MenuBar />
-          {projectName && <LayoutControls />}
           <DiscordButton />
           <div data-tauri-drag-region className="flex min-w-0 flex-1 justify-center px-3">
             {pill}
           </div>
+          {projectName && <LayoutControls />}
           <WindowControls />
         </>
       )}
