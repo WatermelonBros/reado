@@ -2,10 +2,17 @@
 // Pure state (PTY lifecycle lives in the component). Mock only the logger.
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("../logger", () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
+vi.mock("../logger", () => ({
+  createLogger: () => ({ info: vi.fn(), error: vi.fn() }),
+  // `api` routes every command through this; the drop test reaches ptyWrite.
+  tracedInvoke: vi.fn(async () => null),
+  safeError: String,
+}))
 
 import { findPanel, useLayout } from "@/lib/layout"
-import { shellQuote, terminalLinks, useTerminals } from "@/lib/terminals"
+import { tracedInvoke } from "@/lib/logger"
+import { useSettings } from "@/lib/store"
+import { dropPathsIntoTerminal, shellQuote, terminalLinks, useTerminals } from "@/lib/terminals"
 
 const T = () => useTerminals.getState()
 
@@ -121,11 +128,10 @@ describe("useTerminals — sessions & groups", () => {
 describe("useTerminals — active & layout", () => {
   it("setActive focuses a pane and its owning group", () => {
     const a = T().add()
-    const b = T().split()
+    T().split()
     T().setActive(a)
     expect(T().activeId).toBe(a)
     expect(T().activeGroupId).toBe(T().groups[0].id)
-    expect(b).toBeTruthy()
   })
 
   it("setActiveGroup focuses the group's first pane", () => {
@@ -216,5 +222,179 @@ describe("terminalLinks", () => {
     expect(shellQuote("/tmp/a-b.png")).toBe("/tmp/a-b.png")
     expect(shellQuote("/tmp/my shot.png")).toBe("'/tmp/my shot.png'")
     expect(shellQuote("/tmp/it's.png")).toBe(`'/tmp/it'\\''s.png'`)
+  })
+})
+
+describe("the panel's own size", () => {
+  it("clamps the height to the window, and never below a usable minimum", () => {
+    useSettings.setState({ zoom: 1 })
+    useTerminals.getState().setHeight(10)
+    expect(useTerminals.getState().height).toBe(120)
+    useTerminals.getState().setHeight(100_000)
+    expect(useTerminals.getState().height).toBe(window.innerHeight - 160)
+  })
+
+  it("clamps the width the same way", () => {
+    useTerminals.getState().setWidth(10)
+    expect(useTerminals.getState().width).toBe(240)
+    useTerminals.getState().setWidth(100_000)
+    expect(useTerminals.getState().width).toBe(window.innerWidth - 360)
+  })
+
+  it("converts the viewport cap by the interface zoom", () => {
+    useSettings.setState({ zoom: 2 })
+    useTerminals.getState().setHeight(100_000)
+    expect(useTerminals.getState().height).toBe(window.innerHeight / 2 - 160)
+    useSettings.setState({ zoom: 1 })
+  })
+})
+
+describe("panes and groups", () => {
+  beforeEach(() => {
+    useTerminals.setState({
+      sessions: [],
+      groups: [],
+      activeId: null,
+      activeGroupId: null,
+      agentTerminals: [],
+      open: false,
+    })
+  })
+
+  it("splitting with nothing open just opens a terminal", () => {
+    const id = useTerminals.getState().split()
+    expect(useTerminals.getState().groups).toHaveLength(1)
+    expect(useTerminals.getState().activeId).toBe(id)
+  })
+
+  it("splitting an open group adds a pane and re-evens the sizes", () => {
+    useTerminals.getState().add()
+    useTerminals.getState().split()
+    const g = useTerminals.getState().groups[0]
+    expect(g.paneIds).toHaveLength(2)
+    expect(g.sizes[0]).toBeCloseTo(0.5)
+  })
+
+  it("closing a group takes its panes with it, and moves the focus", () => {
+    useTerminals.getState().add()
+    const second = useTerminals.getState().add()
+    const gid = useTerminals.getState().activeGroupId!
+    useTerminals.getState().removeGroup(gid)
+    expect(useTerminals.getState().sessions.some((s) => s.id === second)).toBe(false)
+    expect(useTerminals.getState().activeId).not.toBe(second)
+  })
+
+  it("ignores a close for a group that isn't there", () => {
+    useTerminals.getState().add()
+    const before = useTerminals.getState().groups
+    useTerminals.getState().removeGroup("nope")
+    expect(useTerminals.getState().groups).toEqual(before)
+  })
+
+  it("focusing a pane focuses its group too", () => {
+    const first = useTerminals.getState().add()
+    useTerminals.getState().add()
+    useTerminals.getState().setActive(first)
+    const g = useTerminals.getState().groups.find((x) => x.paneIds.includes(first))
+    expect(useTerminals.getState().activeGroupId).toBe(g?.id)
+  })
+
+  it("focusing a group focuses its first pane", () => {
+    const first = useTerminals.getState().add()
+    const gid = useTerminals.getState().activeGroupId!
+    useTerminals.getState().add()
+    useTerminals.getState().setActiveGroup(gid)
+    expect(useTerminals.getState().activeId).toBe(first)
+  })
+
+  it("keeps the focus where it is for a group that isn't there", () => {
+    const id = useTerminals.getState().add()
+    useTerminals.getState().setActiveGroup("nope")
+    expect(useTerminals.getState().activeId).toBe(id)
+  })
+
+  it("flips a group's axis, or sets it outright", () => {
+    useTerminals.getState().add()
+    const gid = useTerminals.getState().activeGroupId!
+    useTerminals.getState().setGroupDir(gid)
+    expect(useTerminals.getState().groups[0].dir).toBe("column")
+    useTerminals.getState().setGroupDir(gid, "row")
+    expect(useTerminals.getState().groups[0].dir).toBe("row")
+  })
+
+  it("renames a pane", () => {
+    const id = useTerminals.getState().add()
+    useTerminals.getState().setTitle(id, "build")
+    expect(useTerminals.getState().sessions[0].title).toBe("build")
+  })
+
+  it("remembers which pane runs which agent, once", () => {
+    const id = useTerminals.getState().add()
+    useTerminals.getState().markAgent(id, "codex")
+    useTerminals.getState().markAgent(id, "codex")
+    expect(useTerminals.getState().agentTerminals).toEqual([id])
+    expect(useTerminals.getState().lastAgent).toBe("codex")
+  })
+
+  it("restarting a pane mints a fresh id and forgets its agent", () => {
+    const id = useTerminals.getState().add()
+    useTerminals.getState().markAgent(id, "codex")
+    useTerminals.getState().restart(id)
+    expect(useTerminals.getState().sessions[0].id).not.toBe(id)
+    expect(useTerminals.getState().agentTerminals).toEqual([])
+  })
+
+  it("ignores a restart for a pane that isn't there", () => {
+    const before = useTerminals.getState().sessions
+    useTerminals.getState().restart("nope")
+    expect(useTerminals.getState().sessions).toEqual(before)
+  })
+
+  it("opening with nothing running starts the first terminal", () => {
+    useTerminals.getState().toggle(true)
+    expect(useTerminals.getState().sessions).toHaveLength(1)
+    expect(useTerminals.getState().open).toBe(true)
+  })
+
+  it("opening again reuses what is already running", () => {
+    useTerminals.getState().toggle(true)
+    useTerminals.getState().toggle(false)
+    useTerminals.getState().toggle(true)
+    expect(useTerminals.getState().sessions).toHaveLength(1)
+  })
+})
+
+describe("dropPathsIntoTerminal", () => {
+  it("types the quoted paths into the pane under the pointer", () => {
+    const host = document.createElement("div")
+    host.dataset.terminalId = "t1"
+    document.body.appendChild(host)
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(host)
+    expect(dropPathsIntoTerminal(5, 5, ["/tmp/a b.ts", "/tmp/c.ts"])).toBe(true)
+    // Quoted, space-separated, with a trailing space — an agent reading the
+    // prompt gets two paths, not one mangled one.
+    expect(tracedInvoke).toHaveBeenCalledWith("pty_write", {
+      id: "t1",
+      data: "'/tmp/a b.ts' /tmp/c.ts ",
+    })
+    host.remove()
+    vi.restoreAllMocks()
+  })
+
+  it("reports no pane when the pointer is elsewhere, or nothing was dropped", () => {
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(document.createElement("div"))
+    vi.mocked(tracedInvoke).mockClear()
+    expect(dropPathsIntoTerminal(5, 5, ["/tmp/a.ts"])).toBe(false)
+    expect(tracedInvoke).not.toHaveBeenCalled()
+    vi.restoreAllMocks()
+    const host = document.createElement("div")
+    host.dataset.terminalId = "t1"
+    document.body.appendChild(host)
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(host)
+    vi.mocked(tracedInvoke).mockClear()
+    expect(dropPathsIntoTerminal(5, 5, [])).toBe(false)
+    expect(tracedInvoke).not.toHaveBeenCalled()
+    host.remove()
+    vi.restoreAllMocks()
   })
 })

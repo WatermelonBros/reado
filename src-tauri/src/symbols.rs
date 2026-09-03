@@ -280,6 +280,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_preview_line_is_trimmed() {
+        // A deeply-nested declaration would otherwise render as mostly
+        // whitespace in a fixed-width picker row.
+        assert_eq!(trim200("        const deep = 1"), "const deep = 1");
+        assert_eq!(trim200("\tconst tabbed = 2  "), "const tabbed = 2");
+    }
+
+    #[test]
     fn lists_declared_symbols() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(

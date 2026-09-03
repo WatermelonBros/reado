@@ -92,6 +92,31 @@ describe("create / patch / reply / remove", () => {
     expect(api.addReply).toHaveBeenCalledWith("/r", "c1", "user", "hi")
     expect(C().comments[0].messages).toHaveLength(1)
   })
+  it("setState moves a resolved comment out of the open list and into history", async () => {
+    useComments.setState({ comments: [mkComment({ id: "c1" })], archived: [] })
+    api.setCommentState.mockResolvedValue(mkComment({ id: "c1", state: "done", archived: true }))
+    await C().setState("c1", "done")
+    // Resolving is the headline flow: it has to leave the open list *and*
+    // arrive in history, not merely change state in place.
+    expect(C().comments.map((c) => c.id)).toEqual([])
+    expect(C().archived.map((c) => c.id)).toEqual(["c1"])
+  })
+
+  it("setState brings a reopened comment back out of history", async () => {
+    useComments.setState({ comments: [], archived: [mkComment({ id: "c1", archived: true })] })
+    api.setCommentState.mockResolvedValue(mkComment({ id: "c1", state: "open", archived: false }))
+    await C().setState("c1", "open")
+    expect(C().comments.map((c) => c.id)).toEqual(["c1"])
+    expect(C().archived.map((c) => c.id)).toEqual([])
+  })
+
+  it("re-anchoring a comment the backend archived doesn't put it back on screen", async () => {
+    useComments.setState({ comments: [mkComment({ id: "c1" })], reanchoringId: "c1" })
+    api.setAnchor.mockResolvedValue(mkComment({ id: "c1", archived: true }))
+    await C().applyReanchor("a.ts", 3, 4)
+    expect(C().comments.map((c) => c.id)).toEqual([])
+  })
+
   it("remove drops it from comments/archived and clears active", async () => {
     useComments.setState({ comments: [mkComment({ id: "c1" })], activeId: "c1" })
     api.deleteComment.mockResolvedValue(undefined)

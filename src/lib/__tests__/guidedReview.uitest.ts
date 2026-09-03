@@ -179,6 +179,14 @@ describe("refresh / select", () => {
     expect(useGuidedReview.getState().sessions[0].title).toBe("new")
   })
 
+  it("puts a session it hadn't seen at the head of the list", async () => {
+    useGuidedReview.setState({ sessions: [session({ id: "old", title: "older" })] })
+    vi.mocked(api.sessionGet).mockResolvedValue(session({ id: "fresh", title: "newest" }))
+    await useGuidedReview.getState().refresh("/p", "fresh")
+    // The list reads newest-first; appending buries a new session at the end.
+    expect(useGuidedReview.getState().sessions.map((x) => x.id)).toEqual(["fresh", "old"])
+  })
+
   it("leaves state untouched when refresh fails", async () => {
     useGuidedReview.setState({ sessions: [session({ id: "s1", title: "old" })] })
     vi.mocked(api.sessionGet).mockResolvedValue(null as never)

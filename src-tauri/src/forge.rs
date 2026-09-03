@@ -1312,6 +1312,13 @@ mod tests {
         let f = detect_from_remote("git@notgithub.example.com:team/repo.git");
         assert_eq!(f.provider, Provider::Unknown);
         assert!(!f.has_adapter);
+
+        // The same must hold for the *dotted* patterns, which take the other
+        // branch: a bare `ends_with` would hand `notvisualstudio.com` to the
+        // Azure adapter and post review comments at somebody else's host.
+        assert!(!host_matches("notvisualstudio.com", "visualstudio.com"));
+        assert!(host_matches("visualstudio.com", "visualstudio.com"));
+        assert!(host_matches("myorg.visualstudio.com", "visualstudio.com"));
     }
 
     #[test]

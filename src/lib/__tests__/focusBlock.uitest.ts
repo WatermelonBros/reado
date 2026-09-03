@@ -38,6 +38,21 @@ describe("focusBlockRange", () => {
     expect(rangeOnLine(CODE, 1)).toEqual({ from: 1, to: 6 })
   })
 
+  it("stops before the next block in a brace-less language", () => {
+    // Python has no closing token, so the block must end on the last line that
+    // is still indented — not swallow the next `def`'s header.
+    const PY = `def first():
+    a = 1
+    b = 2
+
+def second():
+    c = 3
+`
+    // Ends on line 4 (the blank separator) — the point is that line 5,
+    // `def second():`, is not swallowed into the first block.
+    expect(rangeOnLine(PY, 2)).toEqual({ from: 1, to: 4 })
+  })
+
   it("keeps an open/close tag pair together", () => {
     const html = `<div>\n  <span>hi</span>\n  <p>text</p>\n</div>\n`
     // caret on "<p>text</p>" (line 3) → the <div> block, lines 1..4.

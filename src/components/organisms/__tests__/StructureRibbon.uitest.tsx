@@ -53,6 +53,24 @@ describe("StructureRibbon", () => {
     expect(bandEls[0]).toHaveStyle({ top: "25%", height: "30%" })
   })
 
+  it("keeps a tiny band visible in a long file", () => {
+    // Three lines of a 2000-line file is 0.15% — at that height the band is a
+    // zero-pixel, unclickable nothing, which is exactly the case a ribbon is
+    // for.
+    const { container } = render(
+      <StructureRibbon
+        marks={MARKS}
+        totalLines={2000}
+        band={{ top: 10, height: 0.15 }}
+        onJump={vi.fn()}
+      />,
+    )
+    const bandEl = (container.firstElementChild as HTMLElement).querySelector(
+      ":scope > div",
+    ) as HTMLElement
+    expect(Number.parseFloat(bandEl.style.height)).toBeGreaterThanOrEqual(2)
+  })
+
   it("renders no band element when band is null", () => {
     const { container } = render(
       <StructureRibbon marks={MARKS} totalLines={100} band={null} onJump={vi.fn()} />,

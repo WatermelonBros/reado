@@ -150,6 +150,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn extensions_match_whatever_case_the_file_uses() {
+        // `Component.TSX` and `README.MD` are ordinary on case-insensitive
+        // filesystems; without the fold, Format Document silently does nothing.
+        assert_eq!(
+            candidates_for("/x", "a.TSX").len(),
+            candidates_for("/x", "a.tsx").len()
+        );
+        assert!(!candidates_for("/x", "a.RS").is_empty());
+    }
+
+    #[test]
     fn picks_candidates_by_extension() {
         let c = candidates_for("/x", "a.ts");
         assert!(c.iter().any(|c| c.program.ends_with("biome")));

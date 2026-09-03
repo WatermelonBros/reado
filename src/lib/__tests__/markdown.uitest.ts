@@ -5,7 +5,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (p: string) => `asset://localhost/${encodeURIComponent(p)}`,
 }))
 
-const { markdownRehypeFor, markdownUrlTransform } = await import("../markdown")
+const { markdownRehype, markdownRehypeFor, markdownUrlTransform } = await import("../markdown")
 
 /** Run only the local-image plugin (the last one) over a hast tree. */
 function rewrite(baseDir: string, src: string) {
@@ -69,5 +69,53 @@ describe("markdown url transform", () => {
 
   it("still blanks a dangerous protocol", () => {
     expect(t("javascript:alert(1)")).toBe("")
+  })
+})
+
+describe("the sanitize schema", () => {
+  /** Run the real sanitize plugin — with the real schema, taken straight off
+   *  `markdownRehype` — over a hand-built hast tree. */
+  const sanitize = (node: Record<string, unknown>) => {
+    const entry = (markdownRehype as unknown[]).find((p) => Array.isArray(p)) as [
+      (schema: unknown) => (tree: unknown) => unknown,
+      unknown,
+    ]
+    const out = entry[0](entry[1])({ type: "root", children: [node] }) as {
+      children: Array<{ tagName?: string; properties?: Record<string, unknown> }>
+    }
+    return out.children[0] ?? {}
+  }
+
+  const el = (tagName: string, properties: Record<string, unknown>, children: unknown[] = []) => ({
+    type: "element",
+    tagName,
+    properties,
+    children,
+  })
+
+  // The schema's one real widening is `className`: `align`, `width` and
+  // `height` are already in hast-util-sanitize's default `*` list, so asserting
+  // those would pin the library rather than this file.
+  it("keeps className, which the math placeholders ride on", () => {
+    expect(sanitize(el("span", { className: ["math"] })).properties).toMatchObject({
+      className: ["math"],
+    })
+  })
+
+  it("still strips what the default schema strips", () => {
+    expect(
+      sanitize(el("img", { src: "x.png", onError: "alert(1)" })).properties,
+    ).not.toHaveProperty("onError")
+    expect(sanitize(el("script", {})).tagName).not.toBe("script")
+  })
+
+  it("runs KaTeX after sanitize, so its own output isn't re-sanitized", () => {
+    const plugins = markdownRehype as unknown[]
+    const sanitizeAt = plugins.findIndex((p) => Array.isArray(p))
+    const katexAt = plugins.findIndex((p) => (p as { name?: string }).name === "rehypeKatex")
+    // The file's comment insists on this order; swapping the two strips
+    // KaTeX's markup instead of rendering it.
+    expect(sanitizeAt).toBeGreaterThanOrEqual(0)
+    expect(katexAt).toBeGreaterThan(sanitizeAt)
   })
 })

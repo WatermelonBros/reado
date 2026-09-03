@@ -11,6 +11,58 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A reply that fails to save stays in the box, and says so.** The reply
+  handler awaited the write but caught nothing: on a failure the promise
+  rejected into nowhere, so the only copy of what you typed was gone with no
+  message. It now keeps the draft and surfaces the error.
+- **The status bar no longer claims a sibling project's file.** It carried a
+  private copy of `toRelative` that had lost the trailing-separator guard, so
+  with a project at `~/proj` open, a file from `~/proj-backup` rendered as
+  `-backup/…`. It now calls the shared helper, which also learned to handle a
+  Windows root (its guard only ever appended a forward slash).
+- The command palette now closes after running a command that means to close it.
+  `commandRows` is a module-level function, so its `close()` calls were silently
+  resolving to the DOM global instead of the store action — sixteen commands ran
+  correctly but left the palette sitting open on top of the result.
+- **A new file opens as a green diff, not an error.** Clicking a file from
+  Source Control that isn't in the base yet — anything added since HEAD — said
+  "not present in the selected base" and showed nothing. A file the base doesn't
+  have isn't a missing base: it's a file whose every line is added. It now opens
+  as an all-added diff. Only a base that genuinely doesn't resolve (no repo, no
+  commits, a deleted branch) still says so.
+
+### Added
+- **A lot more tests.** Coverage went from 41% to 93% of statements and 94% of
+  lines (2274 tests, up from 864; the Rust suite went from 146 to 161);
+  branches are at 84% and functions at 89%. The suite was then audited against
+  itself — every claim checked by breaking the code it covers and confirming the
+  test goes red — which is how the four fixes above were found. New suites cover
+  the whole Tauri command boundary (every wrapper's command id and argument mapping), the file
+  tree and its drag-to-move, the dock, the terminal and its panel, the browser
+  preview and its inspector, the editor and its code view, the workspace shell,
+  the app root, the command palette and every command it offers, the knowledge
+  graph, the PDF viewer, the onboarding tour, the Review Guide (sources, PR
+  submission and the session view), every Settings control, the language server
+  driven over a real CodeMirror LSP client, the app-menu dispatcher, the
+  in-editor search panel, git blame — and the library modules: reading progress,
+  filesystem undo, the agent launcher, MCP wiring, per-project settings, Claude
+  Code theme sync, window routing, the extension manifests, the logger, the
+  reasoning feed, the auto-updater, drag-to-reorder, the editor's document
+  commands and the global keyboard and mouse shortcuts.
+
+### Changed
+- **CI runs only what a change can break.** Every job is now gated on the paths
+  it covers: a docs- or markdown-only pull request runs a single cheap
+  path-filter job and nothing else, a frontend change skips the three Rust jobs,
+  and a Rust change skips lint, typecheck and the three-OS frontend matrix.
+  Skipped jobs still report to branch protection, so the required checks stay
+  green without waiting on a full build to prove a typo fix is safe.
+- **Coverage is reported on the pull request.** The Linux frontend job measures
+  it and posts a sticky comment with the totals and the changed files. It stays
+  a report, not a gate — there is still no threshold that can fail the build.
+
 ## [1.9.0] — 2026-09-03
 
 ### Added

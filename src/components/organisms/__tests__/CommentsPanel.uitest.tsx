@@ -76,6 +76,28 @@ describe("CommentsPanel", () => {
     expect(screen.getByText("second note")).toBeInTheDocument()
   })
 
+  it("lists the most recently touched comment first", () => {
+    const body = (b: string) => [{ author: "you", createdAt: 0, body: b }]
+    seed({
+      comments: [
+        comment({ id: "c1", updatedAt: 10, messages: body("oldest") }),
+        comment({ id: "c2", updatedAt: 30, messages: body("newest") }),
+        comment({ id: "c3", updatedAt: 20, messages: body("middle") }),
+      ],
+    })
+    render(<CommentsPanel />)
+    // Order, not membership: the thread you just replied to must not sink to
+    // the bottom of the list.
+    const rows = screen
+      .getAllByRole("button")
+      .filter((b) => /oldest|newest|middle/.test(b.textContent ?? ""))
+    expect(rows.map((r) => r.textContent?.match(/oldest|newest|middle/)?.[0])).toEqual([
+      "newest",
+      "middle",
+      "oldest",
+    ])
+  })
+
   it("shows the empty state when there are no open comments", () => {
     seed({ comments: [] })
     render(<CommentsPanel />)
@@ -162,5 +184,123 @@ describe("CommentsPanel", () => {
     // t("comments.pending") is uppercased in the badge.
     expect(screen.getByText("COMMENTS.PENDING")).toBeInTheDocument()
     expect(screen.getByText("comments.agentChanged")).toBeInTheDocument()
+  })
+})
+
+describe("a comment the agent may have touched", () => {
+  it("flags it as pending review, and opens its delta", async () => {
+    seed({ comments: [comment()] })
+    useReadProgress.setState({ read: new Set(["src/a.ts"]), changed: new Set(["src/a.ts"]) })
+    const { useEditorActions } = await import("@/lib/store")
+    render(<CommentsPanel />)
+    expect(screen.getByText("comments.pending".toUpperCase())).toBeInTheDocument()
+    const review = screen
+      .getAllByRole("button")
+      .find((b) => /delta|review/i.test(b.textContent ?? "")) as HTMLElement
+    await userEvent.click(review)
+    expect(useEditorActions.getState().diffing).toBe(true)
+  })
+
+  it("doesn't flag one whose file is unchanged", () => {
+    seed({ comments: [comment()] })
+    useReadProgress.setState({ read: new Set(), changed: new Set() })
+    render(<CommentsPanel />)
+    expect(screen.getByText("why is this here?")).toBeInTheDocument()
+    expect(screen.queryByText("comments.pending".toUpperCase())).not.toBeInTheDocument()
+    expect(screen.queryByText("comments.reviewChange")).not.toBeInTheDocument()
+  })
+})
+
+describe("navigating from the list", () => {
+  it("opens a file-scoped comment at the file, with no line", async () => {
+    const { open } = seed({
+      comments: [
+        comment({
+          anchor: { file: "src/a.ts", scope: "file", startLine: 0, endLine: 0 },
+        } as Partial<Comment>),
+      ],
+    })
+    render(<CommentsPanel />)
+    await userEvent.click(screen.getByText("why is this here?"))
+    expect(open).toHaveBeenCalledWith(`${ROOT}/src/a.ts`)
+  })
+
+  it("reveals a design comment in the browser instead of the editor", async () => {
+    const { usePreview } = await import("@/lib/preview")
+    const { open } = seed({
+      comments: [
+        comment({
+          anchor: {
+            file: "",
+            scope: "web",
+            url: "http://localhost:5173/x",
+            x: 4,
+            y: 9,
+            startLine: 0,
+            endLine: 0,
+          },
+        } as Partial<Comment>),
+      ],
+    })
+    render(<CommentsPanel />)
+    await userEvent.click(screen.getByText("why is this here?"))
+    expect(open).not.toHaveBeenCalled()
+    expect(usePreview.getState().pinRequest).toMatchObject({
+      url: "http://localhost:5173/x",
+      x: 4,
+      y: 9,
+    })
+  })
+
+  it("opens nothing for a project-scoped comment", async () => {
+    const { open, setActive } = seed({
+      comments: [
+        comment({
+          anchor: { file: "", scope: "project", startLine: 0, endLine: 0 },
+        } as Partial<Comment>),
+      ],
+    })
+    render(<CommentsPanel />)
+    await userEvent.click(screen.getByText("why is this here?"))
+    // The click did land — it selects the comment, it just has nowhere to open.
+    expect(setActive).toHaveBeenCalledWith("c1")
+    expect(open).not.toHaveBeenCalled()
+  })
+})
+
+describe("what each row shows", () => {
+  it("marks an orphan, and names where a comment came from", () => {
+    seed({ comments: [comment({ orphan: true, origin: "agent" } as Partial<Comment>)] })
+    render(<CommentsPanel />)
+    expect(screen.getByText("⚠")).toBeInTheDocument()
+    expect(screen.getByText("agent")).toBeInTheDocument()
+  })
+
+  it("dates a resolved comment in the history view", async () => {
+    seed({ comments: [], archived: [comment({ state: "done", updatedAt: 1_700_000_000_000 })] })
+    render(<CommentsPanel />)
+    await userEvent.click(screen.getByText("comments.history"))
+    expect(await screen.findByText("comments.resolvedAt")).toBeInTheDocument()
+  })
+
+  it("resolves a comment straight from the list", async () => {
+    seed({ comments: [comment()] })
+    const setState = vi.fn(async () => {})
+    useComments.setState({ setState })
+    render(<CommentsPanel />)
+    await userEvent.click(screen.getByLabelText("comments.resolve"))
+    expect(setState).toHaveBeenCalledWith("c1", "done")
+  })
+
+  it("offers no resolve on an already-done comment", () => {
+    seed({ comments: [comment({ state: "done" })] })
+    render(<CommentsPanel />)
+    expect(screen.queryByLabelText("comments.resolve")).not.toBeInTheDocument()
+  })
+
+  it("shows a comment with no body without breaking", () => {
+    seed({ comments: [comment({ messages: [] })] })
+    render(<CommentsPanel />)
+    expect(screen.getByText("src/a.ts:12")).toBeInTheDocument()
   })
 })

@@ -147,6 +147,39 @@ describe("asking the agent", () => {
     expect(useSemanticSearch.getState().results[0].file).toBe("src/agent.ts")
   })
 
+  it("defaults a hit with no line to the top of the file", async () => {
+    useSemanticSearch.getState().run("where do we auth")
+    await settleLocal()
+    vi.mocked(readFile).mockResolvedValue(
+      text(JSON.stringify([{ file: "src/session.ts", snippet: "signIn()" }])) as never,
+    )
+    useSemanticSearch.getState().askAgent()
+    await vi.advanceTimersByTimeAsync(1600)
+    // Without the default, clicking the hit jumps to line `undefined`.
+    expect(useSemanticSearch.getState().results[0].line).toBe(1)
+  })
+
+  it("a slow query for an earlier keystroke can't land on a newer one", async () => {
+    // The debounce guard runs *before* the request; this is the one after it.
+    let releaseOld: (v: unknown) => void = () => {}
+    vi.mocked(semanticQuery).mockReturnValueOnce(
+      new Promise((r) => {
+        releaseOld = r
+      }) as never,
+    )
+    useSemanticSearch.getState().run("aut")
+    await vi.advanceTimersByTimeAsync(200)
+
+    vi.mocked(semanticQuery).mockResolvedValue([hit("src/new.ts")] as never)
+    useSemanticSearch.getState().run("auth")
+    await vi.advanceTimersByTimeAsync(200)
+    expect(useSemanticSearch.getState().results[0].file).toBe("src/new.ts")
+
+    releaseOld([hit("src/old.ts")])
+    await vi.advanceTimersByTimeAsync(10)
+    expect(useSemanticSearch.getState().results[0].file).toBe("src/new.ts")
+  })
+
   it("does nothing without a question", () => {
     useSemanticSearch.setState({ query: "   " })
     useSemanticSearch.getState().askAgent()
