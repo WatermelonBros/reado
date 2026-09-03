@@ -12,6 +12,16 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **A colour-vision setting.** Roughly 8% of men can't reliably tell red from
+  green, and the diff — the surface a review tool is built around — said "added"
+  in green and "removed" in red with nothing else to separate them. Settings →
+  Appearance now takes which pairs you can't distinguish (red–green, or
+  blue–yellow) and recolours the places where a hue is the whole signal: the
+  diff, and errors versus warnings. It layers over your theme rather than
+  replacing it, so sepia and a readable diff are not a choice between two things.
+- **The diff says `+` and `−`.** A non-colour cue helps every kind of colour
+  blindness at once and survives a greyscale screenshot, so it is on for
+  everyone, not behind the setting. The markers aren't part of the copied text.
 - **The window's shape is in the title bar.** Three toggles for the regions
   people hide most — primary sidebar, panel, secondary sidebar — each showing
   whether its region is on screen, plus a Layout popover for the activity bar,
@@ -33,6 +43,11 @@ commit.
   that suits you isn't limited to our list.
 
 ### Fixed
+- **The diff follows your theme.** The merge view was unstyled, so it rendered
+  `@codemirror/merge`'s own hardcoded green and red on every theme — the one
+  surface in Reado that ignored the palette, and the worst possible pair for
+  red-green colour blindness. It uses Reado's tokens now.
+
 - **The code font picker actually changes the font now.** It offered six faces
   by name and resolved them against what the OS had installed — but on a clean
   machine only Menlo is there, so five of the six fell through to

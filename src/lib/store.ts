@@ -65,6 +65,9 @@ export interface SettingsState {
   /** Vertical guide at this column as a target max line length (0 = off). */
   rulerColumn: number
   /** Damp non-essential UI motion: follow the OS, force on, or force off. */
+  /** Which colour pairs the reader cannot distinguish. Layers over the theme:
+   *  only the colours that carry meaning on their own are retinted. */
+  colorVision: "normal" | "red-green" | "blue-yellow"
   reduceMotion: "system" | "on" | "off"
   /** Editor tab strip: full row, single tab, or hidden. */
   tabBar: "multiple" | "single" | "hidden"
@@ -149,6 +152,7 @@ export const useSettings = create<SettingsState>()(
       indentGuides: "all",
       bracketMatching: true,
       rulerColumn: 120,
+      colorVision: "normal",
       reduceMotion: "system",
       tabBar: "multiple",
       scrollbar: "auto",

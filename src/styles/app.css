@@ -279,6 +279,45 @@
     opacity: 0.7;
   }
 
+  /* The diff, in Reado's palette rather than CodeMirror's.
+     `@codemirror/merge` ships hardcoded #22bb22 / #ee4433 — a green/red pair
+     that follows no theme and is the textbook worst case for red-green colour
+     blindness. These override it with tokens the colour-vision setting can
+     retint. */
+  .cm-mergeView .cm-changedLine,
+  .cm-inlineChangedLine {
+    background: var(--diff-add-soft);
+  }
+  .cm-mergeView .cm-deletedChunk {
+    background: var(--diff-del-soft);
+  }
+  .cm-changedText,
+  .cm-mergeView .cm-deletedChunk .cm-deletedText {
+    background: none;
+    box-shadow: inset 0 -2px 0 var(--diff-add);
+  }
+  .cm-mergeView .cm-deletedChunk .cm-deletedText {
+    box-shadow: inset 0 -2px 0 var(--diff-del);
+  }
+
+  /* The non-colour cue. A reader who can't separate the two hues — or who is
+     looking at a greyscale screenshot — still sees which side a line is on.
+     `::before` keeps it out of the copied text: it is chrome, not content. */
+  .cm-mergeView .cm-changedLine::before,
+  .cm-inlineChangedLine::before,
+  .cm-mergeView .cm-deletedChunk .cm-deletedLine::before {
+    display: inline-block;
+    width: 1ch;
+    margin-right: 0.5ch;
+    color: var(--diff-add);
+    font-weight: 600;
+    content: "+";
+  }
+  .cm-mergeView .cm-deletedChunk .cm-deletedLine::before {
+    color: var(--diff-del);
+    content: "\2212"; /* U+2212 MINUS SIGN — reads as a minus, not a hyphen */
+  }
+
   /* Inline blame: one annotation, on the cursor's line, set well away from the
      code so it never reads as part of it. */
   .reado-inline-blame {

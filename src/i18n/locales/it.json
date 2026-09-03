@@ -746,7 +746,12 @@
     "codeFontCustomHint": "Qualsiasi font monospaziato installato su questa macchina, per nome. Lascia vuoto per usare la scelta qui sopra.",
     "codeFontCustomPlaceholder": "es. Comic Code",
     "letterSpacing": "Spaziatura tra lettere",
-    "letterSpacingHint": "Spazio extra tra i caratteri. Una spaziatura più ampia aiuta in modo misurabile chi ha dislessia; 0 è la resa standard."
+    "letterSpacingHint": "Spazio extra tra i caratteri. Una spaziatura più ampia aiuta in modo misurabile chi ha dislessia; 0 è la resa standard.",
+    "colorVision": "Visione dei colori",
+    "colorVisionNormal": "Nessuna correzione",
+    "colorVisionRedGreen": "Difficoltà a distinguere rosso e verde (deuteranopia, protanopia)",
+    "colorVisionBlueYellow": "Difficoltà a distinguere blu e giallo (tritanopia)",
+    "colorVisionHint": "Ricolora i punti dove il colore da solo porta significato — il diff, e gli errori rispetto agli avvisi. Il tema resta quello che hai scelto."
   },
   "defaultApp": {
     "title": "App predefinita per i file di testo",

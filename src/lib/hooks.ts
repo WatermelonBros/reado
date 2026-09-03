@@ -2,6 +2,7 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { useEffect } from "react"
+import { OVERRIDDEN_TOKENS, tokensFor } from "./colorVision"
 import { toRelative } from "./comments"
 import { formatDocument, nextProblem, prevProblem } from "./docInfo"
 import { useExtensions } from "./extensions"
@@ -45,6 +46,26 @@ function resolveTheme(
   // "auto" — Trust Reado: light during the day, dark in the evening/night.
   const hour = new Date().getHours()
   return hour >= 7 && hour < 19 ? lightTheme : darkTheme
+}
+
+/** Put the colour-vision mode on <html>, beside the theme rather than instead of
+ *  it: the tokens it overrides are a small, meaning-carrying subset, so a reader
+ *  keeps the theme they chose and gets a diff they can read. */
+export function useApplyColorVision(): void {
+  const mode = useSettings((s) => s.colorVision)
+  useEffect(() => {
+    const root = document.documentElement
+    // Clear first: switching modes must not leave the previous one's tokens
+    // behind, and "normal" means the theme's own palette, untouched.
+    for (const name of OVERRIDDEN_TOKENS) root.style.removeProperty(`--${name}`)
+    for (const [name, value] of Object.entries(tokensFor(mode))) {
+      root.style.setProperty(`--${name}`, value)
+    }
+    // Also exposed as an attribute, so CSS can react to the mode itself rather
+    // than only to the colours (a rule may want a different border, say).
+    if (mode === "normal") root.removeAttribute("data-color-vision")
+    else root.dataset.colorVision = mode
+  }, [mode])
 }
 
 /** Apply the resolved theme to <html> and keep it live (system + time of day). */

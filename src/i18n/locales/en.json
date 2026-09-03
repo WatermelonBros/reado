@@ -746,7 +746,12 @@
     "codeFontCustomHint": "Any monospace font installed on this machine, by name. Leave empty to use the choice above.",
     "codeFontCustomPlaceholder": "e.g. Comic Code",
     "letterSpacing": "Letter spacing",
-    "letterSpacingHint": "Extra space between characters. Wider spacing measurably helps dyslexic readers; 0 is the standard rendering."
+    "letterSpacingHint": "Extra space between characters. Wider spacing measurably helps dyslexic readers; 0 is the standard rendering.",
+    "colorVision": "Colour vision",
+    "colorVisionNormal": "No adjustment",
+    "colorVisionRedGreen": "Hard to tell red from green (deuteranopia, protanopia)",
+    "colorVisionBlueYellow": "Hard to tell blue from yellow (tritanopia)",
+    "colorVisionHint": "Recolours the places where colour carries meaning on its own — the diff, and errors versus warnings. Your theme is unchanged."
   },
   "defaultApp": {
     "title": "Default app for text files",

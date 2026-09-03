@@ -324,6 +324,21 @@ function InterfaceTab() {
         />
       </Field>
 
+      {/* Labelled by what the reader can't separate, with the clinical name in
+        brackets — most people know the experience, not the term. */}
+      <Field label={t("settings.colorVision")}>
+        <Select
+          value={settings.colorVision}
+          onChange={(v) => settings.set({ colorVision: v as SettingsState["colorVision"] })}
+          options={[
+            { value: "normal", label: t("settings.colorVisionNormal") },
+            { value: "red-green", label: t("settings.colorVisionRedGreen") },
+            { value: "blue-yellow", label: t("settings.colorVisionBlueYellow") },
+          ]}
+        />
+        <span className="text-xs leading-relaxed text-faint">{t("settings.colorVisionHint")}</span>
+      </Field>
+
       <Field label={t("settings.reduceMotion")}>
         <Select
           value={settings.reduceMotion}
