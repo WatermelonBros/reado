@@ -18,6 +18,7 @@
 import { Fragment, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
+import { IconButton } from "@/components/atoms/IconButton"
 import { MoreVerticalIcon } from "@/components/atoms/icons"
 import type { MessageKey } from "@/i18n"
 import {
@@ -374,20 +375,18 @@ export function DockRegion({ area }: { area: DockArea }) {
                   )
                 })}
                 <span className="flex-1" />
-                <button
-                  type="button"
-                  aria-label={t("dock.menu")}
-                  onClick={(e) => {
+                <IconButton
+                  size="xs"
+                  label={t("dock.menu")}
+                  icon={<MoreVerticalIcon className="h-3.5 w-3.5" />}
+                  onClick={(e: React.MouseEvent) => {
                     // Stop the opening click from reaching ContextMenu's window
                     // "click" dismiss listener, which would close it immediately.
                     e.stopPropagation()
                     useLayout.getState().setMenuOpen(true)
                     setMenu({ x: e.clientX, y: e.clientY, panel: g.active })
                   }}
-                  className="grid h-5 w-5 place-items-center rounded text-faint hover:bg-canvas hover:text-ink"
-                >
-                  <MoreVerticalIcon className="h-3.5 w-3.5" />
-                </button>
+                />
               </div>
               <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
                 {renderPanel(g.active)}

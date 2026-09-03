@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { TYPE_COLOR } from "@/components/atoms/commentMeta"
+import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon } from "@/components/atoms/icons"
 import { listFiles } from "@/lib/api"
 import { useComments } from "@/lib/comments"
@@ -314,15 +315,11 @@ export function KnowledgeGraph() {
       >
         <header className="flex flex-none items-center justify-between border-b border-line px-4 py-2.5">
           <h2 className="m-0 text-sm font-medium">{t("graph.title")}</h2>
-          <button
-            type="button"
-            title={t("settings.close")}
-            aria-label={t("settings.close")}
+          <IconButton
+            label={t("settings.close")}
+            icon={<CloseIcon />}
             onClick={() => close(false)}
-            className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink"
-          >
-            <CloseIcon />
-          </button>
+          />
         </header>
         {nodes.length === 0 ? (
           <p className="grid flex-1 place-items-center text-sm text-faint">{t("graph.empty")}</p>

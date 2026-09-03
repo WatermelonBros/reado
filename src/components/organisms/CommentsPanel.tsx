@@ -18,7 +18,8 @@ import {
   TYPE_COLOR,
   typeKey,
 } from "@/components/atoms/commentMeta"
-import { SendIcon, SparkleIcon } from "@/components/atoms/icons"
+import { IconButton } from "@/components/atoms/IconButton"
+import { CheckIcon, SendIcon, SparkleIcon } from "@/components/atoms/icons"
 import { SegmentedControl } from "@/components/atoms/SegmentedControl"
 import { Select } from "@/components/atoms/Select"
 import type { Comment, CommentState, CommentType } from "@/lib/api"
@@ -169,15 +170,13 @@ export function CommentsPanel() {
                   className={`group relative border-b border-line ${pending ? "bg-accent/5" : ""}`}
                 >
                   {view === "open" && c.state !== "done" && (
-                    <button
-                      type="button"
+                    <IconButton
+                      size="xs"
+                      label={t("comments.resolve")}
+                      icon={<CheckIcon className="h-3 w-3" />}
                       onClick={() => void useComments.getState().setState(c.id, "done")}
-                      aria-label={t("comments.resolve")}
-                      title={t("comments.resolve")}
-                      className="absolute right-2 top-2 z-10 rounded-md bg-surface px-1.5 py-0.5 text-xs text-accent opacity-0 transition-opacity hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
-                    >
-                      ✓
-                    </button>
+                      className="absolute top-2 right-2 z-10 bg-surface text-accent opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                    />
                   )}
                   <button
                     type="button"
@@ -216,20 +215,16 @@ export function CommentsPanel() {
                       <span className="mr-auto text-[10px] text-accent">
                         {t("comments.agentChanged")}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => reviewChange(c)}
-                        className="rounded-md bg-surface px-2 py-0.5 text-xs text-muted hover:text-ink"
-                      >
+                      <Button size="sm" className="bg-surface" onClick={() => reviewChange(c)}>
                         {t("comments.reviewChange")}
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-surface text-accent"
                         onClick={() => void useComments.getState().setState(c.id, "done")}
-                        className="rounded-md bg-surface px-2 py-0.5 text-xs text-accent hover:text-ink"
                       >
                         {t("comments.resolve")}
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </li>

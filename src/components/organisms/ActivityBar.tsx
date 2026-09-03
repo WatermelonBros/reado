@@ -181,42 +181,42 @@ export function ActivityBar() {
           const active = tool === id
           const badge = badgeFor(id)
           return (
-            <button
+            <IconButton
               key={id}
-              type="button"
+              size="lg"
               data-tour={id}
               data-reorder-id={id}
               onPointerDown={onPointerDown(id)}
               onClick={() => selectTool(id)}
-              title={t(labelKey)}
-              aria-label={t(labelKey)}
-              aria-pressed={active}
-              className={`relative grid h-10 w-10 place-items-center transition-colors ${
-                active ? "text-accent" : "text-faint hover:text-muted"
-              } ${dragging === id ? "opacity-40" : ""}`}
-            >
-              {over?.id === id && (
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none absolute inset-x-1 z-10 h-0.5 bg-accent ${
-                    over.after ? "bottom-0" : "top-0"
-                  }`}
-                />
-              )}
-              {/* Active tool: primary colour + duotone for a clear, calm accent. */}
-              <Icon className="h-[18px] w-[18px]" weight={active ? "duotone" : "regular"} />
-              {badge > 0 && (
-                <Badge
-                  // Accent (blue) for Source Control: a changed-file count is
-                  // information, not something demanding attention like an open
-                  // comment or a diagnostic, which stay on the marker red.
-                  tone={id === "git" ? "accent" : "marker"}
-                  className="absolute top-1 right-1.5 h-3.5 min-w-3.5 text-[9px] font-bold"
-                >
-                  {badge}
-                </Badge>
-              )}
-            </button>
+              label={t(labelKey)}
+              active={active}
+              tooltipPlacement="right"
+              className={`relative ${dragging === id ? "opacity-40" : ""}`}
+              icon={<Icon className="h-[18px] w-[18px]" />}
+              overlay={
+                <>
+                  {over?.id === id && (
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute inset-x-1 z-10 h-0.5 bg-accent ${
+                        over.after ? "bottom-0" : "top-0"
+                      }`}
+                    />
+                  )}
+                  {badge > 0 && (
+                    <Badge
+                      // Accent (blue) for Source Control: a changed-file count is
+                      // information, not something demanding attention like an open
+                      // comment or a diagnostic, which stay on the marker red.
+                      tone={id === "git" ? "accent" : "marker"}
+                      className="absolute top-1 right-1.5 h-3.5 min-w-3.5 text-[9px] font-bold"
+                    >
+                      {badge}
+                    </Badge>
+                  )}
+                </>
+              }
+            />
           )
         })}
       </div>

@@ -294,13 +294,9 @@ function PrList({
         <p className="text-xs leading-relaxed text-faint">
           {t("forge.installHint", { cli: forge.cli })}
         </p>
-        <button
-          type="button"
-          onClick={() => useForge.getState().installCli()}
-          className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
-        >
+        <Button variant="secondary" size="sm" onClick={() => useForge.getState().installCli()}>
           {t("forge.install", { cli: forge.cli })}
-        </button>
+        </Button>
       </div>
     )
   if (loadingPrs) return <p className="text-xs text-faint">{t("forge.loading")}</p>
@@ -483,20 +479,16 @@ function SessionView({ root, session }: { root: string; session: Session }) {
             <SectionLabel>{t("guided.proposals")}</SectionLabel>
             {focusFileOpen.length >= 2 && (
               <div className="flex gap-2">
-                <button
-                  type="button"
+                <Button
+                  size="sm"
+                  className="text-accent"
                   onClick={() => disposeAll(store().accept)}
-                  className="text-xs text-accent hover:text-ink"
                 >
                   {t("guided.approveAll")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => disposeAll(store().discard)}
-                  className="text-xs text-muted hover:text-ink"
-                >
+                </Button>
+                <Button size="sm" onClick={() => disposeAll(store().discard)}>
                   {t("guided.discardAll")}
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -602,13 +594,9 @@ function SessionView({ root, session }: { root: string; session: Session }) {
         )}
         <div className="flex items-center justify-between">
           {session.status !== "done" ? (
-            <button
-              type="button"
-              onClick={() => void store().close(root, session.id)}
-              className="rounded-md px-2 py-1 text-xs text-faint hover:text-ink"
-            >
+            <Button size="sm" onClick={() => void store().close(root, session.id)}>
               {t("guided.close")}
-            </button>
+            </Button>
           ) : (
             <span />
           )}
@@ -671,30 +659,26 @@ function PrSubmit({ root, session }: { root: string; session: Session }) {
     <div className="flex flex-col gap-1.5">
       <p className="text-[10px] uppercase tracking-wide text-faint">{t("forge.submit")}</p>
       <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
+        <Button
+          size="sm"
           disabled={disabled}
+          className="bg-surface text-accent"
           onClick={() => void submit("approve")}
-          className="rounded-md bg-surface px-2 py-1 text-xs text-accent hover:text-ink disabled:opacity-40"
         >
           {t("forge.approve")}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
           disabled={disabled}
+          className="bg-surface"
           onClick={() => void submit("request_changes")}
-          className="rounded-md bg-surface px-2 py-1 text-xs text-marker hover:text-ink disabled:opacity-40"
         >
           {t("forge.requestChanges")}
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => void submit("comment")}
-          className="rounded-md px-2 py-1 text-xs text-faint hover:text-ink disabled:opacity-40"
-        >
+        </Button>
+        <Button size="sm" disabled={disabled} onClick={() => void submit("comment")}>
           {t("forge.comment")}
-        </button>
+        </Button>
       </div>
       {number === 0 && <p className="text-[10px] leading-snug text-faint">{t("forge.noNumber")}</p>}
       {error && <p className="text-[10px] leading-snug text-marker">{error}</p>}

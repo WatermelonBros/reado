@@ -22,6 +22,7 @@ import {
   TrashIcon,
   WarningIcon,
 } from "@/components/atoms/icons"
+import { t as translate } from "@/i18n"
 import { dispatchToAgent } from "@/lib/agents"
 import { previewEval } from "@/lib/api"
 import { findPanel, useLayout } from "@/lib/layout"
@@ -621,13 +622,14 @@ function TreeNode({
         style={{ paddingLeft: pad }}
         onMouseEnter={() => onHover(path)}
       >
-        <button
-          type="button"
+        <IconButton
+          size="xxs"
+          label={translate(isOpen ? "inspector.collapse" : "inspector.expand")}
+          icon={
+            <ChevronIcon className={`h-3 w-3 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+          }
           onClick={() => toggle(path)}
-          className="grid h-4 w-4 flex-none place-items-center text-faint"
-        >
-          <ChevronIcon className={`h-3 w-3 transition-transform ${isOpen ? "rotate-90" : ""}`} />
-        </button>
+        />
         <span className="min-w-0">
           <Mark node={node} />
           {!isOpen && (

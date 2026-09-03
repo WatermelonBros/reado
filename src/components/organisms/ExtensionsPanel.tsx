@@ -7,7 +7,9 @@
  */
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 import { Checkbox } from "@/components/atoms/Checkbox"
+import { IconButton } from "@/components/atoms/IconButton"
 import { FetchIcon } from "@/components/atoms/icons"
 import { linuxPackageManager, lspInstalled, submitToTerminal } from "@/lib/api"
 import { currentOS, installCmd, LANG_SERVERS, type LinuxPm, useExtensions } from "@/lib/extensions"
@@ -55,16 +57,13 @@ export function ExtensionsPanel() {
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-none items-center justify-between border-b border-line px-3 py-1.5">
         <span className="text-xs text-faint">{t("ext.languageServers")}</span>
-        <button
-          type="button"
+        <IconButton
+          size="sm"
+          label={t("ext.recheck")}
+          icon={<FetchIcon className={`h-4 w-4 ${checking ? "opacity-50" : ""}`} />}
           onClick={recheck}
           disabled={checking}
-          title={t("ext.recheck")}
-          aria-label={t("ext.recheck")}
-          className="grid h-6 w-6 place-items-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-ink disabled:opacity-40"
-        >
-          <FetchIcon className={`h-4 w-4 ${checking ? "opacity-50" : ""}`} />
-        </button>
+        />
       </div>
 
       <ul className="m-0 min-h-0 flex-1 list-none overflow-y-auto p-0">
@@ -83,14 +82,15 @@ export function ExtensionsPanel() {
                     {t("ext.installed")}
                   </span>
                 ) : cmd ? (
-                  <button
-                    type="button"
-                    onClick={() => install(cmd)}
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     title={cmd}
-                    className="flex-none rounded-md border border-line-strong px-2 py-0.5 text-xs font-medium text-ink transition-colors hover:border-accent hover:text-accent"
+                    className="hover:border-accent hover:text-accent"
+                    onClick={() => install(cmd)}
                   >
                     {t("ext.install")}
-                  </button>
+                  </Button>
                 ) : (
                   <span className="flex-none text-xs text-faint">{t("ext.manual")}</span>
                 )}

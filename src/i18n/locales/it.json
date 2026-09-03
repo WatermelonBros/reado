@@ -528,7 +528,9 @@
     "resHeaders": "Header risposta",
     "payload": "Payload",
     "response": "Risposta",
-    "close": "Chiudi"
+    "close": "Chiudi",
+    "collapse": "Comprimi",
+    "expand": "Espandi"
   },
   "diff": {
     "toggle": "Mostra/nascondi diff",

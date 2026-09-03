@@ -5,6 +5,9 @@
  */
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { IconButton } from "@/components/atoms/IconButton"
+import { MinusIcon, PlusIcon } from "@/components/atoms/icons"
 import { useTextView } from "@/lib/textView"
 
 const ZOOMS = [0.25, 0.5, 1, 1.5, 2, 3, 4]
@@ -76,39 +79,33 @@ export function ImageView({ dataUrl, name }: { dataUrl: string; name: string }) 
               {size.w} × {size.h}
             </span>
           )}
-          <button
-            type="button"
+          <IconButton
+            size="sm"
+            label={t("imageView.zoomOut")}
+            icon={<MinusIcon className="h-3.5 w-3.5" />}
             onClick={() => stepZoom(-1)}
-            title={t("imageView.zoomOut")}
-            aria-label={t("imageView.zoomOut")}
-            className="grid h-6 w-6 place-items-center rounded hover:bg-surface hover:text-ink"
-          >
-            −
-          </button>
-          <button
-            type="button"
+          />
+          <Button
+            size="sm"
+            className="min-w-[3rem] justify-center tabular-nums"
             onClick={() => setZoom((z) => (z === null ? 1 : null))}
-            className="min-w-[3rem] rounded px-1.5 py-0.5 text-center tabular-nums hover:bg-surface hover:text-ink"
           >
             {zoom === null ? t("imageView.fit") : `${Math.round(zoom * 100)}%`}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <IconButton
+            size="sm"
+            label={t("imageView.zoomIn")}
+            icon={<PlusIcon className="h-3.5 w-3.5" />}
             onClick={() => stepZoom(1)}
-            title={t("imageView.zoomIn")}
-            aria-label={t("imageView.zoomIn")}
-            className="grid h-6 w-6 place-items-center rounded hover:bg-surface hover:text-ink"
-          >
-            +
-          </button>
+          />
           {isSvg && (
-            <button
-              type="button"
+            <Button
+              size="sm"
+              className="ml-1 border-l border-line"
               onClick={() => useTextView.getState().openAsText(name)}
-              className="ml-1 border-l border-line pl-2 rounded py-0.5 pr-1.5 hover:bg-surface hover:text-ink"
             >
               {t("tree.openAsText")}
-            </button>
+            </Button>
           )}
         </div>
       </div>

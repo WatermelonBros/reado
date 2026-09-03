@@ -17,6 +17,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useTranslation } from "react-i18next"
 import { create } from "zustand"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
+import { IconButton } from "@/components/atoms/IconButton"
 import {
   ChevronIcon,
   DeltaIcon,
@@ -589,18 +590,16 @@ function TreeNode({
           )}
         </button>
         {hasDelta && (
-          <button
-            type="button"
-            aria-label={t("delta.review")}
-            title={t("delta.review")}
+          <IconButton
+            size="xxs"
+            label={t("delta.review")}
+            icon={<DeltaIcon className="h-[13px] w-[13px]" />}
             onClick={(e) => {
               e.stopPropagation()
               reviewDelta()
             }}
-            className="flex flex-none items-center pr-3 pl-1 text-accent hover:underline"
-          >
-            <DeltaIcon className="h-[13px] w-[13px]" />
-          </button>
+            className="mr-2 text-accent"
+          />
         )}
       </div>
       {entry.isDir && expanded && (

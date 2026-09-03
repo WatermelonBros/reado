@@ -14,6 +14,7 @@ import * as pdfjs from "pdfjs-dist"
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url"
 import { memo, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -98,14 +99,14 @@ export const PdfView = memo(function PdfView({ dataUrl }: { dataUrl: string; nam
         >
           −
         </button>
-        <button
-          type="button"
-          onClick={() => setZoom(1)}
+        <Button
+          size="sm"
           title={t("pdf.zoomReset")}
-          className="min-w-[3.5rem] rounded px-1 text-center text-xs text-muted tabular-nums hover:bg-canvas hover:text-ink"
+          className="min-w-[3.5rem] justify-center tabular-nums"
+          onClick={() => setZoom(1)}
         >
           {Math.round(zoom * 100)}%
-        </button>
+        </Button>
         <button type="button" className={btn} onClick={() => zoomBy(1.25)} title={t("pdf.zoomIn")}>
           +
         </button>

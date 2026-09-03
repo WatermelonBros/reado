@@ -5,6 +5,7 @@
  * over the Reado Anywhere channel.
  */
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 import { SparkleIcon } from "@/components/atoms/icons"
 import { useResolveLoop } from "@/lib/resolveLoop"
 import { useProject } from "@/lib/store"
@@ -50,13 +51,9 @@ export function ResolveLoopBar() {
         <span className="flex-none text-[10px] tabular-nums text-faint">
           {t("loop.progress", { resolved, total })}
         </span>
-        <button
-          type="button"
-          onClick={() => useResolveLoop.getState().clear(root)}
-          className="flex-none rounded px-1.5 py-0.5 text-[10px] text-faint hover:text-ink"
-        >
+        <Button size="sm" onClick={() => useResolveLoop.getState().clear(root)}>
           {over ? t("loop.dismiss") : t("loop.cancel")}
-        </button>
+        </Button>
       </div>
       <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-overlay">
         <div

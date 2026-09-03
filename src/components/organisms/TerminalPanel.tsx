@@ -273,18 +273,16 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
                 <span>{titleOf(g.paneIds[0])}</span>
                 {g.paneIds.length > 1 && <Badge tone="neutral">{g.paneIds.length}</Badge>}
               </button>
-              <button
-                type="button"
-                title={t("terminal.close")}
-                aria-label={t("terminal.close")}
+              <IconButton
+                size="xxs"
+                label={t("terminal.close")}
+                icon={<CloseIcon className="block h-3 w-3" />}
                 onClick={(e) => {
                   e.stopPropagation()
                   removeGroup(g.id)
                 }}
-                className="grid h-4 w-4 place-items-center rounded-sm text-faint opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-ink"
-              >
-                <CloseIcon className="block h-3 w-3" />
-              </button>
+                className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+              />
             </div>
           ))}
           <IconButton
@@ -412,18 +410,16 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
             >
               <Terminal id={s.id} cwd={root} active={s.id === activeId} />
               {multi && (
-                <button
-                  type="button"
-                  aria-label={t("terminal.closePane")}
-                  title={t("terminal.closePane")}
+                <IconButton
+                  size="xs"
+                  label={t("terminal.closePane")}
+                  icon={<CloseIcon className="h-3 w-3" />}
                   onClick={(e) => {
                     e.stopPropagation()
                     remove(s.id)
                   }}
-                  className="absolute top-1 right-1 z-10 grid h-5 w-5 place-items-center rounded-md bg-surface/80 text-faint opacity-0 transition-opacity group-hover/pane:opacity-100 group-focus-within/pane:opacity-100 focus-visible:opacity-100 hover:text-ink"
-                >
-                  <CloseIcon className="h-3 w-3" />
-                </button>
+                  className="absolute top-1 right-1 z-10 bg-surface/80 opacity-0 transition-opacity group-hover/pane:opacity-100 group-focus-within/pane:opacity-100 focus-visible:opacity-100"
+                />
               )}
             </div>
           )

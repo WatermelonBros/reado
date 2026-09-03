@@ -15,6 +15,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import {
   ChevronIcon,
@@ -24,6 +25,8 @@ import {
   DevicesIcon,
   FetchIcon,
   MessageIcon,
+  MinusIcon,
+  PlusIcon,
   RobotIcon,
 } from "@/components/atoms/icons"
 import {
@@ -751,14 +754,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
           className="w-14 rounded border border-line bg-surface px-1 py-0.5 text-center tabular-nums text-ink outline-none focus:border-accent"
         />
         <span className="mx-1 text-faint">·</span>
-        <button
-          type="button"
+        <IconButton
+          size="xs"
+          label={t("preview.zoomOut")}
+          icon={<MinusIcon className="h-3 w-3" />}
           onClick={() => setBrowserZoom(browserZoom - 0.1)}
-          className="grid h-5 w-5 place-items-center rounded text-faint hover:bg-surface hover:text-ink"
-          aria-label={t("preview.zoomOut")}
-        >
-          −
-        </button>
+        />
         <input
           type="number"
           value={Math.round(browserZoom * 100)}
@@ -767,22 +768,16 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
           className="w-12 rounded border border-line bg-surface px-1 py-0.5 text-center tabular-nums text-ink outline-none focus:border-accent"
         />
         <span className="text-faint">%</span>
-        <button
-          type="button"
+        <IconButton
+          size="xs"
+          label={t("preview.zoomIn")}
+          icon={<PlusIcon className="h-3 w-3" />}
           onClick={() => setBrowserZoom(browserZoom + 0.1)}
-          className="grid h-5 w-5 place-items-center rounded text-faint hover:bg-surface hover:text-ink"
-          aria-label={t("preview.zoomIn")}
-        >
-          +
-        </button>
+        />
         {device && (
-          <button
-            type="button"
-            onClick={fitZoom}
-            className="rounded-md px-2 py-0.5 text-faint hover:text-ink"
-          >
+          <Button size="sm" onClick={fitZoom}>
             {t("preview.fit")}
-          </button>
+          </Button>
         )}
       </div>
       {/* The native preview webview is parked over the placeholder; the inspector

@@ -366,40 +366,21 @@ export function AnywhereDialog() {
       </div>
 
       <footer className="flex flex-none items-center justify-end gap-2 border-t border-line px-5 py-3">
-        <button
-          type="button"
-          onClick={() => (priming ? setPriming(false) : toggle(false))}
-          className="rounded-md px-3 py-1.5 text-sm text-muted hover:text-ink"
-        >
+        <Button onClick={() => (priming ? setPriming(false) : toggle(false))}>
           {priming ? t("common.cancel") : t("common.close")}
-        </button>
+        </Button>
         {info ? (
-          <button
-            type="button"
-            onClick={disable}
-            disabled={busy}
-            className="rounded-md border border-line px-3 py-1.5 text-sm text-ink hover:border-line-strong disabled:opacity-50"
-          >
+          <Button variant="secondary" onClick={disable} disabled={busy}>
             {t("anywhere.stop")}
-          </button>
+          </Button>
         ) : priming ? (
-          <button
-            type="button"
-            onClick={enable}
-            disabled={busy}
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
-          >
+          <Button variant="primary" onClick={enable} disabled={busy}>
             {busy ? t("anywhere.enabling") : t("anywhere.primeContinue")}
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            onClick={requestEnable}
-            disabled={busy}
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
-          >
+          <Button variant="primary" onClick={requestEnable} disabled={busy}>
             {busy ? t("anywhere.enabling") : t("anywhere.enable")}
-          </button>
+          </Button>
         )}
       </footer>
     </Modal>

@@ -443,20 +443,20 @@ export function GitPanel() {
                         />
                       ) : (
                         <>
-                          <button
-                            type="button"
+                          <Button
+                            size="sm"
+                            className="opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100"
                             onClick={() => runRepo(gitStashApply(root, s.index))}
-                            className="flex-none text-xs text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100 hover:text-ink"
                           >
                             {t("git.stashApply")}
-                          </button>
-                          <button
-                            type="button"
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100"
                             onClick={() => runRepo(gitStashPop(root, s.index))}
-                            className="flex-none text-xs text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100 hover:text-ink"
                           >
                             {t("git.stashPop")}
-                          </button>
+                          </Button>
                           <button
                             type="button"
                             onClick={() => setConfirmDropStash(s.index)}

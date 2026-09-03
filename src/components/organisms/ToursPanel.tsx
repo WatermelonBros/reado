@@ -100,24 +100,18 @@ export function ToursPanel() {
                         <span className="min-w-0 flex-1 truncate">{s.note}</span>
                         <span className="flex-none text-faint">{s.line}</span>
                       </button>
-                      <button
-                        type="button"
+                      <IconButton
+                        size="xs"
+                        label={t("tours.removeStep")}
+                        icon={<CloseIcon className="h-2.5 w-2.5" />}
                         onClick={() => useTours.getState().removeStep(root, tour.id, i)}
-                        title={t("tours.removeStep")}
-                        aria-label={t("tours.removeStep")}
-                        className="grid h-5 w-5 flex-none place-items-center text-faint opacity-0 transition-opacity group-hover/s:opacity-100 group-focus-within/s:opacity-100 focus-visible:opacity-100 hover:text-ink"
-                      >
-                        <CloseIcon className="h-2.5 w-2.5" />
-                      </button>
+                        className="opacity-0 transition-opacity group-hover/s:opacity-100 group-focus-within/s:opacity-100 focus-visible:opacity-100"
+                      />
                     </div>
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => addStep(tour.id)}
-                    className="ml-7 flex items-center gap-1 py-0.5 text-xs text-faint hover:text-ink"
-                  >
+                  <Button size="sm" className="ml-7" onClick={() => addStep(tour.id)}>
                     <PlusIcon className="h-3 w-3" /> {t("tours.addStep")}
-                  </button>
+                  </Button>
                 </div>
               )}
             </li>

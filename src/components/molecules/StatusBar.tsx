@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next"
 import { Input } from "@/components/atoms/Input"
 import {
   BrowserIcon,
+  CheckIcon,
   DeviceIcon,
   GitBranchIcon,
   MessageIcon,
@@ -77,7 +78,7 @@ function MenuRow({
       }`}
     >
       {label}
-      {checked && <span className="text-accent">✓</span>}
+      {checked && <CheckIcon className="h-3 w-3 text-accent" />}
     </button>
   )
 }
@@ -272,7 +273,7 @@ export function StatusBar() {
                       }`}
                     >
                       {opt}
-                      {opt === eol && <span className="text-accent">✓</span>}
+                      {opt === eol && <CheckIcon className="h-3 w-3 text-accent" />}
                     </button>
                   ))}
                 </Popover>
@@ -376,7 +377,7 @@ export function StatusBar() {
           onClick={() => usePalette.getState().toggleAnywhere(true)}
           title={t("anywhere.title")}
           aria-label={`${t("anywhere.title")} — ${t(anywhereOn ? "anywhere.statusOn" : "anywhere.statusOff")}`}
-          className="inline-flex items-center gap-[5px] rounded-sm px-1 text-faint transition-colors hover:text-ink"
+          className={`${ITEM} text-faint`}
         >
           <DeviceIcon className="h-[13px] w-[13px]" />
           <span
@@ -391,7 +392,7 @@ export function StatusBar() {
           onClick={() => toggleTerminal()}
           title={`${t("terminal.toggle")} (${mod}J)`}
           aria-label={t("terminal.toggle")}
-          className="inline-flex items-center gap-[5px] rounded-sm px-1 text-faint transition-colors hover:text-ink"
+          className={`${ITEM} text-faint`}
         >
           <TerminalIcon className="h-[13px] w-[13px]" />
         </button>

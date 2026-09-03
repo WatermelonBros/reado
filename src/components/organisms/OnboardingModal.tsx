@@ -8,6 +8,7 @@ import { openUrl } from "@tauri-apps/plugin-opener"
 import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { Button } from "@/components/atoms/Button"
 import { SparkleIcon } from "@/components/atoms/icons"
 import { Modal } from "@/components/atoms/Modal"
 import { useOnboarding } from "@/lib/onboarding"
@@ -42,14 +43,13 @@ export function OnboardingModal() {
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
           {t("onboarding.title")}
         </span>
-        <button
-          type="button"
-          onClick={() => useOnboarding.getState().regenerate()}
+        <Button
+          size="sm"
           disabled={status === "loading"}
-          className="flex-none rounded-md px-2 py-1 text-xs text-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
+          onClick={() => useOnboarding.getState().regenerate()}
         >
           {t("synopsis.regenerate")}
-        </button>
+        </Button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {status === "ready" && stale && (

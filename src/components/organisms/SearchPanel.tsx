@@ -4,6 +4,8 @@
  */
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
+import { IconButton } from "@/components/atoms/IconButton"
 import { Textarea } from "@/components/atoms/Textarea"
 import { replaceText, type SearchMatch, type SearchOpts, searchText } from "@/lib/api"
 import { toRelative } from "@/lib/comments"
@@ -156,16 +158,15 @@ export function SearchPanel() {
               {t("search.replaceConfirm")}
             </button>
           ) : (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setConfirming(true)}
               disabled={matches.length === 0}
               title={t("search.replaceAll")}
-              aria-label={t("search.replaceAll")}
-              className="flex-none rounded-md border border-line px-2 py-1.5 text-xs text-ink hover:border-line-strong disabled:opacity-40"
             >
               {t("search.replaceAll")}
-            </button>
+            </Button>
           )}
         </div>
         {status && <span className="text-xs text-faint">{status}</span>}
@@ -229,19 +230,17 @@ function FlagButton({
   title: string
 }) {
   return (
-    <button
-      type="button"
+    <IconButton
+      size="sm"
+      active={active}
+      label={title}
+      icon={<span className="font-mono text-[11px] font-semibold">{label}</span>}
       onClick={onClick}
-      aria-pressed={active}
-      title={title}
-      aria-label={title}
-      className={`grid h-6 w-6 flex-none place-items-center rounded border font-mono text-[11px] font-semibold transition-colors ${
+      className={`border ${
         active
-          ? "border-accent bg-[color-mix(in_oklch,var(--accent)_18%,transparent)] text-accent"
-          : "border-line text-muted hover:bg-surface hover:text-ink"
+          ? "border-accent bg-[color-mix(in_oklch,var(--accent)_18%,transparent)]"
+          : "border-line"
       }`}
-    >
-      {label}
-    </button>
+    />
   )
 }

@@ -5,6 +5,7 @@
  */
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 import { Checkbox } from "@/components/atoms/Checkbox"
 import { COMMENT_TYPES, Dot, TYPE_COLOR, typeKey } from "@/components/atoms/commentMeta"
 import { Modal } from "@/components/atoms/Modal"
@@ -131,21 +132,12 @@ export function TreeCommentDialog({
           className="text-xs text-muted"
         />
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={close}
-            className="rounded-md px-2.5 py-1.5 text-xs text-muted hover:text-ink"
-          >
+          <Button size="sm" onClick={close}>
             {t("common.cancel")}
-          </button>
-          <button
-            type="button"
-            onClick={save}
-            disabled={!body.trim() || saving}
-            className="rounded-md bg-accent px-2.5 py-1.5 text-xs font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
-          >
+          </Button>
+          <Button variant="primary" size="sm" onClick={save} disabled={!body.trim() || saving}>
             {t("comment.save")}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

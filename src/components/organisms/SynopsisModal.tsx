@@ -31,14 +31,13 @@ export function SynopsisModal() {
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
           {t("synopsis.title")} · {baseName(relPath)}
         </span>
-        <button
-          type="button"
-          onClick={() => useSynopsis.getState().regenerate()}
+        <Button
+          size="sm"
           disabled={status === "loading"}
-          className="flex-none rounded-md px-2 py-1 text-xs text-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
+          onClick={() => useSynopsis.getState().regenerate()}
         >
           {t("synopsis.regenerate")}
-        </button>
+        </Button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {status === "ready" && stale && (

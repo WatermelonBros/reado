@@ -11,8 +11,9 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { openUrl } from "@tauri-apps/plugin-opener"
-import { useEffect, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, DiscordIcon, MinusIcon, SearchIcon } from "@/components/atoms/icons"
 import { LayoutControls } from "@/components/molecules/LayoutControls"
 import { MenuBar } from "@/components/molecules/MenuBar"
@@ -29,15 +30,13 @@ const DISCORD = "https://discord.gg/HHqT9ucXn4"
  *  (after the menu bar) on Windows/Linux. */
 function DiscordButton({ className = "" }: { className?: string }) {
   return (
-    <button
-      type="button"
+    <IconButton
+      size="sm"
+      label="Discord community"
+      icon={<DiscordIcon className="h-3.5 w-3.5" />}
       onClick={() => void openUrl(DISCORD)}
-      title="Discord"
-      aria-label="Discord community"
-      className={`pointer-events-auto grid h-6 w-8 flex-none place-items-center rounded-md text-muted transition-colors hover:bg-surface hover:text-ink ${className}`}
-    >
-      <DiscordIcon className="h-3.5 w-3.5" />
-    </button>
+      className={`pointer-events-auto w-8 ${className}`}
+    />
   )
 }
 
@@ -53,6 +52,36 @@ const MaximizeGlyph = ({ maximized }: { maximized: boolean }) =>
       <rect x="0.75" y="0.75" width="8.5" height="8.5" rx="1" fill="none" stroke="currentColor" />
     </svg>
   )
+
+/** One of the three OS window buttons. Deliberately not an `IconButton`: these
+ *  replicate the platform's own chrome — full strip height, a fixed 44px hit
+ *  area, and a close button that fills red — which is a shape no size variant
+ *  should be bent into. One component so the three agree with each other. */
+function WindowControl({
+  label,
+  danger = false,
+  onClick,
+  children,
+}: {
+  label: string
+  danger?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={`grid h-full w-11 place-items-center text-muted transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${
+        danger ? "hover:bg-danger hover:text-white" : "hover:bg-surface hover:text-ink"
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
 
 function WindowControls() {
   const [maximized, setMaximized] = useState(false)
@@ -73,34 +102,20 @@ function WindowControls() {
     return () => void un.then((f) => f()).catch(() => {})
   }, [win])
 
-  const btn =
-    "grid h-full w-11 place-items-center text-muted transition-colors hover:bg-surface hover:text-ink"
   return (
     <div className="flex h-full flex-none items-stretch">
-      <button
-        type="button"
-        className={btn}
-        title={t("window.minimize")}
-        onClick={() => void win.minimize()}
-      >
+      <WindowControl label={t("window.minimize")} onClick={() => void win.minimize()}>
         <MinusIcon className="h-3 w-3" />
-      </button>
-      <button
-        type="button"
-        className={btn}
-        title={t(maximized ? "window.restore" : "window.maximize")}
+      </WindowControl>
+      <WindowControl
+        label={t(maximized ? "window.restore" : "window.maximize")}
         onClick={() => void win.toggleMaximize()}
       >
         <MaximizeGlyph maximized={maximized} />
-      </button>
-      <button
-        type="button"
-        className="grid h-full w-11 place-items-center text-muted transition-colors hover:bg-danger hover:text-white"
-        title={t("window.close")}
-        onClick={() => void win.close()}
-      >
+      </WindowControl>
+      <WindowControl danger label={t("window.close")} onClick={() => void win.close()}>
         <CloseIcon className="h-3.5 w-3.5" />
-      </button>
+      </WindowControl>
     </div>
   )
 }

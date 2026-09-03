@@ -7,6 +7,7 @@
  * offers a reload. Class component: error boundaries can't be hooks.
  */
 import { Component, type ErrorInfo, type ReactNode } from "react"
+import { Button } from "@/components/atoms/Button"
 import { t } from "@/i18n"
 
 interface Props {
@@ -40,20 +41,12 @@ export class ErrorBoundary extends Component<Props, State> {
             {error.message}
           </pre>
           <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={() => this.setState({ error: null })}
-              className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
-            >
+            <Button variant="secondary" size="sm" onClick={() => this.setState({ error: null })}>
               {t("error.retry")}
-            </button>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90"
-            >
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => window.location.reload()}>
               {t("error.reload")}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

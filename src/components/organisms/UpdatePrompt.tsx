@@ -72,15 +72,16 @@ export function UpdatePrompt() {
           in it regardless of the pill's own height. */}
       {update && dismissed && !open && (
         <div className="pointer-events-none fixed top-0 right-3 z-[105] flex h-9 items-center">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={reopen}
             title={t("update.available", { version: version ?? "" })}
-            className="animate-fade pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-overlay px-2.5 py-1 text-xs font-medium text-ink shadow-[var(--shadow)] hover:bg-surface"
+            className="animate-fade pointer-events-auto rounded-full border-line-strong bg-overlay shadow-[var(--shadow)]"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />
             {t("update.indicator")}
-          </button>
+          </Button>
         </div>
       )}
 

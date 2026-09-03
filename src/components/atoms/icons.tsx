@@ -26,6 +26,7 @@ import {
   CaretRightIcon as CaretRight,
   ChartDonutIcon as ChartDonut,
   ChatCircleIcon as ChatCircle,
+  CheckIcon as Check,
   ClipboardTextIcon as ClipboardText,
   ClockCounterClockwiseIcon as ClockCounterClockwise,
   CodeIcon as Code,
@@ -76,6 +77,7 @@ import {
   GitBranchIcon as GitBranch,
   GitDiffIcon as GitDiff,
   GraphIcon as Graph,
+  InfoIcon as Info,
   LayoutIcon as Layout,
   LinkBreakIcon as LinkBreak,
   ListBulletsIcon as ListBullets,
@@ -140,6 +142,8 @@ export const UnlinkIcon = wrap(LinkBreak)
 export const DocsIcon = wrap(BookOpen)
 export const GraphIcon = wrap(Graph)
 export const SendIcon = wrap(PaperPlaneTilt)
+export const CheckIcon = wrap(Check)
+export const InfoIcon = wrap(Info)
 export const TerminalIcon = wrap(Terminal)
 export const SparkleIcon = wrap(Sparkle)
 export const RouteIcon = wrap(Signpost)

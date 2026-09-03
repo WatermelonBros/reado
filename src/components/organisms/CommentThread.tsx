@@ -227,13 +227,13 @@ export function CommentThread({ comment, top, onClose }: Props) {
               })()}
               <span className="text-xs text-faint">{fmtTime(m.createdAt)}</span>
               {i === 0 && editDraft === null && (
-                <button
-                  type="button"
+                <Button
+                  size="sm"
+                  className="ml-auto opacity-0 transition-opacity group-hover/msg:opacity-100 group-focus-within/msg:opacity-100 focus-visible:opacity-100"
                   onClick={() => setEditDraft(m.body)}
-                  className="ml-auto text-xs text-faint opacity-0 transition-opacity group-hover/msg:opacity-100 group-focus-within/msg:opacity-100 focus-visible:opacity-100 hover:text-ink"
                 >
                   {t("comment.edit")}
-                </button>
+                </Button>
               )}
             </div>
             {i === 0 && editDraft !== null ? (

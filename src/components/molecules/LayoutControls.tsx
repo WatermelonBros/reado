@@ -16,6 +16,7 @@ import { Popover } from "@ark-ui/react/popover"
 import { Portal } from "@ark-ui/react/portal"
 import { useTranslation } from "react-i18next"
 import { Checkbox } from "@/components/atoms/Checkbox"
+import { IconButton } from "@/components/atoms/IconButton"
 import { LayoutIcon, PanelIcon } from "@/components/atoms/icons"
 import { SegmentedControl } from "@/components/atoms/SegmentedControl"
 import { useLayout } from "@/lib/layout"
@@ -35,22 +36,20 @@ function RegionToggle({
   rotate?: number
 }) {
   return (
-    <button
-      type="button"
+    <IconButton
+      size="sm"
+      active={on}
+      label={label}
       onClick={onClick}
-      title={label}
-      aria-label={label}
-      aria-pressed={on}
-      className={`pointer-events-auto grid h-6 w-7 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
-        on ? "text-ink" : "text-faint"
-      }`}
-    >
-      {/* The wrapper carries the rotation: the icon wrapper takes className and
-        weight, not style. */}
-      <span style={rotate ? { transform: `rotate(${rotate}deg)` } : undefined}>
-        <PanelIcon className="h-3.5 w-3.5" weight={on ? "fill" : "regular"} />
-      </span>
-    </button>
+      className="pointer-events-auto w-7"
+      icon={
+        // The wrapper carries the rotation: the icon takes className and weight,
+        // not style.
+        <span style={rotate ? { transform: `rotate(${rotate}deg)` } : undefined}>
+          <PanelIcon className="h-3.5 w-3.5" />
+        </span>
+      }
+    />
   )
 }
 

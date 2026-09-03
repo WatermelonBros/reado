@@ -13,6 +13,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { CheckIcon } from "./icons"
 
 export interface ContextMenuItem {
   label: string
@@ -125,7 +126,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
           >
             {item.icon && <span className="flex-none text-muted">{item.icon}</span>}
             <span className="flex-1 truncate">{item.label}</span>
-            {item.checked && <span className="flex-none text-accent">✓</span>}
+            {item.checked && <CheckIcon className="h-3 w-3 flex-none text-accent" />}
           </button>
         </div>
       ))}

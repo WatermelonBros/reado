@@ -8,6 +8,7 @@ import { listen } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 import { ContextMenu } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, CollapseAllIcon, EyeIcon, EyeOffIcon, SwapIcon } from "@/components/atoms/icons"
@@ -523,17 +524,17 @@ export function ProjectView({ root }: { root: string }) {
             />
             <header className="flex h-9 flex-none items-center justify-between border-b border-line pr-2 pl-3 text-xs font-medium tracking-wide text-muted uppercase">
               <span className="flex items-center gap-2">
-                <button
-                  type="button"
+                <Button
+                  size="sm"
                   title={t("dock.menu")}
+                  className="-ml-1 px-1 text-inherit uppercase"
                   onClick={(e) => {
                     const r = e.currentTarget.getBoundingClientRect()
                     setToolMenu({ x: r.left, y: r.bottom, tool })
                   }}
-                  className="-ml-1 rounded px-1 text-inherit hover:text-ink"
                 >
                   {t(TOOL_TITLE[tool])}
-                </button>
+                </Button>
                 {tool === "files" && totalFiles > 0 && (
                   <span className="text-[10px] font-normal normal-case text-faint">
                     {readCount}/{totalFiles} {t("progress.read")}
@@ -590,24 +591,18 @@ export function ProjectView({ root }: { root: string }) {
                   >
                     {toRelative(root, splitPath)}
                   </span>
-                  <button
-                    type="button"
+                  <IconButton
+                    size="sm"
+                    label={t("split.swap")}
+                    icon={<SwapIcon className="h-3.5 w-3.5" />}
                     onClick={swapSplit}
-                    aria-label={t("split.swap")}
-                    title={t("split.swap")}
-                    className="grid h-6 w-6 flex-none place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
-                  >
-                    <SwapIcon className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
+                  />
+                  <IconButton
+                    size="sm"
+                    label={t("split.close")}
+                    icon={<CloseIcon className="h-3.5 w-3.5" />}
                     onClick={closeSplit}
-                    aria-label={t("split.close")}
-                    title={t("split.close")}
-                    className="grid h-6 w-6 flex-none place-items-center rounded-md text-faint hover:bg-surface hover:text-ink"
-                  >
-                    <CloseIcon className="h-3.5 w-3.5" />
-                  </button>
+                  />
                 </header>
                 <div className="relative min-h-0 flex-1 overflow-hidden">
                   <Editor paneFile={splitPath} />

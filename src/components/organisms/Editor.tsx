@@ -231,16 +231,17 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
     const mdComments = commentsForFile(inlineCommentSource, relPath)
     return (
       <div className="relative h-full w-full">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => useTextView.getState().toggleText(active)}
           title={asSource ? t("editor.viewRendered") : t("editor.viewSource")}
-          className="absolute top-3 right-4 z-30 flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-xs text-muted shadow-[var(--shadow)] hover:text-ink"
+          className="absolute top-3 right-4 z-30 shadow-[var(--shadow)]"
         >
           {asSource ? <DocsIcon className="h-3.5 w-3.5" /> : <EditIcon className="h-3.5 w-3.5" />}
           {asSource ? t("editor.viewRendered") : t("editor.viewSource")}
           {!asSource && mdComments.length > 0 && <Badge tone="accent">{mdComments.length}</Badge>}
-        </button>
+        </Button>
         {asSource ? (
           <CodeView
             key={active}

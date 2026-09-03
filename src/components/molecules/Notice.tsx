@@ -6,7 +6,8 @@
  */
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CloseIcon } from "@/components/atoms/icons"
+import { IconButton } from "@/components/atoms/IconButton"
+import { CheckIcon, CloseIcon, InfoIcon, WarningIcon } from "@/components/atoms/icons"
 import { type Toast, useNotice } from "@/lib/notice"
 
 /** How long a toast lingers before auto-dismissing. */
@@ -37,30 +38,29 @@ function ToastItem({ toast }: { toast: Toast }) {
     return () => clearTimeout(id)
   }, [leaving, dismiss, toast.id])
 
+  // A coloured 2px left border is the decorative-stripe habit; the kind is
+  // carried by an icon instead, which also survives colour blindness and says
+  // what it means rather than relying on a hue nobody explained.
+  const Glyph =
+    toast.kind === "error" ? WarningIcon : toast.kind === "success" ? CheckIcon : InfoIcon
   const tone =
-    toast.kind === "error"
-      ? "border-l-marker"
-      : toast.kind === "success"
-        ? "border-l-accent"
-        : "border-l-line-strong"
+    toast.kind === "error" ? "text-marker" : toast.kind === "success" ? "text-accent" : "text-faint"
 
   return (
     <div
       role={toast.kind === "error" ? "alert" : "status"}
-      className={`pointer-events-auto flex max-w-[min(90vw,420px)] items-start gap-2 rounded-md border border-l-2 border-line ${tone} bg-overlay py-2 pr-2 pl-3 text-xs text-ink shadow-[var(--shadow)] transition-[opacity,transform] duration-200 ease-[var(--ease,ease)] ${
+      className={`pointer-events-auto flex max-w-[min(90vw,420px)] items-start gap-2 rounded-md border border-line bg-overlay py-2 pr-2 pl-3 text-xs text-ink shadow-[var(--shadow)] transition-[opacity,transform] duration-200 ease-[var(--ease,ease)] ${
         shown && !leaving ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
       }`}
     >
+      <Glyph className={`mt-px h-3.5 w-3.5 flex-none ${tone}`} />
       <span className="min-w-0 flex-1 pt-px leading-snug break-words">{toast.text}</span>
-      <button
-        type="button"
+      <IconButton
+        size="xs"
+        label={t("common.dismiss")}
+        icon={<CloseIcon className="h-3.5 w-3.5" />}
         onClick={() => setLeaving(true)}
-        title={t("common.dismiss")}
-        aria-label={t("common.dismiss")}
-        className="grid h-5 w-5 flex-none place-items-center rounded text-faint transition-colors hover:bg-line hover:text-ink"
-      >
-        <CloseIcon className="h-3.5 w-3.5" />
-      </button>
+      />
     </div>
   )
 }

@@ -13,6 +13,7 @@ import { EditorView, keymap, lineNumbers } from "@codemirror/view"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
+import { IconButton } from "@/components/atoms/IconButton"
 import { ChevronIcon } from "@/components/atoms/icons"
 import { HunkBar } from "@/components/molecules/HunkBar"
 import { getReadSnapshot, gitShowRef } from "@/lib/api"
@@ -100,14 +101,15 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
         />
       </div>
       {isDelta && (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={markReviewed}
           title={t("delta.markReviewed")}
-          className="absolute top-3 left-4 z-10 rounded-md border border-line bg-overlay px-2.5 py-1 text-xs text-muted shadow-[var(--shadow)] hover:text-ink"
+          className="absolute top-3 left-4 z-10 bg-overlay shadow-[var(--shadow)]"
         >
           {t("delta.markReviewed")}
-        </button>
+        </Button>
       )}
     </div>
   )
@@ -185,27 +187,19 @@ function DiffEditor({
       />
       {chunkCount > 0 && (
         <div className="absolute top-3 right-4 z-10 flex items-center overflow-hidden rounded-md border border-line bg-overlay text-muted shadow-[var(--shadow)]">
-          <button
-            type="button"
+          <IconButton
+            label={t("diff.prevChange")}
+            icon={<ChevronIcon className="h-3.5 w-3.5 -rotate-90" />}
             onClick={() => jump(false)}
-            title={t("diff.prevChange")}
-            aria-label={t("diff.prevChange")}
-            className="grid h-7 w-7 place-items-center hover:bg-surface hover:text-ink"
-          >
-            <ChevronIcon className="h-3.5 w-3.5 -rotate-90" />
-          </button>
+          />
           <span className="px-2 text-xs tabular-nums">
             {t("diff.changes", { count: chunkCount })}
           </span>
-          <button
-            type="button"
+          <IconButton
+            label={t("diff.nextChange")}
+            icon={<ChevronIcon className="h-3.5 w-3.5 rotate-90" />}
             onClick={() => jump(true)}
-            title={t("diff.nextChange")}
-            aria-label={t("diff.nextChange")}
-            className="grid h-7 w-7 place-items-center hover:bg-surface hover:text-ink"
-          >
-            <ChevronIcon className="h-3.5 w-3.5 rotate-90" />
-          </button>
+          />
         </div>
       )}
     </div>

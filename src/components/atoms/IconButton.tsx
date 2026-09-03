@@ -12,15 +12,14 @@ import { type ButtonHTMLAttributes, cloneElement, isValidElement, type ReactNode
 import { cn } from "@/lib/cn"
 import { Tooltip } from "./Tooltip"
 
-export type IconButtonSize = "xs" | "sm" | "md" | "lg"
+export type IconButtonSize = "xxs" | "xs" | "sm" | "md" | "lg"
 
-/** The four sizes this atom covers, each measured from hand-rolled buttons it
- *  replaced: `xs` for dense list rows that reveal actions on hover, `sm` for
- *  panel headers and inline toolbars, `md` for the default, `lg` for the
- *  activity bar's footer. (The rail's own nav buttons stay hand-rolled: they
- *  layer a badge and a drop indicator over the glyph, which `icon` can't
- *  express — widening this to take overlay children is its own change.) */
+/** Every size the app uses, each measured from a hand-rolled button this atom
+ *  replaced: `xxs` for a disclosure arrow or a tab's close, `xs` for dense list
+ *  rows that reveal actions on hover, `sm` for panel headers and inline
+ *  toolbars, `md` for the default, `lg` for the activity rail. */
 const SIZE: Record<IconButtonSize, string> = {
+  xxs: "h-4 w-4",
   xs: "h-5 w-5",
   sm: "h-6 w-6",
   md: "h-7 w-7",
@@ -38,6 +37,10 @@ interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-labe
   size?: IconButtonSize
   /** Preferred tooltip side. */
   tooltipPlacement?: "top" | "bottom" | "left" | "right"
+  /** Rendered over the glyph, positioned by the caller — a count badge, a drop
+   *  indicator. Without this a button that layers anything on its icon has to
+   *  be hand-rolled, which is how the activity rail ended up drawing its own. */
+  overlay?: ReactNode
 }
 
 export function IconButton({
@@ -47,6 +50,7 @@ export function IconButton({
   danger = false,
   size = "md",
   tooltipPlacement,
+  overlay,
   className = "",
   type = "button",
   ...rest
@@ -79,6 +83,7 @@ export function IconButton({
         )}
         {...rest}
       >
+        {overlay}
         {glyph}
       </button>
     </Tooltip>

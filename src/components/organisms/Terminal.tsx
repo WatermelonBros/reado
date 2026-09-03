@@ -26,6 +26,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links"
 import { type IDisposable, type ILink, Terminal as XTerm } from "@xterm/xterm"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
 import { ChevronIcon, CloseIcon, SearchIcon } from "@/components/atoms/icons"
 import {
@@ -422,30 +423,24 @@ export function Terminal({ id, cwd, active }: Props) {
             placeholder={t("terminal.search")}
             className="w-44 px-0 py-0"
           />
-          <button
-            type="button"
+          <IconButton
+            size="xs"
+            label={t("terminal.searchPrev")}
+            icon={<ChevronIcon className="h-3.5 w-3.5 -rotate-90" />}
             onClick={() => find(query, true)}
-            title={t("terminal.searchPrev")}
-            className="grid h-5 w-5 flex-none place-items-center rounded text-muted hover:bg-surface hover:text-ink"
-          >
-            <ChevronIcon className="h-3.5 w-3.5 -rotate-90" />
-          </button>
-          <button
-            type="button"
+          />
+          <IconButton
+            size="xs"
+            label={t("terminal.searchNext")}
+            icon={<ChevronIcon className="h-3.5 w-3.5 rotate-90" />}
             onClick={() => find(query)}
-            title={t("terminal.searchNext")}
-            className="grid h-5 w-5 flex-none place-items-center rounded text-muted hover:bg-surface hover:text-ink"
-          >
-            <ChevronIcon className="h-3.5 w-3.5 rotate-90" />
-          </button>
-          <button
-            type="button"
+          />
+          <IconButton
+            size="xs"
+            label={t("common.cancel")}
+            icon={<CloseIcon className="h-3.5 w-3.5" />}
             onClick={closeSearch}
-            title={t("common.cancel")}
-            className="grid h-5 w-5 flex-none place-items-center rounded text-muted hover:bg-surface hover:text-ink"
-          >
-            <CloseIcon className="h-3.5 w-3.5" />
-          </button>
+          />
         </div>
       )}
       {/* Counter-scale the terminal so it carries NO net interface-zoom transform.

@@ -528,7 +528,9 @@
     "resHeaders": "Response Headers",
     "payload": "Payload",
     "response": "Response",
-    "close": "Close"
+    "close": "Close",
+    "collapse": "Collapse",
+    "expand": "Expand"
   },
   "diff": {
     "toggle": "Toggle diff",

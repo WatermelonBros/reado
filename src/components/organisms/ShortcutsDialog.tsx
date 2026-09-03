@@ -4,6 +4,7 @@
  */
 
 import { useTranslation } from "react-i18next"
+import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon } from "@/components/atoms/icons"
 import { Modal } from "@/components/atoms/Modal"
 import { SHORTCUT_GROUPS } from "@/lib/shortcuts"
@@ -23,15 +24,11 @@ export function ShortcutsDialog() {
     >
       <header className="flex flex-none items-center justify-between border-b border-line px-5 py-3">
         <h2 className="m-0 text-sm font-semibold tracking-wide uppercase">{t("sc.title")}</h2>
-        <button
-          type="button"
-          title={t("settings.close")}
-          aria-label={t("settings.close")}
+        <IconButton
+          label={t("settings.close")}
+          icon={<CloseIcon className="h-4 w-4" />}
           onClick={() => toggle(false)}
-          className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink"
-        >
-          <CloseIcon className="h-4 w-4" />
-        </button>
+        />
       </header>
 
       <div className="min-h-0 flex-1 gap-8 overflow-y-auto p-5 sm:columns-2">
