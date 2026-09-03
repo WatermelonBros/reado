@@ -445,6 +445,16 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     // If the webview isn't up yet (bounds were 0 at mount, e.g. on reopen), create
     // it once the placeholder has a real size; otherwise just re-park it.
     const ro = new ResizeObserver(() => {
+      // No box at all — the dock region is collapsed. The preview is a real OS
+      // child window, so it doesn't hide with its placeholder: close it, and
+      // let the branch below re-open it when the region comes back.
+      if (!computeBounds()) {
+        if (openedRef.current) {
+          openedRef.current = false
+          void previewClose()
+        }
+        return
+      }
       if (openedRef.current) syncBounds()
       else openAt(usePreview.getState().url)
     })
@@ -458,7 +468,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       if (r) void previewClearState(r)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncBounds, openAt])
+  }, [syncBounds, openAt, computeBounds])
 
   // Re-park when the device, pane width, or interface zoom changes. Zoom matters:
   // it's a CSS transform, so the ResizeObserver doesn't fire — but the pane's

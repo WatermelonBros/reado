@@ -57,15 +57,28 @@ describe("region toggles", () => {
     expect(btn).toHaveAttribute("aria-pressed", "true")
   })
 
-  it("hides the panel without forgetting what lives there", async () => {
+  it("hides the panel without closing what lives there", async () => {
     render(<LayoutControls />)
     const btn = screen.getByRole("button", { name: "layout.panel" })
     await userEvent.click(btn) // show
     await userEvent.click(btn) // hide
     expect(useLayout.getState().hidden.bottom).toBe(true)
-    expect(useTerminals.getState().open).toBe(false)
-    // The dock keeps its panels — hiding is not the same as forgetting them.
+    expect(btn).toHaveAttribute("aria-pressed", "false")
+    // Hiding is not closing: the terminal stays open — and, on screen, running —
+    // so bringing the region back returns the shell you left, not a fresh one.
+    expect(useTerminals.getState().open).toBe(true)
     expect(useLayout.getState().layout.areas.bottom.groups.length).toBeGreaterThan(0)
+  })
+
+  it("brings the same panel back", async () => {
+    render(<LayoutControls />)
+    const btn = screen.getByRole("button", { name: "layout.panel" })
+    await userEvent.click(btn)
+    await userEvent.click(btn)
+    await userEvent.click(btn)
+    expect(useLayout.getState().hidden.bottom).toBe(false)
+    expect(useTerminals.getState().open).toBe(true)
+    expect(btn).toHaveAttribute("aria-pressed", "true")
   })
 
   it("shows the secondary sidebar independently of the panel", async () => {

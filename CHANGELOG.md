@@ -69,8 +69,13 @@ commit.
   visibility and its panels' own open/closed flags were two switches in two
   stores, and the toggles flipped only the first — so pressing one revealed an
   empty region and then reported itself *active*, because "not hidden" was being
-  read as "on screen". They now open what lives in the region on the way in,
-  close it on the way out, and light up only when something is actually there.
+  read as "on screen". They now open what lives in the region on the way in, and
+  light up only when something is actually there.
+- **Hiding the panel keeps the terminal.** Hiding a dock region unmounted it, and
+  a terminal kills its shell on unmount — so putting the panel away threw away
+  whatever was running in it, and brought back a fresh prompt. A hidden region
+  steps out of the layout instead of leaving the page, so the shell you left is
+  the shell you get back.
 - **`⌘J` works when the panel is hidden.** Hiding the panel and toggling the
   terminal were two switches that could disagree: the terminal would open into a
   region nothing was drawing, so the key did nothing. Opening the terminal now

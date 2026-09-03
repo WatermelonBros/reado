@@ -219,7 +219,13 @@ export function DockRegion({ area }: { area: DockArea }) {
 
   // Collapsed from the title bar: the area keeps its panels, it just isn't on
   // screen. A drag still opens it, so a panel can be dropped into a hidden dock.
-  if (hidden && !dragging) return null
+  //
+  // It steps out of the layout rather than unmounting: a `<Terminal>` kills its
+  // PTY on unmount, so returning null here meant hiding the panel silently threw
+  // away the shell — and whatever was running in it. Its panels size themselves
+  // from their box, and each already no-ops at zero, so nothing runs while the
+  // region is away.
+  const collapsed = hidden && !dragging
 
   // Empty area: normally nothing, but while dragging show a rail so a lone panel
   // can be dragged here (e.g. terminal in the bottom → the empty right area).
@@ -351,7 +357,13 @@ export function DockRegion({ area }: { area: DockArea }) {
     <div
       ref={regionRef}
       className={`relative flex flex-none ${horizontal ? "flex-row border-t" : "flex-col border-l"} border-line`}
-      style={horizontal ? { height: areaState.size } : { width: areaState.size }}
+      style={
+        collapsed
+          ? { display: "none" }
+          : horizontal
+            ? { height: areaState.size }
+            : { width: areaState.size }
+      }
     >
       {/* Resize the whole area (straddles its inner edge toward the editor). */}
       <div

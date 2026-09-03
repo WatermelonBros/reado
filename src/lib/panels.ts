@@ -73,35 +73,20 @@ export function openPanel(id: PanelId): void {
   }
 }
 
-/** Close every panel in an area — what "hide this region" means from a toggle
- *  that also opens it. The layout keeps them, so they come back where they were. */
-function closeArea(area: DockArea): void {
-  for (const g of useLayout.getState().layout.areas[area].groups) {
-    for (const id of g.tabs) {
-      if (id === "terminal") useTerminals.getState().toggle(false)
-      else if (id === "browser") usePreview.getState().close()
-      else if (id === "inspector") usePreview.getState().setInspectorDetached(false)
-      else if (id === "reasoning") useReasoning.getState().close()
-    }
-  }
-}
-
 /**
  * Show or hide a whole dock region, the way the title bar's toggles mean it.
  *
  * Showing an area whose panels are all closed used to reveal an empty strip and
- * call it done. Each group gets its active panel opened instead; hiding closes
- * them again, so the button and the region agree about what it did.
+ * call it done; each group gets its active panel opened instead. Hiding only
+ * hides: the panels stay open and keep running, so a terminal mid-command is
+ * still there — and still running — when the region comes back.
  */
 export function toggleDockArea(area: DockArea, show?: boolean): void {
   const next = show ?? !isAreaShowing(area)
   useLayout.getState().toggleArea(area, !next)
-  if (next) {
-    for (const g of useLayout.getState().layout.areas[area].groups) {
-      if (!g.tabs.some(isPanelOpen)) openPanel(g.active)
-    }
-  } else {
-    closeArea(area)
+  if (!next) return
+  for (const g of useLayout.getState().layout.areas[area].groups) {
+    if (!g.tabs.some(isPanelOpen)) openPanel(g.active)
   }
 }
 
