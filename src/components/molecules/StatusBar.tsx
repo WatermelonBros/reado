@@ -16,19 +16,18 @@ import {
   TerminalIcon,
 } from "@/components/atoms/icons"
 import { anywhereStatus, type GitBranches, gitBranches, gitCheckout, gitInfo } from "@/lib/api"
-import { openCount, useComments } from "@/lib/comments"
+import { openCount, toRelative, useComments } from "@/lib/comments"
 import { convertEol, type Eol, goToLine, LANGUAGE_OPTIONS, useDocInfo } from "@/lib/docInfo"
 import { usePreview } from "@/lib/preview"
 import { mod } from "@/lib/shortcuts"
 import { useCursor, usePalette, useProject } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
 
-/** Path relative to the project root, with forward slashes. */
-function relativePath(root: string, path: string | null): string | null {
-  if (!path) return null
-  const rel = path.startsWith(root) ? path.slice(root.length) : path
-  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/")
-}
+/** Path relative to the project root, with forward slashes. Delegates to the
+ *  shared helper: a private copy here silently lost its sibling-prefix guard,
+ *  rendering `/home/me/proj-backup/a.ts` as `-backup/a.ts`. */
+const relativePath = (root: string, path: string | null): string | null =>
+  path ? toRelative(root, path) : null
 
 /** Shared style for a clickable status-bar item. */
 const ITEM =

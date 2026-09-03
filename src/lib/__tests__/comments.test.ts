@@ -26,6 +26,24 @@ describe("comment helpers", () => {
     expect(toRelative("/p", "other/a.ts")).toBe("other/a.ts")
   })
 
+  it("doesn't claim a sibling directory that shares the root's prefix", () => {
+    // Without the trailing separator, `/home/me/proj-backup/a.ts` would come
+    // back as `-backup/a.ts` and anchor every comment to a path that isn't in
+    // the project.
+    // Passed through unchanged (bar the leading separator every result drops)
+    // — emphatically not the "-backup/a.ts" a prefix match would produce.
+    expect(toRelative("/home/me/proj", "/home/me/proj-backup/a.ts")).toBe(
+      "home/me/proj-backup/a.ts",
+    )
+    // A root that already ends in a separator behaves the same.
+    expect(toRelative("/home/me/proj/", "/home/me/proj-backup/a.ts")).toBe(
+      "home/me/proj-backup/a.ts",
+    )
+    // …and a Windows root, whose separator is the other one.
+    expect(toRelative("C:\\repo", "C:\\repo\\src\\a.ts")).toBe("src/a.ts")
+    expect(toRelative("C:\\repo", "C:\\repo-backup\\a.ts")).toBe("C:/repo-backup/a.ts")
+  })
+
   it("filters comments to a file", () => {
     const list = [comment("src/a.ts", "open"), comment("src/b.ts", "open")]
     expect(commentsForFile(list, "src/a.ts")).toHaveLength(1)

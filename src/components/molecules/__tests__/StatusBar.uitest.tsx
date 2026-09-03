@@ -2,7 +2,7 @@
 // language pickers, the git branch switcher, comment count and the
 // Anywhere/terminal toggles. Stores are real; the Tauri edge is stubbed.
 
-import { render, screen } from "@testing-library/react"
+import { createEvent, fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -123,6 +123,19 @@ describe("StatusBar with an active file", () => {
     expect(screen.getByText(/Ln 12, Col 5/)).toBeInTheDocument()
   })
 
+  it("doesn't claim a sibling directory that shares the root's prefix", () => {
+    useProject.setState({ root: "/repo", active: "/repo-backup/src/main.ts" } as never)
+    render(<StatusBar />)
+    // Not "-backup/src/main.ts": the file isn't in this project at all.
+    expect(screen.getByText("repo-backup/src/main.ts")).toBeInTheDocument()
+  })
+
+  it("shows a Windows path with forward slashes", () => {
+    useProject.setState({ root: "C:\\repo", active: "C:\\repo\\src\\main.ts" } as never)
+    render(<StatusBar />)
+    expect(screen.getByText("src/main.ts")).toBeInTheDocument()
+  })
+
   it("opens the go-to-line popover and submits on Enter", async () => {
     render(<StatusBar />)
     await userEvent.click(screen.getByTitle("status.goToLine"))
@@ -132,6 +145,18 @@ describe("StatusBar with an active file", () => {
     expect(docEdge.goToLine).toHaveBeenCalledWith(42)
     // ...and the popover closes after submit.
     expect(screen.queryByPlaceholderText("status.goToLinePlaceholder")).not.toBeInTheDocument()
+  })
+
+  it("swallows the go-to-line Enter, so it can't reach the editor", async () => {
+    render(<StatusBar />)
+    await userEvent.click(screen.getByTitle("status.goToLine"))
+    const input = screen.getByPlaceholderText("status.goToLinePlaceholder")
+    await userEvent.type(input, "42")
+    const enter = createEvent.keyDown(input, { key: "Enter" })
+    fireEvent(input, enter)
+    // `goToLine` refocuses the editor; an un-swallowed Enter then inserts a
+    // newline there, shifting the target line and marking the file dirty.
+    expect(enter.defaultPrevented).toBe(true)
   })
 
   it("changes the indentation kind from the indent popover", async () => {
