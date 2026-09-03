@@ -13,8 +13,10 @@ import { useTerminals } from "./terminals"
 export type Agent = "claude-code" | "codex" | "copilot" | "gemini" | "opencode"
 type ShellFamily = "cmd" | "powershell" | "posix"
 
-/** The binary that runs each agent. */
-const AGENT_BIN: Record<Agent, string> = {
+/** The binary that runs each agent. Exported because the terminal's launcher row
+ *  and its installed-probe both need it; three copies of this map is how a sixth
+ *  agent ends up half-registered. */
+export const AGENT_BIN: Record<Agent, string> = {
   "claude-code": "claude",
   codex: "codex",
   copilot: "copilot",
@@ -119,8 +121,9 @@ export async function launchAgent(agent: Agent, bin: string): Promise<void> {
 /** Default agent when the user has never launched one. */
 const DEFAULT_AGENT: Agent = "claude-code"
 
-/** Preference order when auto-picking an agent for the first-ever dispatch. */
-const AGENT_ORDER: Agent[] = ["claude-code", "codex", "copilot", "gemini", "opencode"]
+/** Every agent, in the order they are offered — the preference order when
+ *  auto-picking for the first dispatch, and the order of the launcher row. */
+export const AGENT_ORDER: Agent[] = ["claude-code", "codex", "copilot", "gemini", "opencode"]
 
 /** The first installed agent (probed on PATH), so a dev who only has codex or
  *  copilot isn't dead-ended by the Claude default on their first AI action. */

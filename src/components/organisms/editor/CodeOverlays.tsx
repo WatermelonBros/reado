@@ -37,7 +37,7 @@ export function SaveErrorBanner({ onDismiss }: { onDismiss: () => void }) {
         label={t("common.cancel")}
         icon={<CloseIcon className="h-3.5 w-3.5" />}
         onClick={onDismiss}
-        className="h-5 w-5"
+        size="xs"
       />
     </div>
   )
@@ -141,7 +141,7 @@ export function PeekPanel({
           label={t("common.cancel")}
           icon={<CloseIcon className="h-3.5 w-3.5" />}
           onClick={onClose}
-          className="h-5 w-5"
+          size="xs"
         />
       </header>
       {peek.target && (

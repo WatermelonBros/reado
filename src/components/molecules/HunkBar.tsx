@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
+import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { gitApplyPatch, gitFileHunks, type Hunk } from "@/lib/api"
 import { notifyError } from "@/lib/notice"
 import { useProject } from "@/lib/store"
@@ -85,19 +86,13 @@ export function HunkBar({ relPath, onChanged }: Props) {
               </Button>
             )}
             {confirming === h.index ? (
-              <>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void apply(h, false, true, t("hunk.discardFailed"))}
-                >
-                  {t("hunk.discardConfirm")}
-                </Button>
-                <Button size="sm" onClick={() => setConfirming(null)}>
-                  {t("common.cancel")}
-                </Button>
-              </>
+              <InlineConfirm
+                question={t("hunk.discard")}
+                confirmLabel={t("hunk.discardConfirm")}
+                disabled={busy}
+                onConfirm={() => void apply(h, false, true, t("hunk.discardFailed"))}
+                onCancel={() => setConfirming(null)}
+              />
             ) : (
               <>
                 <Button

@@ -16,6 +16,7 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
+import { Button } from "@/components/atoms/Button"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import {
@@ -34,7 +35,7 @@ import {
 import { AuditDialog, type AuditTarget } from "@/components/organisms/AuditDialog"
 import { SendReviewDialog } from "@/components/organisms/SendReviewDialog"
 import { Terminal } from "@/components/organisms/Terminal"
-import { launchAgent } from "@/lib/agents"
+import { AGENT_BIN, AGENT_ORDER, type Agent, launchAgent } from "@/lib/agents"
 import { agentInstalled } from "@/lib/api"
 import { toRelative, useComments } from "@/lib/comments"
 import { findPanel, useLayout } from "@/lib/layout"
@@ -46,6 +47,18 @@ const CLAUDE_ORANGE = "#D97757"
 const CODEX_TEAL = "#10A37F"
 const COPILOT_VIOLET = "#8957E5"
 const OPENCODE_GREY = "#656363"
+
+/** The launcher row's *presentation*. Identity — which agents exist, in what
+ *  order, and which binary each runs — belongs to `lib/agents.ts`; this only
+ *  says how each one looks. Five buttons that differed by name, icon and brand
+ *  colour were five copies of the same twenty-five lines. */
+const AGENT_LOOK: Record<Agent, { name: string; Icon: typeof ClaudeIcon; color?: string }> = {
+  "claude-code": { name: "Claude Code", Icon: ClaudeIcon, color: CLAUDE_ORANGE },
+  codex: { name: "Codex", Icon: CodexIcon, color: CODEX_TEAL },
+  copilot: { name: "Copilot", Icon: CopilotIcon, color: COPILOT_VIOLET },
+  gemini: { name: "Gemini", Icon: GeminiIcon },
+  opencode: { name: "OpenCode", Icon: OpenCodeIcon, color: OPENCODE_GREY },
+}
 
 // Below this panel width the labelled buttons collapse to icon-only.
 const COMPACT_WIDTH = 560
@@ -100,15 +113,9 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
   const [installed, setInstalled] = useState<Record<string, boolean>>({})
   useEffect(() => {
     let alive = true
-    void Promise.all([
-      agentInstalled("claude"),
-      agentInstalled("codex"),
-      agentInstalled("copilot"),
-      agentInstalled("gemini"),
-      agentInstalled("opencode"),
-    ])
-      .then(([claude, codex, copilot, gemini, opencode]) => {
-        if (alive) setInstalled({ claude, codex, copilot, gemini, opencode })
+    void Promise.all(AGENT_ORDER.map((a) => agentInstalled(AGENT_BIN[a])))
+      .then((results) => {
+        if (alive) setInstalled(Object.fromEntries(AGENT_ORDER.map((a, i) => [a, results[i]])))
       })
       .catch(() => {})
     return () => {
@@ -290,26 +297,26 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
         </div>
 
         {/* Send review (collapses to icon-only when narrow). */}
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => setReviewOpen(true)}
           disabled={openTaskCount === 0}
           title={openTaskCount === 0 ? t("terminal.noTasks") : t("terminal.sendReview")}
-          className="flex items-center gap-1.5 rounded-md bg-accent px-2 py-1 text-xs font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-40"
         >
           <SendIcon className="h-3.5 w-3.5" />
           {!compact && t("terminal.sendReview")}
           {openTaskCount > 0 && <Badge tone="soft">{openTaskCount}</Badge>}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={openAudit}
           title={active ? t("tree.audit") : t("comments.auditProject")}
-          className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong"
         >
           <SparkleIcon className="h-3.5 w-3.5" />
           {!compact && t("comments.audit")}
-        </button>
+        </Button>
 
         {/* Layout cluster: split + orientation. */}
         <span className="mx-0.5 h-4 w-px flex-none bg-line" />
@@ -334,105 +341,25 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
 
         {/* Agent launchers: icon-only, the only spot of brand colour. */}
         <span className="mx-0.5 h-4 w-px flex-none bg-line" />
-        <button
-          type="button"
-          aria-label={
-            installed.claude === false
-              ? t("agent.notInstalled", { name: "Claude Code" })
-              : t("terminal.launch", { name: "Claude Code" })
-          }
-          title={
-            installed.claude === false
-              ? t("agent.notInstalled", { name: "Claude Code" })
-              : t("terminal.launch", { name: "Claude Code" })
-          }
-          onClick={() => void launchAgent("claude-code", "claude")}
-          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
-            installed.claude === false ? "opacity-40" : ""
-          }`}
-          style={{ color: CLAUDE_ORANGE }}
-        >
-          <ClaudeIcon className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          aria-label={
-            installed.codex === false
-              ? t("agent.notInstalled", { name: "Codex" })
-              : t("terminal.launch", { name: "Codex" })
-          }
-          title={
-            installed.codex === false
-              ? t("agent.notInstalled", { name: "Codex" })
-              : t("terminal.launch", { name: "Codex" })
-          }
-          onClick={() => void launchAgent("codex", "codex")}
-          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
-            installed.codex === false ? "opacity-40" : ""
-          }`}
-          style={{ color: CODEX_TEAL }}
-        >
-          <CodexIcon className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          aria-label={
-            installed.copilot === false
-              ? t("agent.notInstalled", { name: "Copilot" })
-              : t("terminal.launch", { name: "Copilot" })
-          }
-          title={
-            installed.copilot === false
-              ? t("agent.notInstalled", { name: "Copilot" })
-              : t("terminal.launch", { name: "Copilot" })
-          }
-          onClick={() => void launchAgent("copilot", "copilot")}
-          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
-            installed.copilot === false ? "opacity-40" : ""
-          }`}
-          style={{ color: COPILOT_VIOLET }}
-        >
-          <CopilotIcon className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          aria-label={
-            installed.gemini === false
-              ? t("agent.notInstalled", { name: "Gemini" })
-              : t("terminal.launch", { name: "Gemini" })
-          }
-          title={
-            installed.gemini === false
-              ? t("agent.notInstalled", { name: "Gemini" })
-              : t("terminal.launch", { name: "Gemini" })
-          }
-          onClick={() => void launchAgent("gemini", "gemini")}
-          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
-            installed.gemini === false ? "opacity-40" : ""
-          }`}
-        >
-          <GeminiIcon className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          aria-label={
-            installed.opencode === false
-              ? t("agent.notInstalled", { name: "OpenCode" })
-              : t("terminal.launch", { name: "OpenCode" })
-          }
-          title={
-            installed.opencode === false
-              ? t("agent.notInstalled", { name: "OpenCode" })
-              : t("terminal.launch", { name: "OpenCode" })
-          }
-          onClick={() => void launchAgent("opencode", "opencode")}
-          className={`grid h-6 w-6 flex-none place-items-center rounded-md transition-colors hover:bg-surface ${
-            installed.opencode === false ? "opacity-40" : ""
-          }`}
-          style={{ color: OPENCODE_GREY }}
-        >
-          <OpenCodeIcon className="h-4 w-4" />
-        </button>
+        {AGENT_ORDER.map((id) => {
+          const look = AGENT_LOOK[id]
+          const missing = installed[id] === false
+          return (
+            <IconButton
+              key={id}
+              label={
+                missing
+                  ? t("agent.notInstalled", { name: look.name })
+                  : t("terminal.launch", { name: look.name })
+              }
+              icon={<look.Icon className="h-4 w-4" />}
+              onClick={() => void launchAgent(id, AGENT_BIN[id])}
+              size="sm"
+              className={missing ? "opacity-40" : ""}
+              style={{ color: look.color }}
+            />
+          )
+        })}
         <span className="mx-0.5 h-4 w-px flex-none bg-line" />
         {/* Position toggle only in self-sized mode; docked, the dock's move menu
             owns placement (bottom/right/stack). */}

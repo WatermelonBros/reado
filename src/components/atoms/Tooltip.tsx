@@ -28,7 +28,18 @@ interface Props {
 export function Tooltip({ label, children, placement = "bottom" }: Props) {
   if (!label) return children
   return (
-    <ArkTooltip.Root openDelay={350} closeDelay={0} positioning={{ placement }}>
+    // `lazyMount` + `unmountOnExit`: without them Ark's presence predicate is
+    // never true, so every tooltip renders its positioner and content into a
+    // body-level portal whether or not it has ever opened. With an IconButton
+    // per row, a 40-file Source Control list carried ~120 hidden divs and their
+    // state machines for tooltips nobody had hovered.
+    <ArkTooltip.Root
+      lazyMount
+      unmountOnExit
+      openDelay={350}
+      closeDelay={0}
+      positioning={{ placement }}
+    >
       <ArkTooltip.Trigger asChild>{children}</ArkTooltip.Trigger>
       <Portal>
         <ArkTooltip.Positioner>

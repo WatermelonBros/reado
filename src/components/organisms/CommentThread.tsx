@@ -25,6 +25,7 @@ import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, SendIcon } from "@/components/atoms/icons"
 import { Select } from "@/components/atoms/Select"
 import { Textarea } from "@/components/atoms/Textarea"
+import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { dispatchToAgent } from "@/lib/agents"
 import type { Comment, CommentState, CommentType } from "@/lib/api"
 import { useComments } from "@/lib/comments"
@@ -283,15 +284,12 @@ export function CommentThread({ comment, top, onClose }: Props) {
           />
           <div className="flex items-center gap-1">
             {confirmingDelete ? (
-              <>
-                <span className="text-xs text-muted">{t("comment.deleteConfirm")}</span>
-                <Button variant="danger" size="sm" onClick={() => remove(comment.id)}>
-                  {t("comment.delete")}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
-                  {t("common.cancel")}
-                </Button>
-              </>
+              <InlineConfirm
+                question={t("comment.deleteConfirm")}
+                confirmLabel={t("comment.delete")}
+                onConfirm={() => remove(comment.id)}
+                onCancel={() => setConfirmingDelete(false)}
+              />
             ) : (
               <>
                 <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(true)}>

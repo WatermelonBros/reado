@@ -424,7 +424,9 @@ function SessionView({ root, session }: { root: string; session: Session }) {
             {/* Primary CTA: first press reviews the file; once it has findings a
                 second press runs a second-opinion pass that challenges them. */}
             <div className="mt-3">
-              <PrimaryButton
+              <Button
+                variant="primary"
+                className="w-full"
                 title={
                   reviewedCurrent ? t("guided.action.againHint") : t("guided.action.reviewHint")
                 }
@@ -434,7 +436,7 @@ function SessionView({ root, session }: { root: string; session: Session }) {
                 }}
               >
                 {reviewedCurrent ? t("guided.action.again") : t("guided.action.review")}
-              </PrimaryButton>
+              </Button>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <Action
@@ -815,31 +817,6 @@ function ProposalRow({ root, sessionId, p }: { root: string; sessionId: string; 
   )
 }
 
-/** A full-width primary call-to-action (one per surface — the obvious next step). */
-function PrimaryButton({
-  children,
-  onClick,
-  disabled,
-  title,
-}: {
-  children: React.ReactNode
-  onClick: () => void
-  disabled?: boolean
-  title?: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="w-full rounded-md bg-accent px-3 py-2 text-xs font-medium text-on-accent transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      {children}
-    </button>
-  )
-}
-
 /** A quiet secondary action chip — reads as a button (border + padding), not a
  *  link. `tone` lets a single chip carry meaning (accent for the positive one). */
 function Action({
@@ -853,24 +830,22 @@ function Action({
   onClick: () => void
   title?: string
   disabled?: boolean
-  tone?: "muted" | "accent" | "marker"
+  tone?: "muted" | "accent"
 }) {
-  const toneCls =
-    tone === "accent"
-      ? "text-accent hover:border-accent"
-      : tone === "marker"
-        ? "text-marker hover:border-marker"
-        : "text-muted hover:text-ink hover:border-line-strong"
+  // `secondary` already draws the chip; the only thing left to the call site is
+  // which one of the row reads as the positive action. The muted branch used to
+  // restate the variant's own colours, and a third "marker" tone had no caller.
   return (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
+      size="sm"
       onClick={onClick}
       title={title}
       disabled={disabled}
-      className={`rounded-md border border-line bg-surface px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${toneCls}`}
+      className={tone === "accent" ? "text-accent hover:border-accent" : undefined}
     >
       {children}
-    </button>
+    </Button>
   )
 }
 

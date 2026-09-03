@@ -12,11 +12,19 @@ import { type ButtonHTMLAttributes, cloneElement, isValidElement, type ReactNode
 import { cn } from "@/lib/cn"
 import { Tooltip } from "./Tooltip"
 
-export type IconButtonSize = "sm" | "md"
+export type IconButtonSize = "xs" | "sm" | "md" | "lg"
 
+/** The four sizes this atom covers, each measured from hand-rolled buttons it
+ *  replaced: `xs` for dense list rows that reveal actions on hover, `sm` for
+ *  panel headers and inline toolbars, `md` for the default, `lg` for the
+ *  activity bar's footer. (The rail's own nav buttons stay hand-rolled: they
+ *  layer a badge and a drop indicator over the glyph, which `icon` can't
+ *  express — widening this to take overlay children is its own change.) */
 const SIZE: Record<IconButtonSize, string> = {
+  xs: "h-5 w-5",
   sm: "h-6 w-6",
   md: "h-7 w-7",
+  lg: "h-10 w-10",
 }
 
 interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label"> {

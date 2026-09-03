@@ -30,4 +30,17 @@ describe("IconButton", () => {
       "true",
     )
   })
+
+  it("offers a size for each density the app actually uses", () => {
+    // The sizes were measured from the hand-rolled buttons this atom replaced;
+    // a missing step is how call sites end up overriding h-/w- by hand again.
+    const boxes: Record<string, string> = { xs: "h-5", sm: "h-6", md: "h-7", lg: "h-10" }
+    for (const [size, box] of Object.entries(boxes)) {
+      const { unmount } = render(
+        <IconButton size={size as "xs" | "sm" | "md" | "lg"} label={size} icon={<span />} />,
+      )
+      expect(screen.getByLabelText(size).className, size).toContain(box)
+      unmount()
+    }
+  })
 })

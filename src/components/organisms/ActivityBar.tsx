@@ -9,6 +9,7 @@
 import { useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
+import { IconButton } from "@/components/atoms/IconButton"
 import {
   BookmarkIcon,
   CoverageIcon,
@@ -221,34 +222,28 @@ export function ActivityBar() {
       </div>
 
       <div className="mt-2 flex flex-none flex-col items-center gap-1">
-        <button
-          type="button"
+        <IconButton
+          label={t("kb.title")}
+          icon={<DocsIcon className="h-[18px] w-[18px]" />}
           onClick={() => toggleDocs(true)}
-          title={t("kb.title")}
-          aria-label={t("kb.title")}
-          className="grid h-10 w-10 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
-        >
-          <DocsIcon className="h-[18px] w-[18px]" />
-        </button>
-        <button
-          type="button"
+          size="lg"
+          tooltipPlacement="right"
+        />
+        <IconButton
+          label={t("graph.title")}
+          icon={<GraphIcon className="h-[18px] w-[18px]" />}
           onClick={() => toggleGraph(true)}
-          title={t("graph.title")}
-          aria-label={t("graph.title")}
-          className="grid h-10 w-10 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
-        >
-          <GraphIcon className="h-[18px] w-[18px]" />
-        </button>
-        <button
-          type="button"
+          size="lg"
+          tooltipPlacement="right"
+        />
+        <IconButton
           data-tour="settings"
+          label={t("settings.title")}
+          icon={<SettingsIcon className="h-[18px] w-[18px]" />}
           onClick={() => toggleSettings(true)}
-          title={t("settings.title")}
-          aria-label={t("settings.title")}
-          className="grid h-10 w-10 place-items-center rounded-md text-faint transition-colors hover:bg-overlay hover:text-muted"
-        >
-          <SettingsIcon className="h-[18px] w-[18px]" />
-        </button>
+          size="lg"
+          tooltipPlacement="right"
+        />
       </div>
     </nav>
   )
