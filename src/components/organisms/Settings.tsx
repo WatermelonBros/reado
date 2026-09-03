@@ -17,9 +17,11 @@ import { Textarea } from "@/components/atoms/Textarea"
 import { type Locale, type MessageKey, useLocale } from "@/i18n"
 import { cliInstalled, installCli } from "@/lib/api"
 import { makeDefaultApp } from "@/lib/defaults"
+import { BUNDLED_FONTS, fontName, fontStack, isPresetFont, SYSTEM_FONTS } from "@/lib/fonts"
 import { logPath } from "@/lib/logger"
 import {
   FONT_SIZE_RANGE,
+  LETTER_SPACING_RANGE,
   LINE_HEIGHT_RANGE,
   type SettingsState,
   THEMES,
@@ -31,15 +33,6 @@ import {
 } from "@/lib/store"
 import { useTourGuide } from "@/lib/tour"
 import { checkForUpdates } from "@/lib/updater"
-
-const FONT_PRESETS = [
-  "JetBrains Mono",
-  "SF Mono",
-  "Cascadia Code",
-  "Fira Code",
-  "IBM Plex Mono",
-  "Menlo",
-]
 
 type TabId = "appearance" | "editor" | "interface" | "files" | "system"
 
@@ -168,17 +161,25 @@ function EditorTab() {
     <>
       <Field label={t("settings.codeFont")}>
         <Select
-          value={settings.codeFont}
+          value={isPresetFont(settings.codeFont) ? settings.codeFont : ""}
           onChange={(v) => settings.set({ codeFont: v })}
           options={[
-            { value: "", label: "Default" },
-            ...FONT_PRESETS.map((f) => ({
-              value: `"${f}", ui-monospace, monospace`,
-              label: f,
+            { value: "", label: t("settings.codeFontDefault") },
+            ...BUNDLED_FONTS.map((f) => ({ value: fontStack(f), label: f })),
+            ...SYSTEM_FONTS.map((f) => ({
+              value: fontStack(f),
+              label: t("settings.codeFontSystem", { font: f }),
             })),
           ]}
         />
       </Field>
+
+      {/* Any installed face, by name — the presets are the quick path, not the
+        limit. Empty means "use the preset above". */}
+      <CustomFont
+        value={isPresetFont(settings.codeFont) ? "" : settings.codeFont}
+        onCommit={(name) => settings.set({ codeFont: name ? fontStack(name) : "" })}
+      />
 
       <div className="grid grid-cols-2 gap-4">
         <NumberField
@@ -198,6 +199,16 @@ function EditorTab() {
           onCommit={(n) => settings.set({ lineHeight: n })}
         />
       </div>
+
+      <NumberField
+        label={t("settings.letterSpacing")}
+        value={settings.letterSpacing}
+        min={LETTER_SPACING_RANGE.min}
+        max={LETTER_SPACING_RANGE.max}
+        step={0.01}
+        onCommit={(n) => settings.set({ letterSpacing: n })}
+        hint={t("settings.letterSpacingHint")}
+      />
 
       <NumberField
         label={t("settings.ruler")}
@@ -477,6 +488,27 @@ function FilesTab() {
         </Section>
       )}
     </>
+  )
+}
+
+/** A font name typed by hand, committed on blur so the editor doesn't reflow on
+ *  every keystroke while a name is half-written. */
+function CustomFont({ value, onCommit }: { value: string; onCommit: (name: string) => void }) {
+  const { t } = useTranslation()
+  // Show the bare family name, not the CSS stack it is stored as.
+  const bare = fontName(value)
+  const [draft, setDraft] = useState(bare)
+  useEffect(() => setDraft(bare), [bare])
+  return (
+    <Field label={t("settings.codeFontCustom")}>
+      <Input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => onCommit(draft.trim())}
+        placeholder={t("settings.codeFontCustomPlaceholder")}
+      />
+      <span className="text-xs leading-relaxed text-faint">{t("settings.codeFontCustomHint")}</span>
+    </Field>
   )
 }
 

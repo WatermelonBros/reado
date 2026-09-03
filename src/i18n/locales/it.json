@@ -730,7 +730,14 @@
     "inlineBlame": "Blame in linea",
     "inlineBlameHint": "Annota la riga del cursore con chi l'ha modificata l'ultima volta, e quando.",
     "diffGutter": "Barra delle modifiche",
-    "diffGutterHint": "Segna nell'editor le righe diverse dall'ultimo commit."
+    "diffGutterHint": "Segna nell'editor le righe diverse dall'ultimo commit.",
+    "codeFontDefault": "Predefinito",
+    "codeFontSystem": "{font} (se installato)",
+    "codeFontCustom": "Font personalizzato",
+    "codeFontCustomHint": "Qualsiasi font monospaziato installato su questa macchina, per nome. Lascia vuoto per usare la scelta qui sopra.",
+    "codeFontCustomPlaceholder": "es. Comic Code",
+    "letterSpacing": "Spaziatura tra lettere",
+    "letterSpacingHint": "Spazio extra tra i caratteri. Una spaziatura più ampia aiuta in modo misurabile chi ha dislessia; 0 è la resa standard."
   },
   "defaultApp": {
     "title": "App predefinita per i file di testo",

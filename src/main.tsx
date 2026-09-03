@@ -4,6 +4,7 @@ import App from "./App"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { log } from "./lib/logger"
 import "./i18n" // initialize i18next before any component renders
+import "./lib/fonts" // ships the code faces the picker offers
 import "@xterm/xterm/css/xterm.css"
 import "./styles/app.css"
 

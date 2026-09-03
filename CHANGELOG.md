@@ -11,6 +11,27 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **Letter spacing for the code surface.** Wider spacing between characters is
+  the one typographic change with direct evidence behind it for dyslexic
+  readers — [Zorzi et al. (PNAS 2012)](https://www.pnas.org/doi/10.1073/pnas.1205566109)
+  found the benefit is specifically larger for them, not a general legibility
+  effect. Settings → Appearance, alongside font size and line height, applying
+  to every view that renders code. 0 is the standard rendering, so nothing moves
+  unless you ask.
+- **Name any font you have.** A custom-font field beside the presets, so a face
+  that suits you isn't limited to our list.
+
+### Fixed
+- **The code font picker actually changes the font now.** It offered six faces
+  by name and resolved them against what the OS had installed — but on a clean
+  machine only Menlo is there, so five of the six fell through to
+  `ui-monospace`, which is exactly where the default landed. Every option
+  rendered identically. Geist Mono, JetBrains Mono, Fira Code and IBM Plex Mono
+  now ship with the app (latin, regular + bold), and the faces we can't
+  redistribute are labelled as the conditional ones they are.
+
+
 ## [1.8.0] — 2026-09-03
 
 ### Added

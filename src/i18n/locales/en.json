@@ -730,7 +730,14 @@
     "inlineBlame": "Inline blame",
     "inlineBlameHint": "Annotate the line the cursor is on with who last changed it, and when.",
     "diffGutter": "Diff gutter",
-    "diffGutterHint": "Mark lines in the editor that differ from the last commit."
+    "diffGutterHint": "Mark lines in the editor that differ from the last commit.",
+    "codeFontDefault": "Default",
+    "codeFontSystem": "{font} (if installed)",
+    "codeFontCustom": "Custom font",
+    "codeFontCustomHint": "Any monospace font installed on this machine, by name. Leave empty to use the choice above.",
+    "codeFontCustomPlaceholder": "e.g. Comic Code",
+    "letterSpacing": "Letter spacing",
+    "letterSpacingHint": "Extra space between characters. Wider spacing measurably helps dyslexic readers; 0 is the standard rendering."
   },
   "defaultApp": {
     "title": "Default app for text files",

@@ -36,6 +36,7 @@ import { composeExplainPrompt, composeSymbolExplainPrompt } from "@/lib/review"
 import {
   clampRange,
   FONT_SIZE_RANGE,
+  LETTER_SPACING_RANGE,
   LINE_HEIGHT_RANGE,
   useEditorActions,
   useProject,
@@ -127,6 +128,7 @@ export function CodeView({
   // Reading controls (clamped numerics apply as CSS vars; the rest as compartments).
   const fontSize = useSettings((s) => clampRange(s.fontSize, FONT_SIZE_RANGE))
   const lineHeight = useSettings((s) => clampRange(s.lineHeight, LINE_HEIGHT_RANGE))
+  const letterSpacing = useSettings((s) => clampRange(s.letterSpacing, LETTER_SPACING_RANGE))
   const lineNumbersMode = useSettings((s) => s.lineNumbers)
   const activeLineMode = useSettings((s) => s.activeLine)
   const indentGuidesMode = useSettings((s) => s.indentGuides)
@@ -1014,6 +1016,7 @@ export function CodeView({
           "--code-font": codeFont || undefined,
           "--code-font-size": `${fontSize}px`,
           "--code-line-height": String(lineHeight),
+          "--code-letter-spacing": `${letterSpacing}em`,
           "--code-scroll-past-end": scrollPastEnd,
         } as React.CSSProperties
       }

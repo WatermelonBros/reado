@@ -28,6 +28,11 @@ export const THEMES: ThemeName[] = [
 /** Legible bounds for the editor's numeric reading controls. */
 export const FONT_SIZE_RANGE = { min: 10, max: 24, default: 13 } as const
 export const LINE_HEIGHT_RANGE = { min: 1.2, max: 2.2, default: 1.65 } as const
+/** Letter spacing in ems. 0 is today's rendering, so the default changes nothing.
+ *  The top of the range is deliberately generous: Zorzi et al. (PNAS 2012) found
+ *  reading gains for dyslexic readers at spacings that look extreme to everyone
+ *  else, and the reader is the one who knows. */
+export const LETTER_SPACING_RANGE = { min: 0, max: 0.4, default: 0 } as const
 
 /** Clamp `n` into a range; a non-finite value falls back to the range default,
  *  so a corrupted persisted value can never reach the editor. */
@@ -45,6 +50,8 @@ export interface SettingsState {
   codeFont: string
   /** Editor text size in px (clamped to FONT_SIZE_RANGE on read). */
   fontSize: number
+  /** Extra space between characters, in ems (clamped to LETTER_SPACING_RANGE). */
+  letterSpacing: number
   /** Editor line height as a unitless multiplier (clamped to LINE_HEIGHT_RANGE). */
   lineHeight: number
   /** Gutter line numbers: hidden, absolute, or relative to the caret. */
@@ -134,6 +141,7 @@ export const useSettings = create<SettingsState>()(
       codeFont: '"JetBrains Mono", ui-monospace, monospace',
       fontSize: 12,
       lineHeight: LINE_HEIGHT_RANGE.default,
+      letterSpacing: LETTER_SPACING_RANGE.default,
       lineNumbers: "on",
       activeLine: "both",
       indentGuides: "all",

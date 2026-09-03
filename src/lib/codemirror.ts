@@ -69,6 +69,9 @@ const editorTheme = EditorView.theme({
     fontFamily: "var(--code-font, var(--font-code))",
     fontSize: "var(--code-font-size, var(--text-md))",
     lineHeight: "var(--code-line-height)",
+    // Set on the scroller, not the content, so the gutters track the same
+    // metric as the text and the line numbers stay level with their lines.
+    letterSpacing: "var(--code-letter-spacing, 0)",
   },
   ".cm-content": {
     caretColor: "var(--accent)",
