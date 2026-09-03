@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-09-03
+
 ### Added
 - **A colour-vision setting.** Roughly 8% of men can't reliably tell red from
   green, and the diff — the surface a review tool is built around — said "added"
@@ -899,7 +901,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/WatermelonBros/reado/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/WatermelonBros/reado/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/WatermelonBros/reado/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/WatermelonBros/reado/compare/v1.7.0...v1.7.1
