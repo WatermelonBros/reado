@@ -840,6 +840,7 @@
     "resolvedBy": "Resolved by {agent}",
     "verifyPassed": "Verified: {cmd}",
     "verifyFailed": "Check failed: {cmd}",
+    "replyFailed": "Couldn't save your reply — it's still in the box",
     "noVerify": "Nothing checked this",
     "diffRef": "Diff {ref}"
   },

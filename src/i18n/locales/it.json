@@ -840,6 +840,7 @@
     "resolvedBy": "Risolto da {agent}",
     "verifyPassed": "Verificato: {cmd}",
     "verifyFailed": "Controllo fallito: {cmd}",
+    "replyFailed": "Risposta non salvata — è ancora nel riquadro",
     "noVerify": "Nessun controllo l'ha verificato",
     "diffRef": "Diff {ref}"
   },

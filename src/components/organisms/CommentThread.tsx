@@ -29,6 +29,7 @@ import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { dispatchToAgent } from "@/lib/agents"
 import type { Comment, CommentState, CommentType } from "@/lib/api"
 import { useComments } from "@/lib/comments"
+import { notifyError } from "@/lib/notice"
 import { composeSingleTaskPrompt } from "@/lib/review"
 
 const fmtTime = (ms: number) =>
@@ -66,8 +67,15 @@ export function CommentThread({ comment, top, onClose }: Props) {
 
   const sendReply = async () => {
     if (!replyText.trim()) return
-    await reply(comment.id, replyText.trim())
-    setReplyText("")
+    try {
+      await reply(comment.id, replyText.trim())
+      setReplyText("")
+    } catch (e) {
+      // Keep the draft — it is the only copy of what they wrote — and say so.
+      // Left uncaught this rejected into nowhere: the box emptied on success
+      // and the failure was silent.
+      notifyError("comment", t("comment.replyFailed"), e)
+    }
   }
 
   // "Send just this now": hand this one task to the agent through the hardened

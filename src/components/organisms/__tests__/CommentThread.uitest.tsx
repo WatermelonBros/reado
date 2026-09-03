@@ -6,7 +6,7 @@
 // builder (../../lib/review) are mocked so nothing real launches. i18n is stubbed
 // globally (t(k) => k), so labels are their message keys.
 
-import { render, screen } from "@testing-library/react"
+import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -22,6 +22,7 @@ vi.mock("../../../lib/review", () => ({ composeSingleTaskPrompt }))
 import { CommentThread } from "@/components/organisms/CommentThread"
 import type { Comment } from "@/lib/api"
 import { useComments } from "@/lib/comments"
+import { useNotice } from "@/lib/notice"
 
 function mkComment(over: Partial<Comment> = {}): Comment {
   return {
@@ -86,6 +87,24 @@ describe("CommentThread", () => {
 
     expect(reply).toHaveBeenCalledTimes(1)
     expect(reply).toHaveBeenCalledWith("c1", "looks good")
+  })
+
+  it("keeps the draft when the reply fails to save", async () => {
+    const { reply } = seed()
+    reply.mockRejectedValue(new Error("disk full"))
+    renderThread(mkComment())
+
+    const box = screen.getByPlaceholderText("comment.replyPlaceholder")
+    await userEvent.type(box, "took me a while to write this")
+    await userEvent.click(screen.getByRole("button", { name: "comment.reply" }))
+
+    // Clearing before the write lands throws the user's text away with nothing
+    // to recover it from…
+    await waitFor(() => expect(reply).toHaveBeenCalled())
+    expect(box).toHaveValue("took me a while to write this")
+    // …and a failure the user is never told about is the same as losing it.
+    await waitFor(() => expect(useNotice.getState().notices).toHaveLength(1))
+    expect(useNotice.getState().notices[0].kind).toBe("error")
   })
 
   it("the reply button is disabled until something is typed", async () => {
@@ -171,5 +190,123 @@ describe("CommentThread", () => {
     const { onClose } = renderThread(mkComment())
     await userEvent.click(screen.getByRole("button", { name: "settings.close" }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("what the anchor says", () => {
+  it("names a single line, and a range", () => {
+    seed()
+    renderThread(
+      mkComment({
+        anchor: { file: "a.ts", scope: "range", startLine: 4, endLine: 4 },
+      } as Partial<Comment>),
+    )
+    expect(screen.getByText("comment.line")).toBeInTheDocument()
+    cleanup()
+
+    renderThread(mkComment())
+    expect(screen.getByText("comment.lines")).toBeInTheDocument()
+  })
+
+  it("shows the scope for a file- or project-wide comment", () => {
+    seed()
+    renderThread(
+      mkComment({
+        anchor: { file: "a.ts", scope: "file", startLine: 0, endLine: 0 },
+      } as Partial<Comment>),
+    )
+    expect(screen.getByText("file")).toBeInTheDocument()
+
+    cleanup()
+    seed()
+    renderThread(
+      mkComment({
+        anchor: { file: "a.ts", scope: "project", startLine: 0, endLine: 0 },
+      } as Partial<Comment>),
+    )
+    expect(screen.getByText("project")).toBeInTheDocument()
+  })
+
+  it("flags an orphan, whose anchor no longer matches the code", () => {
+    seed()
+    renderThread(mkComment({ orphan: true }))
+    expect(screen.getByText("comment.orphan")).toBeInTheDocument()
+  })
+})
+
+describe("the provenance of a resolved task", () => {
+  it("names the agent and model, the diff, and what the check said", () => {
+    seed()
+    renderThread(
+      mkComment({
+        state: "done",
+        resolution: {
+          agent: "claude-code",
+          model: "opus",
+          diffRef: "abc1234",
+          verify: { cmd: "pnpm test", passed: true },
+        },
+      } as Partial<Comment>),
+    )
+    expect(screen.getByText("comment.resolvedBy")).toBeInTheDocument()
+    expect(screen.getByText("comment.diffRef")).toBeInTheDocument()
+    expect(screen.getByText("comment.verifyPassed")).toBeInTheDocument()
+  })
+
+  it("says a failed check failed, in the marker colour", () => {
+    seed()
+    renderThread(
+      mkComment({
+        state: "done",
+        resolution: { agent: "codex", verify: { cmd: "pnpm test", passed: false } },
+      } as Partial<Comment>),
+    )
+    expect(screen.getByText("comment.verifyFailed").className).toContain("text-marker")
+  })
+
+  it("is honest when nothing was verified", () => {
+    seed()
+    renderThread(mkComment({ state: "done", resolution: { agent: "codex" } } as Partial<Comment>))
+    expect(screen.getByText("comment.noVerify")).toBeInTheDocument()
+  })
+})
+
+describe("a blocked task", () => {
+  it("shows the agent's question and how many attempts it made", () => {
+    seed()
+    renderThread(
+      mkComment({
+        state: "blocked",
+        blockedReason: "which parser did you mean?",
+        attempts: 2,
+      } as Partial<Comment>),
+    )
+    expect(screen.getByText("which parser did you mean?")).toBeInTheDocument()
+    expect(screen.getByText("comment.attempts")).toBeInTheDocument()
+  })
+
+  it("falls back to a hint when the agent gave no reason", () => {
+    seed()
+    renderThread(mkComment({ state: "blocked" } as Partial<Comment>))
+    expect(screen.getByText("comment.blockedHint")).toBeInTheDocument()
+  })
+})
+
+describe("editing the root message", () => {
+  it("saves the edited body, trimmed", async () => {
+    const { patch } = seed()
+    renderThread(mkComment())
+    await userEvent.click(screen.getByRole("button", { name: "comment.edit" }))
+    const box = screen.getByDisplayValue("please fix the parser")
+    await userEvent.clear(box)
+    await userEvent.type(box, "  sharper wording  ")
+    await userEvent.click(screen.getByRole("button", { name: "editor.save" }))
+    expect(patch).toHaveBeenCalledWith("c1", { body: "sharper wording" })
+  })
+
+  it("offers the edit on the root message only", async () => {
+    seed()
+    renderThread(mkComment())
+    expect(screen.getAllByRole("button", { name: "comment.edit" })).toHaveLength(1)
   })
 })
