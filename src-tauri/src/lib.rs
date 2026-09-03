@@ -141,6 +141,7 @@ pub fn run() {
             git::git_status,
             git::git_refs,
             git::git_show_ref,
+            git::git_diff_base,
             git::git_diff_lines,
             git::git_working_diff_lines,
             git::git_file_hunks,

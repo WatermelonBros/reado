@@ -985,6 +985,11 @@ pub fn git_file_history(root: String, file: String) -> Vec<FileCommit> {
 /// The contents of a tracked file at a given ref (a branch, commit, or `HEAD`),
 /// for the on-demand diff view. Returns `None` when the file is absent there or
 /// git is unavailable. Output is verbatim (no trimming) so the diff is exact.
+///
+/// "Absent" and "no such ref" are the same answer here on purpose: a caller that
+/// wants the file's *bytes* at a ref (the PR reader) falls back to the working
+/// tree either way. A caller that wants a document to *diff against* wants
+/// `git_diff_base` instead.
 #[tauri::command]
 pub fn git_show_ref(root: String, file: String, base: String) -> Option<String> {
     let reference = if base.is_empty() { "HEAD" } else { &base };
@@ -995,11 +1000,46 @@ pub fn git_show_ref(root: String, file: String, base: String) -> Option<String> 
         .args(["show", &format!("{reference}:{file}")])
         .output()
         .ok()?;
-    if output.status.success() {
-        Some(String::from_utf8_lossy(&output.stdout).into_owned())
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// The document to diff a file against at `base` — a different question from
+/// "what are this file's bytes there", and it needs a different answer:
+///
+///   - `Some(text)` — the file is in that commit.
+///   - `Some("")`   — the commit is fine but the file isn't in it. The file was
+///                    added since the base, so its base is an empty document and
+///                    the diff reads as all-added. A new file deserves a green
+///                    diff, not "no base to compare against".
+///   - `None`       — the ref itself doesn't resolve (not a repo, no commits, a
+///                    base that no longer exists). Only then is there genuinely
+///                    nothing to diff against.
+#[tauri::command]
+pub fn git_diff_base(root: String, file: String, base: String) -> Option<String> {
+    let reference = if base.is_empty() {
+        "HEAD"
     } else {
-        None
-    }
+        base.as_str()
+    };
+    let exists = ref_exists(Path::new(&root), reference);
+    git_show_ref(root, file, base).or_else(|| exists.then(String::new))
+}
+
+/// Whether `reference` resolves to a commit in this repository.
+fn ref_exists(root: &Path, reference: &str) -> bool {
+    run_git_raw(
+        root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{reference}^{{commit}}"),
+        ],
+    )
+    .is_some()
 }
 
 /// Line ranges the working tree changes relative to HEAD, for the diff gutter.
@@ -1547,6 +1587,20 @@ mod review_grade_tests {
     }
 
     #[test]
+    fn a_patch_escaping_through_a_mid_path_dotdot_is_refused() {
+        // The prefix checks miss this one: the path starts with a harmless
+        // `src/`, and only the component scan catches the traversal.
+        let sneaky = "diff --git a/src/../../../.ssh/authorized_keys b/src/../../../.ssh/authorized_keys\n--- a/src/../../../.ssh/authorized_keys\n+++ b/src/../../../.ssh/authorized_keys\n@@ -1 +1 @@\n-x\n+y\n";
+        assert!(!patch_is_confined(sneaky));
+        // Windows separators are a traversal too.
+        let backslashed = "--- a/src\\..\\..\\evil\n+++ b/src\\..\\..\\evil\n";
+        assert!(!patch_is_confined(backslashed));
+        // A file legitimately named with dots is still fine.
+        let dotted = "--- a/src/..config/x.ts\n+++ b/src/..config/x.ts\n";
+        assert!(patch_is_confined(dotted));
+    }
+
+    #[test]
     fn a_new_file_patch_is_confined_despite_dev_null() {
         let created =
             "diff --git a/new.ts b/new.ts\n--- /dev/null\n+++ b/new.ts\n@@ -0,0 +1 @@\n+x\n";
@@ -1572,6 +1626,21 @@ mod review_grade_tests {
     #[test]
     fn a_file_without_markers_has_no_regions() {
         assert!(parse_conflicts("just code\n").is_empty());
+    }
+
+    #[test]
+    fn a_separator_outside_a_conflict_is_ordinary_text() {
+        // `=======` is a Markdown setext rule, an ASCII table edge, a changelog
+        // divider. Without the state guard the parser treats one as the start of
+        // "theirs" and reports a phantom region — which `git_resolve_conflict`
+        // would then happily rewrite the file from.
+        assert!(parse_conflicts("Title\n=======\nbody\n>>>>>>> nope\n").is_empty());
+
+        // A rule *before* a real conflict must not disturb it either.
+        let mixed = "Title\n=======\nintro\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\n";
+        let regions = parse_conflicts(mixed);
+        assert_eq!(regions.len(), 1);
+        assert_eq!(regions[0].start_line, 4);
     }
 
     #[test]
@@ -1619,5 +1688,111 @@ mod review_grade_tests {
     #[test]
     fn resolving_an_unknown_region_is_refused() {
         assert!(resolve_in(CONFLICT, 5, Side::Ours).is_none());
+    }
+
+    /// A repository with one committed file, for the `git_show_ref` cases below.
+    fn repo_with_one_commit() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let git = |args: &[&str]| {
+            let ok = command("git")
+                .arg("-C")
+                .arg(root)
+                .args(args)
+                .output()
+                .expect("git is available")
+                .status
+                .success();
+            assert!(ok, "git {args:?} failed");
+        };
+        git(&["init", "--initial-branch=main"]);
+        git(&["config", "user.email", "test@example.com"]);
+        git(&["config", "user.name", "Test"]);
+        std::fs::write(root.join("tracked.txt"), "one\ntwo\n").unwrap();
+        git(&["add", "tracked.txt"]);
+        git(&["commit", "-m", "first"]);
+        dir
+    }
+
+    #[test]
+    fn the_diff_base_of_a_committed_file_is_its_committed_contents() {
+        let dir = repo_with_one_commit();
+        let text = git_diff_base(
+            dir.path().to_string_lossy().into_owned(),
+            "tracked.txt".into(),
+            "HEAD".into(),
+        );
+        assert_eq!(text.as_deref(), Some("one\ntwo\n"));
+    }
+
+    #[test]
+    fn a_file_added_since_the_base_diffs_against_an_empty_base() {
+        // A brand-new file isn't in HEAD. That's not "no base to diff against" —
+        // it's a file whose every line is added, so the base is an empty document
+        // and the diff reads all-green.
+        let dir = repo_with_one_commit();
+        std::fs::write(dir.path().join("brand-new.txt"), "hello\n").unwrap();
+        let text = git_diff_base(
+            dir.path().to_string_lossy().into_owned(),
+            "brand-new.txt".into(),
+            "HEAD".into(),
+        );
+        assert_eq!(text.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn a_staged_new_file_also_diffs_against_an_empty_base() {
+        let dir = repo_with_one_commit();
+        std::fs::write(dir.path().join("staged.txt"), "hello\n").unwrap();
+        command("git")
+            .arg("-C")
+            .arg(dir.path())
+            .args(["add", "staged.txt"])
+            .output()
+            .unwrap();
+        let text = git_diff_base(
+            dir.path().to_string_lossy().into_owned(),
+            "staged.txt".into(),
+            "HEAD".into(),
+        );
+        assert_eq!(text.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn reading_a_file_absent_from_the_ref_still_reports_nothing() {
+        // git_show_ref keeps its old contract: the PR reader falls back to the
+        // working tree when the path isn't in the ref.
+        let dir = repo_with_one_commit();
+        std::fs::write(dir.path().join("brand-new.txt"), "hello\n").unwrap();
+        let text = git_show_ref(
+            dir.path().to_string_lossy().into_owned(),
+            "brand-new.txt".into(),
+            "HEAD".into(),
+        );
+        assert_eq!(text, None);
+    }
+
+    #[test]
+    fn a_base_that_does_not_resolve_has_no_contents_at_all() {
+        // Only here is there genuinely nothing to diff against.
+        let dir = repo_with_one_commit();
+        let text = git_diff_base(
+            dir.path().to_string_lossy().into_owned(),
+            "tracked.txt".into(),
+            "no-such-branch".into(),
+        );
+        assert_eq!(text, None);
+    }
+
+    #[test]
+    fn outside_a_repository_there_is_no_base() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "hello\n").unwrap();
+        let text = git_diff_base(
+            dir.path().to_string_lossy().into_owned(),
+            "a.txt".into(),
+            "HEAD".into(),
+        );
+        assert_eq!(text, None);
     }
 }

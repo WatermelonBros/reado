@@ -16,7 +16,7 @@ import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import { ChevronIcon } from "@/components/atoms/icons"
 import { HunkBar } from "@/components/molecules/HunkBar"
-import { getReadSnapshot, gitShowRef } from "@/lib/api"
+import { getReadSnapshot, gitDiffBase } from "@/lib/api"
 import { readoAppearance } from "@/lib/codemirror"
 import { languages } from "@/lib/languages"
 import { diffRuler } from "@/lib/overviewRuler"
@@ -47,7 +47,9 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
   useEffect(() => {
     let cancelled = false
     setHead(undefined)
-    const fetchBase = isDelta ? getReadSnapshot(root, relPath) : gitShowRef(root, relPath, base)
+    // `gitDiffBase`, not `gitShowRef`: a file added since the base is not "no
+    // base", it's an empty one — so a new file reads as an all-added diff.
+    const fetchBase = isDelta ? getReadSnapshot(root, relPath) : gitDiffBase(root, relPath, base)
     fetchBase.then((h) => !cancelled && setHead(h)).catch(() => !cancelled && setHead(null))
     return () => {
       cancelled = true
