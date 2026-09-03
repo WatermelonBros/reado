@@ -185,6 +185,7 @@ export function Palette() {
         project,
         settings,
         open,
+        close,
         toggleSettings,
         requestCompose: () => {
           useEditorActions.getState().requestCompose()
@@ -444,6 +445,9 @@ interface CommandCtx {
   project: ReturnType<typeof useProject.getState>
   settings: ReturnType<typeof useSettings.getState>
   open: (mode: "commands" | "files" | "search" | "symbols" | "wsymbols") => void
+  /** Dismiss the palette. Must be passed in: `commandRows` is module-level, so
+   *  a bare `close()` here would silently resolve to the DOM global. */
+  close: () => void
   toggleSettings: (open?: boolean) => void
   requestCompose: () => void
   requestExplain: () => void
@@ -459,6 +463,7 @@ function commandRows(
     project,
     settings,
     open,
+    close,
     toggleSettings,
     requestCompose,
     requestExplain,
