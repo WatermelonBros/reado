@@ -76,10 +76,26 @@ fn is_reasoning_store(path: &Path) -> bool {
     s.ends_with("/.reado/reasoning.jsonl")
 }
 
-/// True if `path` is the repo's `.git/HEAD` (rewritten when the branch changes).
-fn is_git_head(path: &Path) -> bool {
+/// True if `path` is git state whose change alters what `git status` would say.
+///
+/// `.git/HEAD` alone is not enough: it is rewritten by `git checkout`, but a
+/// commit on the current branch leaves it pointing at the same ref. What moves
+/// is the branch ref, the index, or `packed-refs` — so a commit made in the
+/// terminal left the UI showing the pre-commit working tree until something else
+/// happened to refresh it.
+fn is_git_state(path: &Path) -> bool {
     let s = path.to_string_lossy().replace('\\', "/");
-    s.ends_with("/.git/HEAD")
+    let Some((_, rest)) = s.split_once("/.git/") else {
+        return false;
+    };
+    // `refs/…` covers branches and tags; `logs/…` covers the reflog, which moves
+    // on every commit even when a ref is packed.
+    rest == "HEAD"
+        || rest == "index"
+        || rest == "packed-refs"
+        || rest == "MERGE_HEAD"
+        || rest.starts_with("refs/")
+        || rest.starts_with("logs/")
 }
 
 /// Convert an absolute path to a project-relative, forward-slashed string.
@@ -205,6 +221,7 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                     let mut comments_dirty = false;
                     let mut sessions_dirty = false;
                     let mut reasoning_dirty = false;
+                    let mut git_dirty = false;
 
                     // Reunite a delete+create into a rename: if exactly one removed
                     // file carried comments and exactly one file was created in this
@@ -274,12 +291,13 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                             reasoning_dirty = true;
                             continue;
                         }
-                        // `.git/HEAD` is rewritten on `git checkout`, so a change
-                        // there means the branch switched (even from the terminal);
-                        // tell the UI to refresh git state. `.git/` is otherwise
+                        // Git state moved under us — a commit, checkout, stage or
+                        // merge in the terminal. Flagged rather than emitted here,
+                        // because one commit touches several of these files and the
+                        // UI only needs to re-read once. `.git/` is otherwise
                         // ignored below.
-                        if is_git_head(&path) {
-                            let _ = app.emit("git-changed", ());
+                        if is_git_state(&path) {
+                            git_dirty = true;
                             continue;
                         }
                         if path.is_dir() || is_ignored(&matcher, &root, &path) {
@@ -303,6 +321,9 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                     if reasoning_dirty {
                         let _ = app.emit("reasoning-changed", ());
                     }
+                    if git_dirty {
+                        let _ = app.emit("git-changed", ());
+                    }
                 }
                 Err(RecvTimeoutError::Disconnected) => break,
             }
@@ -310,4 +331,38 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_commit_counts_as_git_state_not_just_a_checkout() {
+        // The bug this guards: `.git/HEAD` alone missed a commit on the current
+        // branch (HEAD still names the same ref), so the Source Control badge
+        // kept its pre-commit count until something else refreshed it.
+        assert!(is_git_state(Path::new("/p/.git/refs/heads/main")));
+        assert!(is_git_state(Path::new("/p/.git/logs/HEAD")));
+        assert!(is_git_state(Path::new("/p/.git/index")));
+        assert!(is_git_state(Path::new("/p/.git/packed-refs")));
+        assert!(is_git_state(Path::new("/p/.git/HEAD")));
+        assert!(is_git_state(Path::new("/p/.git/MERGE_HEAD")));
+    }
+
+    #[test]
+    fn git_internals_that_change_nothing_visible_are_ignored() {
+        // Object writes and lock files churn constantly; refreshing on them
+        // would be a `git status` per byte written during a fetch.
+        assert!(!is_git_state(Path::new("/p/.git/objects/ab/cdef")));
+        assert!(!is_git_state(Path::new("/p/.git/COMMIT_EDITMSG")));
+        assert!(!is_git_state(Path::new("/p/.git/config")));
+        assert!(!is_git_state(Path::new("/p/src/HEAD")));
+        assert!(!is_git_state(Path::new("/p/src/main.rs")));
+    }
+
+    #[test]
+    fn a_windows_path_is_recognised_too() {
+        assert!(is_git_state(Path::new(r"C:\p\.git\refs\heads\main")));
+    }
 }

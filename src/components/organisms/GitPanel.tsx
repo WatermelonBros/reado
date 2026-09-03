@@ -119,14 +119,19 @@ export function GitPanel() {
 
   useEffect(() => {
     refresh()
+    refreshInfo()
     // Keep the view fresh as the tree changes (cheap, debounced by interval).
     // Skip the poll while the window is hidden — nothing to refresh for.
+    // `refreshInfo` rides along so the rail's badge can't disagree with the list
+    // the panel is showing: the count and the list are the same fact, and only
+    // one of them being refreshed is how they drift apart.
     const id = window.setInterval(() => {
       if (document.hidden) return
       refresh()
+      refreshInfo()
     }, 4000)
     return () => clearInterval(id)
-  }, [refresh])
+  }, [refresh, refreshInfo])
 
   const staged = changes.filter((c) => c.staged)
   const unstaged = changes.filter((c) => !c.staged)

@@ -1151,10 +1151,9 @@ fn split_hunk_lines(
         // Offset of this line on the new side: context lines before it, plus one.
         let mut line = new_start;
         for (i, l) in body.iter().enumerate() {
-            if i == keep {
-                patch.push_str(l);
-                patch.push('\n');
-            } else if !l.starts_with('+') {
+            // Keep every context line, and exactly one of the additions: the
+            // other `+` lines are what this patch is deliberately leaving behind.
+            if i == keep || !l.starts_with('+') {
                 patch.push_str(l);
                 patch.push('\n');
             }

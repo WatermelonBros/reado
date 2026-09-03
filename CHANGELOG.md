@@ -105,6 +105,15 @@ commit.
   or contradicts one. Each route entry cites the document that moved it.
 
 ### Fixed
+- **The Source Control badge notices a commit.** The watcher treated only
+  `.git/HEAD` as a change worth re-reading, and a commit on the current branch
+  doesn't rewrite HEAD — it moves the branch ref. So committing from the
+  terminal left the rail badging the pre-commit count while the panel, which
+  polls, showed the truth: 24 changed files beside an empty list. The watcher
+  now also follows the branch refs, the index, the reflog and `packed-refs`
+  (coalesced, so one commit is one refresh), and the panel's poll refreshes the
+  count alongside the list so the two can't drift apart.
+
 - **Where the terminal is docked has one answer.** The terminal store kept its
   own `position` alongside the layout model's, so dragging the panel to another
   dock updated one and not the other, and the panel could render its
