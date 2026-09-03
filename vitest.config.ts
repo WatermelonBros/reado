@@ -16,7 +16,9 @@ export default defineConfig({
   test: {
     coverage: {
       provider: "v8", // fast, and AST-remapped to Istanbul-grade accuracy (Vitest ≥3.2)
-      reporter: ["text", "text-summary", "html", "lcov"],
+      // json-summary + json are what the PR-comment action reads (totals and
+      // per-file/changed-file detail); the rest are for humans.
+      reporter: ["text", "text-summary", "html", "lcov", "json-summary", "json"],
       reportsDirectory: "coverage",
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
@@ -28,10 +30,10 @@ export default defineConfig({
         "src/**/*.d.ts",
         "src/i18n/locales/**", // data
       ],
-      // No thresholds: coverage is a *report* you run locally (`pnpm
-      // test:coverage`) to see where you stand — it never gates CI. Per-OS runs
-      // hit slightly different code paths, so a hard floor flaked the build for
-      // no real signal. CI runs plain `pnpm test`.
+      // No thresholds: coverage is a *report* — locally via `pnpm
+      // test:coverage`, and as a PR comment from the Linux CI run — never a
+      // gate. Per-OS runs hit slightly different code paths, so a hard floor
+      // flaked the build for no real signal.
     },
     projects: [
       {

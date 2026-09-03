@@ -1,4 +1,7 @@
 # Continuous integration: lint, typecheck, test (incl. UI) and build-check.
+# Every job is gated on the paths it actually covers (see the `changes` job), so a
+# docs-only or markdown-only PR runs nothing but the cheap filter. Jobs skipped
+# this way still report to branch protection, so the required checks stay green.
 # UI + pure-crate tests run on macOS / Windows / Linux so the app is exercised on
 # every shipped OS. Full Tauri (fmt/clippy/build-deps) runs on Linux.
 # Cross-platform release artifacts are built separately in release.yml.
@@ -15,8 +18,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Which parts of the tree did this push / PR touch? Everything below keys off
+  # this, so unrelated jobs never boot. Anything not listed here (docs/**, *.md,
+  # plugin/**) matches nothing and skips the whole build.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared: &shared
+              - '.github/workflows/ci.yml'
+            frontend:
+              - *shared
+              - 'src/**'
+              - 'index.html'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig*.json'
+              - 'vite.config.ts'
+              - 'vitest.config.ts'
+              - 'biome.jsonc'
+            rust:
+              - *shared
+              - 'crates/**'
+              - 'src-tauri/**'
+              - 'scripts/bundle-cli.sh'
+
   lint:
     name: Lint (Biome)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +72,12 @@ jobs:
 
   frontend:
     name: Frontend (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      pull-requests: write # the coverage comment below
     strategy:
       fail-fast: false
       matrix:
@@ -47,11 +91,22 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test # logic + UI (happy-dom) — same on every OS; coverage is local-only (pnpm test:coverage)
+      # Same suite (logic + UI, happy-dom) on every OS; Linux additionally
+      # measures coverage so the PR gets a comment. Still no threshold — the
+      # comment is a report, not a gate.
+      - run: pnpm ${{ matrix.os == 'ubuntu-latest' && 'test:coverage' || 'test' }}
+      - name: Comment coverage on the PR
+        # Fork PRs get a read-only token and can't comment; skip rather than fail.
+        if: >-
+          matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: davelosert/vitest-coverage-report-action@v2
       - run: pnpm build
 
   rust-crates:
     name: Rust crates (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -73,6 +128,8 @@ jobs:
 
   rust-tauri:
     name: Rust Tauri (fmt + clippy + test, Linux)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
