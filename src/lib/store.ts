@@ -467,6 +467,9 @@ interface EditorActionsState {
   /** Show the active file as a diff against its committed version. */
   diffing: boolean
   setDiffing: (diffing: boolean) => void
+  /** Show the conflict resolver for the active file instead of the editor. */
+  resolvingConflict: boolean
+  setResolvingConflict: (on: boolean) => void
   /** The git ref the diff compares against (HEAD, a branch, or a commit hash). */
   diffBase: string
   setDiffBase: (base: string) => void
@@ -493,7 +496,11 @@ export const useEditorActions = create<EditorActionsState>()(
       dirty: false,
       setDirty: (dirty) => set({ dirty }),
       diffing: false,
-      setDiffing: (diffing) => set({ diffing }),
+      // Conflict resolution and the diff are two views of the same file; opening
+      // one closes the other rather than stacking them.
+      setDiffing: (diffing) => set({ diffing, resolvingConflict: false }),
+      resolvingConflict: false,
+      setResolvingConflict: (resolvingConflict) => set({ resolvingConflict, diffing: false }),
       diffBase: "HEAD",
       setDiffBase: (base) => set({ diffBase: base }),
       blame: false,

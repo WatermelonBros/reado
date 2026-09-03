@@ -12,6 +12,21 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **Stage a hunk, not a file.** A working tree usually holds one change worth
+  committing and three that aren't, and "stage this file" can't express that.
+  The diff now carries a strip of its hunks: stage, unstage or discard each on
+  its own — the same thing `git add -p` does, without the interactive prompt.
+  Where a hunk only adds lines, it can be broken down further and staged a line
+  at a time; where it replaces lines it can't, because a `+` inside a
+  replacement isn't a patch anyone means on its own. Discard asks first: it is
+  the one action git cannot undo.
+- **Merge conflicts are a question, not a marker-riddled file.** Opening a
+  conflicted file from Source Control now shows each conflicted region as both
+  sides side by side, labelled with the branch each came from, and takes one
+  answer: keep ours, keep theirs, or keep both. Resolving rewrites that region
+  and leaves the others alone, so five conflicts are five small decisions. Once
+  none are left, one button stages the file. "Abort" abandons the whole merge or
+  rebase — separate, destructive-styled, and it asks.
 - **Semantic search answers as you type.** "Where do we…?" went to the terminal
   agent, which meant a round trip through an LLM for a question a full-text
   index can usually answer in milliseconds — and no answer at all when no agent

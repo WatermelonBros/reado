@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { ChevronIcon } from "@/components/atoms/icons"
+import { HunkBar } from "@/components/molecules/HunkBar"
 import { getReadSnapshot, gitShowRef } from "@/lib/api"
 import { readoAppearance } from "@/lib/codemirror"
 import { languages } from "@/lib/languages"
@@ -36,6 +37,8 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
   const { codeFont } = useSettings()
   const { t } = useTranslation()
   const [head, setHead] = useState<string | null | undefined>(undefined)
+  // Bumped when a hunk moves, so the base is re-read and the diff redraws.
+  const [refresh, setRefresh] = useState(0)
   // Delta mode: diff against the last-read snapshot rather than a git ref.
   const isDelta = base === LAST_READ_BASE
 
@@ -48,7 +51,7 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
     return () => {
       cancelled = true
     }
-  }, [root, relPath, base, isDelta])
+  }, [root, relPath, base, isDelta, refresh])
 
   // "Mark reviewed": re-snapshot the current content as read and leave the delta.
   const markReviewed = () => {
@@ -81,14 +84,21 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
     )
   }
   return (
-    <div className="relative h-full w-full">
-      <DiffEditor
-        key={`${relPath}@${base}`}
-        path={relPath}
-        original={head}
-        text={text}
-        codeFont={codeFont}
-      />
+    <div className="relative flex h-full w-full flex-col">
+      {/* Per-hunk staging, only against HEAD: a delta (vs the last-read snapshot)
+        isn't a git diff, so there is nothing to stage from it. */}
+      {!isDelta && base === "HEAD" && (
+        <HunkBar relPath={relPath} onChanged={() => setRefresh((n) => n + 1)} />
+      )}
+      <div className="relative min-h-0 flex-1">
+        <DiffEditor
+          key={`${relPath}@${base}`}
+          path={relPath}
+          original={head}
+          text={text}
+          codeFont={codeFont}
+        />
+      </div>
       {isDelta && (
         <button
           type="button"

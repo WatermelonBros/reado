@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 /// Git status for an opened project.
@@ -1072,4 +1072,553 @@ fn parse_diff_hunks(diff: &str) -> Vec<[u32; 2]> {
         ranges.push([start, start + count - 1]);
     }
     ranges
+}
+
+// ---- Review-grade git: per-hunk staging and conflict resolution -------------
+//
+// Staging a whole file is the wrong granularity for review: a working tree
+// usually holds one change you want to commit and three you don't. These commands
+// operate on a single hunk by feeding `git apply` a patch containing only that
+// hunk — which is exactly what `git add -p` does, without the interactive prompt.
+
+/// One hunk of a file's diff, with a patch that applies just it.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Hunk {
+    /// Position in the file's diff, for stable identity across a refresh.
+    pub index: usize,
+    /// The `@@ … @@` line, for a compact label.
+    pub header: String,
+    /// A complete patch applying only this hunk (file headers + the hunk).
+    pub patch: String,
+    /// First line the hunk touches on the working-tree side, for scroll-to.
+    pub new_start: u32,
+    /// Added lines in the hunk.
+    pub added: u32,
+    /// Removed lines in the hunk.
+    pub removed: u32,
+    /// One patch per added line, when the hunk is unambiguous — no removals, so
+    /// keeping the context and one `+` line is a patch that means exactly what
+    /// it looks like. Empty for a hunk with removals, where a line in isolation
+    /// would be a guess about which side of a replacement you wanted.
+    pub line_patches: Vec<LinePatch>,
+}
+
+/// One added line of a hunk, with a patch that stages just it.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LinePatch {
+    /// 1-based line on the working-tree side.
+    pub line: u32,
+    /// The line's text, without the leading `+`.
+    pub text: String,
+    pub patch: String,
+}
+
+/// Split a pure-addition hunk into one patch per added line.
+///
+/// Only for hunks with no removals: there, every other `+` line can be dropped
+/// and the context kept, and the result is a patch that adds exactly one line.
+/// A hunk that also removes lines has no such reading — a `+` in a replacement
+/// belongs with the `-` it replaces — so those get nothing rather than something
+/// that might stage a half-change.
+fn split_hunk_lines(
+    header: &[&str],
+    hunk_header: &str,
+    body: &[String],
+    new_start: u32,
+) -> Vec<LinePatch> {
+    if body.iter().any(|l| l.starts_with('-')) {
+        return Vec::new();
+    }
+    let added: Vec<usize> = body
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.starts_with('+'))
+        .map(|(i, _)| i)
+        .collect();
+    // A hunk with one addition is already the finest grain there is.
+    if added.len() < 2 {
+        return Vec::new();
+    }
+
+    let mut out = Vec::new();
+    for &keep in &added {
+        let mut patch = header.join("\n");
+        patch.push('\n');
+        patch.push_str(hunk_header);
+        patch.push('\n');
+        // Offset of this line on the new side: context lines before it, plus one.
+        let mut line = new_start;
+        for (i, l) in body.iter().enumerate() {
+            if i == keep {
+                patch.push_str(l);
+                patch.push('\n');
+            } else if !l.starts_with('+') {
+                patch.push_str(l);
+                patch.push('\n');
+            }
+            if i < keep && !l.starts_with('-') {
+                line += 1;
+            }
+        }
+        out.push(LinePatch {
+            line,
+            text: body[keep][1..].to_string(),
+            patch,
+        });
+    }
+    out
+}
+
+/// Split a unified diff of a single file into one applicable patch per hunk.
+///
+/// Each patch repeats the file's header lines, because `git apply` needs to know
+/// which file it is patching — the hunk body alone is not a patch.
+fn split_hunks(diff: &str) -> Vec<Hunk> {
+    let mut lines = diff.lines().peekable();
+    let mut header = Vec::new();
+    // Everything before the first `@@` is the file header (diff/index/---/+++).
+    while let Some(line) = lines.peek() {
+        if line.starts_with("@@") {
+            break;
+        }
+        header.push(*line);
+        lines.next();
+    }
+    if header.is_empty() {
+        return Vec::new();
+    }
+
+    let mut hunks = Vec::new();
+    let mut current: Option<(String, Vec<String>)> = None;
+    let flush = |current: Option<(String, Vec<String>)>, hunks: &mut Vec<Hunk>, header: &[&str]| {
+        let Some((head, body)) = current else { return };
+        let added = body.iter().filter(|l| l.starts_with('+')).count() as u32;
+        let removed = body.iter().filter(|l| l.starts_with('-')).count() as u32;
+        let new_start = head
+            .split_whitespace()
+            .find(|t| t.starts_with('+'))
+            .and_then(|t| t[1..].split(',').next().and_then(|n| n.parse().ok()))
+            .unwrap_or(1);
+        let mut patch = header.join("\n");
+        patch.push('\n');
+        patch.push_str(&head);
+        patch.push('\n');
+        for line in &body {
+            patch.push_str(line);
+            patch.push('\n');
+        }
+        let line_patches = split_hunk_lines(header, &head, &body, new_start);
+        hunks.push(Hunk {
+            index: hunks.len(),
+            header: head,
+            patch,
+            new_start,
+            added,
+            removed,
+            line_patches,
+        });
+    };
+
+    for line in lines {
+        if line.starts_with("@@") {
+            flush(current.take(), &mut hunks, &header);
+            current = Some((line.to_string(), Vec::new()));
+        } else if let Some((_, body)) = current.as_mut() {
+            body.push(line.to_string());
+        }
+    }
+    flush(current.take(), &mut hunks, &header);
+    hunks
+}
+
+/// The hunks of one file's diff. `staged` reads the index against HEAD (what a
+/// commit would contain); otherwise the working tree against the index.
+#[tauri::command]
+pub fn git_file_hunks(root: String, file: String, staged: bool) -> Vec<Hunk> {
+    let mut args = vec!["diff", "--no-color", "--no-ext-diff", "--unified=3"];
+    if staged {
+        args.push("--cached");
+    }
+    args.push("--");
+    let path = Path::new(&root);
+    let mut all = args.clone();
+    all.push(&file);
+    match run_git_raw(path, &all) {
+        Some(diff) => split_hunks(&diff),
+        None => Vec::new(),
+    }
+}
+
+/// Whether a patch only touches paths inside the project.
+///
+/// `git apply` is run with the repo as its cwd and without `--unsafe-paths`, so
+/// it already refuses to write outside the working tree; this rejects the patch
+/// before it gets there, so a traversal attempt is an error we report rather than
+/// a git message we relay.
+fn patch_is_confined(patch: &str) -> bool {
+    patch
+        .lines()
+        .filter(|l| l.starts_with("--- ") || l.starts_with("+++ "))
+        .all(|l| {
+            let path = l[4..].trim();
+            let path = path
+                .strip_prefix("a/")
+                .or_else(|| path.strip_prefix("b/"))
+                .unwrap_or(path);
+            path == "/dev/null"
+                || (!path.starts_with('/')
+                    && !path.starts_with("..")
+                    && !path.split(['/', '\\']).any(|c| c == ".."))
+        })
+}
+
+/// Apply a patch with `git apply`.
+///
+/// `cached` targets the index (staging or unstaging); without it the patch hits
+/// the working tree (discarding). `reverse` undoes rather than applies, which is
+/// how unstage and discard are expressed — the same patch, run backwards.
+#[tauri::command]
+pub fn git_apply_patch(
+    root: String,
+    patch: String,
+    cached: bool,
+    reverse: bool,
+) -> Result<(), String> {
+    if !patch_is_confined(&patch) {
+        return Err("the patch names a path outside the project".into());
+    }
+    let mut cmd = command("git");
+    cmd.arg("-C").arg(&root).arg("apply");
+    if cached {
+        cmd.arg("--cached");
+    }
+    if reverse {
+        cmd.arg("--reverse");
+    }
+    // `--recount` tolerates a hunk whose line counts we recomputed; `-` reads the
+    // patch from stdin, so nothing is written to a temp file.
+    cmd.args(["--recount", "-"]);
+    cmd.stdin(std::process::Stdio::piped());
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    {
+        use std::io::Write;
+        let stdin = child.stdin.as_mut().ok_or("could not write the patch")?;
+        stdin
+            .write_all(patch.as_bytes())
+            .map_err(|e| e.to_string())?;
+    }
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        return Ok(());
+    }
+    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    Err(if err.is_empty() {
+        "git apply failed".into()
+    } else {
+        err
+    })
+}
+
+/// One conflicted region of a file: what each side wants, and where it sits.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictRegion {
+    pub index: usize,
+    /// 1-based line of the `<<<<<<<` marker.
+    pub start_line: u32,
+    /// 1-based line of the `>>>>>>>` marker.
+    pub end_line: u32,
+    /// The label after `<<<<<<<` (usually the current branch).
+    pub ours_label: String,
+    /// The label after `>>>>>>>` (the branch being merged).
+    pub theirs_label: String,
+    pub ours: String,
+    pub theirs: String,
+}
+
+/// Which side to keep when resolving a region.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    Ours,
+    Theirs,
+    /// Keep both, ours first — the common "these are independent additions".
+    Both,
+}
+
+/// Parse a file's conflict markers into regions.
+///
+/// Reado does not run the merge, so the markers on disk are the only record of
+/// what the two sides wanted; parsing them here means the view and the resolver
+/// agree on the region boundaries by construction.
+fn parse_conflicts(text: &str) -> Vec<ConflictRegion> {
+    let mut regions = Vec::new();
+    let mut ours: Vec<&str> = Vec::new();
+    let mut theirs: Vec<&str> = Vec::new();
+    let mut state = 0; // 0 = outside, 1 = in ours, 2 = in theirs
+    let mut start = 0u32;
+    let mut ours_label = String::new();
+
+    for (i, line) in text.lines().enumerate() {
+        let no = i as u32 + 1;
+        if let Some(label) = line.strip_prefix("<<<<<<< ") {
+            state = 1;
+            start = no;
+            ours_label = label.trim().to_string();
+            ours.clear();
+            theirs.clear();
+        } else if state == 1 && line.starts_with("=======") {
+            state = 2;
+        } else if state == 2 {
+            if let Some(label) = line.strip_prefix(">>>>>>> ") {
+                regions.push(ConflictRegion {
+                    index: regions.len(),
+                    start_line: start,
+                    end_line: no,
+                    ours_label: ours_label.clone(),
+                    theirs_label: label.trim().to_string(),
+                    ours: ours.join("\n"),
+                    theirs: theirs.join("\n"),
+                });
+                state = 0;
+            } else {
+                theirs.push(line);
+            }
+        } else if state == 1 {
+            ours.push(line);
+        }
+    }
+    regions
+}
+
+/// The conflicted regions of a file, or empty when it has none.
+#[tauri::command]
+pub fn git_conflict_regions(root: String, file: String) -> Result<Vec<ConflictRegion>, String> {
+    let path = Path::new(&root).join(&file);
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    Ok(parse_conflicts(&text))
+}
+
+/// Replace one conflicted region with the chosen side, markers and all.
+fn resolve_in(text: &str, index: usize, side: Side) -> Option<String> {
+    let regions = parse_conflicts(text);
+    let region = regions.get(index)?;
+    let lines: Vec<&str> = text.lines().collect();
+    let kept = match side {
+        Side::Ours => region.ours.clone(),
+        Side::Theirs => region.theirs.clone(),
+        Side::Both if region.ours.is_empty() => region.theirs.clone(),
+        Side::Both if region.theirs.is_empty() => region.ours.clone(),
+        Side::Both => format!("{}\n{}", region.ours, region.theirs),
+    };
+
+    let before = &lines[..(region.start_line as usize - 1)];
+    let after = &lines[region.end_line as usize..];
+    let mut out: Vec<&str> = before.to_vec();
+    if !kept.is_empty() {
+        out.extend(kept.lines());
+    }
+    out.extend_from_slice(after);
+    let mut joined = out.join("\n");
+    // Preserve the file's trailing newline: dropping it would show as a spurious
+    // one-line diff on every resolve.
+    if text.ends_with('\n') {
+        joined.push('\n');
+    }
+    Some(joined)
+}
+
+/// Resolve one conflicted region by keeping a side. The file is rewritten with
+/// that region's markers gone; the others are left for the next decision.
+#[tauri::command]
+pub fn git_resolve_conflict(
+    root: String,
+    file: String,
+    index: usize,
+    side: Side,
+) -> Result<(), String> {
+    let path = Path::new(&root).join(&file);
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let resolved = resolve_in(&text, index, side).ok_or("no such conflicted region")?;
+    std::fs::write(&path, resolved).map_err(|e| e.to_string())
+}
+
+/// Abandon an in-progress merge (`git merge --abort`).
+#[tauri::command]
+pub fn git_merge_abort(root: String) -> Result<(), String> {
+    run_git_checked(&root, &["merge", "--abort"])
+}
+
+/// Abandon an in-progress rebase (`git rebase --abort`).
+#[tauri::command]
+pub fn git_rebase_abort(root: String) -> Result<(), String> {
+    run_git_checked(&root, &["rebase", "--abort"])
+}
+
+#[cfg(test)]
+mod review_grade_tests {
+    use super::*;
+
+    const DIFF: &str = "diff --git a/src/a.ts b/src/a.ts\nindex 1111111..2222222 100644\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,3 +1,4 @@\n one\n+two\n three\n four\n@@ -10,2 +11,2 @@\n-old\n+new\n";
+
+    #[test]
+    fn splits_a_diff_into_one_applicable_patch_per_hunk() {
+        let hunks = split_hunks(DIFF);
+        assert_eq!(hunks.len(), 2);
+        // Each patch must carry the file headers: a hunk body alone is not a
+        // patch, and `git apply` would not know what it is patching.
+        for h in &hunks {
+            assert!(h.patch.starts_with("diff --git a/src/a.ts b/src/a.ts"));
+            assert!(h.patch.contains("--- a/src/a.ts"));
+            assert!(h.patch.contains("+++ b/src/a.ts"));
+        }
+        // …and only its own hunk.
+        assert!(hunks[0].patch.contains("+two"));
+        assert!(!hunks[0].patch.contains("+new"));
+        assert!(hunks[1].patch.contains("+new"));
+        assert!(!hunks[1].patch.contains("+two"));
+    }
+
+    #[test]
+    fn counts_a_hunks_additions_and_removals() {
+        let hunks = split_hunks(DIFF);
+        assert_eq!((hunks[0].added, hunks[0].removed), (1, 0));
+        assert_eq!((hunks[1].added, hunks[1].removed), (1, 1));
+        assert_eq!(hunks[0].new_start, 1);
+        assert_eq!(hunks[1].new_start, 11);
+    }
+
+    const ADDITIONS: &str = "diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,2 +1,4 @@\n one\n+two\n+three\n four\n";
+
+    #[test]
+    fn a_pure_addition_hunk_offers_one_patch_per_line() {
+        let hunks = split_hunks(ADDITIONS);
+        let lines = &hunks[0].line_patches;
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].text, "two");
+        assert_eq!(lines[1].text, "three");
+        // Each patch keeps the context and exactly one of the additions, so it
+        // means what it looks like.
+        assert!(lines[0].patch.contains("+two"));
+        assert!(!lines[0].patch.contains("+three"));
+        assert!(lines[0].patch.contains(" one"));
+        assert!(lines[1].patch.contains("+three"));
+        assert!(!lines[1].patch.contains("+two"));
+    }
+
+    #[test]
+    fn a_line_patch_reports_where_the_line_lands() {
+        let lines = &split_hunks(ADDITIONS)[0].line_patches;
+        assert_eq!(lines[0].line, 2);
+        assert_eq!(lines[1].line, 3);
+    }
+
+    #[test]
+    fn a_hunk_with_removals_offers_no_line_patches() {
+        // A `+` inside a replacement belongs with the `-` it replaces; staging
+        // it alone would be a guess about which side you wanted.
+        let hunks = split_hunks(DIFF);
+        assert!(hunks[1].line_patches.is_empty());
+    }
+
+    #[test]
+    fn a_single_addition_needs_no_finer_grain() {
+        let one = "diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,1 +1,2 @@\n one\n+two\n";
+        assert!(split_hunks(one)[0].line_patches.is_empty());
+    }
+
+    #[test]
+    fn an_empty_diff_has_no_hunks() {
+        assert!(split_hunks("").is_empty());
+        assert!(split_hunks("diff --git a/x b/x\n").is_empty());
+    }
+
+    #[test]
+    fn a_patch_escaping_the_project_is_refused() {
+        let escape = "diff --git a/../../etc/passwd b/../../etc/passwd\n--- a/../../etc/passwd\n+++ b/../../etc/passwd\n@@ -1 +1 @@\n-x\n+y\n";
+        assert!(!patch_is_confined(escape));
+        let absolute = "--- /etc/passwd\n+++ /etc/passwd\n";
+        assert!(!patch_is_confined(absolute));
+        assert!(patch_is_confined(DIFF));
+    }
+
+    #[test]
+    fn a_new_file_patch_is_confined_despite_dev_null() {
+        let created =
+            "diff --git a/new.ts b/new.ts\n--- /dev/null\n+++ b/new.ts\n@@ -0,0 +1 @@\n+x\n";
+        assert!(patch_is_confined(created));
+    }
+
+    const CONFLICT: &str =
+        "before\n<<<<<<< HEAD\nours line\n=======\ntheirs line\n>>>>>>> feature\nafter\n";
+
+    #[test]
+    fn parses_a_conflict_region_with_both_sides_and_their_labels() {
+        let regions = parse_conflicts(CONFLICT);
+        assert_eq!(regions.len(), 1);
+        let r = &regions[0];
+        assert_eq!(r.start_line, 2);
+        assert_eq!(r.end_line, 6);
+        assert_eq!(r.ours_label, "HEAD");
+        assert_eq!(r.theirs_label, "feature");
+        assert_eq!(r.ours, "ours line");
+        assert_eq!(r.theirs, "theirs line");
+    }
+
+    #[test]
+    fn a_file_without_markers_has_no_regions() {
+        assert!(parse_conflicts("just code\n").is_empty());
+    }
+
+    #[test]
+    fn parses_several_regions_independently() {
+        let two = format!("{CONFLICT}{CONFLICT}");
+        let regions = parse_conflicts(&two);
+        assert_eq!(regions.len(), 2);
+        assert_eq!(regions[1].index, 1);
+    }
+
+    #[test]
+    fn resolving_keeps_the_chosen_side_and_drops_the_markers() {
+        let ours = resolve_in(CONFLICT, 0, Side::Ours).unwrap();
+        assert_eq!(ours, "before\nours line\nafter\n");
+        let theirs = resolve_in(CONFLICT, 0, Side::Theirs).unwrap();
+        assert_eq!(theirs, "before\ntheirs line\nafter\n");
+        let both = resolve_in(CONFLICT, 0, Side::Both).unwrap();
+        assert_eq!(both, "before\nours line\ntheirs line\nafter\n");
+    }
+
+    #[test]
+    fn resolving_one_region_leaves_the_others_conflicted() {
+        let two = format!("{CONFLICT}{CONFLICT}");
+        let resolved = resolve_in(&two, 0, Side::Ours).unwrap();
+        assert_eq!(
+            parse_conflicts(&resolved).len(),
+            1,
+            "the second still stands"
+        );
+    }
+
+    #[test]
+    fn resolving_preserves_the_trailing_newline() {
+        let without = "a\n<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> b";
+        assert!(!resolve_in(without, 0, Side::Ours).unwrap().ends_with('\n'));
+        assert!(resolve_in(CONFLICT, 0, Side::Ours).unwrap().ends_with('\n'));
+    }
+
+    #[test]
+    fn keeping_both_of_an_empty_side_does_not_add_a_blank_line() {
+        let empty_ours = "a\n<<<<<<< HEAD\n=======\ny\n>>>>>>> b\n";
+        assert_eq!(resolve_in(empty_ours, 0, Side::Both).unwrap(), "a\ny\n");
+    }
+
+    #[test]
+    fn resolving_an_unknown_region_is_refused() {
+        assert!(resolve_in(CONFLICT, 5, Side::Ours).is_none());
+    }
 }

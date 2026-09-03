@@ -18,6 +18,7 @@ import { Badge } from "@/components/atoms/Badge"
 import { Button } from "@/components/atoms/Button"
 import { DocsIcon, EditIcon } from "@/components/atoms/icons"
 import { Welcome } from "@/components/molecules/Welcome"
+import { ConflictView } from "@/components/organisms/ConflictView"
 import { DiffView } from "@/components/organisms/DiffView"
 import { ImageView } from "@/components/organisms/ImageView"
 import { PdfView } from "@/components/organisms/PdfView"
@@ -42,6 +43,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   const archived = useComments((s) => s.archived)
   const reanchoringId = useComments((s) => s.reanchoringId)
   const diffing = useEditorActions((s) => s.diffing)
+  const resolvingConflict = useEditorActions((s) => s.resolvingConflict)
   const { wrap, codeFont, focusMode, renderWhitespace } = useSettings()
   const showResolvedComments = useSettings((s) => s.showResolvedComments)
   // The comments shown inline: open ones always; resolved (done) ones only when
@@ -264,6 +266,12 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
         )}
       </div>
     )
+  }
+
+  // A conflicted file is a question before it is code: resolve the regions
+  // first, then read it.
+  if (resolvingConflict) {
+    return <ConflictView key={relPath} relPath={relPath} />
   }
 
   if (diffing) {

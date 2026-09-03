@@ -112,6 +112,64 @@ export const semanticReindexFile = (root: string, file: string) =>
 export const semanticQuery = (root: string, q: string) =>
   invoke<SemanticHit[]>("semantic_query", { root, q })
 
+/** One added line of a hunk, with a patch that stages just it. */
+export interface LinePatch {
+  line: number
+  text: string
+  patch: string
+}
+
+/** One hunk of a file's diff, with a patch that applies just it. */
+export interface Hunk {
+  index: number
+  header: string
+  patch: string
+  newStart: number
+  added: number
+  removed: number
+  /** Per-line patches, when the hunk is unambiguous (no removals). Empty
+   *  otherwise: a `+` inside a replacement can't be staged on its own. */
+  linePatches: LinePatch[]
+}
+
+/** The hunks of a file's diff. `staged` reads the index against HEAD. */
+export const gitFileHunks = (root: string, file: string, staged: boolean) =>
+  invoke<Hunk[]>("git_file_hunks", { root, file, staged })
+
+/** Apply a patch. `cached` targets the index; `reverse` undoes it — which is how
+ *  unstage (cached+reverse) and discard (reverse) are expressed. */
+export const gitApplyPatch = (root: string, patch: string, cached: boolean, reverse: boolean) =>
+  invoke<void>("git_apply_patch", { root, patch, cached, reverse })
+
+/** One conflicted region: what each side wants, and where it sits. */
+export interface ConflictRegion {
+  index: number
+  startLine: number
+  endLine: number
+  oursLabel: string
+  theirsLabel: string
+  ours: string
+  theirs: string
+}
+
+/** The conflicted regions of a file, or empty when it has none. */
+export const gitConflictRegions = (root: string, file: string) =>
+  invoke<ConflictRegion[]>("git_conflict_regions", { root, file })
+
+/** Resolve one region by keeping a side; the file is rewritten without its markers. */
+export const gitResolveConflict = (
+  root: string,
+  file: string,
+  index: number,
+  side: "ours" | "theirs" | "both",
+) => invoke<void>("git_resolve_conflict", { root, file, index, side })
+
+/** Abandon an in-progress merge. */
+export const gitMergeAbort = (root: string) => invoke<void>("git_merge_abort", { root })
+
+/** Abandon an in-progress rebase. */
+export const gitRebaseAbort = (root: string) => invoke<void>("git_rebase_abort", { root })
+
 /** Line ranges the working tree changes vs HEAD — the diff gutter's input. */
 export const gitWorkingDiffLines = (root: string, file: string) =>
   invoke<Array<[number, number]>>("git_working_diff_lines", { root, file })
