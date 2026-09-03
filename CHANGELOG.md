@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-09-03
+
 ### Added
 - **Stage a hunk, not a file.** A working tree usually holds one change worth
   committing and three that aren't, and "stage this file" can't express that.
@@ -139,6 +141,8 @@ commit.
   listens on the machine's LAN address by default, or one you choose. Optional
   mDNS advertisement lets a paired phone find the desk again without a new QR
   (builds with `--features mdns`; the announcement carries the address only).
+  **Phones paired before this update must pair again, once** — there was nothing
+  persisted to carry across, and from now on a pairing survives restarts.
 - **AI tasks have an honest state, and can be cancelled.** Synopsis, Q&A,
   semantic search, pre-review and AI tours each re-implemented the same
   hand-rolled poll loop, so a slow agent, a closed modal and a malformed result
@@ -788,7 +792,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/WatermelonBros/reado/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/WatermelonBros/reado/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/WatermelonBros/reado/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/WatermelonBros/reado/compare/v1.6.2...v1.7.0

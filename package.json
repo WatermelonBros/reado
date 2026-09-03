@@ -1,7 +1,7 @@
 {
   "name": "reado",
   "private": true,
-  "version": "1.7.2",
+  "version": "1.8.0",
   "type": "module",
   "description": "Reado \u2014 a calm, read-first code IDE where comments are durable, AI-resolvable artifacts.",
   "license": "MIT",
