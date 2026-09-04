@@ -311,9 +311,16 @@ export interface GitRefs {
 /** Local branches and recent commits, for the diff base picker. */
 export const gitRefs = (root: string) => invoke<GitRefs>("git_refs", { root })
 
-/** A tracked file's contents at a ref (branch/commit/HEAD), for the diff view. */
+/** A tracked file's contents at a ref (branch/commit/HEAD). Null when the file
+ *  isn't in that ref — the caller reads the working tree instead. */
 export const gitShowRef = (root: string, file: string, base: string) =>
   invoke<string | null>("git_show_ref", { root, file, base })
+
+/** The document to diff a file against at `base`. Empty when the ref exists but
+ *  the file doesn't — a file added since the base, whose diff is all-added.
+ *  Null only when the ref itself doesn't resolve. */
+export const gitDiffBase = (root: string, file: string, base: string) =>
+  invoke<string | null>("git_diff_base", { root, file, base })
 
 /** Head-side line ranges (1-based, inclusive) a file changed across `base...head`
  *  — the lines a PR touched, for inline change markers. */

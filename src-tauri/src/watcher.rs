@@ -338,6 +338,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn archiving_a_comment_is_a_comment_change() {
+        // Resolving a comment writes under `archive/`, not `comments/` — miss
+        // it and the panel keeps showing the stale set.
+        assert!(is_comment_store(Path::new("/p/.reado/comments/c1.md")));
+        assert!(is_comment_store(Path::new("/p/.reado/archive/c1.md")));
+        assert!(!is_comment_store(Path::new("/p/src/a.ts")));
+    }
+
+    #[test]
     fn a_commit_counts_as_git_state_not_just_a_checkout() {
         // The bug this guards: `.git/HEAD` alone missed a commit on the current
         // branch (HEAD still names the same ref), so the Source Control badge

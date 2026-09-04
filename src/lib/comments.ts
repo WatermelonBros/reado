@@ -30,9 +30,11 @@ import {
 export function toRelative(root: string, path: string): string {
   // Compare against root with a trailing separator so a sibling dir sharing a
   // string prefix (e.g. `/home/me/proj-backup` vs root `/home/me/proj`) doesn't
-  // false-match. Paths outside root fall through unchanged.
-  const base = root.endsWith("/") || root.endsWith("\\") ? root : `${root}/`
-  const rel = path.startsWith(base) ? path.slice(base.length) : path
+  // false-match. Either separator counts — a Windows root is backslashed but
+  // the guard must still fire. Paths outside root fall through unchanged.
+  const bare = root.replace(/[\\/]+$/, "")
+  const sep = [`${bare}/`, `${bare}\\`].find((b) => path.startsWith(b))
+  const rel = sep ? path.slice(sep.length) : path
   return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/")
 }
 

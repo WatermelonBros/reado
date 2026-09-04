@@ -4,7 +4,7 @@
 // runs the matching clipboard / selection op and dismisses the menu. The Tauri
 // clipboard plugin is the only edge mocked.
 
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -123,6 +123,24 @@ describe("EditMenu", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "edit.selectAll" }))
     expect(select).toHaveBeenCalled()
     expect(screen.queryByRole("menu")).not.toBeInTheDocument()
+  })
+
+  it("Paste replaces the selected text rather than wrapping it", async () => {
+    readText.mockResolvedValue("XY")
+    render(
+      <>
+        <input aria-label="field" defaultValue="abcdefg" />
+        <EditMenu />
+      </>,
+    )
+    const field = screen.getByLabelText("field") as HTMLInputElement
+    field.setSelectionRange(2, 5)
+    rightClick(field)
+    await userEvent.click(screen.getByRole("menuitem", { name: "edit.paste" }))
+    // Swapping the two slice bounds duplicates the selection around the paste,
+    // and a collapsed caret — the only case covered before — can't tell.
+    await waitFor(() => expect(field.value).toBe("abXYfg"))
+    expect(field.selectionStart).toBe(4)
   })
 
   it("Paste reads the clipboard and closes the menu", async () => {

@@ -692,7 +692,66 @@ pub fn allow_project_assets(app: tauri::AppHandle, root: String) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, FileContent, MAX_TEXT_BYTES};
+    use super::{base64_encode, create_file, list_dir, FileContent, MAX_TEXT_BYTES};
+
+    #[test]
+    fn an_escaping_create_leaves_no_directories_outside_the_project() {
+        // The refusal alone isn't the property: `create_dir_all` runs before
+        // the final confinement check, so without the ancestor guard the
+        // directories are made outside the project and only the *file* is
+        // refused.
+        let proj = tempfile::TempDir::new().unwrap();
+        let root = proj.path().join("proj");
+        std::fs::create_dir(&root).unwrap();
+
+        let out = create_file(
+            root.to_string_lossy().into_owned(),
+            "../escaped/nested/x.txt".into(),
+        );
+        assert!(out.is_err());
+        assert!(!proj.path().join("escaped").exists());
+    }
+
+    #[test]
+    fn resolves_a_parent_relative_import() {
+        // `../` is at least as common as `./` and had no coverage at all.
+        let proj = tempfile::TempDir::new().unwrap();
+        let root = proj.path();
+        std::fs::create_dir_all(root.join("src/a")).unwrap();
+        std::fs::write(root.join("src/c.ts"), "").unwrap();
+        let out = super::resolve_import(
+            root.to_string_lossy().into_owned(),
+            root.join("src/a/b.ts").to_string_lossy().into_owned(),
+            "../c".into(),
+        )
+        .unwrap();
+        assert!(
+            out.as_deref().is_some_and(|p| p.ends_with("src/c.ts")),
+            "expected src/c.ts, got {out:?}"
+        );
+    }
+
+    #[test]
+    fn directories_sort_before_files() {
+        let proj = tempfile::TempDir::new().unwrap();
+        let root = proj.path();
+        std::fs::create_dir(root.join("z_dir")).unwrap();
+        std::fs::write(root.join("a.txt"), "").unwrap();
+        let entries = list_dir(
+            root.to_string_lossy().into_owned(),
+            root.to_string_lossy().into_owned(),
+            false,
+            vec![],
+        )
+        .unwrap();
+        // Folders first regardless of name — the tree's whole shape depends on
+        // it, and every other test here only checks membership.
+        assert!(
+            entries[0].is_dir,
+            "expected z_dir first, got {:?}",
+            entries[0]
+        );
+    }
 
     /// The editor saves by project-relative path while reading by absolute one,
     /// so both must land on the same file — and neither may be resolved against

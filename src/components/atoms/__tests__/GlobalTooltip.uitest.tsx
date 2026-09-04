@@ -42,6 +42,56 @@ describe("GlobalTooltip", () => {
     expect(button).not.toHaveAttribute("title")
   })
 
+  it("keeps the bubble inside the window at either edge", () => {
+    const at = (left: number, width: number) =>
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+        left,
+        width,
+        right: left + width,
+        top: 10,
+        bottom: 30,
+        height: 20,
+        x: left,
+        y: 10,
+        toJSON: () => ({}),
+      } as DOMRect)
+
+    const show = () => {
+      const button = screen.getByRole("button", { name: "Hi" })
+      fireEvent.mouseOver(button)
+      act(() => {
+        vi.advanceTimersByTime(SHOW_DELAY)
+      })
+      return screen.getByRole("tooltip") as HTMLElement
+    }
+
+    // The activity bar and the title-bar controls sit hard against both edges,
+    // and they are exactly where this legacy tooltip is still used.
+    at(0, 20)
+    const { unmount } = render(
+      <>
+        <GlobalTooltip />
+        <button type="button" title="Hello">
+          Hi
+        </button>
+      </>,
+    )
+    expect(Number.parseFloat(show().style.left)).toBeGreaterThanOrEqual(60)
+    unmount()
+
+    at(window.innerWidth - 20, 20)
+    render(
+      <>
+        <GlobalTooltip />
+        <button type="button" title="Hello">
+          Hi
+        </button>
+      </>,
+    )
+    expect(Number.parseFloat(show().style.left)).toBeLessThanOrEqual(window.innerWidth - 60)
+    vi.restoreAllMocks()
+  })
+
   it("hides the bubble and restores the title on mouseOut", () => {
     render(
       <>

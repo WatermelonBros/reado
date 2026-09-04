@@ -108,6 +108,21 @@ describe("RecentProjects", () => {
     expect(openProjectHere).toHaveBeenCalledWith("/home/me/beta")
   })
 
+  it("ArrowDown at the bottom doesn't cost the next ArrowUp", () => {
+    useRecents.setState({
+      projects: [rp("/home/me/alpha", "alpha"), rp("/home/me/beta", "beta")],
+    })
+    render(<RecentProjects />)
+    fireEvent.keyDown(window, { key: "ArrowDown" }) // → alpha
+    fireEvent.keyDown(window, { key: "ArrowDown" }) // → beta (the last)
+    fireEvent.keyDown(window, { key: "ArrowDown" }) // stays on beta
+    // If the bound lets the raw index run one past the end, the highlight looks
+    // right but the first ArrowUp is swallowed getting back in range.
+    fireEvent.keyDown(window, { key: "ArrowUp" })
+    fireEvent.keyDown(window, { key: "Enter" })
+    expect(openProjectHere).toHaveBeenCalledWith("/home/me/alpha")
+  })
+
   it("the open-folder button triggers the folder picker/open flow", async () => {
     render(<RecentProjects />)
     await userEvent.click(screen.getByRole("button", { name: /recents\.open/ }))

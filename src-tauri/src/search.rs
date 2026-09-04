@@ -238,6 +238,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_blank_query_searches_nothing() {
+        // Clearing the search box must not fire `rg ""`, which matches every
+        // line of every file and walks the whole tree.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "anything\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        for q in ["", "   ", "\t\n"] {
+            let hits = search_text(root.clone(), q.into(), vec![], false, false, false).unwrap();
+            assert!(
+                hits.is_empty(),
+                "blank query {q:?} returned {} hits",
+                hits.len()
+            );
+        }
+    }
+
+    #[test]
     fn replace_text_rewrites_literal_occurrences() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "foo bar foo\n").unwrap();

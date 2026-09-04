@@ -42,3 +42,15 @@ describe("groupSpecs", () => {
     expect(groupSpecs(["src/a.ts", "docs/readme.md"])).toEqual([])
   })
 })
+
+describe("document order within a group", () => {
+  it("puts a document the ordering doesn't know about last, not first", () => {
+    const groups = groupSpecs([
+      "openspec/changes/auth/notes.md",
+      "openspec/changes/auth/proposal.md",
+    ])
+    // An unknown filename ranking as -1 would push it ahead of proposal.md,
+    // which is the document the reader is meant to start from.
+    expect(groups[0].items.map((i) => i.label)).toEqual(["proposal.md", "notes.md"])
+  })
+})

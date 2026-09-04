@@ -153,16 +153,22 @@ describe("useProject — tabs", () => {
   })
   it("setActive / setShowHidden / bumpTree / collapseTree", () => {
     P().open("a.ts")
+    P().open("b.ts")
     P().setActive("a.ts")
     expect(P().active).toBe("a.ts")
     P().setShowHidden(true)
     expect(P().showHidden).toBe(true)
+    // It mirrors into settings, which is what survives a restart.
+    expect(useSettings.getState().showHidden).toBe(true)
     const t = P().treeNonce
     P().bumpTree()
     expect(P().treeNonce).toBe(t + 1)
     const c = P().collapseNonce
+    useProject.setState({ expandedDirs: ["src", "src/lib"] })
     P().collapseTree()
     expect(P().collapseNonce).toBe(c + 1)
+    // The nonce only asks the tree to redraw — the collapse itself is the list.
+    expect(P().expandedDirs).toEqual([])
   })
 })
 
@@ -178,11 +184,48 @@ describe("useProject — history & split", () => {
     P().goForward() // at the end → no-op
     expect(P().active).toBe("b.ts")
   })
+  it("opening after a goBack drops the forward branch", () => {
+    P().open("a.ts")
+    P().open("b.ts")
+    P().open("c.ts")
+    P().goBack()
+    P().goBack()
+    P().open("d.ts")
+    // Without the truncation, Forward would walk on to b/c — a history that
+    // never happened.
+    expect(P().navStack.map((e) => e.path)).toEqual(["a.ts", "d.ts"])
+    P().goForward()
+    expect(P().active).toBe("d.ts")
+  })
+
   it("goBack is a no-op at the start", () => {
     P().open("a.ts")
     P().goBack()
     expect(P().active).toBe("a.ts")
   })
+  it("closing the active tab falls back to the last tab, not the leftmost", () => {
+    P().open("a.ts")
+    P().open("b.ts")
+    P().open("c.ts")
+    P().open("d.ts")
+    P().setActive("b.ts")
+    P().close("b.ts")
+    // Four tabs, closing the second: "the last one" and "the one to the right"
+    // are different answers here, and the product picks the last.
+    expect(P().active).toBe("d.ts")
+  })
+
+  it("reopenClosed brings back the most recently closed tab, not the oldest", () => {
+    P().open("a.ts")
+    P().open("b.ts")
+    P().close("a.ts")
+    P().close("b.ts")
+    P().reopenClosed()
+    expect(P().active).toBe("b.ts")
+    P().reopenClosed()
+    expect(P().active).toBe("a.ts")
+  })
+
   it("openSplit uses the active path by default; swap/close work", () => {
     P().open("a.ts")
     P().openSplit()
@@ -330,6 +373,12 @@ describe("useCursor / useRecents / useSessions", () => {
     useRecents.getState().remove("/a")
     expect(useRecents.getState().projects.find((p) => p.path === "/a")).toBeUndefined()
   })
+  it("useRecents keeps at most 30 projects", () => {
+    for (let i = 0; i < 35; i++) useRecents.getState().touch(`/p${i}`)
+    // The list is persisted — uncapped it grows for the life of the install.
+    expect(useRecents.getState().projects).toHaveLength(30)
+    expect(useRecents.getState().projects[0].path).toBe("/p34")
+  })
 })
 
 describe("useSessions — save preserves per-file state", () => {
@@ -449,10 +498,6 @@ describe("the view a file opens in", () => {
     expect(useEditorActions.getState().takePendingView()).toBeNull()
   })
 
-  it("reports nothing when no view was asked for", () => {
-    expect(useEditorActions.getState().takePendingView()).toBeNull()
-  })
-
   it("carries a conflict request as distinct from a diff", () => {
     useEditorActions.getState().requestView("conflict")
     expect(useEditorActions.getState().takePendingView()).toBe("conflict")
@@ -516,5 +561,224 @@ describe("zen mode", () => {
     toggleZenMode(false)
     expect(useSettings.getState().zenMode).toBe(false)
     expect(useSettings.getState().showActivityBar).toBe(false)
+  })
+})
+
+describe("the navigation history", () => {
+  const project = () => useProject.getState()
+
+  beforeEach(() => {
+    useProject.setState({
+      root: "/repo",
+      tabs: [],
+      active: null,
+      navStack: [],
+      navIndex: -1,
+      closedTabs: [],
+      landing: null,
+      splitPath: null,
+    })
+  })
+
+  it("records each open, and walks back and forward through them", () => {
+    project().open("/repo/a.ts")
+    project().open("/repo/b.ts")
+    project().goBack()
+    expect(project().active).toBe("/repo/a.ts")
+    project().goForward()
+    expect(project().active).toBe("/repo/b.ts")
+  })
+
+  it("stops at both ends rather than falling off", () => {
+    project().open("/repo/a.ts")
+    project().goBack()
+    project().goBack()
+    expect(project().active).toBe("/repo/a.ts")
+    project().goForward()
+    project().goForward()
+    expect(project().active).toBe("/repo/a.ts")
+  })
+
+  it("re-opens a tab that was closed while it sat in the history", () => {
+    project().open("/repo/a.ts")
+    project().open("/repo/b.ts")
+    project().close("/repo/a.ts")
+    project().goBack()
+    expect(project().tabs).toContain("/repo/a.ts")
+  })
+
+  it("carries the line to land on, bumping the nonce so a repeat jump still fires", () => {
+    project().open("/repo/a.ts", 12)
+    const first = project().landing?.nonce ?? 0
+    project().open("/repo/b.ts", 3)
+    project().goBack()
+    expect(project().landing).toMatchObject({ path: "/repo/a.ts", line: 12 })
+    expect(project().landing?.nonce).toBeGreaterThan(first)
+  })
+
+  it("keeps the previous landing when a history entry has no line", () => {
+    project().open("/repo/a.ts", 12)
+    project().open("/repo/b.ts")
+    project().goBack()
+    project().goForward()
+    expect(project().landing?.path).toBe("/repo/a.ts")
+  })
+
+  it("re-opening the same file at a new line updates the entry instead of adding one", () => {
+    project().open("/repo/a.ts", 1)
+    const depth = project().navStack.length
+    project().open("/repo/a.ts", 40)
+    expect(project().navStack).toHaveLength(depth)
+    expect(project().landing).toMatchObject({ line: 40 })
+  })
+})
+
+describe("the tab strip", () => {
+  const project = () => useProject.getState()
+
+  beforeEach(() => {
+    useProject.setState({
+      root: "/repo",
+      tabs: ["/a.ts", "/b.ts", "/c.ts"],
+      active: "/b.ts",
+      closedTabs: [],
+      navStack: [],
+      navIndex: -1,
+    })
+  })
+
+  it("cycles forward and backward, wrapping at both ends", () => {
+    project().cycleTab(1)
+    expect(project().active).toBe("/c.ts")
+    project().cycleTab(1)
+    expect(project().active).toBe("/a.ts")
+    project().cycleTab(-1)
+    expect(project().active).toBe("/c.ts")
+  })
+
+  it("won't cycle a single tab", () => {
+    useProject.setState({ tabs: ["/a.ts"], active: "/a.ts" })
+    project().cycleTab(1)
+    expect(project().active).toBe("/a.ts")
+  })
+
+  it("closes the others, and the ones to the right", () => {
+    project().closeOthers("/b.ts")
+    expect(project().tabs).toEqual(["/b.ts"])
+    useProject.setState({ tabs: ["/a.ts", "/b.ts", "/c.ts"], active: "/c.ts" })
+    project().closeToRight("/a.ts")
+    expect(project().tabs).toEqual(["/a.ts"])
+    expect(project().active).toBe("/a.ts")
+  })
+
+  it("ignores a close-others or close-to-right for a file that isn't open", () => {
+    project().closeOthers("/nope.ts")
+    expect(project().tabs).toHaveLength(3)
+    project().closeToRight("/nope.ts")
+    expect(project().tabs).toHaveLength(3)
+  })
+
+  it("keeps the active tab when closing to the right of it", () => {
+    useProject.setState({ tabs: ["/a.ts", "/b.ts", "/c.ts"], active: "/a.ts" })
+    project().closeToRight("/b.ts")
+    expect(project().active).toBe("/a.ts")
+  })
+
+  it("reopens the most recently closed tab, once", () => {
+    project().close("/b.ts")
+    project().reopenClosed()
+    expect(project().tabs).toContain("/b.ts")
+    project().reopenClosed()
+    expect(project().tabs.filter((t) => t === "/b.ts")).toHaveLength(1)
+  })
+
+  it("moves a tab before another, or to the end", () => {
+    project().moveTab("/a.ts", "/c.ts")
+    expect(project().tabs).toEqual(["/b.ts", "/a.ts", "/c.ts"])
+    project().moveTab("/b.ts", null)
+    expect(project().tabs).toEqual(["/a.ts", "/c.ts", "/b.ts"])
+  })
+
+  it("ignores a move of a tab that isn't open, or onto itself", () => {
+    const before = project().tabs
+    project().moveTab("/a.ts", "/a.ts")
+    project().moveTab("/nope.ts", "/a.ts")
+    expect(project().tabs).toEqual(before)
+  })
+
+  it("re-points a tab after its file moved on disk", () => {
+    project().renamePath("/b.ts", "/moved/b.ts")
+    expect(project().tabs).toContain("/moved/b.ts")
+    expect(project().active).toBe("/moved/b.ts")
+  })
+
+  it("closes them all", () => {
+    project().closeAll()
+    expect(project().tabs).toEqual([])
+    expect(project().active).toBeNull()
+  })
+})
+
+describe("the split editor", () => {
+  const project = () => useProject.getState()
+
+  it("opens on the active file, and swaps sides", () => {
+    useProject.setState({ tabs: ["/a.ts"], active: "/a.ts", splitPath: null })
+    project().openSplit()
+    expect(project().splitPath).toBe("/a.ts")
+    useProject.setState({ active: "/a.ts", splitPath: "/b.ts" })
+    project().swapSplit()
+    expect(project().active).toBe("/b.ts")
+    expect(project().splitPath).toBe("/a.ts")
+  })
+
+  it("swaps nothing when there is no split", () => {
+    useProject.setState({ active: "/a.ts", splitPath: null })
+    project().swapSplit()
+    expect(project().active).toBe("/a.ts")
+  })
+})
+
+describe("zen mode", () => {
+  it("records the chrome it hides, and gives it back on the way out", () => {
+    useSettings.setState({
+      zenMode: false,
+      showActivityBar: true,
+      showStatusBar: true,
+      showBreadcrumbs: true,
+    })
+    toggleZenMode(true)
+    expect(useSettings.getState().zenMode).toBe(true)
+    expect(useSettings.getState().showActivityBar).toBe(false)
+    toggleZenMode(false)
+    expect(useSettings.getState().showActivityBar).toBe(true)
+    expect(useSettings.getState().showStatusBar).toBe(true)
+  })
+
+  it("is a no-op when it is already in the state asked for", () => {
+    // A restore *is* pending: without the early return this would spend it and
+    // put the chrome back to what it was before zen.
+    useSettings.setState({
+      zenMode: false,
+      zenRestore: {
+        showActivityBar: false,
+        showStatusBar: false,
+        showBreadcrumbs: false,
+        centeredLayout: true,
+        tool: null,
+      },
+      showActivityBar: true,
+    })
+    toggleZenMode(false)
+    expect(useSettings.getState().showActivityBar).toBe(true)
+    expect(useSettings.getState().zenRestore).not.toBeNull()
+  })
+
+  it("toggles when told nothing", () => {
+    useSettings.setState({ zenMode: false })
+    toggleZenMode()
+    expect(useSettings.getState().zenMode).toBe(true)
+    toggleZenMode()
+    expect(useSettings.getState().zenMode).toBe(false)
   })
 })

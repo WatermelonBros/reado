@@ -66,3 +66,18 @@ describe("remove", () => {
     expect(useBookmarks.getState().bookmarks).toEqual([bm("a.ts", 3)])
   })
 })
+
+describe("toggling within one file", () => {
+  it("removes only the bookmark on the same line", () => {
+    const B = () => useBookmarks.getState()
+    useBookmarks.setState({
+      bookmarks: [
+        { path: "a.ts", line: 3, snippet: "x" },
+        { path: "a.ts", line: 9, snippet: "y" },
+      ],
+    })
+    B().toggle("/r", { path: "a.ts", line: 3, snippet: "x" })
+    // Matching on path alone would take the line-9 bookmark with it.
+    expect(B().bookmarks).toEqual([{ path: "a.ts", line: 9, snippet: "y" }])
+  })
+})

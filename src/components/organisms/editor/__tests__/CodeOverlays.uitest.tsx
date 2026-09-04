@@ -1,7 +1,7 @@
 // The code-viewer overlays: presentational components lifted out of CodeView.
 // i18n is globally mocked to echo the key, so we assert on keys.
 
-import type { EditorView } from "@codemirror/view"
+import { EditorView } from "@codemirror/view"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { createRef } from "react"
@@ -97,6 +97,25 @@ describe("StickyHeaders", () => {
     // getByText trims/collapses whitespace, so query the trimmed forms.
     expect(screen.getByText("function a() {")).toBeInTheDocument()
     expect(screen.getByText("if (x) {")).toBeInTheDocument()
+  })
+
+  it("pins a stale header to the last line rather than throwing", async () => {
+    // `doc.line(n)` raises a RangeError past the end. A header anchored beyond
+    // it — the file shrank on disk, or an agent rewrote it — would take the
+    // whole CodeMirror plugin down and leave the editor blank.
+    const view = new EditorView({ doc: "one\ntwo\nthree" })
+    const viewRef = { current: view } as React.RefObject<EditorView>
+    const hostRef = createRef<HTMLDivElement>()
+    render(
+      <StickyHeaders
+        headers={[{ line: 50, text: "function gone() {" }]}
+        viewRef={viewRef}
+        hostRef={hostRef}
+      />,
+    )
+    await userEvent.click(screen.getByText("function gone() {"))
+    expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(3)
+    view.destroy()
   })
 })
 

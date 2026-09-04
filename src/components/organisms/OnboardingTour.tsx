@@ -15,8 +15,9 @@ import { useTourGuide } from "@/lib/tour"
 
 const SEEN_KEY = "reado.tour.seen"
 
-/** SVG path for a rounded rectangle (one subpath). */
-function roundedRect(x: number, y: number, w: number, h: number, r: number) {
+/** SVG path for a rounded rectangle (one subpath). Exported for its own test:
+ *  the radius clamp only bites on targets too small to drive through the tour. */
+export function roundedRect(x: number, y: number, w: number, h: number, r: number) {
   r = Math.max(0, Math.min(r, w / 2, h / 2))
   const X = Math.round(x),
     Y = Math.round(y),
