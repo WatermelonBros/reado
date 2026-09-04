@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-09-04
+
 ### Fixed
 
 - **A reply that fails to save stays in the box, and says so.** The reply
@@ -964,7 +966,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/WatermelonBros/reado/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/WatermelonBros/reado/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/WatermelonBros/reado/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/WatermelonBros/reado/compare/v1.7.1...v1.7.2
