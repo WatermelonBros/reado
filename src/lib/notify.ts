@@ -22,6 +22,10 @@ async function ensurePermission(): Promise<boolean> {
 function chime() {
   try {
     const ctx = new AudioContext()
+    // A context created without a user gesture starts suspended, and every
+    // note would be scheduled into silence. Resuming is a no-op when it is
+    // already running.
+    void ctx.resume?.()
     const now = ctx.currentTime
     ;[660, 880].forEach((freq, i) => {
       const osc = ctx.createOscillator()
@@ -48,6 +52,25 @@ export async function notifyResolved(remaining: number): Promise<void> {
       ? "Review complete — all tasks resolved."
       : `A task was resolved — ${remaining} remaining.`
 
+  if (await ensurePermission()) {
+    new Notification("Reado", { body })
+  }
+  if (useSettings.getState().completionSound) chime()
+}
+
+/**
+ * The agent handed the turn back — it called `session_done` over MCP. This is
+ * what the "play a sound when the agent finishes" setting actually means; a
+ * task being resolved (above) is a different event.
+ */
+export async function notifyAgentDone(status: string, summary: string): Promise<void> {
+  const body =
+    summary ||
+    (status === "blocked"
+      ? "The agent is blocked and needs you."
+      : status === "failed"
+        ? "The agent stopped without finishing."
+        : "The agent finished.")
   if (await ensurePermission()) {
     new Notification("Reado", { body })
   }

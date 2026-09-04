@@ -76,6 +76,14 @@ fn is_reasoning_store(path: &Path) -> bool {
     s.ends_with("/.reado/reasoning.jsonl")
 }
 
+/// True if `path` is the agent's end-of-turn handoff (`session_done` over MCP).
+/// A change means the agent said it is done, blocked or stuck — the moment to
+/// get the attention of a user who walked away.
+fn is_agent_done(path: &Path) -> bool {
+    let s = path.to_string_lossy().replace('\\', "/");
+    s.ends_with("/.reado/done.json")
+}
+
 /// True if `path` is git state whose change alters what `git status` would say.
 ///
 /// `.git/HEAD` alone is not enough: it is rewritten by `git checkout`, but a
@@ -221,6 +229,7 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                     let mut comments_dirty = false;
                     let mut sessions_dirty = false;
                     let mut reasoning_dirty = false;
+                    let mut agent_done_dirty = false;
                     let mut git_dirty = false;
 
                     // Reunite a delete+create into a rename: if exactly one removed
@@ -291,6 +300,11 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                             reasoning_dirty = true;
                             continue;
                         }
+                        // The agent handed the turn back via `session_done`.
+                        if is_agent_done(&path) {
+                            agent_done_dirty = true;
+                            continue;
+                        }
                         // Git state moved under us — a commit, checkout, stage or
                         // merge in the terminal. Flagged rather than emitted here,
                         // because one commit touches several of these files and the
@@ -321,6 +335,9 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                     if reasoning_dirty {
                         let _ = app.emit("reasoning-changed", ());
                     }
+                    if agent_done_dirty {
+                        let _ = app.emit("agent-done", ());
+                    }
                     if git_dirty {
                         let _ = app.emit("git-changed", ());
                     }
@@ -336,6 +353,18 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_agents_handoff_is_its_own_event() {
+        // It must not be mistaken for a comment or session write: those reload a
+        // panel, this one gets the user's attention.
+        assert!(is_agent_done(Path::new("/p/.reado/done.json")));
+        assert!(!is_agent_done(Path::new("/p/.reado/sessions/s1.json")));
+        assert!(!is_comment_store(Path::new("/p/.reado/done.json")));
+        assert!(!is_session_store(Path::new("/p/.reado/done.json")));
+        // A file merely named done.json elsewhere in the project isn't it.
+        assert!(!is_agent_done(Path::new("/p/src/done.json")));
+    }
 
     #[test]
     fn archiving_a_comment_is_a_comment_change() {

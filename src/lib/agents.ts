@@ -32,11 +32,41 @@ function shellFamily(shell: string | null): ShellFamily {
   return navigator.userAgent.includes("Windows") ? "cmd" : "posix"
 }
 
+/**
+ * One line appended to the agent's system prompt when Reado launches it, so a
+ * session started *inside* Reado ends its turns by saying so.
+ *
+ * The MCP server's own `instructions` already ask for this, but a client is
+ * free to bury or ignore them; the system prompt is the one channel the model
+ * cannot miss. Single line, single-quoted below, so no shell quoting surprises.
+ */
+const HANDOFF_RULE =
+  "You are running inside Reado. At the end of EVERY turn, as the very last " +
+  "thing you do before handing control back, call the `session_done` MCP tool " +
+  "with a one-line summary — whether you finished, are blocked, or failed. " +
+  "The user has usually walked away; this is what tells them you are back."
+
+/** Flags that inject `HANDOFF_RULE` into that session's system prompt.
+ *
+ *  Only for CLIs whose flag is verified — a wrong flag doesn't degrade, it
+ *  stops the agent booting at all. The rest still get the rule through the MCP
+ *  server's `instructions`. */
+const SYSTEM_PROMPT_FLAG: Partial<Record<Agent, string>> = {
+  "claude-code": "--append-system-prompt",
+}
+
 /** The shell-correct command to run `bin` with `READO_AGENT` set. */
 export function agentLaunchCommand(family: ShellFamily, agent: Agent, bin: string): string {
-  if (family === "powershell") return `$env:READO_AGENT="${agent}"; ${bin}`
-  if (family === "cmd") return `set "READO_AGENT=${agent}" && ${bin}`
-  return `READO_AGENT=${agent} ${bin}`
+  const flag = SYSTEM_PROMPT_FLAG[agent]
+  // Single quotes in every shell family here; the rule contains none itself.
+  const args = flag
+    ? family === "powershell" || family === "cmd"
+      ? ` ${flag} "${HANDOFF_RULE}"`
+      : ` ${flag} '${HANDOFF_RULE}'`
+    : ""
+  if (family === "powershell") return `$env:READO_AGENT="${agent}"; ${bin}${args}`
+  if (family === "cmd") return `set "READO_AGENT=${agent}" && ${bin}${args}`
+  return `READO_AGENT=${agent} ${bin}${args}`
 }
 
 /** Run `text` in the active terminal, creating one if none is focused. */
