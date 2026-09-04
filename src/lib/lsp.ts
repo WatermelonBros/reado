@@ -723,9 +723,25 @@ if (typeof window !== "undefined") {
   })
 }
 
+/**
+ * Identify a server + project root, in a string that can also name a Tauri event.
+ *
+ * Tauri accepts only `[A-Za-z0-9-/:_]` in an event name, and this id names two of
+ * them (`lsp-…`, `lsp-exit-…`). A project path holding a dot or a space —
+ * `~/code/pi.frontend-app` — made `listen` throw *after* the server had already
+ * spawned: a running language server nobody was subscribed to, no code
+ * intelligence, and a fresh attempt (and a fresh process) every few seconds.
+ * The digest keeps two paths that sanitise alike from sharing one session.
+ */
+function connKey(serverId: string, root: string): string {
+  let h = 7
+  for (const c of root) h = (h * 31 + c.charCodeAt(0)) | 0
+  return `${serverId}:${root.replace(/[^A-Za-z0-9\-/:_]/g, "_")}:${(h >>> 0).toString(36)}`
+}
+
 /** Get (or create) a connected client for a server + project root. */
 function connect(server: ServerDef, root: string): Promise<Conn> {
-  const key = `${server.id}:${root}`
+  const key = connKey(server.id, root)
   const existing = conns.get(key)
   if (existing) return existing
 

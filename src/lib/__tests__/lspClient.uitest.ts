@@ -65,7 +65,11 @@ let view: EditorView | undefined
 async function connect(root: string, doc = "const alpha = 1\n") {
   const ext = await lspSupport(root, `${root}/a.ts`)
   expect(ext).not.toBeNull()
-  const key = `typescript:${root}`
+  // Read the id back rather than rebuilding it: it has to double as a Tauri
+  // event name, so how it is derived from the root is the client's business.
+  await vi.waitFor(() => expect(lspStart).toHaveBeenCalled())
+  const started = lspStart.mock.calls as unknown as string[][]
+  const key = started[started.length - 1][0]
   // The client opens with `initialize`; answer it, then acknowledge `initialized`.
   await vi.waitFor(() => expect(reply(key, "initialize", CAPS)).toBe(true))
   view = new EditorView({ doc, extensions: [ext!], parent: document.body })
@@ -85,6 +89,16 @@ afterEach(() => {
 })
 
 describe("the handshake", () => {
+  it("gives a project path with a dot an id a Tauri event can carry", async () => {
+    // The bug this guards: the id was `typescript:<root>` verbatim, and Tauri
+    // accepts only [A-Za-z0-9-/:_] in an event name. Under `~/code/pi.frontend-app`
+    // the `listen` call threw *after* the server had spawned — a live language
+    // server nobody was subscribed to, respawned every few seconds, no
+    // diagnostics, and an unhandled rejection each time.
+    const { key } = await connect("/Users/x/pi.frontend-app")
+    expect(key).toMatch(/^[A-Za-z0-9\-/:_]+$/)
+  })
+
   it("spawns the server, then opens the document on it", async () => {
     const { key } = await connect("/handshake")
     expect(lspStart).toHaveBeenCalledWith(key, "typescript", "/handshake")
@@ -247,8 +261,8 @@ describe("inlay hints", () => {
 
 describe("the server's lifecycle", () => {
   it("stops the servers it started when the page goes away", async () => {
-    await connect("/pagehide")
+    const { key } = await connect("/pagehide")
     window.dispatchEvent(new Event("pagehide"))
-    expect(lspStop).toHaveBeenCalledWith("typescript:/pagehide")
+    expect(lspStop).toHaveBeenCalledWith(key)
   })
 })

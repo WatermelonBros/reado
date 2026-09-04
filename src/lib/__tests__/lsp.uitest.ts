@@ -83,6 +83,13 @@ function attach(res: unknown = null) {
   return request
 }
 
+/** The id the client just used. It doubles as a Tauri event name, so how it is
+ *  derived from the root is the client's business — read it back, don't rebuild it. */
+const lastKey = () => {
+  const calls = lspStart.mock.calls as unknown as string[][]
+  return calls[calls.length - 1][0]
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   listeners.clear()
@@ -277,7 +284,7 @@ describe("the hierarchies", () => {
 describe("lspSupport", () => {
   it("spawns the server for the file's language and hands back the extension", async () => {
     await expect(lspSupport("/rust-root", "/rust-root/src/a.rs")).resolves.toBe("lsp-extension")
-    expect(lspStart).toHaveBeenCalledWith("rust:/rust-root", "rust", "/rust-root")
+    expect(lspStart).toHaveBeenCalledWith(expect.stringMatching(/^rust:/), "rust", "/rust-root")
     // The document is announced with its own language id.
     expect(h.create).toHaveBeenCalledWith(expect.anything(), "file:///rust-root/src/a.rs", "rust")
   })
@@ -305,21 +312,25 @@ describe("lspSupport", () => {
     lspStart.mockRejectedValue(new Error("no such binary"))
     await expect(lspSupport("/missing", "/missing/a.go")).resolves.toBeNull()
     // Null because the spawn failed — not because the file was never routed.
-    expect(lspStart).toHaveBeenCalledWith("go:/missing", "go", "/missing")
+    expect(lspStart).toHaveBeenCalledWith(expect.stringMatching(/^go:/), "go", "/missing")
     expect(notify).not.toHaveBeenCalled()
   })
 
   it("routes .ts to the Angular server in an Angular project", async () => {
     resolvePath.mockResolvedValue("/ng/angular.json")
     await lspSupport("/ng", "/ng/src/app.ts")
-    expect(lspStart).toHaveBeenCalledWith("angular:/ng", "angular", "/ng")
+    expect(lspStart).toHaveBeenCalledWith(expect.stringMatching(/^angular:/), "angular", "/ng")
   })
 
   it("leaves .ts alone when the Angular extension is disabled", async () => {
     resolvePath.mockResolvedValue("/ng-off/angular.json")
     useExtensions.setState({ disabled: ["angular"] })
     await lspSupport("/ng-off", "/ng-off/src/app.ts")
-    expect(lspStart).toHaveBeenCalledWith("typescript:/ng-off", "typescript", "/ng-off")
+    expect(lspStart).toHaveBeenCalledWith(
+      expect.stringMatching(/^typescript:/),
+      "typescript",
+      "/ng-off",
+    )
   })
 
   it("reuses one connection per server and root", async () => {
@@ -332,7 +343,7 @@ describe("lspSupport", () => {
 describe("the connection's side channels", () => {
   it("mirrors published diagnostics into the store for the file tree", async () => {
     await lspSupport("/diag", "/diag/a.py")
-    listeners.get("lsp-python:/diag")?.({
+    listeners.get(`lsp-${lastKey()}`)?.({
       payload: JSON.stringify({
         method: "textDocument/publishDiagnostics",
         params: {
@@ -350,7 +361,7 @@ describe("the connection's side channels", () => {
 
   it("ignores traffic that isn't a diagnostics notification", async () => {
     await lspSupport("/quiet", "/quiet/a.go")
-    const send = listeners.get("lsp-go:/quiet")
+    const send = listeners.get(`lsp-${lastKey()}`)
     const diagnostics = [
       { severity: 1, message: "real", range: { start: { line: 0, character: 0 } } },
     ]
@@ -378,7 +389,7 @@ describe("the connection's side channels", () => {
 
   it("tells the user once when a server crashes, and reconnects on the next use", async () => {
     await lspSupport("/crash", "/crash/a.rb")
-    listeners.get("lsp-exit-ruby:/crash")?.({ payload: "" })
+    listeners.get(`lsp-exit-${lastKey()}`)?.({ payload: "" })
     expect(notify).toHaveBeenCalledWith("error", "lsp.serverStopped")
     // The dead connection is dropped, so the next request spawns a fresh server.
     lspStart.mockClear()
