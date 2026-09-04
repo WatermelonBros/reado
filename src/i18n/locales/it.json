@@ -686,6 +686,8 @@
     "aids": "Aiuti alla lettura",
     "wrapHint": "Le righe lunghe vanno a capo invece di scorrere in orizzontale.",
     "stickyHint": "Blocca in alto le intestazioni di funzione/scope mentre scorri al loro interno.",
+    "colorSwatches": "Quadratini colore",
+    "colorSwatchesHint": "Mostra un quadratino accanto a ogni colore nel file; cliccalo per sceglierne uno nuovo",
     "whitespaceHint": "Mostra spazi e tab come segni tenui.",
     "bracketMatchingHint": "Quando il cursore è accanto a una parentesi, evidenzia quella corrispondente.",
     "focusHint": "Attenua tutto tranne il blocco — funzione, tag o scope — attorno al cursore.",

@@ -686,6 +686,8 @@
     "aids": "Reading aids",
     "wrapHint": "Long lines wrap to the next row instead of scrolling sideways.",
     "stickyHint": "Pin the enclosing function/scope headers at the top while you scroll inside them.",
+    "colorSwatches": "Colour swatches",
+    "colorSwatchesHint": "Show a swatch beside every colour in the file; click it to pick a new one",
     "whitespaceHint": "Show spaces and tabs as faint marks.",
     "bracketMatchingHint": "When the caret sits beside a bracket, highlight its matching one.",
     "focusHint": "Dim everything except the block — function, tag, or scope — around the caret.",

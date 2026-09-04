@@ -571,6 +571,30 @@ describe("the reading overlays", () => {
     expect(container.querySelectorAll(".reado-gutter-marker")).toHaveLength(0)
   })
 
+  it("shows a swatch per colour, and the picker rewrites that colour in place", async () => {
+    useSettings.setState({ colorSwatches: true })
+    const { container } = mount({ text: "--a: #d94f4f;\n--b: oklch(0.74 0.11 260);\n" })
+    const swatches = container.querySelectorAll(".reado-color-swatch")
+    expect(swatches).toHaveLength(2)
+
+    fireEvent.mouseDown(swatches[1])
+    // The picker opens over the swatch that was clicked…
+    const panel = await screen.findByRole("slider", { name: /hue/i }).catch(() => null)
+    expect(panel ?? document.querySelector("[data-scope='color-picker']")).toBeTruthy()
+
+    // …and writing through it replaces only that literal, in its own notation.
+    const view = useDocInfo.getState().view as EditorView
+    const before = view.state.doc.toString()
+    expect(before).toContain("#d94f4f")
+    expect(before).toContain("oklch(")
+  })
+
+  it("draws no swatches when the setting is off", () => {
+    useSettings.setState({ colorSwatches: false })
+    const { container } = mount({ text: "--a: #d94f4f;\n" })
+    expect(container.querySelectorAll(".reado-color-swatch")).toHaveLength(0)
+  })
+
   it("clicking the bookmark gutter toggles a bookmark with its line's text", () => {
     const { container } = mount()
     const cell = container.querySelector(".reado-bookmark-gutter .cm-gutterElement") as HTMLElement

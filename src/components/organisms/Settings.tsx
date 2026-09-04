@@ -283,6 +283,12 @@ function EditorTab() {
           hint={t("settings.stickyHint")}
         />
         <ToggleField
+          checked={settings.colorSwatches}
+          onChange={(v) => settings.set({ colorSwatches: v })}
+          label={t("settings.colorSwatches")}
+          hint={t("settings.colorSwatchesHint")}
+        />
+        <ToggleField
           checked={settings.renderWhitespace}
           onChange={(v) => settings.set({ renderWhitespace: v })}
           label={t("settings.renderWhitespace")}

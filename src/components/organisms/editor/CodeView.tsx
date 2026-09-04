@@ -2,7 +2,7 @@ import { bracketMatching, LanguageDescription } from "@codemirror/language"
 import { forEachDiagnostic } from "@codemirror/lint"
 import { Compartment, EditorState } from "@codemirror/state"
 import { EditorView, highlightWhitespace } from "@codemirror/view"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ContextMenu } from "@/components/atoms/ContextMenu"
 import { CommentComposer } from "@/components/organisms/CommentComposer"
@@ -23,6 +23,7 @@ import { blameGutter, inlineBlame } from "@/lib/blameGutter"
 import { bookmarkGutter } from "@/lib/bookmarkGutter"
 import { useBookmarks } from "@/lib/bookmarks"
 import { changedLinesHighlight, diffGutter } from "@/lib/changedLines"
+import { colorSwatches, type SwatchHit } from "@/lib/colorSwatch"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
 import { toRelative, useComments } from "@/lib/comments"
 import { useDiagnostics } from "@/lib/diagnostics"
@@ -53,6 +54,7 @@ import {
   StickyHeaders,
   ThreadConnector,
 } from "./CodeOverlays"
+import { ColorPickerPopover } from "./ColorPickerPopover"
 import {
   activeLineExt,
   ExternalReload,
@@ -109,6 +111,7 @@ export function CodeView({
   const autoSaveTimer = useRef<number | undefined>(undefined)
   const cursorSaveTimer = useRef<number | undefined>(undefined)
   const wrapComp = useMemo(() => new Compartment(), [])
+  const colorComp = useMemo(() => new Compartment(), [])
   const whitespaceComp = useMemo(() => new Compartment(), [])
   const langComp = useMemo(() => new Compartment(), [])
   const focusComp = useMemo(() => new Compartment(), [])
@@ -125,6 +128,9 @@ export function CodeView({
   const indentSize = useDocInfo((s) => s.indentSize)
   const languageOverride = useDocInfo((s) => s.languageOverride)
   const stickyScroll = useSettings((s) => s.stickyScroll)
+  const colorSwatchesOn = useSettings((s) => s.colorSwatches)
+  // The swatch that was clicked, and so the literal a picker would rewrite.
+  const [pickingColor, setPickingColor] = useState<SwatchHit | null>(null)
   // Reading controls (clamped numerics apply as CSS vars; the rest as compartments).
   const fontSize = useSettings((s) => clampRange(s.fontSize, FONT_SIZE_RANGE))
   const lineHeight = useSettings((s) => clampRange(s.lineHeight, LINE_HEIGHT_RANGE))
@@ -450,6 +456,8 @@ export function CodeView({
         lspComp,
         tabSizeComp,
         wrapComp,
+        colorComp,
+        colorSwatchesExt: colorSwatchesOn ? colorSwatches(onPickColor) : [],
         whitespaceComp,
         focusComp,
         langComp,
@@ -543,6 +551,15 @@ export function CodeView({
 
   // Reconfigure line wrapping live.
   useReconfigure(viewRef, wrapComp, wrap ? EditorView.lineWrapping : [], [wrap, wrapComp])
+
+  // A stable callback: the extension captures it once, so it must not be
+  // rebuilt on every render or every swatch would remount.
+  const onPickColor = useCallback((hit: SwatchHit) => setPickingColor(hit), [])
+  useReconfigure(viewRef, colorComp, colorSwatchesOn ? colorSwatches(onPickColor) : [], [
+    colorSwatchesOn,
+    colorComp,
+    onPickColor,
+  ])
 
   // Reading controls: reconfigure their compartments live (no editor remount).
   useReconfigure(viewRef, lineNumbersComp, lineNumbersExt(lineNumbersMode), [
@@ -1035,6 +1052,23 @@ export function CodeView({
       )}
 
       {sticky.length > 0 && <StickyHeaders headers={sticky} viewRef={viewRef} hostRef={hostRef} />}
+
+      {pickingColor && (
+        <ColorPickerPopover
+          hit={pickingColor}
+          onChange={(literal) => {
+            const view = viewRef.current
+            if (!view) return
+            // Rewrite in place and keep the picker anchored to the new literal:
+            // dragging in the picker is a stream of edits, not one.
+            view.dispatch({
+              changes: { from: pickingColor.from, to: pickingColor.to, insert: literal },
+            })
+            setPickingColor({ ...pickingColor, to: pickingColor.from + literal.length })
+          }}
+          onClose={() => setPickingColor(null)}
+        />
+      )}
 
       {reanchoringId && (
         <ReanchorBar label={reanchorLabel} onConfirm={confirmReanchor} onCancel={cancelReanchor} />

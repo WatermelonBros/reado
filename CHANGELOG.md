@@ -34,6 +34,14 @@ commit.
   commits, a deleted branch) still says so.
 
 ### Added
+- **A swatch beside every colour in the file.** Open anything with colours in it
+  — a theme file, a palette, a stylesheet — and each `#hex`, `rgb()`, `hsl()` or
+  `oklch()` gets a small square painted with that colour. Click it for a picker,
+  and the value is rewritten in place **in the notation it was already written
+  in**: an `oklch()` token comes back as `oklch()`, never converted to hex. A
+  translucent colour shows the chequerboard through it. Off via Settings ›
+  Editor if you'd rather not have them.
+
 - **A lot more tests.** Coverage went from 41% to 93% of statements and 94% of
   lines (2274 tests, up from 864; the Rust suite went from 146 to 161);
   branches are at 84% and functions at 89%. The suite was then audited against
@@ -53,6 +61,9 @@ commit.
   commands and the global keyboard and mouse shortcuts.
 
 ### Changed
+- The Git tab's "commit with AI" no longer asks the agent to sign the commit:
+  the prompt now tells it not to add a `Co-Authored-By` trailer, so the commit
+  is attributed to whoever pressed the button.
 - **CI runs only what a change can break.** Every job is now gated on the paths
   it covers: a docs- or markdown-only pull request runs a single cheap
   path-filter job and nothing else, a frontend change skips the three Rust jobs,

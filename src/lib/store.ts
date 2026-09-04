@@ -104,6 +104,8 @@ export interface SettingsState {
   wrap: boolean
   /** Pin the enclosing scope headers while scrolling. */
   stickyScroll: boolean
+  /** A clickable swatch beside every colour literal in the document. */
+  colorSwatches: boolean
   /** Interface zoom factor (1 = 100%). */
   zoom: number
   /** Version `.reado/` (except the rebuildable index) instead of gitignoring it. */
@@ -194,6 +196,7 @@ export const useSettings = create<SettingsState>()(
       focusMode: false,
       wrap: true,
       stickyScroll: true,
+      colorSwatches: true,
       zoom: 1,
       versionReado: false,
       gitignoreDontAsk: false,
