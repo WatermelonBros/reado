@@ -14,6 +14,7 @@ use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use ignore::WalkBuilder;
 use notify::event::{ModifyKind, RenameMode};
 use notify::{EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
@@ -36,24 +37,63 @@ struct FileChanged {
     file: String,
 }
 
-/// Build the ignore matcher for a project root (its `.gitignore` plus the
-/// always-ignored Reado/VCS directories).
-fn ignore_matcher(root: &Path) -> Gitignore {
+/// Build the ignore matchers for a project: the root `.gitignore` (plus the
+/// always-ignored VCS/Reado/dependency directories) and **every nested one**.
+///
+/// Nested matters: the file tree walks with the `ignore` crate, which honours a
+/// `.gitignore` at any depth, so a monorepo that keeps its rules in
+/// `app/.gitignore` shows no `app/node_modules` in the tree. The watcher used to
+/// read the root file only and therefore disagreed — a dev server rewriting
+/// `app/node_modules/.vite/deps` became a thousand `file-changed` events, each
+/// one a re-anchor, a re-index and a `git status` on the UI thread. That is what
+/// a locked-up window looks like from the inside.
+///
+/// Each matcher's patterns are relative to the directory its file sits in, so
+/// they are kept apart rather than merged into one root-scoped matcher (`/dist`
+/// in `app/.gitignore` means `app/dist`, not `<root>/dist`).
+///
+/// ponytail: read once, at watch time. A `.gitignore` added or edited later is
+/// picked up on the next project open — reload it here if that ever bites.
+fn ignore_matchers(root: &Path) -> Vec<Gitignore> {
     let mut builder = GitignoreBuilder::new(root);
     let _ = builder.add(root.join(".gitignore"));
-    // Always ignore these regardless of the project's own rules.
-    for pat in [".git/", ".reado/"] {
+    // Always ignored, whatever the project's own rules say. `node_modules` earns
+    // its place next to the VCS directories: it is the loudest churn on disk
+    // (installs, dev-server dep caches) and nothing in it is worth re-anchoring.
+    for pat in [".git/", ".reado/", "node_modules/"] {
         let _ = builder.add_line(None, pat);
     }
-    builder.build().unwrap_or_else(|_| Gitignore::empty())
+    let mut matchers = vec![builder.build().unwrap_or_else(|_| Gitignore::empty())];
+
+    // The walk honours what it has found so far, so it never descends into an
+    // ignored tree looking for more ignore files.
+    for entry in WalkBuilder::new(root).hidden(false).build().flatten() {
+        if entry.depth() == 0 || entry.file_name() != ".gitignore" {
+            continue;
+        }
+        let Some(dir) = entry.path().parent() else {
+            continue;
+        };
+        if dir == root {
+            continue; // already in the root matcher
+        }
+        let mut nested = GitignoreBuilder::new(dir);
+        let _ = nested.add(entry.path());
+        if let Ok(g) = nested.build() {
+            matchers.push(g);
+        }
+    }
+    matchers
 }
 
-/// True if `path` should be ignored (VCS/Reado internals or gitignored output).
-fn is_ignored(matcher: &Gitignore, root: &Path, path: &Path) -> bool {
-    let rel = path.strip_prefix(root).unwrap_or(path);
-    matcher
-        .matched_path_or_any_parents(rel, path.is_dir())
-        .is_ignore()
+/// True if `path` should be ignored (VCS/Reado internals or ignored output).
+/// The `starts_with` guard is required, not defensive: `matched_path_or_any_parents`
+/// panics on a path outside its matcher's root.
+fn is_ignored(matchers: &[Gitignore], path: &Path) -> bool {
+    let is_dir = path.is_dir();
+    matchers.iter().any(|m| {
+        path.starts_with(m.path()) && m.matched_path_or_any_parents(path, is_dir).is_ignore()
+    })
 }
 
 /// True if `path` is a comment file under `.reado/comments` or `.reado/archive`.
@@ -118,7 +158,6 @@ fn relative(root: &Path, path: &Path) -> Option<String> {
 #[tauri::command]
 pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
     let root = PathBuf::from(&root);
-    let matcher = ignore_matcher(&root);
 
     let (tx, rx) = channel();
     let mut watcher = notify::recommended_watcher(move |res| {
@@ -137,6 +176,9 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
     std::thread::spawn(move || {
         // Keep the watcher alive for the lifetime of this loop.
         let _watcher = watcher;
+        // Built here, not in the command: collecting the ignore files walks the
+        // project, and `start_watching` is a blocking command — on the UI thread.
+        let matchers = ignore_matchers(&root);
         let mut pending: HashSet<PathBuf> = HashSet::new();
         // Tracked per debounce window so a delete+create pair (how macOS/FSEvents
         // reports a rename) can be reunited into a comment move instead of orphan.
@@ -314,7 +356,7 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                             git_dirty = true;
                             continue;
                         }
-                        if path.is_dir() || is_ignored(&matcher, &root, &path) {
+                        if path.is_dir() || is_ignored(&matchers, &path) {
                             continue;
                         }
                         if let Some(rel) = relative(&root, &path) {
@@ -353,6 +395,40 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_nested_gitignore_is_honoured_and_stays_in_its_own_directory() {
+        // The lock-up this guards: a monorepo keeps its rules in `app/.gitignore`,
+        // the watcher read the root file only, and a dev server rewriting
+        // `app/node_modules/.vite/deps` became a thousand `file-changed` events —
+        // each a re-anchor, a re-index and a `git status` on the UI thread.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("app/build")).unwrap();
+        std::fs::create_dir_all(root.join("app/node_modules/.vite/deps")).unwrap();
+        std::fs::create_dir_all(root.join("app/src")).unwrap();
+        std::fs::create_dir_all(root.join("build")).unwrap();
+        std::fs::write(root.join("app/.gitignore"), "build/\n").unwrap();
+        for f in [
+            "app/build/out.js",
+            "app/node_modules/.vite/deps/dep.js",
+            "app/src/main.ts",
+            "build/keep.ts",
+        ] {
+            std::fs::write(root.join(f), "").unwrap();
+        }
+
+        let m = ignore_matchers(root);
+        assert!(is_ignored(&m, &root.join("app/build/out.js")));
+        // node_modules goes regardless of whether any .gitignore names it.
+        assert!(is_ignored(
+            &m,
+            &root.join("app/node_modules/.vite/deps/dep.js")
+        ));
+        assert!(!is_ignored(&m, &root.join("app/src/main.ts")));
+        // `build/` came from app's file: it must not reach a root-level build dir.
+        assert!(!is_ignored(&m, &root.join("build/keep.ts")));
+    }
 
     #[test]
     fn the_agents_handoff_is_its_own_event() {

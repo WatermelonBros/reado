@@ -170,6 +170,26 @@ describe("output", () => {
     vi.useRealTimers()
   })
 
+  it("colours the links once the output settles, never per render", async () => {
+    // The bug this guards: a decoration (and its marker) per link on *every*
+    // xterm render. An agent streams faster than it renders, and the churn
+    // retained ~7KB of web-process memory per line of output — hours of agent
+    // work walked the window into swap and froze the whole UI.
+    vi.useFakeTimers()
+    const decorate = vi.spyOn(XTerm.prototype, "registerDecoration")
+    render(<Terminal id="t1" cwd="/repo" active />)
+    await vi.waitFor(() => expect(listeners.has("pty-output-t1")).toBe(true))
+    for (let i = 1; i <= 20; i++) {
+      listeners.get("pty-output-t1")?.({ payload: b64(`src/lib/a.ts:${i}:1 working\r\n`) })
+      await vi.advanceTimersByTimeAsync(50) // still streaming
+    }
+    expect(decorate).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(400) // …and now it has settled
+    expect(decorate).toHaveBeenCalled()
+    decorate.mockRestore()
+    vi.useRealTimers()
+  })
+
   it("doesn't mirror a plain shell pane", async () => {
     vi.useFakeTimers()
     render(<Terminal id="t1" cwd="/repo" active />)

@@ -257,6 +257,17 @@ fn list_symbols_in(cache: &SymbolCache, root: &str) -> Vec<Symbol> {
     out
 }
 
+/// Declared symbols in one file, keyed by line. The per-file counterpart of
+/// `symbols_by_line`: reindexing a single file needs that file's declarations,
+/// not a walk (and a clone of every cached record) of the whole project.
+pub fn symbols_in_file(cache: &SymbolCache, path: &Path) -> HashMap<u32, String> {
+    records_for(cache, path)
+        .into_iter()
+        .filter(|r| r.score == 3)
+        .map(|r| (r.line as u32, r.name))
+        .collect()
+}
+
 /// Declared symbols keyed by (project-relative file, line) — the semantic index
 /// uses it to tell a declaration from a mention, which is most of its ranking.
 pub fn symbols_by_line(

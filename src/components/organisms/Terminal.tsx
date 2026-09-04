@@ -136,7 +136,7 @@ export function Terminal({ id, cwd, active }: Props) {
       term.options.fontFamily = useSettings.getState().codeFont || xtermFontFamily()
       linkColor = xtermLinkColor()
       paintedKey = "" // the layout is unchanged; force the recolour through
-      paintLinks()
+      paintLinksSoon()
     })
     themeObserver.observe(document.documentElement, {
       attributes: true,
@@ -177,6 +177,15 @@ export function Terminal({ id, cwd, active }: Props) {
     // is the only way to restyle text the terminal has already drawn.
     // ponytail: viewport only, redrawn whenever the link layout changes — the
     // scrollback isn't decorated until it scrolls back into view.
+    //
+    // Painted on the *pause*, never per render. A marker plus a decoration per
+    // link is cheap once and ruinous at the rate an agent streams: xterm renders
+    // as fast as output arrives, and repainting each frame retained ~7KB of
+    // WebKit memory per line of agent output (measured: 8000 lines carrying
+    // `path:line` grew the web process by 55MB, the same lines without them by
+    // 6.8MB) — an afternoon of agent work walked the window into swap and froze
+    // the whole UI. Streaming output therefore paints nothing; the viewport is
+    // coloured once, shortly after it settles.
     const painted: IDisposable[] = []
     let paintedKey = ""
     const paintLinks = () => {
@@ -213,7 +222,17 @@ export function Terminal({ id, cwd, active }: Props) {
         if (d) painted.push(d)
       }
     }
-    term.onRender(paintLinks)
+    // Long enough to sit out an agent's stream (which renders continuously), short
+    // enough that a settled screen colours its links before you reach for one.
+    let paintTimer: ReturnType<typeof setTimeout> | null = null
+    const paintLinksSoon = () => {
+      if (paintTimer) clearTimeout(paintTimer)
+      paintTimer = setTimeout(() => {
+        paintTimer = null
+        paintLinks()
+      }, 250)
+    }
+    term.onRender(paintLinksSoon)
 
     const unlisten: UnlistenFn[] = []
     let disposed = false
@@ -309,6 +328,7 @@ export function Terminal({ id, cwd, active }: Props) {
 
     return () => {
       disposed = true
+      if (paintTimer) clearTimeout(paintTimer)
       themeObserver.disconnect()
       // A rejecting unlisten (listener map already torn down) must not escape.
       unlisten.forEach((off) => void Promise.resolve(off()).catch(() => {}))

@@ -52,6 +52,11 @@ const STATUS_ARGS: [&str; 5] = [
 
 fn run_git(root: &Path, args: &[&str]) -> Option<String> {
     let output = command("git")
+        // Reado polls `status`/`info` in the background. Without this, each poll
+        // may take `index.lock` to refresh the index — colliding with the git the
+        // user is running in the terminal (either side then fails), and with the
+        // other poll now that these commands run off the UI thread.
+        .arg("--no-optional-locks")
         .arg("-C")
         .arg(root)
         .args(args)
@@ -109,7 +114,9 @@ pub fn git_changed_files(root: String, base: Option<String>) -> Vec<String> {
 
 /// Inspect the git state of a project root. Never errors: a missing `git`, or a
 /// non-repository folder, simply yields `is_repo: false`.
-#[tauri::command]
+/// `async` so it runs on a worker: it shells out to git several times, the UI
+/// polls it, and a slow repo answering on the main thread freezes the window.
+#[tauri::command(async)]
 pub fn git_info(root: String) -> GitInfo {
     let root = Path::new(&root);
     let is_repo = run_git(root, &["rev-parse", "--is-inside-work-tree"])
@@ -300,7 +307,8 @@ fn expand_status_line(line: &str) -> Vec<GitChange> {
 /// The working-tree status for the Source Control view, split into staged and
 /// unstaged entries. (Raw, untrimmed output: porcelain lines begin with the
 /// two status columns, so the leading space of an unstaged-only change matters.)
-#[tauri::command]
+/// `async` for the same reason as `git_info`: polled, and slow on a big tree.
+#[tauri::command(async)]
 pub fn git_status(root: String) -> Vec<GitChange> {
     let Some(out) = run_git_raw(Path::new(&root), &STATUS_ARGS) else {
         return Vec::new();
@@ -311,6 +319,7 @@ pub fn git_status(root: String) -> Vec<GitChange> {
 /// Run git and return raw stdout (no trimming), or `None` on failure.
 fn run_git_raw(root: &Path, args: &[&str]) -> Option<String> {
     let output = command("git")
+        .arg("--no-optional-locks") // a read: see run_git
         .arg("-C")
         .arg(root)
         .args(args)

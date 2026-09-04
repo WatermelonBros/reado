@@ -104,6 +104,9 @@ fn rebuild(cache: &SymbolCache, root: &str) -> Result<usize> {
     let reado = Path::new(root).join(".reado");
     std::fs::create_dir_all(&reado)?;
     let mut conn = Connection::open(index_path(root)).map_err(|e| Error::Other(e.to_string()))?;
+    // Off the main thread this can race an incremental reindex; wait it out.
+    conn.busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|e| Error::Other(e.to_string()))?;
     let fts = has_fts5(&conn);
     schema(&conn, fts)?;
 
@@ -291,9 +294,10 @@ fn query(root: &str, q: &str) -> Result<Vec<Hit>> {
 }
 
 /// (Re)build the semantic index. Called on project open and after a change the
-/// incremental path can't absorb.
-#[tauri::command]
-pub fn semantic_rebuild(cache: State<SymbolCache>, root: String) -> Result<usize> {
+/// incremental path can't absorb. `async` so a full walk of the project doesn't
+/// block the UI thread while it runs.
+#[tauri::command(async)]
+pub fn semantic_rebuild(cache: State<'_, SymbolCache>, root: String) -> Result<usize> {
     let started = std::time::Instant::now();
     let result = rebuild(&cache, &root);
     match &result {
@@ -314,9 +318,14 @@ pub fn semantic_rebuild(cache: State<SymbolCache>, root: String) -> Result<usize
 /// Re-index one file in place, for the watcher's `file-changed`. Cheaper than a
 /// rebuild by the size of the project; falls back to nothing when the index is
 /// absent (the next open rebuilds it).
-#[tauri::command]
+///
+/// `async` (so Tauri runs it off the main thread) and single-transaction on
+/// purpose: an agent editing a dozen files fires a dozen of these, and this used
+/// to be an fsync per indexed *line* on the UI thread — seconds of a frozen
+/// window (macOS spinner) per file the agent touched.
+#[tauri::command(async)]
 pub fn semantic_reindex_file(
-    cache: State<SymbolCache>,
+    cache: State<'_, SymbolCache>,
     root: String,
     file: String,
 ) -> Result<usize> {
@@ -324,38 +333,53 @@ pub fn semantic_reindex_file(
     if !path.exists() {
         return Ok(0);
     }
-    let conn = Connection::open(&path).map_err(|e| Error::Other(e.to_string()))?;
-    conn.execute("DELETE FROM docs WHERE file = ?1", [&file])
+    let mut conn = Connection::open(&path).map_err(|e| Error::Other(e.to_string()))?;
+    // Now that this runs on a worker thread it can meet a concurrent rebuild;
+    // wait for it rather than failing the reindex outright.
+    conn.busy_timeout(std::time::Duration::from_secs(5))
         .map_err(|e| Error::Other(e.to_string()))?;
 
     let abs = Path::new(&root).join(&file);
-    let Ok(text) = std::fs::read_to_string(&abs) else {
-        return Ok(0); // deleted or binary: the delete above was the whole job
+    // A file the rebuild would skip (binary, generated, huge) must not sneak into
+    // the index through the incremental path — but its old rows still go.
+    let text = if indexable(&abs)
+        && std::fs::metadata(&abs).map(|m| m.len()).unwrap_or(0) <= MAX_INDEXED_BYTES
+    {
+        std::fs::read_to_string(&abs).unwrap_or_default()
+    } else {
+        String::new()
     };
-    let symbols = crate::symbols::symbols_by_line(&cache, &root);
-    let mut count = 0;
-    for (i, line) in text.lines().enumerate() {
-        if !worth_indexing(line) {
-            continue;
-        }
-        let no = i as u32 + 1;
-        let snippet: String = line.trim().chars().take(200).collect();
-        conn.execute(
-            "INSERT INTO docs (file, line, snippet, symbol, body) VALUES (?1,?2,?3,?4,?5)",
-            rusqlite::params![
-                file,
-                no,
-                snippet,
-                symbols
-                    .get(&(file.clone(), no))
-                    .cloned()
-                    .unwrap_or_default(),
-                format!("{file} {snippet}")
-            ],
-        )
+    let symbols = crate::symbols::symbols_in_file(&cache, &abs);
+
+    let tx = conn
+        .transaction()
         .map_err(|e| Error::Other(e.to_string()))?;
-        count += 1;
+    tx.execute("DELETE FROM docs WHERE file = ?1", [&file])
+        .map_err(|e| Error::Other(e.to_string()))?;
+    let mut count = 0;
+    {
+        let mut insert = tx
+            .prepare("INSERT INTO docs (file, line, snippet, symbol, body) VALUES (?1,?2,?3,?4,?5)")
+            .map_err(|e| Error::Other(e.to_string()))?;
+        for (i, line) in text.lines().enumerate() {
+            if !worth_indexing(line) {
+                continue;
+            }
+            let no = i as u32 + 1;
+            let snippet: String = line.trim().chars().take(200).collect();
+            insert
+                .execute(rusqlite::params![
+                    file,
+                    no,
+                    snippet,
+                    symbols.get(&no).cloned().unwrap_or_default(),
+                    format!("{file} {snippet}")
+                ])
+                .map_err(|e| Error::Other(e.to_string()))?;
+            count += 1;
+        }
     }
+    tx.commit().map_err(|e| Error::Other(e.to_string()))?;
     Ok(count)
 }
 
