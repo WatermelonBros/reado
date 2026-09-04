@@ -55,26 +55,36 @@ jobs:
   lint:
     name: Lint (Biome)
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    # NOT `if:` on the job: a skipped job reports no status, and branch
+    # protection waits for a context that will never arrive. The job runs and
+    # reports; the work is what's gated.
+    env:
+      RUN: ${{ needs.changes.outputs.frontend }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        uses: pnpm/action-setup@v4
+      - if: env.RUN == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - if: env.RUN == 'true'
+        run: pnpm install --frozen-lockfile
       # Formatting, lint and import order in one pass, read-only: a single
       # diagnostic fails the job, so nothing unformatted or unlinted merges.
       # `pnpm lint:fix` applies everything this would flag.
-      - run: pnpm lint
+      - if: env.RUN == 'true'
+        run: pnpm lint
 
   frontend:
     name: Frontend (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
     runs-on: ${{ matrix.os }}
+    env:
+      RUN: ${{ needs.changes.outputs.frontend }}
     permissions:
       contents: read
       pull-requests: write # the coverage comment below
@@ -83,45 +93,58 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        uses: pnpm/action-setup@v4
+      - if: env.RUN == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      - if: env.RUN == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: env.RUN == 'true'
+        run: pnpm typecheck
       # Same suite (logic + UI, happy-dom) on every OS; Linux additionally
       # measures coverage so the PR gets a comment. Still no threshold — the
       # comment is a report, not a gate.
-      - run: pnpm ${{ matrix.os == 'ubuntu-latest' && 'test:coverage' || 'test' }}
+      - if: env.RUN == 'true'
+        run: pnpm ${{ matrix.os == 'ubuntu-latest' && 'test:coverage' || 'test' }}
       - name: Comment coverage on the PR
         # Fork PRs get a read-only token and can't comment; skip rather than fail.
         if: >-
-          matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' &&
+          env.RUN == 'true' && matrix.os == 'ubuntu-latest' &&
+          github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
         uses: davelosert/vitest-coverage-report-action@v2
-      - run: pnpm build
+      - if: env.RUN == 'true'
+        run: pnpm build
 
   rust-crates:
     name: Rust crates (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
     runs-on: ${{ matrix.os }}
+    env:
+      RUN: ${{ needs.changes.outputs.rust }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        uses: dtolnay/rust-toolchain@stable
+      - if: env.RUN == 'true'
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates/reado-core
       # Pure crates — no Tauri sidecar / system deps needed. These hold the
       # OS-divergent logic (path anchoring, sessions, forge, search), so run them
       # on every OS to catch separator/case-sensitivity regressions.
-      - name: Test core + cli
+      - if: env.RUN == 'true'
+        name: Test core + cli
         run: |
           cargo test --manifest-path crates/reado-core/Cargo.toml
           cargo test --manifest-path crates/reado-cli/Cargo.toml
@@ -129,34 +152,43 @@ jobs:
   rust-tauri:
     name: Rust Tauri (fmt + clippy + test, Linux)
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
+    env:
+      RUN: ${{ needs.changes.outputs.rust }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Linux system dependencies
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        name: Install Linux system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf libgtk-3-dev
-      - uses: dtolnay/rust-toolchain@stable
+      - if: env.RUN == 'true'
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - if: env.RUN == 'true'
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
       # tauri.conf.json declares the CLI as an externalBin sidecar, so Tauri's
       # build script requires the binary to exist even for clippy/test.
-      - name: Build the CLI sidecar
+      - if: env.RUN == 'true'
+        name: Build the CLI sidecar
         run: bash scripts/bundle-cli.sh
-      - name: Check formatting
+      - if: env.RUN == 'true'
+        name: Check formatting
         run: |
           for crate in crates/reado-core crates/reado-cli src-tauri; do
             cargo fmt --manifest-path "$crate/Cargo.toml" --all -- --check
           done
-      - name: Clippy
+      - if: env.RUN == 'true'
+        name: Clippy
         run: |
           for crate in crates/reado-core crates/reado-cli src-tauri; do
             cargo clippy --manifest-path "$crate/Cargo.toml" --all-targets -- -D warnings
           done
-      - name: Test
+      - if: env.RUN == 'true'
+        name: Test
         run: cargo test --manifest-path src-tauri/Cargo.toml
