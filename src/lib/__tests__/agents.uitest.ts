@@ -71,9 +71,30 @@ describe("AGENT_BIN / AGENT_ORDER", () => {
 
 describe("agentLaunchCommand", () => {
   it("sets READO_AGENT the POSIX way", () => {
-    expect(agentLaunchCommand("posix", "claude-code", "claude")).toBe(
-      "READO_AGENT=claude-code claude",
-    )
+    // `codex` has no verified system-prompt flag, so it launches bare.
+    expect(agentLaunchCommand("posix", "codex", "codex")).toBe("READO_AGENT=codex codex")
+  })
+
+  it("tells an agent it can reach that it must sign off each turn", () => {
+    const cmd = agentLaunchCommand("posix", "claude-code", "claude")
+    expect(cmd.startsWith("READO_AGENT=claude-code claude ")).toBe(true)
+    expect(cmd).toContain("--append-system-prompt")
+    expect(cmd).toContain("session_done")
+    // Single-quoted, and the rule carries no quote of its own to break out with.
+    expect(cmd.split("--append-system-prompt ")[1]).toMatch(/^'[^']+'$/)
+  })
+
+  it("launches bare when the CLI has no verified flag, rather than guessing one", () => {
+    // A wrong flag doesn't degrade — the agent fails to boot. Those still get
+    // the rule through the MCP server's own instructions.
+    for (const [agent, bin] of [
+      ["codex", "codex"],
+      ["gemini", "gemini"],
+      ["copilot", "copilot"],
+      ["opencode", "opencode"],
+    ] as const) {
+      expect(agentLaunchCommand("posix", agent, bin)).toBe(`READO_AGENT=${agent} ${bin}`)
+    }
   })
 
   it("uses $env: on PowerShell", () => {

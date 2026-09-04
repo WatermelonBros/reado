@@ -47,7 +47,7 @@ import { type DockArea, findPanel, useLayout } from "@/lib/layout"
 import { createLogger, safeError } from "@/lib/logger"
 import { ensureMcp } from "@/lib/mcp"
 import { notifyError } from "@/lib/notice"
-import { notifyResolved } from "@/lib/notify"
+import { notifyAgentDone, notifyResolved } from "@/lib/notify"
 import { usePreReview } from "@/lib/preReview"
 import { usePreview } from "@/lib/preview"
 import { loadProjectConfig, watchProjectConfig } from "@/lib/projectConfig"
@@ -318,6 +318,19 @@ export function ProjectView({ root }: { root: string }) {
       // live reasoning feed docked beside the terminal.
       listen("reasoning-changed", () => {
         useReasoning.getState().load(root)
+      }),
+      // The agent called `session_done` over MCP: it is handing the turn back.
+      // The user has usually walked away, which is the whole point of the
+      // notification and the chime.
+      listen("agent-done", async () => {
+        const c = await readFile(root, `${root}/.reado/done.json`, true).catch(() => null)
+        if (!c || c.kind !== "text") return
+        try {
+          const { status, summary } = JSON.parse(c.text) as { status: string; summary: string }
+          await notifyAgentDone(status, summary)
+        } catch {
+          /* a half-written file: the next write brings the whole one */
+        }
       }),
       // The branch changed on disk (e.g. `git checkout` in the terminal) — refresh
       // git state so the status bar shows the real branch.

@@ -11,6 +11,21 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **The agent tells Reado when it's done, instead of Reado guessing.** A new
+  `session_done` MCP tool: the agent calls it as the last thing in a turn —
+  finished, blocked or failed — and Reado raises the notification and the
+  completion chime then. Agents launched from Reado are told to do this in
+  their system prompt (where the CLI has a flag for it; Claude Code today), and
+  every MCP client also gets the rule through the server's own instructions.
+
+### Fixed
+- **"Play a sound when the agent finishes" now does that.** It was wired to the
+  open-task count dropping, so running the agent in the terminal — the ordinary
+  case — never made a sound. It now fires on the agent's own end-of-turn
+  handoff. The chime also resumes its audio context, which a browser starts
+  suspended when no user gesture preceded it.
+
 ## [1.10.0] — 2026-09-04
 
 ### Fixed

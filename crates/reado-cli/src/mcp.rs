@@ -35,6 +35,7 @@ const META_SERVER_INFO: &str = "io.modelcontextprotocol/serverInfo";
 const INSTRUCTIONS: &str = "You are a terminal agent working inside Reado, a read-first code IDE. In Reado's loop the user is the reviewer and you are the committer: they annotate the code with comments and tasks, and you resolve them.\n\n\
 WORK FROM THEIR ANNOTATIONS: before and while you work, read the user's open tasks and comments via the `reado://tasks` and `reado://comments` resources (plus `reado://reading-progress` and `reado://bookmarks` for context). They carry file/line anchors and are the source of truth for what to do — prefer them over guessing.\n\n\
 LIVE BROWSER PREVIEW: when the user asks about their running app, a page, console errors, network, or the DOM, use the `browser_*` tools to inspect and drive Reado's in-app preview — what the user actually sees. Do NOT launch your own browser (Playwright, Chrome, headless) for it; that opens a different, disconnected page. If a browser tool reports 'no preview pane running', ask the user to open the preview and enable agent access.\n\n\
+SAY WHEN YOU ARE DONE: the moment you finish a turn and are handing control back — the work is complete, or you are blocked, or you need an answer — call `session_done` with a one-line summary. The user has usually walked away from the desk; this is what tells Reado to get their attention. Call it exactly once per turn, as the last thing you do, and call it even when the answer is 'I could not do it'.\n\n\
 Per-tool and per-resource details are in their descriptions. Prefer all of these — they act on the user's real session.";
 
 /// Run the stdio server loop until stdin closes.
@@ -250,6 +251,7 @@ fn tool_list() -> serde_json::Value {
         { "name": "task_fail", "description": "Record a failed attempt on a task, with a note. Past the attempt budget the task blocks itself.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "note": { "type": "string" } }, "required": ["id"] }) },
         { "name": "task_block", "description": "Block a task: you cannot proceed without a human answering first.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "reason": { "type": "string" } }, "required": ["id", "reason"] }) },
         { "name": "comment_add", "description": "Add a comment anchored to a file and line. `kind` is task (sent to the AI batch) or note.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "file": { "type": "string" }, "line": { "type": "number" }, "end": { "type": "number" }, "type": { "type": "string" }, "kind": { "type": "string" }, "body": { "type": "string" } }, "required": ["file", "line", "body"] }) },
+        { "name": "session_done", "description": "Call this as the LAST thing in every turn, when you are handing control back to the user — finished, blocked, or out of questions. Reado uses it to alert a user who has walked away. `summary` is one line on what happened; `status` is done (default), blocked or failed.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "summary": { "type": "string" }, "status": { "type": "string" } } }) },
         { "name": "comment_reply", "description": "Reply in a comment's thread.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "body": { "type": "string" } }, "required": ["id", "body"] }) },
     ])
 }
@@ -428,6 +430,16 @@ fn call_tool(
             let c = core::fail_attempt(root, &sarg("id")).map_err(|e| (-32603, e.to_string()))?;
             mutation_result(&c, "task_fail")
         }
+        "session_done" => {
+            let status = match sarg("status").as_str() {
+                "blocked" => "blocked",
+                "failed" => "failed",
+                _ => "done",
+            };
+            core::mark_session_done(root, status, &sarg("summary"))
+                .map_err(|e| (-32603, e.to_string()))?;
+            Ok("Noted — Reado will let the user know.".to_string())
+        }
         "task_block" => {
             let c = core::block_comment(root, &sarg("id"), &sarg("reason"))
                 .map_err(|e| (-32603, e.to_string()))?;
@@ -569,7 +581,7 @@ mod tests {
         assert_eq!(result["cacheScope"], "public");
         assert!(result["ttlMs"].as_i64().unwrap() > 0);
         assert_eq!(result["_meta"][META_SERVER_INFO]["name"], "reado");
-        assert_eq!(result["tools"].as_array().unwrap().len(), 17);
+        assert_eq!(result["tools"].as_array().unwrap().len(), 18);
     }
 
     #[test]
@@ -624,6 +636,9 @@ mod tests {
         // The mutating half: the review loop's verbs, so an agent can close a
         // task through MCP rather than shelling out to the CLI.
         for expected in [
+            // The end-of-turn handoff: without it Reado can't tell a user who
+            // walked away that the agent is back.
+            "session_done",
             "task_done",
             "task_fail",
             "task_block",
@@ -635,7 +650,7 @@ mod tests {
                 "missing tool {expected} in {names:?}"
             );
         }
-        assert_eq!(names.len(), 17);
+        assert_eq!(names.len(), 18);
     }
 
     #[test]
@@ -929,6 +944,44 @@ mod tests {
         assert_eq!(res["content"][0]["type"], "image");
         assert_eq!(res["content"][0]["data"], "AAAA");
         assert_eq!(res["content"][0]["mimeType"], "image/png");
+    }
+
+    #[test]
+    fn session_done_records_the_handoff_the_watcher_watches_for() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let res = handle_call(
+            &root,
+            &serde_json::json!({
+                "name": "session_done",
+                "arguments": { "status": "blocked", "summary": "needs the API key" }
+            }),
+        );
+        assert_eq!(res["content"][0]["type"], "text");
+
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join(".reado/done.json")).unwrap())
+                .unwrap();
+        assert_eq!(written["status"], "blocked");
+        assert_eq!(written["summary"], "needs the API key");
+    }
+
+    #[test]
+    fn session_done_defaults_to_done_for_an_unknown_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        // An agent inventing a status must not put an unknown word in front of
+        // the user; and calling it bare is the common case.
+        handle_call(
+            &root,
+            &serde_json::json!({ "name": "session_done", "arguments": { "status": "whatever" } }),
+        );
+        let v: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join(".reado/done.json")).unwrap())
+                .unwrap();
+        assert_eq!(v["status"], "done");
+        assert_eq!(v["summary"], "");
     }
 
     // Thin wrapper so the image-vs-text branch of `handle` is exercised directly.
