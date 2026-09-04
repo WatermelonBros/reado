@@ -80,7 +80,8 @@ export const log = createLogger("app")
 
 /**
  * `invoke` wrapper that traces the IPC boundary: every command logs its name and
- * duration (at `debug`), and failures at `error`. Argument *keys* are logged as a
+ * duration (at `debug`), and failures at `error` (a missing file at `debug` — see
+ * below). Argument *keys* are logged as a
  * summary — never values — so contents and secrets stay out of the log.
  * `lib/api.ts` imports this as `invoke`, so all call sites are instrumented.
  */
@@ -98,10 +99,20 @@ export async function tracedInvoke<T>(cmd: string, args?: Record<string, unknown
     })
     return result
   } catch (e) {
-    emit("error", "ipc", `${cmd} failed`, {
+    const error = safeError(e)
+    // A file that isn't there is an answer, not a failure. Half the app probes
+    // for optional sidecars a project may simply not have (`.reado/qa.json`,
+    // `.reado/tours.json`, `.reado/pre-review.json`, …) and every probe was
+    // logged at `error` — pages of alarms that name no file (values never reach
+    // the log, by design) and that nobody can act on, drowning the real ones.
+    // Callers that actually need the file report it themselves with context;
+    // the trace stays, one level down. Best-effort match: an unrecognised
+    // wording just keeps its `error` level.
+    const missing = /no such file|cannot find the (file|path)/i.test(error)
+    emit(missing ? "debug" : "error", "ipc", `${cmd} failed`, {
       ms: Math.round(performance.now() - start),
       args: args ? Object.keys(args) : [],
-      error: safeError(e),
+      error,
     })
     throw e
   }

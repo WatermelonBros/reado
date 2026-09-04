@@ -304,7 +304,16 @@ pub fn read_file(
 ) -> Result<FileContent> {
     let root = PathBuf::from(&root);
     let path = ensure_within(&root, &PathBuf::from(&path))?;
-    let metadata = std::fs::metadata(&path)?;
+    // Name the file here or nowhere: the IPC trace logs argument *keys* only, so
+    // "read_file failed" on its own leaves no way to tell an optional sidecar
+    // that was merely absent from a file the app genuinely needed.
+    let metadata = std::fs::metadata(&path).inspect_err(|e| {
+        crate::log::debug(
+            "fs",
+            "read failed",
+            serde_json::json!({ "path": path.to_string_lossy(), "error": e.to_string() }),
+        );
+    })?;
 
     // `as_text` forces source decoding for image-renderable formats (e.g. SVG).
     if as_text != Some(true) {

@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-09-04
+
 ### Added
 - **The agent tells Reado when it's done, instead of Reado guessing.** A new
   `session_done` MCP tool: the agent calls it as the last thing in a turn —
@@ -20,6 +22,46 @@ commit.
   every MCP client also gets the rule through the server's own instructions.
 
 ### Fixed
+- **The window no longer grinds to a halt while an agent works.** Two causes, both
+  measured on a live session: the terminal repainted a decoration (and a marker)
+  for every clickable `path:line` in the viewport on *every* xterm render — 210 of
+  them for 20 streamed lines — which retained about 7KB of web-process memory per
+  line of agent output; it now paints once the output settles. And re-indexing one
+  changed file for semantic search ran on the UI thread with an fsync per indexed
+  line, plus a symbol walk of the whole project per file, so every file the agent
+  wrote froze the window for a second or more; it is now one transaction, this
+  file's symbols only, and off the main thread.
+- **A dev server in the project no longer locks the window up.** The watcher read
+  the root `.gitignore` only, while the file tree walks with the `ignore` crate
+  and honours one at any depth — so in a monorepo that keeps its rules in
+  `app/.gitignore`, Vite rewriting `app/node_modules/.vite/deps` reached the UI as
+  a thousand `file-changed` events (95% of every event in a two-hour session),
+  each one a re-anchor, a re-index and a `git status` on the main thread. Nested
+  ignore files are now honoured, `node_modules` is ignored outright, and
+  collecting the ignore rules moved off the UI thread with the rest of the watcher
+  setup.
+- **`git status` and the repo info no longer run on the UI thread**, where they
+  were 40 of the 130 seconds a locked-up session spent inside blocking commands —
+  the Source Control panel polls both every 4 seconds. Reado's git reads also pass
+  `--no-optional-locks` now, so a background poll can't take `index.lock` out from
+  under the git you are running in the terminal.
+- **Language servers now start in a project whose path contains a dot.** The
+  connection id doubles as a Tauri event name, which accepts only
+  `[A-Za-z0-9-/:_]`: under a path like `~/code/pi.frontend-app` the subscription
+  threw *after* the server had spawned, so every language server was started,
+  never listened to, and respawned every few seconds — no diagnostics, no hovers,
+  and an unhandled rejection each round.
+- **Reado no longer edits `.mcp.json` every time you open the project.** Wiring
+  the MCP server in is meant to be idempotent, but the "already correct" check
+  compared the file's *text* against a fresh re-serialisation: a config a
+  formatter had written as `"args": ["mcp"]` never matched, so every open
+  rewrote it — a modified file in `git status` and a failing format check.
+  It now compares the parsed config and hands an unchanged file back untouched.
+- **A missing file no longer shows up in the log as an error.** Half the app
+  probes for optional `.reado/*` sidecars a project may not have, and each probe
+  was traced at `error` naming no file (the IPC trace logs argument keys, never
+  values) — pages of alarms nobody could act on, hiding the real ones. Those
+  traces moved to `debug`, and `read_file` now records *which* path was missing.
 - **"Play a sound when the agent finishes" now does that.** It was wired to the
   open-task count dropping, so running the agent in the terminal — the ordinary
   case — never made a sound. It now fires on the agent's own end-of-turn
@@ -981,7 +1023,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/WatermelonBros/reado/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/WatermelonBros/reado/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/WatermelonBros/reado/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/WatermelonBros/reado/compare/v1.7.2...v1.8.0

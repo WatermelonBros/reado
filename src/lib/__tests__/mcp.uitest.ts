@@ -107,6 +107,19 @@ describe("ensureMcp", () => {
     expect(writeFile).not.toHaveBeenCalled()
   })
 
+  it("leaves a config that is already correct but formatted differently alone", async () => {
+    // The bug this guards: the comparison was textual, so a `.mcp.json` a
+    // formatter had written as `"args": ["mcp"]` never matched our re-serialised
+    // three-line array — every project open rewrote the file, leaving it
+    // modified in git and failing the formatter's check on the next commit.
+    vi.mocked(readFile).mockResolvedValue({
+      kind: "text",
+      text: '{\n  "mcpServers": { "reado": { "command": "reado", "args": ["mcp"] } }\n}\n',
+    })
+    await ensureMcp("/root")
+    expect(writeFile).not.toHaveBeenCalled()
+  })
+
   it("appends to an existing Codex TOML instead of rewriting it", async () => {
     installed("codex")
     vi.mocked(readFile).mockResolvedValue({ kind: "text", text: 'model = "o3"\n' })

@@ -119,6 +119,18 @@ describe("tracedInvoke", () => {
     expect((records()[0].fields as { error: string }).error).toBe("Error: ENOENT")
   })
 
+  it("keeps a missing file out of the error log — it is a probe, not a fault", async () => {
+    // Half the app probes for optional `.reado/*` sidecars. Logged at `error`,
+    // those probes fill the log with alarms that name no file and mean nothing.
+    applyLogConfig(true, "debug")
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "read_file") throw new Error("I/O error: No such file or directory (os error 2)")
+      return null
+    })
+    await expect(tracedInvoke("read_file", { path: ".reado/qa.json" })).rejects.toThrow()
+    expect(records()[0]).toMatchObject({ level: "debug", msg: "read_file failed" })
+  })
+
   it("never traces the logging commands — that would recurse", async () => {
     applyLogConfig(true, "trace")
     await tracedInvoke("log_path")

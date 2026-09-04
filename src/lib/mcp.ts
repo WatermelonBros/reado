@@ -28,7 +28,8 @@ interface McpTarget {
 }
 
 /** Merge into a JSON config, preserving everything else. Returns null on a parse
- *  error so we never clobber a file we don't understand. */
+ *  error so we never clobber a file we don't understand, and `existing` verbatim
+ *  when the merge changes nothing. */
 function mergeJson(
   existing: string | null,
   apply: (o: Record<string, unknown>) => void,
@@ -41,7 +42,13 @@ function mergeJson(
       return null
     }
   }
+  const before = JSON.stringify(o)
   apply(o)
+  // Already wired: hand the file back untouched. Re-serialising it rewrites the
+  // user's formatting — `["mcp"]` becomes a three-line array — so every project
+  // open left `.mcp.json` modified in git and at odds with whatever formatter
+  // owns the file (here, Biome, whose check is required on main).
+  if (JSON.stringify(o) === before) return existing
   return `${JSON.stringify(o, null, 2)}\n`
 }
 
@@ -120,7 +127,9 @@ async function writeMcpConfigs(root: string, targets: McpTarget[]): Promise<stri
       .catch(() => null)
     const next = tgt.merge(existing)
     if (next == null || next === existing) continue // unparseable or already there
-    await createFile(root, path).catch(() => {}) // ensure parent dirs + file
+    // Only to make the parent dirs and the file itself; on an existing config it
+    // would just fail ("a file with that name already exists") into the log.
+    if (existing == null) await createFile(root, path).catch(() => {})
     await writeFile(root, path, next).catch(() => {})
     written.push(tgt.label)
   }
