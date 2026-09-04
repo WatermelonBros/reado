@@ -246,7 +246,11 @@ mod tests {
         let root = dir.path().to_string_lossy().into_owned();
         for q in ["", "   ", "\t\n"] {
             let hits = search_text(root.clone(), q.into(), vec![], false, false, false).unwrap();
-            assert!(hits.is_empty(), "blank query {q:?} returned {} hits", hits.len());
+            assert!(
+                hits.is_empty(),
+                "blank query {q:?} returned {} hits",
+                hits.len()
+            );
         }
     }
 

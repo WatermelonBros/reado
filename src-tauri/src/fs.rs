@@ -746,7 +746,11 @@ mod tests {
         .unwrap();
         // Folders first regardless of name — the tree's whole shape depends on
         // it, and every other test here only checks membership.
-        assert!(entries[0].is_dir, "expected z_dir first, got {:?}", entries[0]);
+        assert!(
+            entries[0].is_dir,
+            "expected z_dir first, got {:?}",
+            entries[0]
+        );
     }
 
     /// The editor saves by project-relative path while reading by absolute one,
