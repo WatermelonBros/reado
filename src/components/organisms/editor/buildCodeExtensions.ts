@@ -63,6 +63,8 @@ export interface CodeExtensionsCtx {
   lspComp: Compartment
   tabSizeComp: Compartment
   wrapComp: Compartment
+  /** Swatches beside colour literals; empty when the setting is off. */
+  colorComp: Compartment
   whitespaceComp: Compartment
   focusComp: Compartment
   langComp: Compartment
@@ -73,6 +75,8 @@ export interface CodeExtensionsCtx {
   rulerColumn: number
   indentGuidesMode: "off" | "all" | "active"
   wrap: boolean
+  /** Built by CodeView, which owns the click handler. */
+  colorSwatchesExt: Extension
   renderWhitespace: boolean
   focusMode: boolean
   primary: boolean
@@ -239,6 +243,7 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // Mark diagnostics along the scrollbar so problems are easy to find.
     diagnosticsRuler,
     ctx.wrapComp.of(ctx.wrap ? EditorView.lineWrapping : []),
+    ctx.colorComp.of(ctx.colorSwatchesExt),
     ctx.whitespaceComp.of(ctx.renderWhitespace ? highlightWhitespace() : []),
     ctx.focusComp.of(focusExtension(ctx.focusMode)),
     ctx.langComp.of([]),

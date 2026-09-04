@@ -52,7 +52,9 @@ export function composeCommitPrompt(): string {
   return (
     "Commit and push the current changes. Run `git status` and `git diff` to review them, " +
     "stage everything, write a concise Conventional Commit message summarising the change, " +
-    "commit, then `git push`. Don't ask for confirmation — just do it."
+    "commit, then `git push`. Do NOT add a Co-Authored-By trailer or any other " +
+    "attribution footer to the message — the commit is the author's. " +
+    "Don't ask for confirmation — just do it."
   )
 }
 

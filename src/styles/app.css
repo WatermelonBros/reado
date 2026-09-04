@@ -183,6 +183,28 @@
   }
 
   /* Comment gutter markers (rendered by lib/commentGutter.ts). */
+  /* A colour literal's swatch, inline just before the value it paints. The
+     chequerboard shows through a translucent colour so alpha is visible. */
+  .reado-color-swatch {
+    display: inline-block;
+    width: 0.75em;
+    height: 0.75em;
+    margin-right: 0.3em;
+    vertical-align: -0.05em;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    cursor: pointer;
+    background-image:
+      linear-gradient(var(--swatch, transparent), var(--swatch, transparent)),
+      repeating-conic-gradient(var(--bg-elevated) 0% 25%, var(--bg) 0% 50%);
+    background-size:
+      auto,
+      6px 6px;
+  }
+  .reado-color-swatch:hover {
+    border-color: var(--accent);
+  }
+
   .reado-comment-gutter {
     width: 16px;
     cursor: pointer;
