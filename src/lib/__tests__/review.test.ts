@@ -126,6 +126,14 @@ describe("commit prompt", () => {
     expect(p).toContain("git push")
     expect(p).toContain("Don't ask for confirmation")
   })
+
+  it("tells the agent not to sign the commit as a co-author", () => {
+    // Agents add a Co-Authored-By trailer by default; the commit belongs to
+    // whoever pressed the button.
+    const p = composeCommitPrompt()
+    expect(p).toContain("Co-Authored-By")
+    expect(p).toMatch(/Do NOT add a Co-Authored-By/)
+  })
 })
 
 describe("explain prompt", () => {
