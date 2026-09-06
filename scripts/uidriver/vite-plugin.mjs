@@ -50,12 +50,23 @@ export function uidriver() {
         if (req.method === "GET" && path === "/poll") {
           if (queue.length) return json(res, 200, queue.shift());
           bridgeWaiters.push(res);
-          const t = setTimeout(() => {
+          const drop = () => {
             const i = bridgeWaiters.indexOf(res);
             if (i >= 0) bridgeWaiters.splice(i, 1);
+          };
+          const t = setTimeout(() => {
+            drop();
             json(res, 200, { id: 0, cmd: { action: "noop" } });
           }, POLL_TIMEOUT);
-          res.on("close", () => clearTimeout(t));
+          // Drop it on close too. A webview that reloads (HMR, or the Rust half
+          // rebuilding) abandons its long-poll, and a waiter left in the array
+          // is a socket `pump` will happily write the next command into — the
+          // command vanishes, the queue drains, and the agent waits out its
+          // full timeout against a bridge that is alive and polling.
+          res.on("close", () => {
+            clearTimeout(t);
+            drop();
+          });
           return;
         }
 
