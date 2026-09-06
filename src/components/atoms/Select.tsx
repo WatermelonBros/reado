@@ -55,7 +55,10 @@ export function Select<T extends string>({
     <ArkSelect.Root
       collection={collection}
       value={[value]}
-      onValueChange={(d) => d.value[0] && onChange(d.value[0] as T)}
+      // Length, not truthiness: "" is a legitimate value (the "built-in" /
+      // "auto" option several call sites use), so only a genuinely empty
+      // selection from Ark is ignored.
+      onValueChange={(d) => d.value.length > 0 && onChange(d.value[0] as T)}
       positioning={{ gutter: 4, placement: "bottom-start", sameWidth: true }}
     >
       <ArkSelect.Control>

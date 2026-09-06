@@ -27,10 +27,13 @@ import { colorSwatches, type SwatchHit } from "@/lib/colorSwatch"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
 import { toRelative, useComments } from "@/lib/comments"
 import { useDiagnostics } from "@/lib/diagnostics"
-import { detectEol, detectIndent, formatDocument, useDocInfo } from "@/lib/docInfo"
+import { detectEol, detectIndent, formatDocument, textToSave, useDocInfo } from "@/lib/docInfo"
+import { grammarSupport } from "@/lib/extGrammars"
+import { resolvedLanguageId } from "@/lib/extLanguages"
 import { languages } from "@/lib/languages"
 import { createLogger, safeError } from "@/lib/logger"
 import { hasServer, lspDefinition, lspHover, lspSupport } from "@/lib/lsp"
+import { enabledExtensions, useMarketplace } from "@/lib/marketplace"
 import { extractSymbols } from "@/lib/outline"
 import { noteSelfWrite, useReadProgress } from "@/lib/readProgress"
 import { composeExplainPrompt, composeSymbolExplainPrompt } from "@/lib/review"
@@ -298,16 +301,15 @@ export function CodeView({
 
   // Save the buffer to disk (Cmd/Ctrl+S). Never in PR mode: the bytes are the
   // PR's (from a ref), so writing them would clobber the user's working tree.
-  const saveFile = () => {
+  const saveFile = async () => {
     const view = viewRef.current
     if (!view || pinned) return
+    // Opt-in save pipeline, applied only on write (never on read): format on
+    // save, then trim trailing whitespace and/or ensure a final newline. A
+    // formatter that fails or hangs is reported but never blocks the write.
+    const text = await textToSave(view)
+    if (viewRef.current !== view) return // the tab changed while formatting ran
     noteSelfWrite(relPath) // our own save — don't let it mark the file unread
-    // Opt-in save hygiene, applied only on write (never on read): trim trailing
-    // whitespace and/or ensure a final newline.
-    let text = view.state.doc.toString()
-    const s = useSettings.getState()
-    if (s.trimTrailingWhitespace) text = text.replace(/[ \t]+$/gm, "")
-    if (s.insertFinalNewline && text.length > 0 && !text.endsWith("\n")) text += "\n"
     writeFile(useProject.getState().root, relPath, text)
       .then(() => {
         useEditorActions.getState().setDirty(false)
@@ -323,7 +325,7 @@ export function CodeView({
 
   // Auto Save: write only when there are unsaved edits (avoids needless writes).
   const autoSave = () => {
-    if (useEditorActions.getState().dirty) saveFile()
+    if (useEditorActions.getState().dirty) void saveFile()
   }
 
   // In re-anchor mode the same gesture sets an orphan's new anchor instead of
@@ -521,6 +523,18 @@ export function CodeView({
     if (desc) {
       desc.load().then((support) => {
         view.dispatch({ effects: langComp.reconfigure(support) })
+      })
+    } else {
+      // No pack for this language. A contributed TextMate grammar can still
+      // colour it — the file opens as plain text and gains highlighting once
+      // the grammar is compiled, which is the honest order of events.
+      // The enabled set, like every other consumer: a disabled extension must
+      // not get to name the language of a file for one code path and not another.
+      const installed = enabledExtensions(useMarketplace.getState().installed)
+      void grammarSupport(resolvedLanguageId(installed, relPath)).then((support) => {
+        if (support && viewRef.current === view) {
+          view.dispatch({ effects: langComp.reconfigure(support) })
+        }
       })
     }
 

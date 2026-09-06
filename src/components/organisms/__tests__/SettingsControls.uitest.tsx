@@ -29,7 +29,12 @@ vi.mock("@tauri-apps/api/app", () => ({ getVersion }))
 vi.mock("@tauri-apps/plugin-opener", () => ({ revealItemInDir }))
 vi.mock("../../../lib/api", () => ({ installCli, cliInstalled }))
 vi.mock("../../../lib/updater", () => ({ checkForUpdates }))
-vi.mock("../../../lib/logger", () => ({ logPath }))
+// Settings now reaches the marketplace (contributed themes in the picker),
+// which logs through the shared logger.
+vi.mock("../../../lib/logger", () => ({
+  logPath,
+  createLogger: () => ({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }),
+}))
 vi.mock("../../../lib/defaults", () => ({ makeDefaultApp }))
 vi.mock("../../../lib/tour", () => ({ useTourGuide: { getState: () => ({ run: tourRun }) } }))
 
@@ -221,17 +226,21 @@ describe("the theme picker", () => {
     expect(useSettings.getState().theme).toBe("reado-dark")
   })
 
-  it("picks a light and a dark theme separately once the mode is automatic", async () => {
+  it("offers every theme while following the system, and picking one takes hold", async () => {
+    // The split grids hid Sepia from a dark-mode machine and High-Contrast from
+    // a light one, and clicking the other polarity did nothing at all — the
+    // most-attempted action in the window was dead on first open.
     useSettings.setState({ mode: "system" })
     await openTab("appearance")
-    // Pick the *non-default* swatch in each grid — the defaults are
-    // reado-light/reado-dark, which would pass with no click at all.
-    const light = document.querySelector('button[data-theme="reado-sepia"]') as HTMLElement
-    const dark = document.querySelector('button[data-theme="reado-high-contrast"]') as HTMLElement
-    await userEvent.click(light)
-    await userEvent.click(dark)
-    expect(useSettings.getState().lightTheme).toBe("reado-sepia")
-    expect(useSettings.getState().darkTheme).toBe("reado-high-contrast")
+    for (const name of ["reado-light", "reado-dark", "reado-sepia", "reado-high-contrast"]) {
+      expect(document.querySelector(`button[data-theme="${name}"]`), name).toBeTruthy()
+    }
+    const sepia = document.querySelector('button[data-theme="reado-sepia"]') as HTMLElement
+    await userEvent.click(sepia)
+    expect(useSettings.getState().theme).toBe("reado-sepia")
+    // Choosing a theme is a manual choice; the mode has to follow, and the note
+    // above the grid says so before the click.
+    expect(useSettings.getState().mode).toBe("manual")
   })
 })
 

@@ -782,3 +782,31 @@ describe("zen mode", () => {
     expect(useSettings.getState().zenMode).toBe(false)
   })
 })
+
+describe("resetting the settings", () => {
+  it("puts preferences back to how Reado ships", () => {
+    useSettings.setState({ fontSize: 22, theme: "reado-sepia", wrap: false })
+    useSettings.getState().reset()
+    const s = useSettings.getState()
+    expect(s.fontSize).toBe(12)
+    expect(s.theme).toBe("reado-dark")
+    expect(s.wrap).toBe(true)
+  })
+
+  it("keeps the answers the user already gave", () => {
+    // Resetting these would re-ask a dismissed question, or throw away where
+    // the user was rather than how they like things.
+    useSettings.setState({
+      defaultAppsDismissed: true,
+      gitignoreDontAsk: true,
+      reviewObjective: "perf",
+      fontSize: 22,
+    })
+    useSettings.getState().reset()
+    const s = useSettings.getState()
+    expect(s.defaultAppsDismissed).toBe(true)
+    expect(s.gitignoreDontAsk).toBe(true)
+    expect(s.reviewObjective).toBe("perf")
+    expect(s.fontSize).toBe(12)
+  })
+})

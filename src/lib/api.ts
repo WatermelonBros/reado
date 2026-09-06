@@ -424,9 +424,124 @@ export const getBookmarks = (root: string) => invoke<Bookmark[]>("get_bookmarks"
 export const setBookmarks = (root: string, bookmarks: Bookmark[]) =>
   invoke<void>("set_bookmarks", { root, bookmarks })
 
-/** Format text with the project's formatter for this file type. Throws on failure. */
-export const formatFile = (root: string, path: string, content: string) =>
-  invoke<string>("format_file", { root, path, content })
+/** The outcome of a format attempt. `formatter` is null when the project
+ *  declares none for this file — a normal result, not a failure. */
+export interface FormatResult {
+  formatter: string | null
+  text: string
+  changed: boolean
+}
+
+/** Format text with a formatter this project declares. `formatter` pins one by
+ *  id (the per-project override). Throws when a formatter ran and failed, or
+ *  when the project declares one that isn't installed. */
+export const formatFile = (
+  root: string,
+  path: string,
+  content: string,
+  formatter?: string | null,
+) => invoke<FormatResult>("format_file", { root, path, content, formatter: formatter ?? null })
+
+/** A formatter's standing for the open project. */
+export interface FormatterStatus {
+  id: string
+  exts: string[]
+  declared: boolean
+  installed: boolean
+}
+
+/** Every formatter Reado can run, with whether this project declares it and
+ *  whether it's installed here. */
+export const formatterStatus = (root: string) =>
+  invoke<FormatterStatus[]>("formatter_status", { root })
+
+// ---- Extension marketplace (Open VSX) -------------------------------------
+
+/** An extension's published `package.json`. Only the keys Reado reads are named;
+ *  everything else in a real manifest is deliberately ignored. */
+export interface ExtManifest {
+  name?: string
+  displayName?: string
+  description?: string
+  version?: string
+  publisher?: string
+  /** A code entry point. Its presence is what makes an extension "partial":
+   *  Reado takes the data it declares and never loads the code. */
+  main?: string
+  browser?: string
+  extensionPack?: string[]
+  extensionDependencies?: string[]
+  categories?: string[]
+  contributes?: Record<string, unknown>
+}
+
+/** One catalogue entry, with the manifest that says what it contributes. */
+export interface ExtListing {
+  id: string
+  namespace: string
+  name: string
+  version: string
+  displayName: string
+  description: string
+  downloadCount: number
+  verified: boolean
+  icon: string | null
+  manifest: ExtManifest | null
+}
+
+export interface ExtSearchPage {
+  items: ExtListing[]
+  total: number
+}
+
+/** An installed extension, read from its own directory. */
+export interface InstalledExt {
+  id: string
+  namespace: string
+  name: string
+  version: string
+  displayName: string
+  manifest: ExtManifest
+}
+
+/** Search Open VSX. `category` narrows to one of the registry's own categories
+ *  ("Themes", "Snippets", "Programming Languages"); `sort: "downloads"` orders
+ *  by installs, which is what makes an empty query worth browsing. */
+export const ovsxSearch = (
+  query: string,
+  category: string | null,
+  offset: number,
+  size: number,
+  sort: "downloads" | null = null,
+) => invoke<ExtSearchPage>("ovsx_search", { query, category, offset, size, sort })
+
+/** Download, verify and unpack an extension. The download URL comes from the
+ *  registry's own answer, never from here. */
+export const ovsxInstall = (namespace: string, name: string, version: string) =>
+  invoke<InstalledExt>("ovsx_install", { namespace, name, version })
+
+export const ovsxInstalled = () => invoke<InstalledExt[]>("ovsx_installed")
+
+/** An extension's README as Markdown — from disk when it's installed, from the
+ *  registry otherwise, so a listing can be read before installing it. */
+export const ovsxReadme = (namespace: string, name: string, version?: string | null) =>
+  invoke<string>("ovsx_readme", { namespace, name, version: version ?? null })
+
+/** The latest published version of each id, for the ones the registry answers
+ *  for. An id missing from the answer means "no update offered" — unreachable
+ *  and up-to-date must not look the same. */
+export const ovsxLatest = (ids: string[]) => invoke<Record<string, string>>("ovsx_latest", { ids })
+
+export const ovsxUninstall = (namespace: string, name: string) =>
+  invoke<void>("ovsx_uninstall", { namespace, name })
+
+/** Read a text file an extension contributes, confined to its own directory. */
+export const extRead = (namespace: string, name: string, path: string) =>
+  invoke<string>("ext_read", { namespace, name, path })
+
+/** Read a binary asset an extension contributes, as a `data:` URL. */
+export const extAsset = (namespace: string, name: string, path: string) =>
+  invoke<string>("ext_asset", { namespace, name, path })
 
 // ---- Annotations ---------------------------------------------------------
 
@@ -897,6 +1012,10 @@ export const lspSend = (id: string, message: string) => invoke<void>("lsp_send",
 
 /** Stop a language server. */
 export const lspStop = (id: string) => invoke<void>("lsp_stop", { id })
+
+/** Whether every known language server is installed, in one call — the panel
+ *  asks about all of them at once. */
+export const lspInstalledAll = () => invoke<Array<[string, boolean]>>("lsp_installed_all")
 
 /** Whether a known language server's binary is installed (on the real PATH). */
 export const lspInstalled = (server: string) => invoke<boolean>("lsp_installed", { server })

@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@ark-ui/react": "^5.37.2",
+    "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.7.1",
     "@codemirror/language": "^6.10.8",
     "@codemirror/language-data": "^6.5.1",
@@ -66,6 +67,8 @@
     "remark-gfm": "^4.0.0",
     "remark-math": "^6.0.0",
     "tailwind-merge": "^3.6.0",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

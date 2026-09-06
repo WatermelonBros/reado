@@ -26,6 +26,7 @@
   --color-marker: var(--marker);
   --color-selection: var(--selection);
   --color-danger: var(--diag-error);
+  --color-ok: var(--ok);
 
   --font-sans: var(--font-ui);
   --font-mono: var(--font-code);

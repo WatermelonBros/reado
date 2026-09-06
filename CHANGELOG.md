@@ -11,6 +11,164 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **An extension marketplace, backed by Open VSX.** Search it from the Extensions
+  panel and install colour themes, file icon themes, snippets, language
+  configuration and TextMate grammars. Reado reads what an extension *declares*
+  and never loads its code — which is why the list only ever shows extensions
+  that will actually work here. An extension that also ships code installs its
+  declarative half and says, in a sentence, what won't work.
+  - Themes map onto Reado's semantic palette, with the built-in theme of the same
+    polarity underneath supplying anything the theme leaves out, so an imported
+    theme never half-paints the interface. Each one is measured against the same
+    WCAG AA contrast floor Reado holds its own themes to, and labelled with the
+    result — never blocked.
+  - Icon themes drive the file tree, with Reado's own glyphs filling every gap.
+  - Snippets are offered in completion for the languages they declare. Completion
+    only appears where an extension actually contributes snippets, so nothing
+    changes in a project without them.
+  - Contributed language configuration teaches comment toggling and auto-closing
+    pairs to languages Reado has no pack for.
+  - TextMate grammars highlight languages with no CodeMirror language pack. The
+    language packs still win where they exist — the outline, focus block and
+    syntax-aware selection read their syntax tree, which a token stream can't
+    replace. Tokenizing is bounded by a per-line time limit, a line-length cap
+    and the visible region, so a pathological grammar degrades to plain text
+    instead of freezing the window.
+  - Packages are downloaded, checksum-verified and unpacked in the backend, with
+    size and entry caps and strict path confinement. Uninstall is exact.
+  - Language servers and formatters stay curated: they're the kinds that spawn a
+    process, so the command still comes from a compiled allowlist. Both are
+    listed in the same panel and one search covers all of it.
+  - **Every row opens.** Formatters and language servers get a page too — what
+    they add, whether the open project asks for them, what they need, and the
+    exact command that installs them. A list where only some rows respond to a
+    click reads as broken, not as principled, and the row you reach for first is
+    usually one of these.
+  - Enable and disable are a button that names what it does, not a checkbox you
+    have to read a state off, and a **Reload** prompt appears only after a change
+    the open window genuinely can't pick up — a language server is a running
+    process, a grammar is compiled into an editor when a file opens. A theme, a
+    file-icon set or a formatter changes live and says nothing.
+  - Switching an extension off now takes effect immediately rather than at the
+    next restart: the hooks that apply a theme and an icon theme filter by the
+    enabled list, so they have to watch it.
+  - **Every extension has a page.** Click its name and its README opens in the
+    editor area, rendered, with Install / Use / Remove alongside it. A sidebar
+    row holds a name and two lines of blurb; what decides whether you want an
+    extension is what its author wrote about it, and reading that used to mean
+    leaving the app. Installed extensions read theirs from disk, so it works
+    offline.
+  - Switching an extension off now actually stops it contributing — themes,
+    icons, snippets, grammars and language configuration all read one filtered
+    list, so "disabled" means disabled rather than "still there, quietly". The
+    switch appears only once something is installed: offering it on a catalogue
+    row was a preference about nothing, and it put a checked box on every line.
+  - **If it's installable, it works.** An extension is offered only when Reado
+    can deliver everything it contributes; one that also ships code isn't
+    listed, however useful the data inside it is. Half an extension with a
+    footnote explaining the missing half is an apology, not support. The
+    judgement comes from the manifest alone, so an extension published tomorrow
+    is classified like one from three years ago and there is no per-extension
+    list to keep up to date.
+  - The panel opens on what's relevant rather than on a catalogue: a formatter
+    the open project declares is a real suggestion, a language server for a
+    language you haven't opened is not — it waits behind its own filter, one
+    click away. Row actions appear on hover or keyboard focus, so a long list
+    reads as a list.
+  - Removing an extension asks first, in the row, and the question is
+    dismissable — a destructive action was one stray click away.
+  - The extension you just updated stays where it was in the list. Replacing it
+    meant filtering it out and appending, so the one row you were looking at was
+    the one row that moved.
+  - **Extensions can be updated.** Installed extensions are read from disk, so
+    nothing on the machine knew a newer version existed; the panel now asks the
+    registry once when it opens and offers **Update to X** on any row that has
+    one, next to Remove rather than in place of it. An extension the registry
+    can't answer for offers nothing — unreachable and up-to-date must not look
+    the same.
+  - Installing a language server or a formatter now opens the terminal it runs
+    in. Reusing an already-open pane left the panel closed, so the command ran
+    out of sight and the button looked dead. The row stops saying "Install" on
+    its own once the tool lands, instead of waiting for a manual re-check.
+  - Every section folds away and remembers it, the filter narrows what's on
+    screen rather than only what a search asks for, and searching unfolds
+    whatever it matched — a hit hidden inside a folded section is a search that
+    answered nothing. **Installed** means installed: extensions, formatters and
+    language servers alike, with a **Use** control on anything selectable, so
+    installing a theme isn't followed by a trip to Settings to see it.
+- **Formatters are manifests, with a per-project override.** The Extensions panel
+  shows each formatter, whether the open project declares it, and how to declare
+  it if you want it. When detection isn't what you want, pin a formatter for a
+  file type in that project — or turn formatting off for it — without affecting
+  any other project.
+- **Format on save.** A new editor setting, off by default, next to the existing
+  trim-whitespace and final-newline toggles. It runs the project's formatter
+  before writing, and a formatter that fails, hangs, or is missing never blocks
+  the save — Reado writes what you have and tells you why it couldn't format.
+- **Formatting goes through the language server when one offers it.** rustfmt via
+  rust-analyzer, gofmt via gopls, RuboCop via ruby-lsp — each with the project's
+  own configuration, which a command-line invocation can only approximate. Reado
+  falls back to the project's formatter binary when the server can't format.
+
+### Fixed
+- **A globally installed formatter no longer hijacks projects that don't use it.**
+  Reado picked formatters from a hardcoded table that fell back to whatever was
+  on your PATH, so one Biome install silently reformatted every Prettier project
+  you opened — the whole file, in the wrong style. A formatter now runs only when
+  the project declares it: a config file it owns, or its name in the project's
+  package manifest. Languages with a single conventional formatter (rustfmt,
+  gofmt, shfmt) are unchanged.
+- **Format Document says what happened.** "This project declares no formatter"
+  and "already formatted" used to look identical to doing nothing at all.
+- **Formatting no longer throws away your cursor.** It rewrote the whole document
+  even to fix one line; now it replaces only what actually changed.
+- **File ▸ Save applies the same on-save settings as ⌘S.** The native menu's save
+  skipped the trim-whitespace and final-newline toggles entirely.
+- **Dropdown options that mean "none" can be chosen again.** Picking an installed
+  icon theme left no way back to Reado's own icons, and the same went for the
+  default code font and the automatic formatter override — the shared select
+  tested the new value for truthiness, so the empty string those options carry
+  was read as no selection at all and discarded.
+
+### Changed
+- **Imported themes are corrected, not just measured.** A theme supplies its
+  identity — canvas, ink, accent, syntax palette — and Reado derives the parts
+  that carry legibility from it: surfaces and borders step away from the canvas
+  by a fixed perceptual amount in the canvas's own hue, and secondary text is
+  solved for a contrast ratio. Copying `descriptionForeground` and
+  `editorLineNumber.foreground` onto Reado's tokens imported the names and lost
+  the roles — those are colours meant to recede in the editor they were written
+  for, and Reado reads them. Themes whose sidebar and editor share one
+  background used to leave inputs on the same colour as the page, with an
+  invisible border. Ink, accent and syntax colours that fall under WCAG AA are
+  now lifted until they clear it, keeping their hue.
+- **Settings can be put back.** A **Reset to defaults** in the settings footer,
+  behind a confirmation. Every control there was reversible only if you
+  remembered what it used to be, which after an evening of moving the font size,
+  the line height and the theme around nobody does. Answers you have already
+  given are kept — a dismissed prompt stays dismissed rather than coming back.
+- **One theme grid, and it tells you when it isn't in charge.** Settings showed
+  a separate light and dark picker while following the system, so choosing a
+  theme there changed a stored value and nothing on screen. There is now a
+  single grid showing the theme you are actually looking at; picking one takes
+  over from the system, and a line under it says so when the system is still
+  deciding.
+- **Secondary text separates from tertiary without either falling below AA.**
+  Section labels and hints had drifted close enough to read as one rank; the
+  muted rank was lifted rather than the faint rank lowered, so the hierarchy is
+  visible and the quietest text still clears 4.9:1. Every theme also carries an
+  explicit "ok" colour, so installed and valid states stop borrowing a syntax
+  colour that a theme is free to redefine.
+- **Settings became a window instead of a drawer**, with a search that takes you
+  to a setting by name, every control inside a named group, and section titles
+  that no longer look identical to the field labels under them.
+- The window's content security policy now allows WebAssembly (`wasm-unsafe-eval`
+  in `script-src`). The TextMate grammar engine is a WebAssembly module, and
+  Chromium-based webviews refuse to instantiate one without it. It's loaded on
+  demand — a session that never opens a file needing a contributed grammar never
+  loads it.
+
 ## [1.11.0] — 2026-09-04
 
 ### Added

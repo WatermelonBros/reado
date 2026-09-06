@@ -8,7 +8,13 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
-    "paths": { "@/*": ["./src/*"] },
+    "paths": {
+      "@/*": ["./src/*"],
+      // vscode-textmate ships types but doesn't point at them from its
+      // package.json, so resolution has to be told where they are. Types only:
+      // Vite and Vitest resolve the runtime module normally.
+      "vscode-textmate": ["./node_modules/vscode-textmate/types/vscode-textmate.d.ts"]
+    },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

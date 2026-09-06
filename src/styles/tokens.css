@@ -61,7 +61,13 @@
   --border: oklch(0.32 0.02 250);
   --border-strong: oklch(0.42 0.02 250);
   --text: oklch(0.87 0.012 250); /* 12.2:1 on --bg; APCA Lc 80 (was Lc 66 at 0.8) */
-  --text-muted: oklch(0.62 0.012 250);
+  /* Three declared ranks need three values. `--text-muted` used to equal
+     `--text-faint` exactly, so a section title and the hint beneath it were the
+     same colour and the hierarchy the interface claims did not exist. The step
+     is taken by lifting `muted` toward the ink rather than sinking `faint`:
+     everything here still clears AA, because a rank bought with legibility is
+     the wrong trade in a reading app. */
+  --text-muted: oklch(0.73 0.012 250); /* 7.5:1 on --bg */
   --text-faint: oklch(0.62 0.012 250); /* 4.97:1 on --bg, 4.52:1 on --bg-elevated */
 
   --accent: oklch(0.74 0.11 260);
@@ -74,6 +80,13 @@
   --syn-control: oklch(0.72 0.15 330);
   --syn-keyword: oklch(0.79 0.1 260);
   --syn-definition: oklch(0.88 0.12 95);
+  /* Success, as a semantic token of its own.
+     Status ("Installed", "In use", "Used by this project") used to borrow
+     --syn-string, which an installed theme overwrites — so a theme whose
+     strings are red turned the interface's success colour red. Same value the
+     built-in themes give strings, but this one is Reado's and stays put. */
+  --ok: oklch(0.82 0.12 150);
+
   --syn-string: oklch(0.82 0.12 150);
   --syn-number: oklch(0.71 0.15 55);
   --syn-comment: oklch(0.63 0.02 250); /* 5.2:1 on --bg */
@@ -115,7 +128,8 @@
   --border: oklch(0.88 0.008 90);
   --border-strong: oklch(0.78 0.01 90);
   --text: oklch(0.33 0.012 250);
-  --text-muted: oklch(0.5 0.012 250);
+  /* 0.02 apart was no step at all; see the dark theme's note. */
+  --text-muted: oklch(0.4 0.012 250);
   --text-faint: oklch(0.52 0.012 250); /* 5.0:1 on --bg, 5.4:1 on --bg-elevated */
 
   --accent: oklch(0.5 0.13 260);
@@ -124,6 +138,13 @@
   --syn-control: oklch(0.46 0.16 330);
   --syn-keyword: oklch(0.52 0.13 260);
   --syn-definition: oklch(0.44 0.08 95);
+  /* Success, as a semantic token of its own.
+     Status ("Installed", "In use", "Used by this project") used to borrow
+     --syn-string, which an installed theme overwrites — so a theme whose
+     strings are red turned the interface's success colour red. Same value the
+     built-in themes give strings, but this one is Reado's and stays put. */
+  --ok: oklch(0.5 0.12 150);
+
   --syn-string: oklch(0.5 0.12 150);
   --syn-number: oklch(0.53 0.13 55);
   --syn-comment: oklch(0.54 0.03 250); /* 4.63:1 on --bg */
@@ -170,6 +191,13 @@
   --syn-control: oklch(0.79 0.15 330);
   --syn-keyword: oklch(0.82 0.085 260);
   --syn-definition: oklch(0.94 0.09 95);
+  /* Success, as a semantic token of its own.
+     Status ("Installed", "In use", "Used by this project") used to borrow
+     --syn-string, which an installed theme overwrites — so a theme whose
+     strings are red turned the interface's success colour red. Same value the
+     built-in themes give strings, but this one is Reado's and stays put. */
+  --ok: oklch(0.88 0.12 150);
+
   --syn-string: oklch(0.88 0.12 150);
   --syn-number: oklch(0.79 0.14 55);
   --syn-comment: oklch(0.7 0.02 250);
@@ -207,7 +235,8 @@
   --border: oklch(0.85 0.025 75);
   --border-strong: oklch(0.74 0.03 75);
   --text: oklch(0.34 0.02 60);
-  --text-muted: oklch(0.5 0.02 60);
+  /* A real third rung, like the dark and light themes. */
+  --text-muted: oklch(0.4 0.02 60);
   --text-faint: oklch(0.52 0.02 60); /* 4.63:1 on --bg, 4.92:1 on --bg-elevated */
 
   --accent: oklch(0.5 0.13 40);
@@ -216,6 +245,13 @@
   --syn-control: oklch(0.46 0.16 350);
   --syn-keyword: oklch(0.52 0.13 290);
   --syn-definition: oklch(0.44 0.08 80);
+  /* Success, as a semantic token of its own.
+     Status ("Installed", "In use", "Used by this project") used to borrow
+     --syn-string, which an installed theme overwrites — so a theme whose
+     strings are red turned the interface's success colour red. Same value the
+     built-in themes give strings, but this one is Reado's and stays put. */
+  --ok: oklch(0.5 0.12 150);
+
   --syn-string: oklch(0.5 0.12 150);
   --syn-number: oklch(0.53 0.13 45);
   --syn-comment: oklch(0.52 0.03 70); /* 4.63:1 on --bg */

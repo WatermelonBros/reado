@@ -30,7 +30,12 @@ vi.mock("@tauri-apps/api/app", () => ({ getVersion }))
 vi.mock("@tauri-apps/plugin-opener", () => ({ revealItemInDir }))
 vi.mock("../../../lib/api", () => ({ installCli, cliInstalled }))
 vi.mock("../../../lib/updater", () => ({ checkForUpdates }))
-vi.mock("../../../lib/logger", () => ({ logPath }))
+// Settings now reaches the marketplace (contributed themes in the picker),
+// which logs through the shared logger.
+vi.mock("../../../lib/logger", () => ({
+  logPath,
+  createLogger: () => ({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }),
+}))
 vi.mock("../../../lib/defaults", () => ({ makeDefaultApp }))
 vi.mock("../../../lib/tour", () => ({ useTourGuide: { getState: () => ({ run: tourRun }) } }))
 

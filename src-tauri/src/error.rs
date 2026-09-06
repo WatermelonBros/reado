@@ -18,10 +18,17 @@ pub enum Error {
     #[error(transparent)]
     Store(#[from] reado_core::Error),
 
-    // Catch-all for command-specific failures.
-    #[allow(dead_code)]
+    // Catch-all for command-specific failures. Serialises verbatim, so a
+    // command with its own wording keeps it.
     #[error("{0}")]
     Other(String),
+}
+
+impl Error {
+    /// Wrap anything printable as a command failure, keeping its own words.
+    pub fn other(e: impl std::fmt::Display) -> Self {
+        Error::Other(e.to_string())
+    }
 }
 
 /// Serialise as the error message string so `invoke` rejects with readable text.

@@ -8,6 +8,7 @@
  * fails and we silently fall back to the index-based features.
  */
 
+import { getIndentUnit, indentUnit } from "@codemirror/language"
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint"
 import type { Transport } from "@codemirror/lsp-client"
 import {
@@ -138,7 +139,9 @@ const extOf = (path: string) => path.split(".").pop()?.toLowerCase() ?? ""
 const serverFor = (path: string) =>
   SERVERS.find((s) => s.exts.includes(extOf(path)) && useExtensions.getState().isEnabled(s.id)) ??
   null
-const langIdFor = (path: string) => LANG_IDS[extOf(path)] ?? extOf(path)
+/** The LSP/editor language id for a file — also what snippet and grammar
+ *  contributions key on, so they resolve languages the same way servers do. */
+export const langIdFor = (path: string) => LANG_IDS[extOf(path)] ?? extOf(path)
 
 /** A file:// URI for an absolute path (spaces and the like encoded). Handles
  *  Windows paths (`C:\…`): backslashes are normalized and the drive gets a
@@ -555,6 +558,61 @@ interface DocSymbol {
   selectionRange?: { start: { line: number } }
   location?: { range: { start: { line: number } } }
   children?: DocSymbol[]
+}
+
+/** An LSP `TextEdit` — a replacement over a line/character range. */
+interface LspTextEdit {
+  range: { start: { line: number; character: number }; end: { line: number; character: number } }
+  newText: string
+}
+
+/**
+ * Format the view's document through its language server, and resolve once the
+ * edits have landed.
+ *
+ * `@codemirror/lsp-client` exports a `formatDocument` command, but it is
+ * fire-and-forget: it returns true the moment the request goes out. Format on
+ * save has to know the buffer is settled *before* it writes, so this is the
+ * awaitable version.
+ *
+ * Resolves to what the server did, or null when this file has no server or the
+ * server offers no formatting — the caller then falls through to the project's
+ * own formatter.
+ */
+export async function lspFormat(view: EditorView): Promise<"formatted" | "unchanged" | null> {
+  const plugin = LSPPlugin.get(view)
+  if (!plugin?.client.serverCapabilities?.documentFormattingProvider) return null
+  const before = view.state.doc
+  try {
+    plugin.client.sync()
+    const edits = await plugin.client.request<object, LspTextEdit[] | null>(
+      "textDocument/formatting",
+      {
+        textDocument: { uri: plugin.uri },
+        options: {
+          tabSize: getIndentUnit(view.state),
+          insertSpaces: !view.state.facet(indentUnit).includes("\t"),
+        },
+      },
+    )
+    // The user kept typing while the server thought. Applying offsets computed
+    // against the old document would corrupt the new one.
+    if (view.state.doc !== before) return "unchanged"
+    if (!edits?.length) return "unchanged"
+    view.dispatch({
+      changes: edits.map((e) => ({
+        from: plugin.fromPosition(e.range.start, before),
+        to: plugin.fromPosition(e.range.end, before),
+        insert: e.newText,
+      })),
+    })
+    return "formatted"
+  } catch (e) {
+    // A server that errors on formatting shouldn't block the project's own
+    // formatter from trying.
+    log.warn("server formatting failed", { error: String(e) })
+    return null
+  }
 }
 
 /** Ask the server for the active file's document symbols, mapped to the outline

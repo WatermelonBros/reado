@@ -20,6 +20,53 @@ pub fn lsp_installed(server: String) -> bool {
     server_command(&server).is_some_and(|(bin, _)| on_path(bin))
 }
 
+/// The same answer for every server Reado knows, in one call.
+///
+/// Each probe walks the login-shell PATH with a `stat` per directory, and the
+/// marketplace asks about all of them at once — as two dozen separate commands
+/// that was two dozen IPC round trips and a few hundred stats every time the
+/// panel mounted.
+#[tauri::command]
+pub fn lsp_installed_all() -> Vec<(String, bool)> {
+    SERVER_IDS
+        .iter()
+        .map(|id| {
+            let found = server_command(id).is_some_and(|(bin, _)| on_path(bin));
+            ((*id).to_string(), found)
+        })
+        .collect()
+}
+
+/// Every server id the allowlist answers for. Kept beside `server_command` so
+/// the two cannot drift; the test below pins that.
+const SERVER_IDS: &[&str] = &[
+    "typescript",
+    "angular",
+    "rust",
+    "python",
+    "go",
+    "cpp",
+    "bash",
+    "csharp",
+    "java",
+    "kotlin",
+    "scala",
+    "ruby",
+    "php",
+    "lua",
+    "swift",
+    "zig",
+    "html",
+    "css",
+    "json",
+    "yaml",
+    "vue",
+    "svelte",
+    "solidity",
+    "terraform",
+    "toml",
+];
+
 /// The system package manager available on this (Linux) machine, so the
 /// marketplace can pick the right install command per distro. Returns one of
 /// "apt" | "dnf" | "pacman" | "zypper" | "brew", or null if none is found.
@@ -320,6 +367,15 @@ pub fn kill_all(state: &LspState) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn every_listed_id_resolves_to_a_command() {
+        // `lsp_installed_all` iterates the id list; an id the allowlist doesn't
+        // know would silently report "not installed" forever.
+        for id in SERVER_IDS {
+            assert!(server_command(id).is_some(), "{id} has no command");
+        }
+    }
     use super::*;
 
     #[test]

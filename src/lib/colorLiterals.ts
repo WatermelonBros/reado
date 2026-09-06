@@ -143,6 +143,33 @@ function linearToOklab(r: number, g: number, b: number): [number, number, number
   ]
 }
 
+/** A colour in OKLCH: lightness 0..1, chroma, hue in degrees. */
+export interface Oklch {
+  l: number
+  c: number
+  h: number
+}
+
+/** sRGB → OKLCH. Perceptual lightness is what makes "one step lighter" mean the
+ *  same thing on a navy background as on a warm grey one. */
+export function rgbToOklch({ r, g, b }: Rgb): Oklch {
+  const [L, A, B] = linearToOklab(ungamma(r / 255), ungamma(g / 255), ungamma(b / 255))
+  const h = (Math.atan2(B, A) * 180) / Math.PI
+  return { l: L, c: Math.hypot(A, B), h: h < 0 ? h + 360 : h }
+}
+
+/** OKLCH → `#rrggbb`, clipped per channel so an out-of-gamut colour keeps its
+ *  hue rather than washing out to grey. */
+export function oklchToHex({ l, c, h }: Oklch): string {
+  const rad = (h * Math.PI) / 180
+  const [lr, lg, lb] = oklabToLinear(l, c * Math.cos(rad), c * Math.sin(rad))
+  const ch = (v: number) =>
+    Math.round(clamp01(gamma(v)) * 255)
+      .toString(16)
+      .padStart(2, "0")
+  return `#${ch(lr)}${ch(lg)}${ch(lb)}`
+}
+
 function parseOklch(s: string): Rgb | null {
   const p = args(s)
   if (p.length < 3 || p.some((x) => !/^[-\d.%degrad]+$/i.test(x))) return null

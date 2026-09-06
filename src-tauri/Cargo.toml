@@ -82,6 +82,22 @@ local-ip-address = "0.6"
 mdns-sd = { version = "0.11", optional = true }
 # Stream/Sink helpers for the WebSocket terminal bridge.
 futures-util = "0.3"
+
+# --- Extension marketplace (Open VSX) -----------------------------------------
+# The catalogue and the `.vsix` packages are fetched here, never in the webview,
+# so the app's content security policy stays closed. `-no-provider` keeps reqwest
+# on the same rustls crypto provider the Anywhere server already uses (ring)
+# instead of pulling a second one into the process.
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls-webpki-roots-no-provider",
+  "http2",
+  "charset",
+  "json",
+] }
+# A `.vsix` is a zip. `enclosed_name` is what keeps a hostile archive inside its
+# own directory.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# (Extension assets reach the webview as `data:` URLs via `fs::base64_encode`.)
 tauri-plugin-clipboard-manager = "2.3.2"
 # PNG encoding for clipboard images spilled to a temp file (terminal paste).
 # Already in the tree via xcap on non-Linux; `png` only, so Linux pays little.

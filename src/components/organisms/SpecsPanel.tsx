@@ -53,16 +53,15 @@ export function SpecsPanel() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-none items-center gap-1.5 border-b border-line px-2 py-2">
-        <div className="relative flex min-w-0 flex-1 items-center">
-          <SearchIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-faint" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("specs.search")}
-            aria-label={t("specs.search")}
-            className="min-w-0 flex-1 bg-canvas py-1 pr-2 pl-7"
-          />
-        </div>
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("specs.search")}
+          aria-label={t("specs.search")}
+          icon={<SearchIcon className="h-3.5 w-3.5" />}
+          className="bg-canvas py-1"
+          wrapperClassName="min-w-0 flex-1"
+        />
         <IconButton
           label={t(anyExpanded ? "specs.collapseAll" : "specs.expandAll")}
           onClick={() =>

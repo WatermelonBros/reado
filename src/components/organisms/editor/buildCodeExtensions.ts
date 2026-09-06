@@ -22,6 +22,7 @@ import { explainSymbolAt, taskFromDiagnostic } from "@/lib/lspActions"
 import { occurrenceHighlight } from "@/lib/occurrenceHighlight"
 import { diagnosticsRuler } from "@/lib/overviewRuler"
 import { readoSearchPanel } from "@/lib/searchPanel"
+import { contributedLanguage, contributedSnippets } from "@/lib/snippetSupport"
 import { useCursor, useEditorActions, useProject, useSessions, useSettings } from "@/lib/store"
 import { expandSelection, shrinkSelection, syntaxSelection } from "@/lib/syntaxSelection"
 import {
@@ -188,6 +189,8 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     blockField,
     linkField,
     filePathFacet.of(ctx.path),
+    contributedSnippets(ctx.relPath),
+    contributedLanguage(ctx.path),
     gotoDefinitionHandlers,
     // F12 jumps to the definition of the symbol at the cursor.
     keymap.of([

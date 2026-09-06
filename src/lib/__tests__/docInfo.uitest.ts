@@ -13,8 +13,15 @@ vi.mock("../api", () => ({
   writeFile: vi.fn(async () => {}),
 }))
 vi.mock("../prompt", () => ({ prompt: vi.fn(async () => null) }))
+// The on-save pipeline reads these; all off means "write the buffer as it is".
+const { settings } = vi.hoisted(() => ({
+  settings: { formatOnSave: false, trimTrailingWhitespace: false, insertFinalNewline: false },
+}))
 vi.mock("../lsp", () => ({
   lspCalls: vi.fn(() => null),
+  // Null = this file's server offers no formatting, so formatting falls through
+  // to the project's own formatter (the path these tests exercise).
+  lspFormat: vi.fn(async () => null),
   lspLocate: vi.fn(() => false),
   lspPrepareCallHierarchy: vi.fn(() => null),
   lspPrepareTypeHierarchy: vi.fn(() => null),
@@ -42,6 +49,7 @@ const searchFor = vi.fn()
 const { workspaceSetState } = vi.hoisted(() => ({ workspaceSetState: vi.fn() }))
 vi.mock("../store", () => ({
   useProject: { getState: () => project },
+  useSettings: { getState: () => settings },
   useEditorActions: { getState: () => ({ setDirty }) },
   useWorkspace: Object.assign(() => ({ searchFor }), {
     getState: () => ({ searchFor }),
@@ -190,10 +198,39 @@ describe("goToLine", () => {
 })
 
 describe("saveDocument", () => {
-  it("writes the buffer to the active file's project-relative path", () => {
+  it("writes the buffer to the active file's project-relative path", async () => {
     mount("hello")
-    saveDocument()
+    await saveDocument()
     expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "hello")
+  })
+
+  it("applies the on-save hygiene the editor applies (menu save used to skip it)", async () => {
+    settings.trimTrailingWhitespace = true
+    settings.insertFinalNewline = true
+    mount("a   \nb")
+    await saveDocument()
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\nb\n")
+    settings.trimTrailingWhitespace = false
+    settings.insertFinalNewline = false
+  })
+
+  it("formats before writing when format on save is on", async () => {
+    settings.formatOnSave = true
+    vi.mocked(formatFile).mockResolvedValue({ formatter: "biome", text: "fixed\n", changed: true })
+    mount("broken\n")
+    await saveDocument()
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "fixed\n")
+    settings.formatOnSave = false
+  })
+
+  it("still saves when the formatter fails", async () => {
+    // A failing formatter must never cost the user their save.
+    settings.formatOnSave = true
+    vi.mocked(formatFile).mockRejectedValue(new Error("syntax error"))
+    mount("broken\n")
+    await saveDocument()
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "broken\n")
+    settings.formatOnSave = false
   })
 
   it("does nothing without a file or a view", () => {
@@ -229,23 +266,47 @@ describe("convertEol", () => {
 })
 
 describe("formatDocument", () => {
+  const result = (text: string, formatter: string | null, changed: boolean) => ({
+    formatter,
+    text,
+    changed,
+  })
+
   it("applies the formatter's output to the buffer", async () => {
-    vi.mocked(formatFile).mockResolvedValue("formatted\n")
+    vi.mocked(formatFile).mockResolvedValue(result("formatted\n", "biome", true))
     mount("unformatted\n")
-    await formatDocument()
-    expect(formatFile).toHaveBeenCalledWith("/root", "src/a.ts", "unformatted\n")
+    await expect(formatDocument()).resolves.toEqual({ kind: "ok" })
+    // The trailing argument is the per-project pin; null means "detect".
+    expect(formatFile).toHaveBeenCalledWith("/root", "src/a.ts", "unformatted\n", null)
     expect(view.state.doc.toString()).toBe("formatted\n")
   })
 
   it("leaves an already-formatted buffer untouched", async () => {
-    vi.mocked(formatFile).mockResolvedValue("same\n")
+    vi.mocked(formatFile).mockResolvedValue(result("same\n", "biome", false))
     mount("same\n")
-    await formatDocument()
+    await expect(formatDocument()).resolves.toEqual({ kind: "unchanged", formatter: "biome" })
     expect(view.state.doc.toString()).toBe("same\n")
   })
 
-  it("returns null when there's nothing to format", async () => {
-    await expect(formatDocument()).resolves.toBeNull()
+  it("reports that the project declares no formatter, rather than nothing at all", async () => {
+    // "No formatter here" and "the formatter ran and found nothing to do" look
+    // identical from the buffer; the outcome is what tells them apart.
+    vi.mocked(formatFile).mockResolvedValue(result("x\n", null, false))
+    mount("x\n")
+    await expect(formatDocument()).resolves.toEqual({ kind: "none" })
+  })
+
+  it("returns none when there's nothing to format", async () => {
+    await expect(formatDocument()).resolves.toEqual({ kind: "none" })
+  })
+
+  it("only rewrites what actually changed, so the cursor survives", async () => {
+    // A whole-document replacement drops the caret to the end of the file on
+    // every save once format-on-save is on.
+    vi.mocked(formatFile).mockResolvedValue(result("const a = 1\nlet b  = 2\n", "biome", true))
+    mount("const a=1\nlet b  = 2\n")
+    await formatDocument()
+    expect(view.state.doc.toString()).toBe("const a = 1\nlet b  = 2\n")
   })
 })
 
@@ -765,15 +826,17 @@ describe("the remaining edges", () => {
     expect(writeFile).not.toHaveBeenCalled()
   })
 
-  it("saveDocument does nothing with no editor", () => {
-    saveDocument()
+  it("saveDocument does nothing with no editor", async () => {
+    await saveDocument()
     expect(writeFile).not.toHaveBeenCalled()
   })
 
   it("formatDocument returns the formatter's own reason when it fails", async () => {
     vi.mocked(formatFile).mockRejectedValue(new Error("prettier not found"))
     mount("unformatted\n")
-    await expect(formatDocument()).resolves.toContain("prettier not found")
+    const outcome = await formatDocument()
+    expect(outcome.kind).toBe("error")
+    expect(outcome.kind === "error" && outcome.message).toContain("prettier not found")
     expect(view.state.doc.toString()).toBe("unformatted\n")
   })
 })

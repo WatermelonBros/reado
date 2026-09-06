@@ -27,6 +27,7 @@ import { RecentProjects } from "./components/pages/RecentProjects"
 import { anywhereSetRecents, drainOpenTargets } from "./lib/api"
 import {
   useApplyColorVision,
+  useApplyIconTheme,
   useApplyReduceMotion,
   useApplyTheme,
   useApplyZoom,
@@ -45,6 +46,7 @@ export default function App() {
   useApplyZoom()
   useApplyReduceMotion()
   useApplyColorVision()
+  useApplyIconTheme()
   useGlobalShortcuts()
   useAutoUpdateCheck()
   useCrossWindowSync()

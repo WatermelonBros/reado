@@ -34,4 +34,19 @@ describe("Select", () => {
     await userEvent.click(screen.getByRole("option", { name: "Cherry" }))
     expect(onChange).toHaveBeenCalledWith("c")
   })
+
+  it("calls onChange for an option whose value is the empty string", async () => {
+    const onChange = vi.fn()
+    render(
+      <Select
+        value="a"
+        options={[{ value: "", label: "Default" }, ...options]}
+        onChange={onChange}
+        ariaLabel="Fruit"
+      />,
+    )
+    await userEvent.click(screen.getByRole("combobox", { name: "Fruit" }))
+    await userEvent.click(screen.getByRole("option", { name: "Default" }))
+    expect(onChange).toHaveBeenCalledWith("")
+  })
 })

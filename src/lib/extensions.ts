@@ -1,5 +1,5 @@
 /**
- * Declarative extensions (Phase 1: language servers).
+ * Declarative extensions: the curated half of the marketplace.
  *
  * Each entry is a manifest, not code: metadata + how to install the server, per
  * OS. The actual binary that gets spawned is chosen by the Rust allowlist keyed
@@ -285,6 +285,21 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
 ]
 
+/**
+ * Whether turning `id` on or off is invisible until the window is rebuilt.
+ *
+ * A language server is a running process; a grammar or a snippet set is
+ * compiled into an editor when a file opens. A theme, a file-icon set and a
+ * formatter are re-read live and say nothing.
+ */
+function noteReloadIfNeeded(id: string): void {
+  void import("./marketplace").then(({ changeNeedsReload, useMarketplace }) => {
+    const ext = useMarketplace.getState().byId(id)
+    const needed = ext ? changeNeedsReload(ext.manifest) : LANG_SERVERS.some((s) => s.id === id)
+    if (needed) useMarketplace.getState().noteReloadNeeded()
+  })
+}
+
 interface ExtensionsState {
   /** Ids the user has disabled (persisted). Everything else is enabled. */
   disabled: string[]
@@ -299,6 +314,10 @@ export const useExtensions = create<ExtensionsState>()(
       isEnabled: (id) => !get().disabled.includes(id),
       toggle: (id, enabled) => {
         log.info(enabled ? "extension enabled" : "extension disabled", { id })
+        // Here, not at the call sites: there were three of them computing it
+        // three different ways, and `settingsSync` restoring a bundle bypassed
+        // all of them — you'd get the old highlighting with no explanation.
+        noteReloadIfNeeded(id)
         set((s) => ({
           disabled: enabled
             ? s.disabled.filter((x) => x !== id)
@@ -311,3 +330,108 @@ export const useExtensions = create<ExtensionsState>()(
     { name: "reado.extensions" },
   ),
 )
+
+/**
+ * Formatters, as manifests.
+ *
+ * Same shape and same rule as the language servers: the manifest carries the
+ * name, the description and the install command, and the backend's allowlist —
+ * keyed on `id` — decides what actually gets spawned. A formatter makes Reado
+ * run a program, so it can never come from an open registry.
+ */
+export interface FormatterExt {
+  /** Must match the Rust allowlist id (and the binary's name). */
+  id: string
+  name: string
+  description: string
+  install: Install
+  requires?: string
+  /** How the project is expected to declare it, shown when it doesn't. */
+  declaredBy: string
+}
+
+export const FORMATTERS: FormatterExt[] = [
+  {
+    id: "biome",
+    name: "Biome",
+    description: "One fast formatter for JavaScript, TypeScript, JSON, CSS and GraphQL.",
+    install: all("npm install --save-dev --save-exact @biomejs/biome"),
+    requires: "Node.js",
+    declaredBy: "biome.json, or @biomejs/biome in package.json",
+  },
+  {
+    id: "prettier",
+    name: "Prettier",
+    description: "The web's default formatter — JS, TS, JSON, CSS, HTML, Markdown, YAML and more.",
+    install: all("npm install --save-dev prettier"),
+    requires: "Node.js",
+    declaredBy: ".prettierrc, prettier.config.*, or prettier in package.json",
+  },
+  {
+    id: "rustfmt",
+    name: "rustfmt",
+    description: "Rust's official formatter; ships with the toolchain.",
+    install: all("rustup component add rustfmt"),
+    requires: "rustup",
+    declaredBy: "being installed — Rust has one formatter and nothing to disambiguate",
+  },
+  {
+    id: "gofmt",
+    name: "gofmt",
+    description: "Go's official formatter; ships with the toolchain.",
+    install: {
+      mac: "brew install go",
+      windows: "winget install GoLang.Go",
+      linux: {
+        apt: "sudo apt install golang-go",
+        dnf: "sudo dnf install golang",
+        pacman: "sudo pacman -S go",
+        zypper: "sudo zypper install go",
+        brew: "brew install go",
+      },
+    },
+    requires: "Go toolchain",
+    declaredBy: "being installed — Go has one formatter and nothing to disambiguate",
+  },
+  {
+    id: "shfmt",
+    name: "shfmt",
+    description: "Shell script formatter.",
+    install: {
+      mac: "brew install shfmt",
+      windows: "winget install mvdan.shfmt",
+      linux: {
+        apt: "sudo apt install shfmt",
+        dnf: "sudo dnf install shfmt",
+        pacman: "sudo pacman -S shfmt",
+        zypper: "sudo zypper install shfmt",
+        brew: "brew install shfmt",
+      },
+    },
+    declaredBy: "being installed — shell has one conventional formatter",
+  },
+  {
+    id: "ruff",
+    name: "Ruff",
+    description: "Fast Python formatter and linter.",
+    install: all("pip install ruff"),
+    requires: "Python (pip)",
+    declaredBy: "ruff.toml, or [tool.ruff] in pyproject.toml",
+  },
+  {
+    id: "black",
+    name: "Black",
+    description: "The uncompromising Python formatter.",
+    install: all("pip install black"),
+    requires: "Python (pip)",
+    declaredBy: "[tool.black] in pyproject.toml",
+  },
+  {
+    id: "rubocop",
+    name: "RuboCop",
+    description: "Ruby formatter and linter.",
+    install: all("gem install rubocop"),
+    requires: "Ruby (gem)",
+    declaredBy: ".rubocop.yml, or rubocop in the Gemfile",
+  },
+]

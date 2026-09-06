@@ -65,14 +65,23 @@ vi.mock("../docInfo", () => ({
 vi.mock("../panels", () => ({ toggleDockArea: vi.fn() }))
 vi.mock("../updater", () => ({ checkForUpdates: vi.fn() }))
 vi.mock("../window", () => ({ toggleFullscreen: vi.fn() }))
+// The theme hooks read the disabled list as a hook now, so the mock has to be
+// callable as one — not just a bag of statics.
 vi.mock("../extensions", () => ({
-  useExtensions: { persist: { rehydrate: h.rehydrateExtensions } },
+  useExtensions: Object.assign(
+    (sel: (s: { disabled: string[] }) => unknown) => sel({ disabled: [] }),
+    {
+      persist: { rehydrate: h.rehydrateExtensions },
+      getState: () => ({ disabled: [], isEnabled: () => true }),
+    },
+  ),
 }))
 vi.mock("../fileUndo", () => ({ useFileUndo: { getState: () => ({ undo: h.undo }) } }))
 vi.mock("../readProgress", () => ({ useReadProgress: { getState: () => h.readState } }))
 vi.mock("../terminals", () => ({ useTerminals: { getState: () => h.terminals } }))
 vi.mock("../store", () => ({
   toggleZenMode: () => h.toggleZenMode(),
+  isExtTheme: (t: string) => t.startsWith("ext:"),
   useSettings: h.fakeStore(h.settings, { persist: { rehydrate: h.rehydrateSettings } }),
   usePalette: h.fakeStore(h.palette),
   useProject: h.fakeStore(h.project),

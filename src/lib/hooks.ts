@@ -2,14 +2,21 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { useEffect } from "react"
+import { t } from "@/i18n"
 import { OVERRIDDEN_TOKENS, tokensFor } from "./colorVision"
 import { toRelative } from "./comments"
 import { formatDocument, nextProblem, prevProblem } from "./docInfo"
 import { useExtensions } from "./extensions"
+import { allIconThemes, useIconTheme } from "./extIcons"
+import { applyExtTheme, clearExtTheme } from "./extThemes"
 import { useFileUndo } from "./fileUndo"
+import { enabledExtensions, useMarketplace } from "./marketplace"
+import { notify } from "./notice"
 import { toggleDockArea } from "./panels"
 import { useReadProgress } from "./readProgress"
 import {
+  type BuiltinTheme,
+  isExtTheme,
   type ThemeName,
   toggleZenMode,
   useEditorActions,
@@ -33,7 +40,7 @@ function toggleActiveRead(): void {
 }
 
 /** The dark Reado themes — used to match the native window (title bar) chrome. */
-const DARK_THEMES: ThemeName[] = ["reado-dark", "reado-high-contrast"]
+const DARK_THEMES: BuiltinTheme[] = ["reado-dark", "reado-high-contrast"]
 
 /** Resolve the active theme from settings, OS preference and time of day. */
 function resolveTheme(
@@ -71,19 +78,63 @@ export function useApplyColorVision(): void {
   }, [mode])
 }
 
+/** Keep the chosen icon theme loaded, and drop it when its extension goes away. */
+export function useApplyIconTheme(): void {
+  const chosen = useSettings((s) => s.iconTheme)
+  const installed = useMarketplace((s) => s.installed)
+  // Switching an extension off has to take effect now, not at the next restart:
+  // the filter runs inside the effect, so the effect has to watch it.
+  const disabled = useExtensions((s) => s.disabled)
+
+  useEffect(() => {
+    const theme = chosen
+      ? allIconThemes(enabledExtensions(installed)).find((t) => t.id === chosen)
+      : null
+    // A theme whose extension was removed resolves to null, which is also how
+    // "use Reado's own glyphs" is expressed — the tree just goes back to them.
+    if (useIconTheme.getState().theme?.id !== theme?.id)
+      void useIconTheme.getState().load(theme ?? null)
+  }, [chosen, installed, disabled])
+}
+
 /** Apply the resolved theme to <html> and keep it live (system + time of day). */
 export function useApplyTheme(): void {
   const { mode, theme, lightTheme, darkTheme } = useSettings()
+  // Same reason as the icon theme: the enabled filter lives inside the effect.
+  const disabledExtensions = useExtensions((s) => s.disabled)
+  // Re-apply when the installed extensions arrive: at first paint the chosen
+  // theme may be one Reado hasn't read off disk yet.
+  const installed = useMarketplace((s) => s.installed)
 
   useEffect(() => {
+    // Match the native window chrome (notably the Windows title bar, which is
+    // otherwise the default light bar even under a dark theme).
+    const matchChrome = (base: BuiltinTheme) => {
+      getCurrentWindow()
+        .setTheme(DARK_THEMES.includes(base) ? "dark" : "light")
+        .catch(() => {})
+    }
+    const applyBuiltin = (name: BuiltinTheme) => {
+      clearExtTheme()
+      document.documentElement.dataset.theme = name
+      matchChrome(name)
+    }
     const apply = () => {
       const resolved = resolveTheme(mode, theme, lightTheme, darkTheme)
-      document.documentElement.dataset.theme = resolved
-      // Match the native window chrome (notably the Windows title bar, which is
-      // otherwise the default light bar even under a dark theme).
-      getCurrentWindow()
-        .setTheme(DARK_THEMES.includes(resolved) ? "dark" : "light")
-        .catch(() => {})
+      if (!isExtTheme(resolved)) return applyBuiltin(resolved)
+      // A contributed theme paints over a built-in base, so anything it doesn't
+      // specify still has a coherent value. If its extension is gone, fall back
+      // to that base rather than leaving the interface half-themed.
+      void applyExtTheme(resolved).then((base) => {
+        if (base) return matchChrome(base)
+        // Its extension was uninstalled or disabled. Its polarity went with it,
+        // so fall back to the one the machine asks for, and say so.
+        const dark = window.matchMedia("(prefers-color-scheme: dark)").matches
+        applyBuiltin(dark ? "reado-dark" : "reado-light")
+        // Only once the installed set is known: before that, "missing" is a
+        // race with the first read from disk, not a fact about the user's setup.
+        if (useMarketplace.getState().loaded) notify("info", t("theme.extMissing"))
+      })
     }
     apply()
 
@@ -95,7 +146,7 @@ export function useApplyTheme(): void {
       mq.removeEventListener("change", apply)
       if (timer) clearInterval(timer)
     }
-  }, [mode, theme, lightTheme, darkTheme])
+  }, [mode, theme, lightTheme, darkTheme, installed, disabledExtensions])
 }
 
 /** Periodically check for updates while the app stays open, plus when the window

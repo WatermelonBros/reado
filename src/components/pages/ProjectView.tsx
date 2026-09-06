@@ -19,6 +19,7 @@ import { ActivityBar } from "@/components/organisms/ActivityBar"
 import { DockRegion } from "@/components/organisms/DockRegion"
 import { DocsView } from "@/components/organisms/DocsView"
 import { Editor } from "@/components/organisms/Editor"
+import { ExtensionPage } from "@/components/organisms/ExtensionPage"
 import { KnowledgeGraph } from "@/components/organisms/KnowledgeGraph"
 import { Tabs } from "@/components/organisms/Tabs"
 import { TOOL_TITLE, ToolPanelBody } from "@/components/organisms/ToolPanelBody"
@@ -324,7 +325,7 @@ export function ProjectView({ root }: { root: string }) {
       // notification and the chime.
       listen("agent-done", async () => {
         const c = await readFile(root, `${root}/.reado/done.json`, true).catch(() => null)
-        if (!c || c.kind !== "text") return
+        if (c?.kind !== "text") return
         try {
           const { status, summary } = JSON.parse(c.text) as { status: string; summary: string }
           await notifyAgentDone(status, summary)
@@ -624,6 +625,10 @@ export function ProjectView({ root }: { root: string }) {
             <div className="relative min-w-0 flex-1 overflow-hidden">
               <Editor />
               <TourBar />
+              {/* Inside the editor pane, not over the window: you read an
+                  extension's page while the list you came from is still there,
+                  so picking the next one is one click and not a re-navigation. */}
+              <ExtensionPage />
             </div>
             {splitPath && (
               <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-l-line">

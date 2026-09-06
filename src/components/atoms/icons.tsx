@@ -83,11 +83,13 @@ import {
   ListBulletsIcon as ListBullets,
   MagnifyingGlassIcon as MagnifyingGlass,
   MinusIcon as Minus,
+  PaintBrushIcon as PaintBrush,
   PaperPlaneTiltIcon as PaperPlaneTilt,
   PencilSimpleIcon as PencilSimple,
   PlusIcon as Plus,
   PuzzlePieceIcon as PuzzlePiece,
   RobotIcon as Robot,
+  SealCheckIcon as SealCheck,
   SidebarSimpleIcon as SidebarSimple,
   SignpostIcon as Signpost,
   SparkleIcon as Sparkle,
@@ -100,6 +102,7 @@ import {
   WarningIcon as Warning,
   XIcon as X,
 } from "@phosphor-icons/react"
+import { definitionKey, useIconTheme } from "@/lib/extIcons"
 
 type IconProps = { className?: string; weight?: IconWeight }
 
@@ -145,6 +148,9 @@ export const SendIcon = wrap(PaperPlaneTilt)
 export const CheckIcon = wrap(Check)
 export const InfoIcon = wrap(Info)
 export const TerminalIcon = wrap(Terminal)
+export const PaintBrushIcon = wrap(PaintBrush)
+/** Verified publisher (Open VSX namespace ownership). */
+export const SealCheckIcon = wrap(SealCheck)
 export const SparkleIcon = wrap(Sparkle)
 export const RouteIcon = wrap(Signpost)
 export const SwapIcon = wrap(Swap)
@@ -546,6 +552,49 @@ export const FileIcon = ({
   mode?: FileIconMode
   name?: string
 }) => {
+  // An installed icon theme wins where it has an icon; Reado's own glyph fills
+  // every gap, so a partial theme never leaves a row blank.
+  //
+  // Both selectors return a string, so a row only re-renders when *its own*
+  // icon arrives. Subscribing to the whole asset map instead re-rendered every
+  // row on every icon — and the file tree isn't virtualised, so that is
+  // hundreds of rows times dozens of icons when a theme is first chosen.
+  const key = useIconTheme((s) =>
+    s.file ? definitionKey(s.file, name ?? "", isDir, expanded ?? false) : undefined,
+  )
+  useIconTheme((s) => (key ? s.assets[key] : undefined))
+  const contributed = useIconTheme((s) => s.resolve)(name ?? "", isDir, expanded ?? false)
+  if (contributed?.kind === "image") {
+    return (
+      <img
+        src={contributed.src}
+        alt=""
+        aria-hidden="true"
+        className={className}
+        style={{ flex: "none", width: 15, height: 15 }}
+      />
+    )
+  }
+  if (contributed?.kind === "glyph") {
+    return (
+      <span
+        aria-hidden="true"
+        className={className}
+        style={{
+          flex: "none",
+          width: 15,
+          fontFamily: contributed.family,
+          color: contributed.color,
+          fontSize: 15,
+          lineHeight: "15px",
+          textAlign: "center",
+        }}
+      >
+        {contributed.char}
+      </span>
+    )
+  }
+
   if (isDir) {
     const F = expanded ? FolderOpen : Folder
     return (

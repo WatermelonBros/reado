@@ -20,6 +20,7 @@ mod index;
 mod log;
 mod lsp;
 mod menu;
+mod ovsx;
 mod pairing;
 mod preview;
 mod proc;
@@ -35,6 +36,12 @@ mod watcher;
 /// Build and run the Tauri application.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Two things in this process speak TLS — the Anywhere server and the
+    // extension marketplace's HTTP client — and rustls refuses to guess which
+    // crypto provider to use when more than one is compiled in. Pin it once,
+    // here, rather than letting whichever initialises first decide.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     tauri::Builder::default()
         // Single-instance MUST be the first plugin: a second launch (e.g. the OS
         // opening a file with Reado while it's running) forwards its argv here
@@ -178,6 +185,15 @@ pub fn run() {
             symbols::find_definition,
             symbols::list_symbols,
             format::format_file,
+            format::formatter_status,
+            ovsx::ovsx_search,
+            ovsx::ovsx_install,
+            ovsx::ovsx_installed,
+            ovsx::ovsx_latest,
+            ovsx::ovsx_readme,
+            ovsx::ovsx_uninstall,
+            ovsx::ext_read,
+            ovsx::ext_asset,
             cli::install_cli,
             cli::cli_installed,
             annotations::create_comment,
@@ -233,6 +249,7 @@ pub fn run() {
             lsp::lsp_send,
             lsp::lsp_stop,
             lsp::lsp_installed,
+            lsp::lsp_installed_all,
             lsp::linux_package_manager,
             anywhere::anywhere_enable,
             anywhere::anywhere_disable,

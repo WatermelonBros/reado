@@ -11,14 +11,36 @@
  */
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { GitInfo } from "./api"
+import type { ExtListing, GitInfo } from "./api"
 import { findPanel, useLayout } from "./layout"
 
-export type ThemeName = "reado-dark" | "reado-light" | "reado-high-contrast" | "reado-sepia"
+export type BuiltinTheme = "reado-dark" | "reado-light" | "reado-high-contrast" | "reado-sepia"
+
+/** A theme contributed by an installed extension: `ext:{extensionId}:{label}`.
+ *  Kept as a template literal type so it stays distinguishable from a built-in
+ *  at every use site instead of widening the whole setting to `string`. */
+export type ExtThemeName = `ext:${string}`
+
+export type ThemeName = BuiltinTheme | ExtThemeName
+
+/** Whether a chosen theme comes from an extension rather than from Reado. */
+export const isExtTheme = (t: ThemeName): t is ExtThemeName => t.startsWith("ext:")
 
 export type ThemeMode = "manual" | "system" | "auto"
 
-export const THEMES: ThemeName[] = [
+/**
+ * An extension being read in the editor area.
+ *
+ * Every row opens one, whichever catalogue it came from. A curated tool has no
+ * README, but it has everything else a reader wants before deciding — what it
+ * adds, what it needs, how it gets installed — and a list where only some rows
+ * respond to a click reads as broken, not as principled.
+ */
+export type ReadingExtension =
+  | { kind: "registry"; namespace: string; name: string; version?: string; listing?: ExtListing }
+  | { kind: "curated"; id: string }
+
+export const THEMES: BuiltinTheme[] = [
   "reado-dark",
   "reado-light",
   "reado-high-contrast",
@@ -88,6 +110,10 @@ export interface SettingsState {
   excludeGlobs: string[]
   /** Restore a project's tabs/scroll/caret on reopen, or start clean. */
   restoreSession: boolean
+  /** File icons contributed by an extension, or null for Reado's own glyphs. */
+  iconTheme: string | null
+  /** Format the buffer with the project's formatter on save. */
+  formatOnSave: boolean
   /** Trim trailing whitespace on save (never on read). */
   trimTrailingWhitespace: boolean
   /** Ensure a single final newline on save (never on read). */
@@ -158,68 +184,96 @@ export interface SettingsState {
   /** The user dismissed the "make Reado the default app for text files" prompt. */
   defaultAppsDismissed: boolean
   set: (patch: Partial<SettingsState>) => void
+  /** Put every preference back to how Reado ships. Choices that record a past
+   *  interaction rather than a preference are kept — see {@link REMEMBERED}. */
+  reset: () => void
 }
+
+/**
+ * Not preferences: answers. Resetting these would re-ask a question the user has
+ * already answered ("make Reado the default app?"), or throw away where they
+ * were rather than how they like things.
+ */
+const REMEMBERED = [
+  "defaultAppsDismissed",
+  "gitignoreDontAsk",
+  "reviewObjective",
+  "zenMode",
+  "zenRestore",
+] as const
+
+/** How Reado ships. Named so "reset" has something to reset *to*. */
+const DEFAULTS = {
+  theme: "reado-dark",
+  lightTheme: "reado-light",
+  darkTheme: "reado-dark",
+  mode: "system",
+  codeFont: '"JetBrains Mono", ui-monospace, monospace',
+  fontSize: 12,
+  lineHeight: LINE_HEIGHT_RANGE.default,
+  letterSpacing: LETTER_SPACING_RANGE.default,
+  lineNumbers: "on",
+  activeLine: "both",
+  indentGuides: "all",
+  bracketMatching: true,
+  rulerColumn: 120,
+  colorVision: "normal",
+  reduceMotion: "system",
+  tabBar: "multiple",
+  scrollbar: "auto",
+  cursorStyle: "line",
+  cursorBlink: "smooth",
+  showResolvedComments: true,
+  inlineDiagnostics: true,
+  excludeGlobs: [],
+  restoreSession: true,
+  iconTheme: null,
+  formatOnSave: false,
+  trimTrailingWhitespace: false,
+  insertFinalNewline: false,
+  // 2 MB: comfortably above any file written by hand, comfortably below the
+  // generated bundles and fixtures that make the editor crawl.
+  largeFileGuardMb: 2,
+  inlineBlame: false,
+  diffGutter: false,
+  focusMode: false,
+  wrap: true,
+  stickyScroll: true,
+  colorSwatches: true,
+  zoom: 1,
+  versionReado: false,
+  gitignoreDontAsk: false,
+  completionSound: false,
+  autoSave: "afterDelay",
+  sidebarSide: "left",
+  showActivityBar: true,
+  showStatusBar: true,
+  showBreadcrumbs: true,
+  panelAlignment: "center",
+  quickInputPosition: "top",
+  zenMode: false,
+  zenRestore: null,
+  centeredLayout: false,
+  renderWhitespace: false,
+  showRibbon: true,
+  fileIcons: "colored",
+  logEnabled: true,
+  logLevel: "info",
+  showHidden: false,
+  reviewObjective: "bug_risk",
+  defaultAppsDismissed: false,
+} satisfies Omit<SettingsState, "set" | "reset">
 
 export const useSettings = create<SettingsState>()(
   persist(
-    (set) => ({
-      theme: "reado-dark",
-      lightTheme: "reado-light",
-      darkTheme: "reado-dark",
-      mode: "system",
-      codeFont: '"JetBrains Mono", ui-monospace, monospace',
-      fontSize: 12,
-      lineHeight: LINE_HEIGHT_RANGE.default,
-      letterSpacing: LETTER_SPACING_RANGE.default,
-      lineNumbers: "on",
-      activeLine: "both",
-      indentGuides: "all",
-      bracketMatching: true,
-      rulerColumn: 120,
-      colorVision: "normal",
-      reduceMotion: "system",
-      tabBar: "multiple",
-      scrollbar: "auto",
-      cursorStyle: "line",
-      cursorBlink: "smooth",
-      showResolvedComments: true,
-      inlineDiagnostics: true,
-      excludeGlobs: [],
-      restoreSession: true,
-      trimTrailingWhitespace: false,
-      insertFinalNewline: false,
-      // 2 MB: comfortably above any file written by hand, comfortably below the
-      // generated bundles and fixtures that make the editor crawl.
-      largeFileGuardMb: 2,
-      inlineBlame: false,
-      diffGutter: false,
-      focusMode: false,
-      wrap: true,
-      stickyScroll: true,
-      colorSwatches: true,
-      zoom: 1,
-      versionReado: false,
-      gitignoreDontAsk: false,
-      completionSound: false,
-      autoSave: "afterDelay",
-      sidebarSide: "left",
-      showActivityBar: true,
-      showStatusBar: true,
-      showBreadcrumbs: true,
-      panelAlignment: "center",
-      quickInputPosition: "top",
-      zenMode: false,
-      zenRestore: null,
-      centeredLayout: false,
-      renderWhitespace: false,
-      showRibbon: true,
-      fileIcons: "colored",
-      logEnabled: true,
-      logLevel: "info",
-      showHidden: false,
-      reviewObjective: "bug_risk",
-      defaultAppsDismissed: false,
+    (set, get) => ({
+      ...DEFAULTS,
       set: (patch) => set(patch),
+      reset: () =>
+        set({
+          ...DEFAULTS,
+          ...Object.fromEntries(REMEMBERED.map((k) => [k, get()[k]])),
+        } as Partial<SettingsState>),
     }),
     {
       name: "reado.settings",
@@ -379,6 +433,11 @@ interface WorkspaceState {
   pendingSearch: string | null
   searchFor: (query: string) => void
   clearPendingSearch: () => void
+  /** The extension whose page is open in the editor area, if any. The listing
+   *  rides along when the page was opened from a catalogue row, so the page can
+   *  offer Install without asking the registry a second time. */
+  readingExtension: ReadingExtension | null
+  readExtension: (ext: ReadingExtension | null) => void
   /** Whether the knowledge-graph overlay is open. */
   graphOpen: boolean
   toggleGraph: (open?: boolean) => void
@@ -419,6 +478,8 @@ export const useWorkspace = create<WorkspaceState>()(
       pendingSearch: null,
       searchFor: (query) => set({ tool: "search", lastTool: "search", pendingSearch: query }),
       clearPendingSearch: () => set({ pendingSearch: null }),
+      readingExtension: null,
+      readExtension: (readingExtension) => set({ readingExtension }),
       graphOpen: false,
       toggleGraph: (open) => set((s) => ({ graphOpen: open ?? !s.graphOpen })),
       docsOpen: false,

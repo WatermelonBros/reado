@@ -27,21 +27,25 @@ import { EditorSelection } from "@codemirror/state"
 import { EditorView } from "@codemirror/view"
 import { create } from "zustand"
 import { t } from "@/i18n"
-import { createFile, findDefinition, formatFile, readFile, writeFile } from "./api"
+import { createFile, findDefinition, formatFile, formatterStatus, readFile, writeFile } from "./api"
 import { useBookmarks } from "./bookmarks"
 import { toRelative } from "./comments"
+import { FORMATTERS, useExtensions } from "./extensions"
+import { choiceFor, extOf } from "./formatters"
 import { type HierDir, useHierarchy } from "./hierarchy"
 import {
   lspCalls,
+  lspFormat,
   lspLocate,
   lspPrepareCallHierarchy,
   lspPrepareTypeHierarchy,
   lspTypes,
 } from "./lsp"
+import { notify } from "./notice"
 import { prompt } from "./prompt"
 import { useQa } from "./qa"
 import { noteSelfWrite } from "./readProgress"
-import { useEditorActions, useProject, useWorkspace } from "./store"
+import { useEditorActions, useProject, useSettings, useWorkspace } from "./store"
 import { expandSelection, shrinkSelection } from "./syntaxSelection"
 
 export type Eol = "LF" | "CRLF"
@@ -126,33 +130,149 @@ export function goToLine(n: number): void {
   view.focus()
 }
 
-/** Format the active document with the project's formatter, applying the result
- *  to the buffer (the user still saves). Returns an error message on failure. */
-export async function formatDocument(): Promise<string | null> {
+/** What a format attempt did. `none` — the project declares no formatter for
+ *  this file, which is a normal outcome and not an error. `stale` — the buffer
+ *  moved on while the formatter was working, so the result was dropped. */
+export type FormatOutcome =
+  // `ok` covers formatted and stale alike: both mean "say nothing". The
+  // formatter's name is only carried where it gets spoken.
+  | { kind: "ok" }
+  | { kind: "unchanged"; formatter: string }
+  | { kind: "none" }
+  | { kind: "disabled" }
+  | { kind: "error"; message: string }
+
+/**
+ * The one change that turns `a` into `b`, with their common prefix and suffix
+ * trimmed off.
+ *
+ * Replacing the whole document instead — which is what this used to do — drops
+ * the cursor and the scroll position on every format. Tolerable for a command
+ * the user invokes; not tolerable once formatting runs on every save.
+ */
+function minimalChange(a: string, b: string) {
+  const max = Math.min(a.length, b.length)
+  let start = 0
+  while (start < max && a[start] === b[start]) start++
+  let endA = a.length
+  let endB = b.length
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA--
+    endB--
+  }
+  return { from: start, to: endA, insert: b.slice(start, endB) }
+}
+
+/**
+ * Format the active document in place, quietly.
+ *
+ * The language server goes first when it offers formatting: it uses the
+ * project's own rustfmt / gofmt / rubocop configuration, which a command-line
+ * candidate can only approximate. Otherwise Reado runs a formatter this project
+ * declares — never one that merely happens to be installed.
+ */
+export async function formatBuffer(): Promise<FormatOutcome> {
   const { view } = useDocInfo.getState()
   const { root, active } = useProject.getState()
-  if (!view || !active) return null
-  const content = view.state.doc.toString()
+  if (!view || !active) return { kind: "none" }
+
+  const rel = toRelative(root, active)
+  const choice = choiceFor(root, rel)
+  if (choice.kind === "off") return { kind: "disabled" }
+
+  // A pinned formatter outranks the server: the point of pinning is to say
+  // "this one, here", and a server quietly winning would defeat it.
+  if (choice.kind === "detect") {
+    const viaServer = await lspFormat(view)
+    if (viaServer)
+      return viaServer === "formatted"
+        ? { kind: "ok" }
+        : { kind: "unchanged", formatter: t("editor.formatViaServer") }
+  }
+
+  const pinned = choice.kind === "pinned" ? choice.id : await firstEnabled(root, rel)
+  if (pinned === "none") return { kind: "none" }
+
+  const before = view.state.doc
+  const content = before.toString()
   try {
-    const formatted = await formatFile(root, toRelative(root, active), content)
-    if (formatted && formatted !== content) {
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: formatted },
-      })
-    }
-    return null
+    const res = await formatFile(root, rel, content, pinned)
+    if (!res.formatter) return { kind: "none" }
+    // The user kept typing while the formatter ran. Its text describes a
+    // document that no longer exists, so it is dropped rather than applied.
+    if (view.state.doc !== before) return { kind: "ok" }
+    if (!res.changed) return { kind: "unchanged", formatter: res.formatter }
+    view.dispatch({ changes: minimalChange(content, res.text) })
+    return { kind: "ok" }
   } catch (e) {
-    return String(e)
+    return { kind: "error", message: String(e) }
   }
 }
 
+/**
+ * The formatter detection should land on, honouring the marketplace's
+ * enable/disable state.
+ *
+ * `null` means "let the backend detect" — the common case, and free. Only when
+ * the user has actually disabled a formatter does Reado ask which ones this
+ * project declares, so it can skip past the disabled one. `"none"` means every
+ * formatter this project declares for the file type is disabled.
+ */
+async function firstEnabled(root: string, rel: string): Promise<string | null | "none"> {
+  const isEnabled = useExtensions.getState().isEnabled
+  if (FORMATTERS.every((f) => isEnabled(f.id))) return null
+  const ext = extOf(rel)
+  try {
+    const status = await formatterStatus(root)
+    const usable = status.filter((s) => s.exts.includes(ext) && s.declared)
+    if (usable.length === 0) return null // nothing declared; let the backend say so
+    return usable.find((s) => isEnabled(s.id))?.id ?? "none"
+  } catch {
+    return null
+  }
+}
+
+/** Format Document (palette, menu, Shift+Alt+F): formats the active buffer and
+ *  reports what happened, so an unformattable file never looks like a no-op. */
+export async function formatDocument(): Promise<FormatOutcome> {
+  const outcome = await formatBuffer()
+  if (outcome.kind === "error") notify("error", outcome.message)
+  else if (outcome.kind === "none") notify("info", t("editor.formatNone"))
+  else if (outcome.kind === "disabled") notify("info", t("editor.formatDisabled"))
+  else if (outcome.kind === "unchanged")
+    notify("info", t("editor.formatUnchanged", { name: outcome.formatter }))
+  return outcome
+}
+
+/**
+ * The text to write for the active buffer: format on save when enabled, then
+ * the hygiene toggles over the result so the two never fight.
+ *
+ * Shared by both save paths (⌘S in the editor, File ▸ Save in the native menu),
+ * which otherwise drift — the menu used to skip the hygiene toggles entirely.
+ */
+export async function textToSave(view: EditorView): Promise<string> {
+  const s = useSettings.getState()
+  if (s.formatOnSave) {
+    // A failing formatter must never cost the user their save: report it and
+    // write what they have.
+    const outcome = await formatBuffer()
+    if (outcome.kind === "error") notify("error", outcome.message)
+  }
+  let text = view.state.doc.toString()
+  if (s.trimTrailingWhitespace) text = text.replace(/[ \t]+$/gm, "")
+  if (s.insertFinalNewline && text.length > 0 && !text.endsWith("\n")) text += "\n"
+  return text
+}
+
 /** Save the active document to disk (used by the native menu's File ▸ Save). */
-export function saveDocument(): void {
+export async function saveDocument(): Promise<void> {
   const { view } = useDocInfo.getState()
   const { root, active } = useProject.getState()
   if (!view || !active) return
+  const text = await textToSave(view)
   noteSelfWrite(toRelative(root, active))
-  writeFile(root, toRelative(root, active), view.state.doc.toString())
+  writeFile(root, toRelative(root, active), text)
     .then(() => useEditorActions.getState().setDirty(false))
     .catch(() => {})
 }

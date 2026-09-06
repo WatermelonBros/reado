@@ -13,7 +13,8 @@ const readFile = vi.fn(async () => ({ kind: "text", text: "def target() {}\n" })
 const gitBlame = vi.fn(async () => [])
 const gitWorkingDiffLines = vi.fn(async () => [])
 const findDefinition = vi.fn(async () => [] as Array<{ path: string; line: number }>)
-const formatFile = vi.fn(async () => "")
+const formatted = (text: string, changed = true) => ({ formatter: "biome", text, changed })
+const formatFile = vi.fn(async () => formatted("", false))
 vi.mock("../../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../../lib/api")>()),
   writeFile: (...a: unknown[]) => writeFile(...(a as [])),
@@ -114,7 +115,7 @@ beforeEach(() => {
   })
   serverAttached = false
   lspDefinition.mockReturnValue(null)
-  formatFile.mockResolvedValue("")
+  formatFile.mockResolvedValue(formatted("", false))
   gitBlame.mockResolvedValue([])
   readFile.mockResolvedValue({ kind: "text", text: "def target() {}\n" })
   useProject.setState({ root: ROOT, active: PATH, git: { isRepo: true } as never, open: vi.fn() })
@@ -470,12 +471,13 @@ describe("what typing does", () => {
     vi.useRealTimers()
   })
 
-  it("auto-saves on blur when the setting asks for that instead", () => {
+  it("auto-saves on blur when the setting asks for that instead", async () => {
     useSettings.setState({ autoSave: "onFocusChange" })
     const { container } = mount()
     useEditorActions.setState({ dirty: true })
     fireEvent.blur(container.querySelector(".cm-content") as HTMLElement)
-    expect(writeFile).toHaveBeenCalled()
+    // The save pipeline is async now (it may run a formatter first).
+    await waitFor(() => expect(writeFile).toHaveBeenCalled())
   })
 
   it("saves nothing on blur with auto-save off", () => {
@@ -872,7 +874,7 @@ describe("more of the context menu", () => {
   })
 
   it("formats the document", async () => {
-    formatFile.mockResolvedValue("formatted by the project's formatter\n")
+    formatFile.mockResolvedValue(formatted("formatted by the project's formatter\n"))
     const { container } = mount()
     const menu = await openMenu(container)
     await userEvent.click(within(menu).getByText("editor.format"))

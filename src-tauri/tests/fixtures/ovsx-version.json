@@ -1,0 +1,17 @@
+{
+  "files": {
+    "download": "https://open-vsx.org/api/Telokis/theme-dracula-at-dusk/1.0.6/file/Telokis.theme-dracula-at-dusk-1.0.6.vsix",
+    "signature": "https://open-vsx.org/api/Telokis/theme-dracula-at-dusk/1.0.6/file/Telokis.theme-dracula-at-dusk-1.0.6.sigzip",
+    "manifest": "https://open-vsx.org/api/Telokis/theme-dracula-at-dusk/1.0.6/file/package.json",
+    "changelog": "https://open-vsx.org/api/Telokis/theme-dracula-at-dusk/1.0.6/file/CHANGELOG.md",
+    "license": "https://open-vsx.org/api/Telokis/theme-dracula-at-dusk/1.0.6/file/LICENSE.txt",
+    "icon": "https://open-vsx.org/api/Telokis/theme-dracula-at-dusk/1.0.6/file/dracula-at-dusk.png",
+    "vsixmanifest": "https://open-vsx.org/api/Telokis/theme-dracula-at-dusk/1.0.6/file/extension.vsixmanifest",
+    "sha256": "https://open-vsx.org/api/Telokis/theme-dracula-at-dusk/1.0.6/file/Telokis.theme-dracula-at-dusk-1.0.6.sha256",
+    "readme": "https://open-vsx.org/api/Telokis/theme-dracula-at-dusk/1.0.6/file/README.md",
+    "publicKey": "https://open-vsx.org/api/-/public-key/14ccb407-4e79-41ed-be5a-6d608325c45a"
+  },
+  "version": "1.0.6",
+  "namespace": "Telokis",
+  "name": "theme-dracula-at-dusk"
+}
