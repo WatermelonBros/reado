@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-09-07
+
 ### Added
 - **An extension marketplace, backed by Open VSX.** Search it from the Extensions
   panel and install colour themes, file icon themes, snippets, language
@@ -1181,7 +1183,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/WatermelonBros/reado/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/WatermelonBros/reado/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/WatermelonBros/reado/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/WatermelonBros/reado/compare/v1.8.0...v1.9.0
