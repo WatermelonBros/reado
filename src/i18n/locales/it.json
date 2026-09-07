@@ -44,6 +44,27 @@
     "remove": "Rimuovi dalla lista"
   },
   "tree": {
+    "deleteMany": "Elimina {count} elementi",
+    "selected": "{count} selezionati",
+    "findInFolder": "Cerca nella cartella…",
+    "openWith": "Apri con…",
+    "openWithBack": "← Indietro",
+    "viewerText": "Editor (sorgente)",
+    "viewerPreview": "Anteprima",
+    "viewerDiff": "Diff",
+    "cut": "Taglia",
+    "copy": "Copia",
+    "paste": "Incolla",
+    "duplicate": "Duplica",
+    "pasteFailed": "Impossibile copiare qui.",
+    "openInTerminal": "Apri nel terminale integrato",
+    "rename": "Rinomina…",
+    "renameConfirm": "Rinomina",
+    "renameFailed": "Impossibile rinominare — il nome potrebbe essere già in uso.",
+    "newFolder": "Nuova cartella…",
+    "createFailed": "Impossibile creare qui.",
+    "copyPath": "Copia percorso",
+    "copyRelativePath": "Copia percorso relativo",
     "showHidden": "Mostra file nascosti e ignorati",
     "collapseAll": "Comprimi tutte le cartelle",
     "empty": "Questa cartella è vuota.",
@@ -84,6 +105,13 @@
     "explainNote": "Spiega e salva come nota",
     "viewSource": "Sorgente",
     "viewRendered": "Anteprima",
+    "cut": "Taglia",
+    "copy": "Copia",
+    "paste": "Incolla",
+    "peekDef": "Anteprima definizione",
+    "findRefs": "Trova tutti i riferimenti",
+    "renameSymbol": "Rinomina simbolo",
+    "allOccurrences": "Seleziona tutte le occorrenze",
     "goToDef": "Vai alla definizione",
     "goToTypeDef": "Vai alla definizione del tipo",
     "goToImpl": "Vai all'implementazione",
@@ -578,6 +606,9 @@
     "expand": "Espandi"
   },
   "diff": {
+    "saved": "File salvato",
+    "lastRead": "Ultima lettura",
+    "compareWithSaved": "Confronta con il salvato",
     "toggle": "Mostra/nascondi diff",
     "base": "Base del diff",
     "head": "HEAD (non committato)",
@@ -655,7 +686,11 @@
     "empty": "Nessun file corrisponde."
   },
   "search": {
+    "inFolder": "in",
+    "clearScope": "Cerca in tutto il progetto",
     "placeholder": "Cerca nel progetto…",
+    "count": "{current} di {total}",
+    "countCapped": "oltre {cap} risultati",
     "noResults": "Nessun risultato.",
     "replacePlaceholder": "Sostituisci…",
     "caseSensitive": "Maiuscole/minuscole",
@@ -835,6 +870,7 @@
     "title": "Scorciatoie da tastiera",
     "navigation": "Navigazione",
     "editing": "Modifica",
+    "files": "File",
     "view": "Vista"
   },
   "empty": {
@@ -955,6 +991,15 @@
     "panel": "File"
   },
   "git": {
+    "folderChanged": "Contiene modifiche",
+    "status": {
+      "modified": "Modificato",
+      "added": "Aggiunto",
+      "deleted": "Eliminato",
+      "renamed": "Rinominato",
+      "untracked": "Non tracciato",
+      "conflicted": "In conflitto"
+    },
     "panel": "Controllo sorgente",
     "clean": "Nessuna modifica — working tree pulito.",
     "staged": "Modifiche in stage",

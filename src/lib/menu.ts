@@ -15,6 +15,7 @@ import {
   addCursorsToLineEnds,
   addNextOccurrence,
   askAboutSelection,
+  compareWithSaved,
   copyLineDownCmd,
   copyLineUpCmd,
   duplicateSelection,
@@ -92,6 +93,7 @@ const MENU_PRECOND: Record<string, MenuCond> = {
   save: "file",
   saveAs: "file",
   revert: "file",
+  compareSaved: "file",
   format: "file",
   closeEditor: "file",
   gotoLine: "file",
@@ -256,6 +258,9 @@ export function runMenuCommand(id: string): void {
       break
     case "revert":
       revertFile()
+      break
+    case "compareSaved":
+      compareWithSaved()
       break
 
     // Edit

@@ -5,7 +5,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { DirEntry } from "@/lib/api"
+import type { DirEntry, GitChange } from "@/lib/api"
 
 const listDir = vi.fn<(root: string, dir: string, showHidden: boolean) => Promise<DirEntry[]>>()
 const listFiles = vi.fn<(root: string) => Promise<string[]>>()
@@ -13,6 +13,7 @@ const importPaths = vi.fn<(root: string, sources: string[], dest: string) => Pro
   async () => {},
 )
 const movePath = vi.fn<(root: string, from: string, to: string) => Promise<void>>(async () => {})
+const gitStatus = vi.fn<(root: string) => Promise<GitChange[]>>(async () => [])
 
 vi.mock("../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../lib/api")>()),
@@ -20,6 +21,25 @@ vi.mock("../../../lib/api", async (orig) => ({
   listFiles: (root: string) => listFiles(root),
   importPaths: (root: string, sources: string[], dest: string) => importPaths(root, sources, dest),
   movePath: (root: string, from: string, to: string) => movePath(root, from, to),
+  gitStatus: (root: string) => gitStatus(root),
+  createFile: (root: string, path: string) => createFile(root, path),
+  createDir: (root: string, path: string) => createDir(root, path),
+}))
+
+const createFile = vi.fn<(root: string, path: string) => Promise<string>>(
+  async (root, path) => `${root}/${path}`,
+)
+const createDir = vi.fn<(root: string, path: string) => Promise<string>>(
+  async (root, path) => `${root}/${path}`,
+)
+const promptMock = vi.fn<() => Promise<string | null>>(async () => null)
+vi.mock("../../../lib/prompt", async (orig) => ({
+  ...(await orig<typeof import("../../../lib/prompt")>()),
+  prompt: () => promptMock(),
+}))
+const clipboardWrite = vi.fn<(t: string) => Promise<void>>(async () => {})
+vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
+  writeText: (t: string) => clipboardWrite(t),
 }))
 
 const revealItemInDir = vi.fn<(p: string) => Promise<void>>(async () => {})
@@ -52,8 +72,10 @@ vi.mock("../../../lib/terminals", async (orig) => ({
 import { FileTree } from "@/components/organisms/FileTree"
 import { useDiagnostics } from "@/lib/diagnostics"
 import { useFileUndo } from "@/lib/fileUndo"
+import { useGitStatus } from "@/lib/gitStatus"
 import { useReadProgress } from "@/lib/readProgress"
-import { useProject } from "@/lib/store"
+import { useEditorActions, useProject, useWorkspace } from "@/lib/store"
+import { useTerminals } from "@/lib/terminals"
 import { useTextView } from "@/lib/textView"
 
 const ROOT = "/repo"
@@ -84,6 +106,16 @@ beforeEach(() => {
   useDiagnostics.setState({ byFile: {}, errors: {} })
   useTextView.setState({ force: new Set() })
   useFileUndo.setState({ stack: [] })
+  promptMock.mockResolvedValue(null)
+  // `clearAllMocks` clears calls, not implementations: without this the
+  // "move is refused" test's rejection leaks into every test after it.
+  movePath.mockResolvedValue(undefined)
+  importPaths.mockResolvedValue(undefined)
+  gitStatus.mockResolvedValue([])
+  useGitStatus.setState({ byPath: {}, changes: [] })
+  useEditorActions.setState({ dirtyPaths: [] })
+  useWorkspace.setState({ searchScope: null })
+  useTerminals.setState({ sessions: [], groups: [], activeId: null, activeGroupId: null })
 })
 
 describe("listing", () => {
@@ -334,6 +366,41 @@ describe("the context menu", () => {
     expect(trashAndRecord).toHaveBeenCalledWith(`${ROOT}/a.ts`)
   })
 
+  it("renames a file through the menu, recording an undoable move", async () => {
+    tree({ [ROOT]: [file("a.ts")] })
+    promptMock.mockResolvedValue("b.ts")
+    render(<FileTree />)
+    const menu = await openMenu("a.ts")
+    await userEvent.click(within(menu).getByText("tree.rename"))
+    await waitFor(() => expect(movePath).toHaveBeenCalledWith(ROOT, `${ROOT}/a.ts`, `${ROOT}/b.ts`))
+    expect(useFileUndo.getState().stack).toHaveLength(1)
+  })
+
+  it("creates a file and a folder inside the clicked folder", async () => {
+    tree({ [ROOT]: [dir("src")], [`${ROOT}/src`]: [] })
+    promptMock.mockResolvedValue("new.ts")
+    render(<FileTree />)
+    const menu = await openMenu("src")
+    await userEvent.click(within(menu).getByText("file.newFile"))
+    await waitFor(() => expect(createFile).toHaveBeenCalledWith(ROOT, "src/new.ts"))
+
+    const menu2 = await openMenu("src")
+    await userEvent.click(within(menu2).getByText("tree.newFolder"))
+    await waitFor(() => expect(createDir).toHaveBeenCalledWith(ROOT, "src/new.ts"))
+  })
+
+  it("copies the absolute and the project-relative path", async () => {
+    tree({ [ROOT]: [file("a.ts")] })
+    render(<FileTree />)
+    const menu = await openMenu("a.ts")
+    await userEvent.click(within(menu).getByText("tree.copyPath"))
+    expect(clipboardWrite).toHaveBeenCalledWith(`${ROOT}/a.ts`)
+
+    const menu2 = await openMenu("a.ts")
+    await userEvent.click(within(menu2).getByText("tree.copyRelativePath"))
+    expect(clipboardWrite).toHaveBeenLastCalledWith("a.ts")
+  })
+
   it("offers only the project-scoped comment on empty space", async () => {
     render(<FileTree />)
     await screen.findByText("tree.empty")
@@ -460,5 +527,311 @@ describe("dragging a row onto a folder", () => {
     screen.getByText("a.ts").closest("button")?.dispatchEvent(click)
     expect(click.defaultPrevented).toBe(true)
     vi.restoreAllMocks()
+  })
+})
+
+describe("the keyboard, like VS Code's explorer", () => {
+  const row = (name: string) => screen.getByText(name).closest("button") as HTMLElement
+
+  it("renames the focused row on F2", async () => {
+    tree({ [ROOT]: [file("a.ts")] })
+    promptMock.mockResolvedValue("b.ts")
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    fireEvent.keyDown(row("a.ts"), { key: "F2" })
+    await waitFor(() => expect(movePath).toHaveBeenCalledWith(ROOT, `${ROOT}/a.ts`, `${ROOT}/b.ts`))
+  })
+
+  it("deletes on Delete and on Cmd+Backspace", async () => {
+    tree({ [ROOT]: [file("a.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    fireEvent.keyDown(row("a.ts"), { key: "Delete" })
+    fireEvent.keyDown(row("a.ts"), { key: "Backspace", metaKey: true })
+    expect(trashAndRecord).toHaveBeenCalledTimes(2)
+    expect(trashAndRecord).toHaveBeenCalledWith(`${ROOT}/a.ts`)
+  })
+
+  it("leaves a bare Backspace alone — that is not a delete gesture", async () => {
+    tree({ [ROOT]: [file("a.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    fireEvent.keyDown(row("a.ts"), { key: "Backspace" })
+    expect(trashAndRecord).not.toHaveBeenCalled()
+  })
+
+  it("jumps to a row by typing its first letter, wrapping around", async () => {
+    tree({ [ROOT]: [file("alpha.ts"), file("beta.ts"), file("gamma.ts")] })
+    render(<FileTree />)
+    await screen.findByText("gamma.ts")
+    fireEvent.keyDown(row("alpha.ts"), { key: "g" })
+    expect(document.activeElement).toBe(row("gamma.ts"))
+    // Past the end, it comes back round to the top.
+    fireEvent.keyDown(row("gamma.ts"), { key: "b" })
+    expect(document.activeElement).toBe(row("beta.ts"))
+  })
+
+  it("Home and End go to the first and last row", async () => {
+    tree({ [ROOT]: [file("a.ts"), file("b.ts"), file("c.ts")] })
+    render(<FileTree />)
+    await screen.findByText("c.ts")
+    fireEvent.keyDown(row("b.ts"), { key: "End" })
+    expect(document.activeElement).toBe(row("c.ts"))
+    fireEvent.keyDown(row("c.ts"), { key: "Home" })
+    expect(document.activeElement).toBe(row("a.ts"))
+  })
+
+  it("cuts and pastes from the keyboard", async () => {
+    tree({ [ROOT]: [dir("src"), file("a.ts")], [`${ROOT}/src`]: [] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    fireEvent.keyDown(row("a.ts"), { key: "x", metaKey: true })
+    fireEvent.keyDown(row("src"), { key: "v", metaKey: true })
+    await waitFor(() =>
+      expect(movePath).toHaveBeenCalledWith(ROOT, `${ROOT}/a.ts`, `${ROOT}/src/a.ts`),
+    )
+  })
+
+  it("walks rows with the arrows and expands a folder with ArrowRight", async () => {
+    tree({ [ROOT]: [dir("src"), file("a.ts")], [`${ROOT}/src`]: [] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    fireEvent.keyDown(row("src"), { key: "ArrowDown" })
+    expect(document.activeElement).toBe(row("a.ts"))
+    fireEvent.keyDown(row("a.ts"), { key: "ArrowUp" })
+    expect(document.activeElement).toBe(row("src"))
+    fireEvent.keyDown(row("src"), { key: "ArrowRight" })
+    expect(useProject.getState().expandedDirs).toContain("src")
+    fireEvent.keyDown(row("src"), { key: "ArrowLeft" })
+    expect(useProject.getState().expandedDirs).not.toContain("src")
+  })
+})
+
+describe("moving files around", () => {
+  const openMenu = async (label?: string) => {
+    const target = label
+      ? (screen.getByText(label).closest("button") as HTMLElement)
+      : (screen.getByRole("tree") as HTMLElement)
+    fireEvent.contextMenu(target)
+    return await screen.findByRole("menu")
+  }
+
+  it("cut then paste moves the file into the target folder, undoably", async () => {
+    tree({ [ROOT]: [dir("src"), file("a.ts")], [`${ROOT}/src`]: [] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    await userEvent.click(within(await openMenu("a.ts")).getByText("tree.cut"))
+    await userEvent.click(within(await openMenu("src")).getByText("tree.paste"))
+    await waitFor(() =>
+      expect(movePath).toHaveBeenCalledWith(ROOT, `${ROOT}/a.ts`, `${ROOT}/src/a.ts`),
+    )
+    await waitFor(() => expect(useFileUndo.getState().stack).toHaveLength(1))
+  })
+
+  it("copy then paste copies instead, and can be pasted more than once", async () => {
+    tree({ [ROOT]: [dir("src"), file("a.ts")], [`${ROOT}/src`]: [] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    await userEvent.click(within(await openMenu("a.ts")).getByText("tree.copy"))
+    await userEvent.click(within(await openMenu("src")).getByText("tree.paste"))
+    await waitFor(() =>
+      expect(importPaths).toHaveBeenCalledWith(ROOT, [`${ROOT}/a.ts`], `${ROOT}/src`),
+    )
+    expect(movePath).not.toHaveBeenCalled()
+    // A cut is consumed by its paste; a copy stays on the clipboard.
+    expect(within(await openMenu("src")).getByText("tree.paste")).toBeInTheDocument()
+  })
+
+  it("offers no paste before anything is cut or copied", async () => {
+    tree({ [ROOT]: [file("a.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    expect(within(await openMenu("a.ts")).queryByText("tree.paste")).not.toBeInTheDocument()
+  })
+
+  it("duplicates beside the original", async () => {
+    tree({ [ROOT]: [file("a.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    await userEvent.click(within(await openMenu("a.ts")).getByText("tree.duplicate"))
+    await waitFor(() => expect(importPaths).toHaveBeenCalledWith(ROOT, [`${ROOT}/a.ts`], ROOT))
+  })
+
+  it("opens a terminal in the clicked folder, not the project root", async () => {
+    tree({ [ROOT]: [dir("src")], [`${ROOT}/src`]: [] })
+    render(<FileTree />)
+    await screen.findByText("src")
+    await userEvent.click(within(await openMenu("src")).getByText("tree.openInTerminal"))
+    const sessions = useTerminals.getState().sessions
+    expect(sessions[sessions.length - 1]?.cwd).toBe(`${ROOT}/src`)
+  })
+})
+
+describe("git decorations", () => {
+  it("marks a changed file, and the folder that contains it", async () => {
+    useProject.setState({ git: { isRepo: true } as never })
+    gitStatus.mockResolvedValue([{ path: "src/a.ts", status: "modified", staged: false }])
+    tree({ [ROOT]: [dir("src"), file("a.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    // The file row is keyed on its project-relative path — "a.ts" at the root
+    // here — so drive the assertion from the folder rollup and the letter.
+    gitStatus.mockResolvedValue([{ path: "src/x.ts", status: "modified", staged: false }])
+    useProject.getState().bumpTree()
+    expect(await screen.findByLabelText("git.folderChanged")).toBeInTheDocument()
+  })
+
+  it("marks the file itself with its status letter", async () => {
+    useProject.setState({ git: { isRepo: true } as never })
+    gitStatus.mockResolvedValue([{ path: "a.ts", status: "untracked", staged: false }])
+    tree({ [ROOT]: [file("a.ts")] })
+    render(<FileTree />)
+    expect(await screen.findByTitle("git.status.untracked")).toBeInTheDocument()
+  })
+
+  it("says nothing on a clean tree", async () => {
+    useProject.setState({ git: { isRepo: true } as never })
+    tree({ [ROOT]: [file("a.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    expect(screen.queryByTitle("git.status.modified")).not.toBeInTheDocument()
+  })
+})
+
+describe("selecting more than one row", () => {
+  const row = (name: string) => screen.getByText(name).closest("button") as HTMLElement
+  const openMenu = async (label: string) => {
+    fireEvent.contextMenu(row(label))
+    return await screen.findByRole("menu")
+  }
+
+  const three = async () => {
+    tree({ [ROOT]: [file("a.ts"), file("b.ts"), file("c.ts")] })
+    render(<FileTree />)
+    await screen.findByText("c.ts")
+  }
+
+  it("⌘-click adds rows without opening them", async () => {
+    await three()
+    await userEvent.click(row("a.ts"))
+    expect(open).toHaveBeenCalledTimes(1)
+    fireEvent.click(row("c.ts"), { ctrlKey: true })
+    // The second click extended the selection; it must not have opened a file.
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(row("a.ts")).toHaveAttribute("aria-selected", "true")
+    expect(row("c.ts")).toHaveAttribute("aria-selected", "true")
+    expect(row("b.ts")).toHaveAttribute("aria-selected", "false")
+  })
+
+  it("⇧-click takes the whole range from the anchor", async () => {
+    await three()
+    await userEvent.click(row("a.ts"))
+    fireEvent.click(row("c.ts"), { shiftKey: true })
+    for (const name of ["a.ts", "b.ts", "c.ts"]) {
+      expect(row(name)).toHaveAttribute("aria-selected", "true")
+    }
+  })
+
+  it("deletes every selected row at once, each undoable", async () => {
+    await three()
+    await userEvent.click(row("a.ts"))
+    fireEvent.click(row("b.ts"), { ctrlKey: true })
+    const menu = await openMenu("a.ts")
+    await userEvent.click(within(menu).getByText("tree.deleteMany"))
+    await waitFor(() => expect(trashAndRecord).toHaveBeenCalledTimes(2))
+    expect(trashAndRecord).toHaveBeenCalledWith(`${ROOT}/a.ts`)
+    expect(trashAndRecord).toHaveBeenCalledWith(`${ROOT}/b.ts`)
+  })
+
+  it("right-clicking outside the selection acts on that row alone", async () => {
+    await three()
+    await userEvent.click(row("a.ts"))
+    fireEvent.click(row("b.ts"), { ctrlKey: true })
+    // c.ts is not selected — the menu must be about c.ts, not the other two.
+    const menu = await openMenu("c.ts")
+    expect(within(menu).queryByText("tree.deleteMany")).not.toBeInTheDocument()
+    await userEvent.click(within(menu).getByText("tree.delete"))
+    await waitFor(() => expect(trashAndRecord).toHaveBeenCalledTimes(1))
+    expect(trashAndRecord).toHaveBeenCalledWith(`${ROOT}/c.ts`)
+  })
+
+  it("cuts and pastes the whole selection", async () => {
+    tree({ [ROOT]: [dir("src"), file("a.ts"), file("b.ts")], [`${ROOT}/src`]: [] })
+    render(<FileTree />)
+    await screen.findByText("b.ts")
+    await userEvent.click(row("a.ts"))
+    fireEvent.click(row("b.ts"), { ctrlKey: true })
+    await userEvent.click(within(await openMenu("a.ts")).getByText("tree.cut"))
+    fireEvent.contextMenu(row("src"))
+    await userEvent.click(within(await screen.findByRole("menu")).getByText("tree.paste"))
+    await waitFor(() => expect(movePath).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe("finding, and opening another way", () => {
+  const row = (name: string) => screen.getByText(name).closest("button") as HTMLElement
+  const openMenu = async (label: string) => {
+    fireEvent.contextMenu(row(label))
+    return await screen.findByRole("menu")
+  }
+
+  it("scopes the search to the clicked folder and reveals the panel", async () => {
+    tree({ [ROOT]: [dir("src")], [`${ROOT}/src`]: [] })
+    render(<FileTree />)
+    await screen.findByText("src")
+    await userEvent.click(within(await openMenu("src")).getByText("tree.findInFolder"))
+    expect(useWorkspace.getState().searchScope).toBe("src")
+    expect(useWorkspace.getState().tool).toBe("search")
+  })
+
+  it("offers Find in Folder on folders only", async () => {
+    tree({ [ROOT]: [file("a.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    expect(within(await openMenu("a.ts")).queryByText("tree.findInFolder")).not.toBeInTheDocument()
+  })
+
+  it("Open With opens a second page listing the viewers, and comes back", async () => {
+    tree({ [ROOT]: [file("readme.md")] })
+    useProject.setState({ git: { isRepo: true } as never })
+    render(<FileTree />)
+    await screen.findByText("readme.md")
+    await userEvent.click(within(await openMenu("readme.md")).getByText("tree.openWith"))
+    const page = await screen.findByRole("menu")
+    expect(within(page).getByText("tree.viewerText")).toBeInTheDocument()
+    expect(within(page).getByText("tree.viewerPreview")).toBeInTheDocument()
+    expect(within(page).getByText("tree.viewerDiff")).toBeInTheDocument()
+    await userEvent.click(within(page).getByText("tree.openWithBack"))
+    expect(within(await screen.findByRole("menu")).getByText("tree.openWith")).toBeInTheDocument()
+  })
+
+  it("offers no Preview for a file that has no rich rendering", async () => {
+    tree({ [ROOT]: [file("a.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    await userEvent.click(within(await openMenu("a.ts")).getByText("tree.openWith"))
+    const page = await screen.findByRole("menu")
+    expect(within(page).queryByText("tree.viewerPreview")).not.toBeInTheDocument()
+  })
+
+  it("Open With ▸ Editor forces the source view and opens the file", async () => {
+    tree({ [ROOT]: [file("readme.md")] })
+    render(<FileTree />)
+    await screen.findByText("readme.md")
+    await userEvent.click(within(await openMenu("readme.md")).getByText("tree.openWith"))
+    await userEvent.click(within(await screen.findByRole("menu")).getByText("tree.viewerText"))
+    expect(useTextView.getState().force.has(`${ROOT}/readme.md`)).toBe(true)
+    expect(open).toHaveBeenCalledWith(`${ROOT}/readme.md`)
+  })
+
+  it("offers Compare with Saved only for a file with unsaved edits", async () => {
+    tree({ [ROOT]: [file("a.ts"), file("b.ts")] })
+    useEditorActions.setState({ dirtyPaths: ["a.ts"] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    expect(within(await openMenu("a.ts")).getByText("diff.compareWithSaved")).toBeInTheDocument()
+    expect(
+      within(await openMenu("b.ts")).queryByText("diff.compareWithSaved"),
+    ).not.toBeInTheDocument()
   })
 })

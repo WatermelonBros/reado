@@ -14,7 +14,11 @@ const project = {
   bumpTree: vi.fn(),
   close: vi.fn(),
 }
-vi.mock("../store", () => ({ useProject: { getState: () => project } }))
+const editorActions = { dirtyPaths: [] as string[], setDirty: vi.fn() }
+vi.mock("../store", () => ({
+  useProject: { getState: () => project },
+  useEditorActions: { getState: () => editorActions },
+}))
 
 import { movePath, trashPath } from "@/lib/api"
 import { trashAndRecord, useFileUndo } from "@/lib/fileUndo"
@@ -22,6 +26,7 @@ import { notify, notifyError } from "@/lib/notice"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  editorActions.dirtyPaths = []
   useFileUndo.setState({ stack: [] })
 })
 
@@ -92,6 +97,16 @@ describe("trashAndRecord", () => {
     expect(useFileUndo.getState().stack).toEqual([
       { kind: "trash", original: "a.ts", trashed: ".reado/.trash/a.ts" },
     ])
+  })
+
+  it("forgets unsaved edits on what it deleted, subtree included", async () => {
+    // Otherwise closing the tab flushes the buffer back to disk and the file
+    // the user just deleted reappears.
+    editorActions.dirtyPaths = ["src/a.ts", "src/nested/b.ts", "other/c.ts"]
+    await trashAndRecord("/root/src")
+    expect(editorActions.setDirty).toHaveBeenCalledWith("src/a.ts", false)
+    expect(editorActions.setDirty).toHaveBeenCalledWith("src/nested/b.ts", false)
+    expect(editorActions.setDirty).not.toHaveBeenCalledWith("other/c.ts", false)
     expect(notify).toHaveBeenCalledWith("info", "tree.deleted")
   })
 

@@ -45,27 +45,17 @@ import {
   gitStashDrop,
   gitStashList,
   gitStashPop,
-  gitStatus,
   gitSync,
   gitUnstage,
   gitUnstageAll,
   type StashEntry,
   submitToTerminal,
 } from "@/lib/api"
+import { STATUS, useGitStatus } from "@/lib/gitStatus"
 import { notify } from "@/lib/notice"
 import { composeCommitPrompt } from "@/lib/review"
 import { useEditorActions, useProject } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
-
-/** Single-letter badge + colour per change category. */
-const STATUS: Record<GitChange["status"], { letter: string; color: string }> = {
-  modified: { letter: "M", color: "var(--syn-number)" },
-  added: { letter: "A", color: "var(--syn-string)" },
-  deleted: { letter: "D", color: "var(--marker)" },
-  renamed: { letter: "R", color: "var(--syn-keyword)" },
-  untracked: { letter: "U", color: "var(--text-faint)" },
-  conflicted: { letter: "!", color: "var(--diag-error)" },
-}
 
 const basename = (p: string) => p.split("/").pop() ?? p
 const dirname = (p: string) => {
@@ -81,7 +71,9 @@ export function GitPanel() {
   const activeTerminal = useTerminals((s) => s.activeId)
   const addTerminal = useTerminals((s) => s.add)
   const { t } = useTranslation()
-  const [changes, setChanges] = useState<GitChange[]>([])
+  // The status lives in a store: the file tree decorates its rows from the same
+  // fetch instead of running `git status` on its own poll.
+  const changes = useGitStatus((s) => s.changes)
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
   // Path armed for discard confirmation (inline, like the comment delete flow).
@@ -100,9 +92,7 @@ export function GitPanel() {
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
-    gitStatus(root)
-      .then(setChanges)
-      .catch(() => setChanges([]))
+    void useGitStatus.getState().refresh(root)
   }, [root])
 
   const refreshStashes = useCallback(() => {

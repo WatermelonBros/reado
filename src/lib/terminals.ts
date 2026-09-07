@@ -117,6 +117,9 @@ export function dropPathsIntoTerminal(clientX: number, clientY: number, paths: s
 export interface TermSession {
   id: string
   title: string
+  /** Where the shell starts. Absent means the project root — a terminal opened
+   *  on a folder from the file tree carries that folder instead. */
+  cwd?: string
 }
 
 export interface TermGroup {
@@ -159,7 +162,7 @@ interface TerminalsState {
    *  the layout model — this store no longer keeps a second copy of it. */
   togglePosition: () => void
   /** Create a new tab (group with one pane) and focus it. Returns the pane id. */
-  add: () => string
+  add: (cwd?: string) => string
   /** Add a pane to the active group (split), focus it. Returns the pane id. */
   split: () => string
   /** Remove a pane; removes its group when it was the last one. */
@@ -224,12 +227,12 @@ export const useTerminals = create<TerminalsState>()(
         layout.move("terminal", at === "right" ? "bottom" : "right")
       },
 
-      add: () => {
+      add: (cwd) => {
         const id = newId()
         const gid = newGroupId()
         log.info("terminal opened", { id })
         set((s) => ({
-          sessions: [...s.sessions, { id, title: `Terminal ${s.sessions.length + 1}` }],
+          sessions: [...s.sessions, { id, title: `Terminal ${s.sessions.length + 1}`, cwd }],
           groups: [...s.groups, { id: gid, dir: "row", paneIds: [id], sizes: [1] }],
           activeId: id,
           activeGroupId: gid,

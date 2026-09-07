@@ -1,10 +1,25 @@
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
-import { bracketMatching, foldGutter, foldKeymap } from "@codemirror/language"
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete"
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+  selectLine,
+} from "@codemirror/commands"
+import {
+  bracketMatching,
+  foldGutter,
+  foldKeymap,
+  indentOnInput,
+  indentUnit,
+} from "@codemirror/language"
+import { lintKeymap } from "@codemirror/lint"
 import { gotoLine, highlightSelectionMatches, search, searchKeymap } from "@codemirror/search"
 import { type Compartment, EditorState, type Extension } from "@codemirror/state"
 import {
   crosshairCursor,
   drawSelection,
+  dropCursor,
   EditorView,
   highlightSpecialChars,
   highlightWhitespace,
@@ -18,6 +33,7 @@ import { changedLinesHighlight } from "@/lib/changedLines"
 import { readoAppearance } from "@/lib/codemirror"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
 import { setLastEdit, useDocInfo } from "@/lib/docInfo"
+import { cursorsToLineEnds, insertLineAbove, insertLineBelow } from "@/lib/editorCommands"
 import { explainSymbolAt, taskFromDiagnostic } from "@/lib/lspActions"
 import { occurrenceHighlight } from "@/lib/occurrenceHighlight"
 import { diagnosticsRuler } from "@/lib/overviewRuler"
@@ -63,6 +79,8 @@ export interface CodeExtensionsCtx {
   blameComp: Compartment
   lspComp: Compartment
   tabSizeComp: Compartment
+  /** The indentation unit auto-indent and Tab insert (tabs, or N spaces). */
+  indentUnitComp: Compartment
   wrapComp: Compartment
   /** Swatches beside colour literals; empty when the setting is off. */
   colorComp: Compartment
@@ -106,6 +124,13 @@ export interface CodeExtensionsCtx {
   autoSave: () => void
 }
 
+/** The indentation unit of the document the status bar last measured: a tab, or
+ *  as many spaces as it detected. */
+export function detectedIndentUnit(): string {
+  const { indentKind, indentSize } = useDocInfo.getState()
+  return indentKind === "tabs" ? "\t" : " ".repeat(indentSize)
+}
+
 /** Build the CodeMirror extensions array for the code viewer. Moved verbatim
  *  out of CodeView's "create the editor once per file" effect. */
 export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
@@ -115,6 +140,11 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     foldGutter(),
     highlightSpecialChars(),
     drawSelection(),
+    dropCursor(),
+    // Typing behaviours every editor has: auto-closing pairs (and the matching
+    // Backspace), and re-indenting a line as you type its closing token.
+    closeBrackets(),
+    indentOnInput(),
     ctx.bracketComp.of(ctx.bracketMatchingOn ? bracketMatching() : []),
     ctx.rulerComp.of(rulerExt(ctx.rulerColumn)),
     highlightSelectionMatches(),
@@ -136,10 +166,11 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // Find & replace panel (Mod-F to find, Mod-Alt-F to replace).
     search({ top: true, createPanel: readoSearchPanel }),
     // Mirror the cursor position into the status bar; track unsaved edits.
-    // Only the primary pane writes the shared cursor/dirty state.
+    // The cursor is shared state, so only the primary pane writes it; the dirty
+    // flag is per file, so both panes must — the split pane edits its own file
+    // and would otherwise never auto-save.
     EditorView.updateListener.of((u) => {
-      if (!ctx.primary) return
-      if (u.selectionSet || u.docChanged) {
+      if (ctx.primary && (u.selectionSet || u.docChanged)) {
         const head = u.state.selection.main.head
         const line = u.state.doc.lineAt(head)
         const col = head - line.from + 1
@@ -154,7 +185,7 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
         }, 300)
       }
       if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ExternalReload))) {
-        useEditorActions.getState().setDirty(true)
+        useEditorActions.getState().setDirty(ctx.relPath, true)
         setLastEdit(u.state.selection.main.head)
         // Auto Save (after-delay): debounce a write while the user types.
         if (useSettings.getState().autoSave === "afterDelay") {
@@ -209,8 +240,9 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
         },
       },
     ]),
-    // Go to line — Cmd/Ctrl+G (VS Code), alongside the default Cmd+Alt+G.
-    keymap.of([{ key: "Mod-g", run: gotoLine }]),
+    // Go to line — Ctrl+G, like VS Code on every platform. Not Cmd+G on macOS:
+    // there that combo is Find Next, which searchKeymap still provides.
+    keymap.of([{ key: "Mod-g", mac: "Ctrl-g", run: gotoLine }]),
     // Shift+F12 — find references (project-wide search for the symbol).
     keymap.of([{ key: "Shift-F12", run: findReferencesAt }]),
     // Alt+F12 — peek the definition inline.
@@ -222,8 +254,18 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     ctx.blameComp.of([]),
     ctx.lspComp.of([]),
     ctx.tabSizeComp.of(EditorState.tabSize.of(useDocInfo.getState().indentSize)),
+    // What Enter, Tab and indent/outdent actually insert. Without this every
+    // file is re-indented with CodeMirror's 2-space default, whatever it uses.
+    ctx.indentUnitComp.of(indentUnit.of(detectedIndentUnit())),
     // Create-comment gesture (spec: a dedicated key on a selection).
     keymap.of([{ key: "Mod-Shift-m", run: ctx.startComposer }]),
+    // VS Code editing keys CodeMirror has commands for but doesn't bind.
+    keymap.of([
+      { key: "Mod-l", run: selectLine },
+      { key: "Mod-Enter", run: insertLineBelow },
+      { key: "Mod-Shift-Enter", run: insertLineAbove },
+      { key: "Shift-Alt-i", run: cursorsToLineEnds },
+    ]),
     // Save when editing.
     keymap.of([
       {
@@ -237,7 +279,18 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // Undo/redo: the history field plus its keymap (Mod-z / Mod-Shift-z).
     // These bindings live in historyKeymap, not defaultKeymap.
     history(),
-    keymap.of([...historyKeymap, ...defaultKeymap, ...searchKeymap, ...foldKeymap]),
+    // `indentWithTab` last of the four: Tab is a real key with real fallbacks
+    // (accepting a completion, leaving the editor for the next control), so it
+    // must not outrank them.
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...historyKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...foldKeymap,
+      ...lintKeymap,
+      indentWithTab,
+    ]),
     // Editing is normally available; read-first is about the clean default
     // view, not read-only. The exception is PR mode, where the buffer is a
     // git ref's content and must not be edited into the working tree.

@@ -41,7 +41,7 @@ beforeEach(() => {
   searchText.mockReset().mockResolvedValue(MATCHES)
   replaceText.mockReset().mockResolvedValue(3)
   // A stale query would auto-run a search on mount; start each test clean.
-  useWorkspace.setState({ searchQuery: "", pendingSearch: null })
+  useWorkspace.setState({ searchQuery: "", pendingSearch: null, searchScope: null })
 })
 
 describe("SearchPanel", () => {
@@ -62,6 +62,7 @@ describe("SearchPanel", () => {
       caseSensitive: false,
       wholeWord: false,
       regex: false,
+      scope: null,
     })
   })
 
@@ -119,8 +120,29 @@ describe("SearchPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "search.replaceAll" }))
     await userEvent.click(screen.getByRole("button", { name: "search.replaceConfirm" }))
 
-    expect(replaceText).toHaveBeenCalledWith(ROOT, "foo", "bar")
+    expect(replaceText).toHaveBeenCalledWith(ROOT, "foo", "bar", null)
     // The panel surfaces the "replaced" status (count is fed to i18n).
     expect(await screen.findByText("search.replaced")).toBeInTheDocument()
+  })
+
+  it("a folder scope reaches the search, the replace, and back out of the chip", async () => {
+    seed()
+    useWorkspace.setState({ searchScope: "src/lib" })
+    render(<SearchPanel />)
+    await userEvent.type(screen.getByPlaceholderText("search.placeholder"), "foo")
+    await waitFor(() =>
+      expect(searchText).toHaveBeenCalledWith(
+        ROOT,
+        "foo",
+        expect.objectContaining({ scope: "src/lib" }),
+      ),
+    )
+    // The rewrite must be scoped the same way the results are.
+    await userEvent.click(await screen.findByTitle("search.replaceAll"))
+    await userEvent.click(await screen.findByTitle("search.replaceConfirm"))
+    await waitFor(() => expect(replaceText).toHaveBeenCalledWith(ROOT, "foo", "", "src/lib"))
+
+    await userEvent.click(screen.getByRole("button", { name: "search.clearScope" }))
+    expect(useWorkspace.getState().searchScope).toBeNull()
   })
 })

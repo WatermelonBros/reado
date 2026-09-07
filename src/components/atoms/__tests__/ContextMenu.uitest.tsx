@@ -80,4 +80,23 @@ describe("ContextMenu", () => {
     await userEvent.setup({ pointerEventsCheck: 0 }).click(btn)
     expect(disabledSelect).not.toHaveBeenCalled()
   })
+
+  it("a keepOpen item runs without dismissing the menu", async () => {
+    // The menu is portalled to document.body, outside React's root container,
+    // so a synthetic stopPropagation never reaches the window listener that
+    // closes it — the listener has to test containment instead. Without that,
+    // an item that swaps the menu's own contents ("Open With ▸") is closed by
+    // its own click.
+    const openWith = vi.fn()
+    const { onClose } = setup([{ label: "Open With", onSelect: openWith, keepOpen: true }])
+    await userEvent.click(screen.getByText("Open With"))
+    expect(openWith).toHaveBeenCalledOnce()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it("a click outside still closes it", async () => {
+    const { onClose } = setup()
+    await userEvent.click(document.body)
+    expect(onClose).toHaveBeenCalled()
+  })
 })

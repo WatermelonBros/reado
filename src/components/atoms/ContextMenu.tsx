@@ -26,6 +26,9 @@ export interface ContextMenuItem {
   checked?: boolean
   /** Draw a divider above this item. */
   separatorBefore?: boolean
+  /** Keep the menu open after selecting (an item that swaps the menu's own
+   *  contents, e.g. "Open With ▸"). */
+  keepOpen?: boolean
 }
 
 interface Props {
@@ -83,8 +86,17 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
   }
 
   // Dismiss on any outside interaction.
+  //
+  // The click listener has to test containment rather than trust
+  // `stopPropagation` on the item's React handler: the menu is portalled to
+  // `document.body`, outside React's root container, so a synthetic
+  // stopPropagation never reaches this native listener and every in-menu click
+  // used to close the menu whether the item wanted it or not.
   useEffect(() => {
-    const close = () => onClose()
+    const close = (e?: Event) => {
+      if (e?.type === "click" && ref.current?.contains(e.target as Node)) return
+      onClose()
+    }
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
     window.addEventListener("click", close)
     window.addEventListener("resize", close)
@@ -117,7 +129,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
             role="menuitem"
             disabled={item.disabled}
             onClick={() => {
-              onClose()
+              if (!item.keepOpen) onClose()
               item.onSelect()
             }}
             className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors disabled:opacity-40 disabled:hover:bg-transparent ${

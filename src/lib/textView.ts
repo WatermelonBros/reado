@@ -13,6 +13,8 @@ interface TextViewState {
   openAsText: (path: string) => void
   /** Flip a path between its rich rendering and source (e.g. markdown). */
   toggleText: (path: string) => void
+  /** Set it outright — "Open With ▸ Editor / Preview" picks a side, not a flip. */
+  setText: (path: string, asText: boolean) => void
 }
 
 export const useTextView = create<TextViewState>((set) => ({
@@ -23,6 +25,13 @@ export const useTextView = create<TextViewState>((set) => ({
       const force = new Set(s.force)
       if (force.has(path)) force.delete(path)
       else force.add(path)
+      return { force }
+    }),
+  setText: (path, asText) =>
+    set((s) => {
+      const force = new Set(s.force)
+      if (asText) force.add(path)
+      else force.delete(path)
       return { force }
     }),
 }))

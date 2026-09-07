@@ -29,9 +29,18 @@ import { EditorSelection } from "@codemirror/state"
 import { EditorView } from "@codemirror/view"
 import { create } from "zustand"
 import { t } from "@/i18n"
-import { createFile, findDefinition, formatFile, formatterStatus, readFile, writeFile } from "./api"
+import {
+  createDir,
+  createFile,
+  findDefinition,
+  formatFile,
+  formatterStatus,
+  readFile,
+  writeFile,
+} from "./api"
 import { useBookmarks } from "./bookmarks"
 import { toRelative } from "./comments"
+import { cursorsToLineEnds, duplicateSelectionCmd } from "./editorCommands"
 import { FORMATTERS, useExtensions } from "./extensions"
 import { choiceFor, extOf } from "./formatters"
 import { type HierDir, useHierarchy } from "./hierarchy"
@@ -47,7 +56,7 @@ import { notify } from "./notice"
 import { prompt } from "./prompt"
 import { useQa } from "./qa"
 import { noteSelfWrite } from "./readProgress"
-import { useEditorActions, useProject, useSettings, useWorkspace } from "./store"
+import { SAVED_BASE, useEditorActions, useProject, useSettings, useWorkspace } from "./store"
 import { expandSelection, shrinkSelection } from "./syntaxSelection"
 
 export type Eol = "LF" | "CRLF"
@@ -261,7 +270,14 @@ export async function textToSave(view: EditorView): Promise<string> {
     const outcome = await formatBuffer()
     if (outcome.kind === "error") notify("error", outcome.message)
   }
-  let text = view.state.doc.toString()
+  return applyHygiene(view.state.doc.toString())
+}
+
+/** The on-write hygiene toggles (trim trailing whitespace, final newline),
+ *  without the formatter. Shared with the close-flush, which cannot format: by
+ *  then the formatter's idea of "the active document" is the next file. */
+export function applyHygiene(text: string): string {
+  const s = useSettings.getState()
   if (s.trimTrailingWhitespace) text = text.replace(/[ \t]+$/gm, "")
   if (s.insertFinalNewline && text.length > 0 && !text.endsWith("\n")) text += "\n"
   return text
@@ -275,8 +291,23 @@ export async function saveDocument(): Promise<void> {
   const text = await textToSave(view)
   noteSelfWrite(toRelative(root, active))
   writeFile(root, toRelative(root, active), text)
-    .then(() => useEditorActions.getState().setDirty(false))
+    .then(() => useEditorActions.getState().setDirty(toRelative(root, active), false))
     .catch(() => {})
+}
+
+/**
+ * "Compare with Saved": diff the live buffer against the bytes on disk.
+ *
+ * The buffer has to be captured *here* — switching to the diff unmounts the code
+ * view, and with it the only copy of the unsaved text.
+ */
+export function compareWithSaved(): void {
+  const { view } = useDocInfo.getState()
+  if (!view || !useProject.getState().active) return
+  const actions = useEditorActions.getState()
+  actions.setCompareBuffer(view.state.doc.toString())
+  actions.setDiffBase(SAVED_BASE)
+  actions.setDiffing(true)
 }
 
 /** Open the editor's find panel (native menu Edit ▸ Find). */
@@ -435,23 +466,7 @@ export const toggleBookmarkAtCursor = () =>
 
 /** Replace each multi-line selection with a cursor at the end of every spanned
  *  line (VS Code's "Add Cursors to Line Ends"). */
-export const addCursorsToLineEnds = () =>
-  runOnView((view) => {
-    const { state } = view
-    const cursors = []
-    for (const r of state.selection.ranges) {
-      const first = state.doc.lineAt(r.from).number
-      const last = state.doc.lineAt(r.to).number
-      if (last > first) {
-        for (let n = first; n <= last; n++)
-          cursors.push(EditorSelection.cursor(state.doc.line(n).to))
-      } else {
-        cursors.push(EditorSelection.cursor(r.head))
-      }
-    }
-    view.dispatch({ selection: EditorSelection.create(cursors) })
-    return true
-  })
+export const addCursorsToLineEnds = () => runOnView(cursorsToLineEnds)
 
 // Last edit location: the editor records where the document last changed, so the
 // reader can jump back to it after navigating away.
@@ -468,15 +483,7 @@ export const gotoLastEdit = () =>
   })
 
 /** Duplicate each non-empty selection in place (after itself). */
-export const duplicateSelection = () =>
-  runOnView((view) => {
-    const changes = view.state.selection.ranges
-      .filter((r) => !r.empty)
-      .map((r) => ({ from: r.to, insert: view.state.sliceDoc(r.from, r.to) }))
-    if (!changes.length) return false
-    view.dispatch({ changes })
-    return true
-  })
+export const duplicateSelection = () => runOnView(duplicateSelectionCmd)
 
 /** Go to the type definition / implementation of the symbol at the cursor (LSP). */
 export function goToTypeDefinitionAtCursor(): void {
@@ -535,6 +542,24 @@ export async function newFile(): Promise<void> {
   }
 }
 
+/** Create a folder at a prompted, project-relative path. */
+export async function newFolder(): Promise<void> {
+  const root = useProject.getState().root
+  if (!root) return
+  const name = await prompt({
+    title: t("tree.newFolder"),
+    placeholder: "path/name",
+    confirmLabel: t("file.create"),
+  })
+  if (!name) return
+  try {
+    await createDir(root, name)
+    useProject.getState().bumpTree()
+  } catch {
+    /* already exists / invalid path */
+  }
+}
+
 /** Prompt for a destination and write the active buffer there, then open it. */
 export async function saveAs(): Promise<void> {
   const { view } = useDocInfo.getState()
@@ -565,7 +590,7 @@ export function revertFile(): void {
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: c.text },
       })
-      useEditorActions.getState().setDirty(false)
+      useEditorActions.getState().setDirty(toRelative(root, active), false)
     })
     .catch(() => {})
 }
@@ -597,7 +622,7 @@ export function convertEol(eol: Eol): void {
   writeFile(root, toRelative(root, active), out)
     .then(() => {
       set({ eol })
-      useEditorActions.getState().setDirty(false)
+      useEditorActions.getState().setDirty(toRelative(root, active), false)
     })
     .catch(() => {})
 }

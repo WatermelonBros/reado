@@ -29,6 +29,7 @@ import { toRelative } from "@/lib/comments"
 import {
   addCursorsToLineEnds,
   askAboutSelection,
+  compareWithSaved,
   formatDocument,
   goToBracket,
   goToLine,
@@ -628,6 +629,14 @@ function commandRows(
       hint: `${shift}${alt}F`,
       when: hasFile,
       run: () => void formatDocument(),
+    },
+    {
+      label: t("diff.compareWithSaved"),
+      when: hasFile,
+      run: () => {
+        compareWithSaved()
+        close()
+      },
     },
     { label: t("terminal.clear"), when: hasTerminal, run: clearTerminal },
     { label: t("terminal.restart"), when: hasTerminal, run: restartTerminal },

@@ -16,12 +16,12 @@ import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import { ChevronIcon } from "@/components/atoms/icons"
 import { HunkBar } from "@/components/molecules/HunkBar"
-import { getReadSnapshot, gitDiffBase } from "@/lib/api"
+import { getReadSnapshot, gitDiffBase, readFile } from "@/lib/api"
 import { readoAppearance } from "@/lib/codemirror"
 import { languages } from "@/lib/languages"
 import { diffRuler } from "@/lib/overviewRuler"
 import { LAST_READ_BASE, useReadProgress } from "@/lib/readProgress"
-import { useEditorActions, useProject, useSettings } from "@/lib/store"
+import { SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
 
 interface Props {
   relPath: string
@@ -42,6 +42,9 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
   const [refresh, setRefresh] = useState(0)
   // Delta mode: diff against the last-read snapshot rather than a git ref.
   const isDelta = base === LAST_READ_BASE
+  // "Compare with Saved": the base is the file on disk, not a git ref — so this
+  // works on an untracked file, and outside a repository entirely.
+  const isSaved = base === SAVED_BASE
 
   // Fetch the base version whenever the file or chosen base changes.
   useEffect(() => {
@@ -49,12 +52,16 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
     setHead(undefined)
     // `gitDiffBase`, not `gitShowRef`: a file added since the base is not "no
     // base", it's an empty one — so a new file reads as an all-added diff.
-    const fetchBase = isDelta ? getReadSnapshot(root, relPath) : gitDiffBase(root, relPath, base)
+    const fetchBase = isSaved
+      ? readFile(root, relPath).then((c) => (c.kind === "text" ? c.text : null))
+      : isDelta
+        ? getReadSnapshot(root, relPath)
+        : gitDiffBase(root, relPath, base)
     fetchBase.then((h) => !cancelled && setHead(h)).catch(() => !cancelled && setHead(null))
     return () => {
       cancelled = true
     }
-  }, [root, relPath, base, isDelta, refresh])
+  }, [root, relPath, base, isDelta, isSaved, refresh])
 
   // "Mark reviewed": re-snapshot the current content as read and leave the delta.
   const markReviewed = () => {

@@ -438,6 +438,45 @@ fn copy_path(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Create a new empty directory at `path` (project-relative), making parent dirs
+/// as needed. Confined to `root`; errors if something is already there. Returns
+/// its absolute path.
+#[tauri::command]
+pub fn create_dir(root: String, path: String) -> Result<String> {
+    let root = PathBuf::from(&root);
+    let target = root.join(&path);
+    // Same order as create_file: confine against the nearest existing ancestor
+    // *before* creating anything, so a `..`-escaping path can't leave
+    // directories behind outside the project.
+    let canon_root = root.canonicalize()?;
+    let anchor = target
+        .ancestors()
+        .find(|p| p.exists())
+        .ok_or(Error::PathEscapesRoot)?;
+    if !anchor.canonicalize()?.starts_with(&canon_root) {
+        return Err(Error::PathEscapesRoot);
+    }
+    // `ensure_dest_within` canonicalizes the parent, so the parent has to exist
+    // first — same order as create_file, and safe because the ancestor guard
+    // above already refused anything resolving outside the root.
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let target = ensure_dest_within(&root, &target)?;
+    if target.exists() {
+        return Err(Error::Other(
+            "something with that name already exists".into(),
+        ));
+    }
+    std::fs::create_dir(&target)?;
+    crate::log::info(
+        "fs",
+        "folder created",
+        serde_json::json!({ "path": target.to_string_lossy() }),
+    );
+    Ok(target.to_string_lossy().into_owned())
+}
+
 /// Move/rename a file or directory within the project (internal drag-and-drop).
 /// Both ends are confined to the root; refuses to overwrite an existing target.
 #[tauri::command]
@@ -701,7 +740,7 @@ pub fn allow_project_assets(app: tauri::AppHandle, root: String) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, create_file, list_dir, FileContent, MAX_TEXT_BYTES};
+    use super::{base64_encode, create_dir, create_file, list_dir, FileContent, MAX_TEXT_BYTES};
 
     #[test]
     fn an_escaping_create_leaves_no_directories_outside_the_project() {
@@ -719,6 +758,31 @@ mod tests {
         );
         assert!(out.is_err());
         assert!(!proj.path().join("escaped").exists());
+    }
+
+    #[test]
+    fn an_escaping_folder_create_leaves_nothing_outside_the_project() {
+        // Same property as the file case: `create_dir_all` would happily build
+        // the whole escaping chain if the ancestor guard didn't run first.
+        let proj = tempfile::TempDir::new().unwrap();
+        let root = proj.path().join("proj");
+        std::fs::create_dir(&root).unwrap();
+
+        let out = create_dir(
+            root.to_string_lossy().into_owned(),
+            "../escaped/nested".into(),
+        );
+        assert!(out.is_err());
+        assert!(!proj.path().join("escaped").exists());
+    }
+
+    #[test]
+    fn creates_a_folder_and_refuses_a_second_one_with_the_same_name() {
+        let proj = tempfile::TempDir::new().unwrap();
+        let root = proj.path().to_string_lossy().into_owned();
+        assert!(create_dir(root.clone(), "a/b".into()).is_ok());
+        assert!(proj.path().join("a/b").is_dir());
+        assert!(create_dir(root, "a/b".into()).is_err());
     }
 
     #[test]

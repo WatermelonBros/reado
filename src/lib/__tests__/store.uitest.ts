@@ -349,8 +349,8 @@ describe("useEditorActions", () => {
   it("boolean/state setters", () => {
     E().setEditing(true)
     expect(E().editing).toBe(true)
-    E().setDirty(true)
-    expect(E().dirty).toBe(true)
+    E().setDirty("src/a.ts", true)
+    expect(E().isDirty("src/a.ts")).toBe(true)
     E().setDiffing(true)
     expect(E().diffing).toBe(true)
     E().setDiffBase("HEAD~1")

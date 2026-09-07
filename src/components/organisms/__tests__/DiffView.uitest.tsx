@@ -7,11 +7,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const gitDiffBase = vi.fn<(root: string, path: string, base: string) => Promise<string | null>>()
 const getReadSnapshot = vi.fn<(root: string, path: string) => Promise<string | null>>()
+const readFile = vi.fn<(root: string, path: string) => Promise<{ kind: string; text?: string }>>()
 
 vi.mock("../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../lib/api")>()),
   gitDiffBase: (root: string, path: string, base: string) => gitDiffBase(root, path, base),
   getReadSnapshot: (root: string, path: string) => getReadSnapshot(root, path),
+  readFile: (root: string, path: string) => readFile(root, path),
 }))
 // The per-hunk staging bar owns its own git calls and its own test; here it is
 // a button that fires the "a hunk moved" callback the diff has to react to.
@@ -25,7 +27,7 @@ vi.mock("../../molecules/HunkBar", () => ({
 
 import { DiffView } from "@/components/organisms/DiffView"
 import { LAST_READ_BASE, useReadProgress } from "@/lib/readProgress"
-import { useEditorActions, useProject } from "@/lib/store"
+import { SAVED_BASE, useEditorActions, useProject } from "@/lib/store"
 
 const ROOT = "/repo"
 const REL = "src/a.ts"
@@ -34,6 +36,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   gitDiffBase.mockResolvedValue("old\n")
   getReadSnapshot.mockResolvedValue("old\n")
+  readFile.mockResolvedValue({ kind: "text", text: "on disk\n" })
   useProject.setState({ root: ROOT })
   useEditorActions.setState({ diffBase: "HEAD", diffing: true })
   useReadProgress.setState({ read: new Set(), changed: new Set() })
@@ -160,5 +163,20 @@ describe("the diff itself", () => {
     // Staging a hunk moves the base, so the diff has to be recomputed against it.
     await userEvent.click(screen.getByText("hunk-bar"))
     await waitFor(() => expect(gitDiffBase).toHaveBeenCalledTimes(2))
+  })
+
+  it("compares with the saved file — the disk copy, not a git ref", async () => {
+    // The point of this base: it works on an untracked file, and outside a
+    // repository entirely, because it never asks git anything.
+    render(<DiffView relPath={REL} text={"unsaved buffer\n"} base={SAVED_BASE} />)
+    await waitFor(() => expect(readFile).toHaveBeenCalledWith(ROOT, REL))
+    expect(gitDiffBase).not.toHaveBeenCalled()
+    expect(getReadSnapshot).not.toHaveBeenCalled()
+  })
+
+  it("says there is no base when the saved file cannot be read as text", async () => {
+    readFile.mockResolvedValue({ kind: "binary" })
+    render(<DiffView relPath={REL} text={"unsaved\n"} base={SAVED_BASE} />)
+    expect(await screen.findByText("diff.noBase")).toBeInTheDocument()
   })
 })

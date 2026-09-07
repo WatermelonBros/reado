@@ -5,7 +5,8 @@ import { IconButton } from "@/components/atoms/IconButton"
 import { BlameIcon, ChevronIcon, DiffIcon, SparkleIcon } from "@/components/atoms/icons"
 import { Select } from "@/components/atoms/Select"
 import { type GitRefs, gitRefs } from "@/lib/api"
-import { useEditorActions, useProject } from "@/lib/store"
+import { LAST_READ_BASE } from "@/lib/readProgress"
+import { SAVED_BASE, useEditorActions, useProject } from "@/lib/store"
 import { useSynopsis } from "@/lib/synopsis"
 
 export function Breadcrumb() {
@@ -22,7 +23,7 @@ export function Breadcrumb() {
   const setDiffBase = useEditorActions((s) => s.setDiffBase)
   const blame = useEditorActions((s) => s.blame)
   const setBlame = useEditorActions((s) => s.setBlame)
-  const dirty = useEditorActions((s) => s.dirty)
+  const dirtyPaths = useEditorActions((s) => s.dirtyPaths)
   const { t } = useTranslation()
   const [refs, setRefs] = useState<GitRefs>({ branches: [], commits: [] })
 
@@ -40,8 +41,13 @@ export function Breadcrumb() {
     .replace(/^[\\/]+/, "")
     .replace(/\\/g, "/")
   const segments = rel.split("/")
+  const dirty = dirtyPaths.includes(rel)
 
   const baseOptions = [
+    // The sentinels aren't git refs, so they're only listed while active —
+    // otherwise the Select would show a blank value for the base in effect.
+    ...(diffBase === SAVED_BASE ? [{ value: SAVED_BASE, label: t("diff.saved") }] : []),
+    ...(diffBase === LAST_READ_BASE ? [{ value: LAST_READ_BASE, label: t("diff.lastRead") }] : []),
     { value: "HEAD", label: t("diff.head") },
     ...refs.branches.map((b) => ({ value: b, label: b })),
     ...refs.commits.map((c) => ({

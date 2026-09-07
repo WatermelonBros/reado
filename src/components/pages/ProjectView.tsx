@@ -11,7 +11,15 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { ContextMenu } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
-import { CloseIcon, CollapseAllIcon, EyeIcon, EyeOffIcon, SwapIcon } from "@/components/atoms/icons"
+import {
+  CloseIcon,
+  CollapseAllIcon,
+  EyeIcon,
+  EyeOffIcon,
+  NewFileIcon,
+  NewFolderIcon,
+  SwapIcon,
+} from "@/components/atoms/icons"
 import { Breadcrumb } from "@/components/molecules/Breadcrumb"
 import { GitignorePrompt } from "@/components/molecules/GitignorePrompt"
 import { StatusBar } from "@/components/molecules/StatusBar"
@@ -43,6 +51,7 @@ import {
 } from "@/lib/api"
 import { useBookmarks } from "@/lib/bookmarks"
 import { toRelative, useComments } from "@/lib/comments"
+import { newFile, newFolder } from "@/lib/docInfo"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { type DockArea, findPanel, useLayout } from "@/lib/layout"
 import { createLogger, safeError } from "@/lib/logger"
@@ -580,6 +589,18 @@ export function ProjectView({ root }: { root: string }) {
               </span>
               {tool === "files" && (
                 <span className="flex items-center gap-0.5">
+                  <IconButton
+                    size="sm"
+                    label={t("file.newFile")}
+                    onClick={() => void newFile()}
+                    icon={<NewFileIcon className="h-[15px] w-[15px]" />}
+                  />
+                  <IconButton
+                    size="sm"
+                    label={t("tree.newFolder")}
+                    onClick={() => void newFolder()}
+                    icon={<NewFolderIcon className="h-[15px] w-[15px]" />}
+                  />
                   <IconButton
                     size="sm"
                     label={t("tree.collapseAll")}

@@ -29,6 +29,7 @@ const h = vi.hoisted(() => {
       darkTheme: "reado-dark",
       colorVision: "normal",
       reduceMotion: "off",
+      wrap: true,
       zoom: 1,
       set: vi.fn(),
     },
@@ -117,6 +118,15 @@ import {
 import { toggleDockArea } from "@/lib/panels"
 import { checkForUpdates } from "@/lib/updater"
 import { toggleFullscreen } from "@/lib/window"
+
+// These tests drive the macOS bindings: the command modifier is Cmd there, and
+// the ⌃⌘F / ⌥⌘Z combos only exist there. The non-macOS half of the split — Ctrl
+// as the command modifier, and Ctrl *not* being one on macOS — is asserted
+// separately below.
+vi.mock("@/lib/shortcuts", async (orig) => ({
+  ...(await orig<typeof import("@/lib/shortcuts")>()),
+  isMacUA: true,
+}))
 
 /** Fire a keydown on window, as the app's global listener sees it. */
 function press(init: KeyboardEventInit) {
@@ -314,8 +324,24 @@ describe("useGlobalShortcuts", () => {
     expect(palette.open).not.toHaveBeenCalled()
   })
 
+  it("leaves the Ctrl keys alone on macOS — they belong to the editor and the shell", () => {
+    // Ctrl+P/K/B are readline motion in the editor and tmux/shell keys in the
+    // terminal. Treating Ctrl as a second command modifier stole all of them.
+    press({ key: "p", ctrlKey: true })
+    press({ key: "k", ctrlKey: true })
+    expect(palette.open).not.toHaveBeenCalled()
+    press({ key: "b", ctrlKey: true })
+    expect(workspace.toggleSidebar).not.toHaveBeenCalled()
+  })
+
+  it("toggles word wrap on ⌥Z, off the physical key", () => {
+    press({ key: "Ω", code: "KeyZ", altKey: true })
+    expect(settings.set).toHaveBeenCalledWith({ wrap: false })
+  })
+
   it("formats the document on Shift+Alt+F, without a Cmd/Ctrl", () => {
-    press({ key: "F", shiftKey: true, altKey: true })
+    // Read off the physical key: with Option held macOS composes (⇧⌥F is "Ï").
+    press({ key: "Ï", code: "KeyF", shiftKey: true, altKey: true })
     expect(formatDocument).toHaveBeenCalled()
   })
 

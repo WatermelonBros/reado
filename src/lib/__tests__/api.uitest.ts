@@ -64,7 +64,7 @@ describe("the command boundary", () => {
   it("still sees every wrapper — bump this when you add one", () => {
     // A tripwire on the sweep itself. Exact, not `>=`: a loosened filter or a
     // broken mock would otherwise shrink the sweep silently.
-    expect(wrappers).toHaveLength(164)
+    expect(wrappers).toHaveLength(165)
   })
 
   for (const [name, fn] of wrappers) {
@@ -106,6 +106,7 @@ describe("the wrappers that do more than forward", () => {
       caseSensitive: false,
       wholeWord: false,
       regex: false,
+      scope: null,
     })
     await api.replaceText("/root", "a", "b")
     expect(lastArgs().exclude).toEqual(["**/node_modules/**"])
@@ -114,6 +115,18 @@ describe("the wrappers that do more than forward", () => {
   it("searchText flattens its options into flat arguments", async () => {
     await api.searchText("/root", "needle", { caseSensitive: true, wholeWord: false, regex: true })
     expect(lastArgs()).toMatchObject({ caseSensitive: true, wholeWord: false, regex: true })
+  })
+
+  it("a search scope reaches both search and replace, or a scoped replace lies", async () => {
+    await api.searchText("/root", "needle", {
+      caseSensitive: false,
+      wholeWord: false,
+      regex: false,
+      scope: "src",
+    })
+    expect(lastArgs()).toMatchObject({ scope: "src" })
+    await api.replaceText("/root", "a", "b", "src")
+    expect(lastArgs()).toMatchObject({ scope: "src" })
   })
 
   it("readFile passes the guard through, and omits what wasn't asked for", async () => {

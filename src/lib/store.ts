@@ -433,6 +433,10 @@ interface WorkspaceState {
   pendingSearch: string | null
   searchFor: (query: string) => void
   clearPendingSearch: () => void
+  /** Project-relative folder the Search panel is limited to, or null for the
+   *  whole project. Set by "Find in Folder" in the tree, cleared in the panel. */
+  searchScope: string | null
+  setSearchScope: (scope: string | null) => void
   /** The extension whose page is open in the editor area, if any. The listing
    *  rides along when the page was opened from a catalogue row, so the page can
    *  offer Install without asking the registry a second time. */
@@ -478,6 +482,8 @@ export const useWorkspace = create<WorkspaceState>()(
       pendingSearch: null,
       searchFor: (query) => set({ tool: "search", lastTool: "search", pendingSearch: query }),
       clearPendingSearch: () => set({ pendingSearch: null }),
+      searchScope: null,
+      setSearchScope: (searchScope) => set({ searchScope }),
       readingExtension: null,
       readExtension: (readingExtension) => set({ readingExtension }),
       graphOpen: false,
@@ -567,9 +573,12 @@ interface EditorActionsState {
   /** Manual editing enabled for the active file (read-first stays the default). */
   editing: boolean
   setEditing: (editing: boolean) => void
-  /** True when the active editable file has unsaved changes. */
-  dirty: boolean
-  setDirty: (dirty: boolean) => void
+  /** Project-relative paths with unsaved changes. Per file, not global: the
+   *  split pane edits a different file than the primary one, and a single flag
+   *  made one pane's edits invisible to the other's auto-save. */
+  dirtyPaths: string[]
+  setDirty: (path: string, dirty: boolean) => void
+  isDirty: (path: string) => boolean
   /** Show the active file as a diff against its committed version. */
   diffing: boolean
   setDiffing: (diffing: boolean) => void
@@ -590,9 +599,14 @@ interface EditorActionsState {
   requestView: (view: "diff" | "conflict") => void
   /** Take the pending view, if any, leaving nothing behind for the next file. */
   takePendingView: () => "diff" | "conflict" | null
-  /** The git ref the diff compares against (HEAD, a branch, or a commit hash). */
+  /** The git ref the diff compares against (HEAD, a branch, or a commit hash),
+   *  or one of the sentinels: the last-read snapshot, or what is on disk. */
   diffBase: string
   setDiffBase: (base: string) => void
+  /** The unsaved buffer to diff, captured when "Compare with Saved" ran. Null
+   *  when the diff is against a git ref, where the file on disk is the doc. */
+  compareBuffer: string | null
+  setCompareBuffer: (text: string | null) => void
   /** Show a per-line git blame gutter in the editor. */
   blame: boolean
   setBlame: (blame: boolean) => void
@@ -613,8 +627,16 @@ export const useEditorActions = create<EditorActionsState>()(
       requestPeek: () => set((s) => ({ peekNonce: s.peekNonce + 1 })),
       editing: false,
       setEditing: (editing) => set({ editing }),
-      dirty: false,
-      setDirty: (dirty) => set({ dirty }),
+      dirtyPaths: [],
+      setDirty: (path, dirty) =>
+        set((s) => {
+          const has = s.dirtyPaths.includes(path)
+          if (has === dirty) return s
+          return {
+            dirtyPaths: dirty ? [...s.dirtyPaths, path] : s.dirtyPaths.filter((p) => p !== path),
+          }
+        }),
+      isDirty: (path) => get().dirtyPaths.includes(path),
       diffing: false,
       // Conflict resolution and the diff are two views of the same file; opening
       // one closes the other rather than stacking them.
@@ -630,6 +652,8 @@ export const useEditorActions = create<EditorActionsState>()(
       },
       diffBase: "HEAD",
       setDiffBase: (base) => set({ diffBase: base }),
+      compareBuffer: null,
+      setCompareBuffer: (compareBuffer) => set({ compareBuffer }),
       blame: false,
       setBlame: (blame) => set({ blame }),
     }),
@@ -639,6 +663,10 @@ export const useEditorActions = create<EditorActionsState>()(
     },
   ),
 )
+
+/** Diff base sentinel: the file as it is on disk, so unsaved edits can be seen
+ *  as a diff ("Compare with Saved"). Not a git ref — no repository needed. */
+export const SAVED_BASE = "reado:saved"
 
 interface CursorState {
   line: number

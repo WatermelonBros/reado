@@ -11,6 +11,93 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **Tab indents.** It never did — `indentWithTab` was simply never bound, so Tab
+  walked focus out of the editor. Tab now indents the selection and Shift+Tab
+  outdents it, and Reado indents with the file's *own* unit: the indentation the
+  status bar detects (tabs, or N spaces) is what Enter, Tab and re-indent insert,
+  instead of CodeMirror's 2-space default applied to every file regardless.
+- **Auto-closing brackets and quotes**, with the matching Backspace, plus
+  re-indent as you type a closing token (`closeBrackets`, `indentOnInput`).
+- **Editing keys VS Code has and CodeMirror doesn't bind**: ⌘L select line, ⌘↵ /
+  ⌘⇧↵ open a line below / above, ⇧⌥I add cursors to every line end, ⌥Z toggle word
+  wrap, and the lint keymap.
+- **The editor's right-click menu now has the basics**: Cut, Copy, Paste, Rename
+  Symbol, Find All References, Peek Definition and Select All Occurrences. The
+  webview has no native context menu, so before this there was no way to copy from
+  a right-click at all.
+- **The find bar counts.** "3 of 17" beside the field, like every other editor's
+  (capped on very large documents, where it reads "1000+" rather than stalling).
+- **The file tree got its file operations**: Rename (F2 or the menu), Delete
+  (Delete, ⌘⌫ on macOS), New File…, New Folder…, Copy Path and Copy Relative Path.
+  Rename and delete are both undoable with ⌘Z, like a drag-move already was. The
+  arrows walk the rows and open/close folders.
+- **The file tree shows what git thinks.** A changed file's name carries its
+  status colour and letter (M/A/D/R/U/!), and a folder holding changes gets a
+  quiet dot — so a modified file three levels down is visible without expanding
+  to find it. Source Control and the tree now read one `git status`, on one poll,
+  instead of each running their own.
+- **Cut, Copy, Paste and Duplicate in the tree** (⌘X / ⌘C / ⌘V / ⌘D, or the
+  menu). A cut is a move — undoable with ⌘Z like a drag — and is consumed by its
+  paste; a copy stays on the clipboard for as many pastes as you want, and a name
+  clash becomes "file 2.ts" rather than an overwrite.
+- **Open in Integrated Terminal** on any folder: the shell starts *there*, not at
+  the project root, which is the only reason to want the menu item.
+- **The tree navigates like a file list should**: Home / End, and typing a letter
+  jumps to the next row starting with it (wrapping). Rows carry their full
+  project-relative path as their tooltip, not just the filename.
+- **New File / New Folder buttons** in the Files panel header, beside Collapse All.
+- **Multi-selection in the file tree.** ⌘/Ctrl+click adds a row, ⇧+click takes the
+  range, ⇧+↑/↓ extends it as you walk — and delete, cut, copy, duplicate and drag
+  all act on the whole selection. Right-clicking a row *outside* the selection
+  acts on that row alone, so the menu can never quietly hit ten files you can no
+  longer see. Deleting many stays undoable, one ⌘Z per file.
+- **Find in Folder…** on any folder: the Search panel gets a chip naming the
+  folder and every search is limited to it — and so is Replace All, because
+  showing one folder's matches while rewriting the whole project would be a trap
+  rather than a feature. Clearing the chip goes back to the whole project. The
+  no-ripgrep fallback honours the scope too, so results don't differ by machine.
+- **Open With…** on a file: a second page of the menu listing the viewers that
+  actually apply to it — Editor (source), Preview (only where there *is* a rich
+  rendering), Diff — with a check on the one in effect. This is VS Code's
+  meaning of the command: which of Reado's editors opens it, not which external
+  app. Handing the file to the OS is what Reveal in Finder is for.
+- **Compare with Saved**, in the editor's right-click menu, the command palette,
+  the File menu, and on a tree row with unsaved edits. It diffs the live buffer
+  against the bytes on disk — the buffer is captured at the moment you ask,
+  because switching to the diff tears down the editor holding it. It asks git
+  nothing, so it works on an untracked file and outside a repository.
+
+### Fixed
+- **A context-menu item could not keep its own menu open.** The menu is portalled
+  to `document.body`, outside React's root container, so the `stopPropagation` it
+  relied on never reached the native listener that dismisses it — every in-menu
+  click closed the menu whether the item wanted it or not. The listener now tests
+  containment, and an item can ask to stay open.
+- **The diff base picker showed a blank value** whenever the base was one of the
+  non-git sentinels (the last-read snapshot, and now the saved file); those are
+  listed while they are in effect.
+- **Edits could be lost by switching tabs.** A tab switch tears the editor down
+  and re-reads the file from disk; a debounced auto-save still pending at that
+  moment fired into a destroyed view and wrote nothing. Unsaved edits are now
+  flushed before the editor goes away — with Auto Save off too, where the loss was
+  guaranteed rather than a race.
+- **⌘Z stopped at the tab switch.** The undo history is parked when a file's
+  editor is torn down and restored when it comes back unchanged, so undo reaches
+  back past the last time you looked at another file.
+- **Unsaved state is tracked per file, not globally.** One shared flag meant the
+  split pane's edits were invisible to auto-save (so they were never written), and
+  the breadcrumb's unsaved dot reported another file's state.
+- **Ctrl belongs to the editor and the terminal again on macOS.** Reado read
+  Cmd-or-Ctrl as its command modifier, so ⌃P, ⌃K, ⌃B, ⌃T and ⌃J opened the file
+  finder, the palette, the sidebar, symbols and the terminal — on top of being
+  readline motion in the editor and tmux's prefix, kill-line and history in the
+  shell. On macOS the command modifier is Cmd, and Cmd only.
+- **⇧⌥F formatted the document twice** when a language server was attached — the
+  server's own binding and Reado's ran on the same key.
+- **Go to Line moved to ⌃G on macOS**, freeing ⌘G for Find Next, which is what it
+  is everywhere else on that platform.
+
 ## [1.13.0] — 2026-09-07
 
 ### Added

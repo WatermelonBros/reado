@@ -85,6 +85,7 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("saveAs", "Save As…")
         .item(&autosave_menu)
         .text("revert", "Revert File")
+        .text("compareSaved", "Compare with Saved")
         .text("format", "Format Document")
         .separator()
         .text("reopenClosed", "Reopen Closed Editor")

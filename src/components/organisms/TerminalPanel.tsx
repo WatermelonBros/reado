@@ -391,7 +391,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
             // A pane from another group: keep it mounted but out of layout.
             return (
               <div key={s.id} className="hidden">
-                <Terminal id={s.id} cwd={root} active={false} />
+                <Terminal id={s.id} cwd={s.cwd ?? root} active={false} />
               </div>
             )
           }
@@ -408,7 +408,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
                 boxShadow: multi && s.id === activeId ? "inset 0 0 0 1px var(--accent)" : undefined,
               }}
             >
-              <Terminal id={s.id} cwd={root} active={s.id === activeId} />
+              <Terminal id={s.id} cwd={s.cwd ?? root} active={s.id === activeId} />
               {multi && (
                 <IconButton
                   size="xs"

@@ -123,7 +123,7 @@ beforeEach(() => {
   useBookmarks.setState({ bookmarks: [] })
   useReadProgress.setState({ read: new Set(), changed: new Set() })
   useEditorActions.setState({
-    dirty: false,
+    dirtyPaths: [],
     blame: false,
     composeNonce: 0,
     explainNonce: 0,
@@ -198,7 +198,7 @@ describe("the editing surface", () => {
   })
 
   it("won't clobber unsaved manual edits with a disk reload", () => {
-    useEditorActions.setState({ dirty: true })
+    useEditorActions.setState({ dirtyPaths: [REL] })
     const { container, rerender } = mount()
     rerender(
       <CodeView
@@ -230,11 +230,11 @@ describe("saving", () => {
   }
 
   it("writes the buffer and clears the dirty flag", async () => {
-    useEditorActions.setState({ dirty: true })
+    useEditorActions.setState({ dirtyPaths: [REL] })
     const { container } = mount()
     pressSave(container)
     await waitFor(() => expect(writeFile).toHaveBeenCalledWith(ROOT, REL, TEXT))
-    await waitFor(() => expect(useEditorActions.getState().dirty).toBe(false))
+    await waitFor(() => expect(useEditorActions.getState().isDirty(REL)).toBe(false))
   })
 
   it("applies the opt-in save hygiene", async () => {
@@ -428,7 +428,7 @@ describe("what typing does", () => {
   it("marks the document dirty and mirrors the caret to the status bar", () => {
     mount()
     view().dispatch({ changes: { from: 0, insert: "x" }, selection: { anchor: 1 } })
-    expect(useEditorActions.getState().dirty).toBe(true)
+    expect(useEditorActions.getState().isDirty(REL)).toBe(true)
     expect(useCursor.getState()).toMatchObject({ line: 1, col: 2 })
   })
 
@@ -438,7 +438,38 @@ describe("what typing does", () => {
       changes: { from: 0, to: view().state.doc.length, insert: "from disk" },
       annotations: ExternalReload.of(true),
     })
-    expect(useEditorActions.getState().dirty).toBe(false)
+    expect(useEditorActions.getState().isDirty(REL)).toBe(false)
+  })
+
+  it("keeps the undo history across the remount a tab switch causes", async () => {
+    useSettings.setState({ autoSave: "off" })
+    const { unmount } = mount()
+    view().dispatch({ changes: { from: 0, insert: "x" } })
+    unmount()
+    // Coming back, the editor is handed what is now on disk — the edited text.
+    mount({ text: `x${TEXT}` })
+    const content = document.querySelectorAll(".cm-content")
+    fireEvent.keyDown(content[content.length - 1] as HTMLElement, {
+      key: "z",
+      code: "KeyZ",
+      metaKey: true,
+    })
+    fireEvent.keyDown(content[content.length - 1] as HTMLElement, {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+    })
+    expect(view().state.doc.toString()).toBe(TEXT)
+  })
+
+  it("Tab indents, Shift+Tab outdents", () => {
+    const { container } = mount()
+    const content = container.querySelector(".cm-content") as HTMLElement
+    view().dispatch({ selection: { anchor: 0 } })
+    fireEvent.keyDown(content, { key: "Tab", code: "Tab" })
+    expect(view().state.doc.line(1).text).toBe(`  ${TEXT.split("\n")[0]}`)
+    fireEvent.keyDown(content, { key: "Tab", code: "Tab", shiftKey: true })
+    expect(view().state.doc.line(1).text).toBe(TEXT.split("\n")[0])
   })
 
   it("remembers the caret per file, debounced, so reopening lands where you left", async () => {
@@ -474,7 +505,7 @@ describe("what typing does", () => {
   it("auto-saves on blur when the setting asks for that instead", async () => {
     useSettings.setState({ autoSave: "onFocusChange" })
     const { container } = mount()
-    useEditorActions.setState({ dirty: true })
+    useEditorActions.setState({ dirtyPaths: [REL] })
     fireEvent.blur(container.querySelector(".cm-content") as HTMLElement)
     // The save pipeline is async now (it may run a formatter first).
     await waitFor(() => expect(writeFile).toHaveBeenCalled())
@@ -483,8 +514,47 @@ describe("what typing does", () => {
   it("saves nothing on blur with auto-save off", () => {
     useSettings.setState({ autoSave: "off" })
     const { container } = mount()
-    useEditorActions.setState({ dirty: true })
+    useEditorActions.setState({ dirtyPaths: [REL] })
     fireEvent.blur(container.querySelector(".cm-content") as HTMLElement)
+    expect(writeFile).not.toHaveBeenCalled()
+  })
+
+  it("writes pending edits when the tab is switched away, instead of losing them", async () => {
+    vi.useFakeTimers()
+    useSettings.setState({ autoSave: "afterDelay" })
+    const { unmount } = mount()
+    view().dispatch({ changes: { from: 0, insert: "x" } })
+    // Switching tabs before the 1s debounce fires used to destroy the view with
+    // the write still pending — the edits went nowhere.
+    unmount()
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(writeFile).toHaveBeenCalledWith(ROOT, REL, `x${TEXT}`)
+    vi.useRealTimers()
+  })
+
+  it("writes on close even with auto-save off", async () => {
+    useSettings.setState({ autoSave: "off" })
+    const { unmount } = mount()
+    view().dispatch({ changes: { from: 0, insert: "x" } })
+    unmount()
+    await waitFor(() => expect(writeFile).toHaveBeenCalledWith(ROOT, REL, `x${TEXT}`))
+  })
+
+  it("never writes a PR-pinned buffer on close — those bytes are the ref's", async () => {
+    useSettings.setState({ autoSave: "off" })
+    const { unmount } = mount({ pinned: true })
+    useEditorActions.setState({ dirtyPaths: [REL] })
+    unmount()
+    expect(writeFile).not.toHaveBeenCalled()
+  })
+
+  it("does not resurrect a file that was deleted while it had unsaved edits", async () => {
+    useSettings.setState({ autoSave: "off" })
+    const { unmount } = mount()
+    view().dispatch({ changes: { from: 0, insert: "x" } })
+    // What deleting does: the path stops being unsaved, then the tab closes.
+    useEditorActions.getState().setDirty(REL, false)
+    unmount()
     expect(writeFile).not.toHaveBeenCalled()
   })
 
@@ -493,7 +563,7 @@ describe("what typing does", () => {
     useSettings.setState({ autoSave: "afterDelay" })
     mount()
     view().dispatch({ changes: { from: 0, insert: "x" } })
-    useEditorActions.setState({ dirty: false }) // saved by hand in the meantime
+    useEditorActions.setState({ dirtyPaths: [] }) // saved by hand in the meantime
     await vi.advanceTimersByTimeAsync(1100)
     expect(writeFile).not.toHaveBeenCalled()
     vi.useRealTimers()

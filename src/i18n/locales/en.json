@@ -44,6 +44,27 @@
     "remove": "Remove from list"
   },
   "tree": {
+    "deleteMany": "Delete {count} items",
+    "selected": "{count} selected",
+    "findInFolder": "Find in Folder…",
+    "openWith": "Open With…",
+    "openWithBack": "← Back",
+    "viewerText": "Editor (source)",
+    "viewerPreview": "Preview",
+    "viewerDiff": "Diff",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "duplicate": "Duplicate",
+    "pasteFailed": "Couldn't copy that here.",
+    "openInTerminal": "Open in Integrated Terminal",
+    "rename": "Rename…",
+    "renameConfirm": "Rename",
+    "renameFailed": "Couldn't rename that — the name may already be taken.",
+    "newFolder": "New Folder…",
+    "createFailed": "Couldn't create that here.",
+    "copyPath": "Copy Path",
+    "copyRelativePath": "Copy Relative Path",
     "showHidden": "Show hidden & ignored files",
     "collapseAll": "Collapse all folders",
     "empty": "This folder is empty.",
@@ -84,6 +105,13 @@
     "explainNote": "Explain & Save as Note",
     "viewSource": "Source",
     "viewRendered": "Preview",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "peekDef": "Peek Definition",
+    "findRefs": "Find All References",
+    "renameSymbol": "Rename Symbol",
+    "allOccurrences": "Select All Occurrences",
     "goToDef": "Go to Definition",
     "goToTypeDef": "Go to Type Definition",
     "goToImpl": "Go to Implementation",
@@ -578,6 +606,9 @@
     "expand": "Expand"
   },
   "diff": {
+    "saved": "Saved file",
+    "lastRead": "Last read",
+    "compareWithSaved": "Compare with Saved",
     "toggle": "Toggle diff",
     "base": "Diff base",
     "head": "HEAD (uncommitted)",
@@ -655,7 +686,11 @@
     "empty": "No files match."
   },
   "search": {
+    "inFolder": "in",
+    "clearScope": "Search the whole project",
     "placeholder": "Search in project…",
+    "count": "{current} of {total}",
+    "countCapped": "{cap}+ matches",
     "noResults": "No matches.",
     "replacePlaceholder": "Replace…",
     "caseSensitive": "Match case",
@@ -835,6 +870,7 @@
     "title": "Keyboard Shortcuts",
     "navigation": "Navigation",
     "editing": "Editing",
+    "files": "Files",
     "view": "View"
   },
   "empty": {
@@ -955,6 +991,15 @@
     "panel": "Files"
   },
   "git": {
+    "folderChanged": "Contains changes",
+    "status": {
+      "modified": "Modified",
+      "added": "Added",
+      "deleted": "Deleted",
+      "renamed": "Renamed",
+      "untracked": "Untracked",
+      "conflicted": "Conflicted"
+    },
     "panel": "Source control",
     "clean": "No changes — the working tree is clean.",
     "staged": "Staged Changes",

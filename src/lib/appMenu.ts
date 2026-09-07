@@ -32,6 +32,7 @@ export const APP_MENUS: Menu[] = [
       { id: "autosave:afterDelay", label: "After Delay" },
       { id: "autosave:onFocusChange", label: "On Focus Change" },
       { id: "revert", label: "Revert File" },
+      { id: "compareSaved", label: "Compare with Saved" },
       { id: "format", label: "Format Document" },
       { sep: true },
       { id: "reopenClosed", label: "Reopen Closed Editor" },

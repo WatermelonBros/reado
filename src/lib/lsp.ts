@@ -12,7 +12,6 @@ import { getIndentUnit, indentUnit } from "@codemirror/language"
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint"
 import type { Transport } from "@codemirror/lsp-client"
 import {
-  formatKeymap,
   LSPClient,
   LSPPlugin,
   renameKeymap,
@@ -468,13 +467,16 @@ function lspHoverTooltip() {
 }
 
 /** The per-client LSP feature set: completion, hover, signature help, our
- * diagnostics, inlay hints, and the rename/format keymaps. Definition/references
+ * diagnostics, inlay hints, and the rename keymap. Definition/references
  * navigation is handled by the editor's own gestures (which fall back to the
- * index), so the library's F12/Shift-F12 keymaps are intentionally left out. */
+ * index), so the library's F12/Shift-F12 keymaps are intentionally left out —
+ * and so is its ⇧⌥F, because Reado binds Format Document globally to its own
+ * pipeline (which tries the server first, then a configured formatter). Two
+ * bindings on one key meant the document was formatted twice. */
 const clientExtensions = () => [
   serverCompletion(),
   lspHoverTooltip(),
-  keymap.of([...formatKeymap, ...renameKeymap]),
+  keymap.of([...renameKeymap]),
   signatureHelp(),
   serverDiagnostics(),
   inlayHints(),

@@ -14,6 +14,7 @@ import { enabledExtensions, useMarketplace } from "./marketplace"
 import { notify } from "./notice"
 import { toggleDockArea } from "./panels"
 import { useReadProgress } from "./readProgress"
+import { isMacUA } from "./shortcuts"
 import {
   type BuiltinTheme,
   isExtTheme,
@@ -235,7 +236,7 @@ export function useGlobalShortcuts(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Format Document (Shift+Alt+F), like VS Code — not a Cmd/Ctrl shortcut.
-      if (e.shiftKey && e.altKey && e.key.toLowerCase() === "f") {
+      if (e.shiftKey && e.altKey && e.code === "KeyF") {
         e.preventDefault()
         void formatDocument()
         return
@@ -254,7 +255,27 @@ export function useGlobalShortcuts(): void {
         else nextProblem()
         return
       }
-      const mod = e.metaKey || e.ctrlKey
+      // Toggle word wrap (⌥Z), like VS Code. `e.code`, not `e.key`: with Option
+      // held macOS composes (⌥Z is "Ω"). Checked before the modifier block, and
+      // guarded against ⌥⌘Z (zen mode) below.
+      if (e.code === "KeyZ" && e.altKey && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        const s = useSettings.getState()
+        s.set({ wrap: !s.wrap })
+        return
+      }
+      // Ctrl+Tab / Ctrl+Shift+Tab cycle the open tabs — Ctrl on macOS too,
+      // matching editors, so it is checked before the Cmd-only gate below.
+      if (e.ctrlKey && e.key.toLowerCase() === "tab") {
+        e.preventDefault()
+        useProject.getState().cycleTab(e.shiftKey ? -1 : 1)
+        return
+      }
+      // The command modifier: Cmd on macOS, Ctrl elsewhere. Never "either" —
+      // macOS gives Ctrl+A/E/K/P/N to the editor (readline-style motion) and to
+      // the terminal (tmux's prefix, kill-line, history), and claiming those for
+      // workbench commands broke both.
+      const mod = isMacUA ? e.metaKey : e.ctrlKey
       if (!mod) return
       const key = e.key.toLowerCase()
       // Full screen (⌃⌘F), like VS Code. Both modifiers, checked before the
@@ -274,13 +295,6 @@ export function useGlobalShortcuts(): void {
       if (e.code === "KeyZ" && e.altKey) {
         e.preventDefault()
         toggleZenMode()
-        return
-      }
-      // Ctrl+Tab / Ctrl+Shift+Tab cycle the open tabs (Ctrl, not Cmd, on macOS
-      // too — matching editors).
-      if (e.ctrlKey && key === "tab") {
-        e.preventDefault()
-        useProject.getState().cycleTab(e.shiftKey ? -1 : 1)
         return
       }
       // Back / forward through the navigation history (Cmd/Ctrl+Alt+←/→).

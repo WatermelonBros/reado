@@ -1,7 +1,14 @@
-import { bracketMatching, LanguageDescription } from "@codemirror/language"
+import { historyField } from "@codemirror/commands"
+import { bracketMatching, indentUnit, LanguageDescription } from "@codemirror/language"
 import { forEachDiagnostic } from "@codemirror/lint"
+import { renameSymbol } from "@codemirror/lsp-client"
+import { selectSelectionMatches } from "@codemirror/search"
 import { Compartment, EditorState } from "@codemirror/state"
 import { EditorView, highlightWhitespace } from "@codemirror/view"
+import {
+  readText as clipboardReadText,
+  writeText as clipboardWriteText,
+} from "@tauri-apps/plugin-clipboard-manager"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ContextMenu } from "@/components/atoms/ContextMenu"
@@ -27,7 +34,15 @@ import { colorSwatches, type SwatchHit } from "@/lib/colorSwatch"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
 import { toRelative, useComments } from "@/lib/comments"
 import { useDiagnostics } from "@/lib/diagnostics"
-import { detectEol, detectIndent, formatDocument, textToSave, useDocInfo } from "@/lib/docInfo"
+import {
+  applyHygiene,
+  compareWithSaved,
+  detectEol,
+  detectIndent,
+  formatDocument,
+  textToSave,
+  useDocInfo,
+} from "@/lib/docInfo"
 import { grammarSupport } from "@/lib/extGrammars"
 import { resolvedLanguageId } from "@/lib/extLanguages"
 import { languages } from "@/lib/languages"
@@ -61,6 +76,7 @@ import { ColorPickerPopover } from "./ColorPickerPopover"
 import {
   activeLineExt,
   ExternalReload,
+  findReferencesAt,
   focusExtension,
   goToDefinitionAt,
   goToImplementationAt,
@@ -74,6 +90,29 @@ import {
 } from "./extensions"
 
 const log = createLogger("editor")
+
+/**
+ * Undo histories of files whose editor was torn down.
+ *
+ * A tab switch remounts CodeView (the `key` in Editor), so the EditorState —
+ * and with it the whole undo stack — is thrown away. VS Code keeps ⌘Z working
+ * across tab switches; parking the serialized history here restores that, and
+ * it is re-applied only when the file comes back byte-identical, so undo can
+ * never replay against a document someone else changed meanwhile.
+ *
+ * Bounded: a handful of histories is cheap, one per file ever opened is not.
+ */
+const parkedHistory = new Map<string, { doc: string }>()
+const PARK_LIMIT = 12
+
+function parkHistory(path: string, state: EditorState): void {
+  parkedHistory.delete(path) // re-insert so the map stays in least-recent order
+  parkedHistory.set(path, state.toJSON({ history: historyField }))
+  if (parkedHistory.size > PARK_LIMIT) {
+    const oldest = parkedHistory.keys().next().value
+    if (oldest !== undefined) parkedHistory.delete(oldest)
+  }
+}
 
 interface CodeViewProps {
   path: string
@@ -122,6 +161,7 @@ export function CodeView({
   const blameComp = useMemo(() => new Compartment(), [])
   const bookmarkComp = useMemo(() => new Compartment(), [])
   const tabSizeComp = useMemo(() => new Compartment(), [])
+  const indentUnitComp = useMemo(() => new Compartment(), [])
   const lspComp = useMemo(() => new Compartment(), [])
   const changedComp = useMemo(() => new Compartment(), [])
   const diffComp = useMemo(() => new Compartment(), [])
@@ -129,6 +169,7 @@ export function CodeView({
   const inlineBlameOn = useSettings((s) => s.inlineBlame)
   const diffGutterOn = useSettings((s) => s.diffGutter)
   const indentSize = useDocInfo((s) => s.indentSize)
+  const indentKind = useDocInfo((s) => s.indentKind)
   const languageOverride = useDocInfo((s) => s.languageOverride)
   const stickyScroll = useSettings((s) => s.stickyScroll)
   const colorSwatchesOn = useSettings((s) => s.colorSwatches)
@@ -312,7 +353,7 @@ export function CodeView({
     noteSelfWrite(relPath) // our own save — don't let it mark the file unread
     writeFile(useProject.getState().root, relPath, text)
       .then(() => {
-        useEditorActions.getState().setDirty(false)
+        useEditorActions.getState().setDirty(relPath, false)
         setSaveError(false) // clear any prior failure on a successful save
       })
       .catch((e) => {
@@ -323,9 +364,21 @@ export function CodeView({
       })
   }
 
+  // Closing (or switching away from) a file with unsaved edits: write what is in
+  // the buffer, right now. `saveFile` cannot be reused — it drops the write when
+  // the tab changed under it, which is exactly the case here — and formatting is
+  // skipped on purpose: the formatter resolves "the active document", which by
+  // this point is the file being switched *to*.
+  const flushOnClose = (view: EditorView, root: string) => {
+    noteSelfWrite(relPath)
+    writeFile(root, relPath, applyHygiene(view.state.doc.toString()))
+      .then(() => useEditorActions.getState().setDirty(relPath, false))
+      .catch((e) => log.error("flush on close failed", { path: relPath, error: safeError(e) }))
+  }
+
   // Auto Save: write only when there are unsaved edits (avoids needless writes).
   const autoSave = () => {
-    if (useEditorActions.getState().dirty) void saveFile()
+    if (useEditorActions.getState().isDirty(relPath)) void saveFile()
   }
 
   // In re-anchor mode the same gesture sets an orphan's new anchor instead of
@@ -442,7 +495,11 @@ export function CodeView({
   // Create the editor once per file.
   useEffect(() => {
     if (!hostRef.current) return
-    const state = EditorState.create({
+    // The project this buffer belongs to, captured now: by the time the cleanup
+    // runs the store may already point at another project, and the flush must
+    // not write this file's bytes into that one.
+    const rootAtOpen = useProject.getState().root
+    const config = {
       doc: text,
       extensions: buildCodeExtensions({
         lineNumbersComp,
@@ -457,6 +514,7 @@ export function CodeView({
         diffComp,
         lspComp,
         tabSizeComp,
+        indentUnitComp,
         wrapComp,
         colorComp,
         colorSwatchesExt: colorSwatchesOn ? colorSwatches(onPickColor) : [],
@@ -489,7 +547,15 @@ export function CodeView({
         openComposerFor,
         autoSave,
       }),
-    })
+    }
+    // The editor is rebuilt from scratch on every tab switch (`key` in Editor),
+    // which would throw the undo history away with it. Restore the parked
+    // history when the file comes back unchanged.
+    const parked = parkedHistory.get(path)
+    const state =
+      parked && parked.doc === text
+        ? EditorState.fromJSON(parked, config, { history: historyField })
+        : EditorState.create(config)
     const view = new EditorView({ state, parent: hostRef.current })
     viewRef.current = view
     if (primary) useDocInfo.getState().set({ view })
@@ -539,6 +605,11 @@ export function CodeView({
     }
 
     return () => {
+      // A pending debounced auto-save would fire into a destroyed view and drop
+      // the edits on the floor: write them now instead.
+      clearTimeout(autoSaveTimer.current)
+      if (!pinned && useEditorActions.getState().isDirty(relPath)) flushOnClose(view, rootAtOpen)
+      parkHistory(path, view.state)
       view.destroy()
       viewRef.current = null
       if (useDocInfo.getState().view === view) useDocInfo.getState().set({ view: null })
@@ -553,7 +624,7 @@ export function CodeView({
   useEffect(() => {
     const view = viewRef.current
     if (!view || view.state.doc.toString() === text) return
-    if (useEditorActions.getState().dirty) return
+    if (useEditorActions.getState().isDirty(relPath)) return
     const sel = view.state.selection.main
     const len = text.length
     view.dispatch({
@@ -629,11 +700,14 @@ export function CodeView({
     }
   }, [path, primary, pinned, lspComp])
 
-  // Apply the (possibly status-bar-overridden) tab display width.
+  // Apply the (possibly status-bar-overridden) tab display width, and the unit
+  // that auto-indent and Tab actually insert.
   useReconfigure(viewRef, tabSizeComp, EditorState.tabSize.of(indentSize), [
     indentSize,
     tabSizeComp,
   ])
+  const unit = indentKind === "tabs" ? "\t" : " ".repeat(indentSize)
+  useReconfigure(viewRef, indentUnitComp, indentUnit.of(unit), [unit, indentUnitComp])
 
   // Apply a manual language-mode override picked from the status bar.
   useEffect(() => {
@@ -971,9 +1045,42 @@ export function CodeView({
       if (diagMessage) return
       if (to >= clickLine.from && from <= clickLine.to) diagMessage = d.message
     })
+    const hasSelection = !view.state.selection.main.empty
     return [
+      // The webview has no native context menu, so the clipboard verbs have to
+      // be here or right-click offers no way to copy at all.
+      hasSelection && {
+        label: t("editor.cut"),
+        run: () => {
+          const sel = view.state.sliceDoc(
+            view.state.selection.main.from,
+            view.state.selection.main.to,
+          )
+          void clipboardWriteText(sel).catch(() => {})
+          view.dispatch(view.state.replaceSelection(""))
+        },
+      },
+      hasSelection && {
+        label: t("editor.copy"),
+        run: () => {
+          const sel = view.state.sliceDoc(
+            view.state.selection.main.from,
+            view.state.selection.main.to,
+          )
+          void clipboardWriteText(sel).catch(() => {})
+        },
+      },
+      !pinned && {
+        label: t("editor.paste"),
+        run: () => {
+          void clipboardReadText()
+            .then((text) => text && view.dispatch(view.state.replaceSelection(text)))
+            .catch(() => {})
+        },
+      },
       word && {
         label: t("editor.goToDef"),
+        separatorBefore: true,
         run: () => goToDefinitionAt(view, pos),
       },
       hasServer(path) &&
@@ -991,6 +1098,34 @@ export function CodeView({
           label: t("editor.explainSymbol"),
           run: () => explainSymbol(pos),
         },
+      word && {
+        label: t("editor.peekDef"),
+        run: () => {
+          view.dispatch({ selection: { anchor: pos } })
+          peekDefinition()
+        },
+      },
+      word && {
+        label: t("editor.findRefs"),
+        run: () => {
+          view.dispatch({ selection: { anchor: pos } })
+          findReferencesAt(view)
+        },
+      },
+      !pinned &&
+        hasServer(path) &&
+        word && {
+          label: t("editor.renameSymbol"),
+          run: () => {
+            view.dispatch({ selection: { anchor: pos } })
+            view.focus()
+            renameSymbol(view)
+          },
+        },
+      hasSelection && {
+        label: t("editor.allOccurrences"),
+        run: () => selectSelectionMatches(view),
+      },
       diagMessage && {
         label: t("lsp.createTaskFromProblem"),
         run: () =>
@@ -1008,11 +1143,18 @@ export function CodeView({
       // A pinned (PR-ref) buffer is read-only — formatting mutates it but the
       // save is a no-op, so don't offer it.
       !pinned && { label: t("editor.format"), run: () => void formatDocument() },
+      // Only when there is something unsaved to compare — otherwise the diff is
+      // guaranteed empty and the item is a dead end.
+      !pinned &&
+        useEditorActions.getState().isDirty(relPath) && {
+          label: t("diff.compareWithSaved"),
+          run: () => compareWithSaved(),
+        },
       isRepo && {
         label: t("diff.toggle"),
         run: () => useEditorActions.getState().setDiffing(!useEditorActions.getState().diffing),
       },
-    ].filter(Boolean) as { label: string; run: () => void }[]
+    ].filter(Boolean) as { label: string; run: () => void; separatorBefore?: boolean }[]
   }
 
   // Track the hovered line to show the "+" add-comment affordance.
@@ -1141,7 +1283,11 @@ export function CodeView({
         <ContextMenu
           x={ctxMenu.x}
           y={ctxMenu.y}
-          items={ctxActions().map((a) => ({ label: a.label, onSelect: a.run }))}
+          items={ctxActions().map((a) => ({
+            label: a.label,
+            onSelect: a.run,
+            separatorBefore: a.separatorBefore,
+          }))}
           onClose={() => setCtxMenu(null)}
         />
       )}

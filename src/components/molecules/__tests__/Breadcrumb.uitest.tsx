@@ -41,7 +41,7 @@ beforeEach(() => {
     diffing: false,
     diffBase: "HEAD",
     blame: false,
-    dirty: false,
+    dirtyPaths: [],
   })
   useSynopsis.setState({ show: vi.fn() })
   setProject()
@@ -82,7 +82,7 @@ describe("Breadcrumb", () => {
   it("shows the dirty dot only when there are unsaved changes", () => {
     render(<Breadcrumb />)
     expect(screen.queryByTitle("editor.unsaved")).not.toBeInTheDocument()
-    act(() => useEditorActions.setState({ dirty: true }))
+    act(() => useEditorActions.setState({ dirtyPaths: ["src/app/main.ts"] }))
     expect(screen.getByTitle("editor.unsaved")).toBeInTheDocument()
   })
 

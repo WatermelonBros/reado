@@ -184,6 +184,10 @@ export const writeFile = (root: string, path: string, content: string) =>
 export const createFile = (root: string, path: string) =>
   invoke<string>("create_file", { root, path })
 
+/** Create a new empty folder (project-relative path); returns its absolute path. */
+export const createDir = (root: string, path: string) =>
+  invoke<string>("create_dir", { root, path })
+
 /** Move/rename a file or folder within the project (internal drag-and-drop). */
 export const movePath = (root: string, from: string, to: string) =>
   invoke<void>("move_path", { root, from, to })
@@ -356,7 +360,13 @@ export const gitBlame = (root: string, file: string) =>
 
 /** Full-text search across the project via ripgrep. */
 /** Global-search toggles, mirroring VS Code's Aa / whole-word / .* buttons. */
-export type SearchOpts = { caseSensitive: boolean; wholeWord: boolean; regex: boolean }
+export type SearchOpts = {
+  caseSensitive: boolean
+  wholeWord: boolean
+  regex: boolean
+  /** Project-relative folder to search in ("Find in Folder"); absent = all of it. */
+  scope?: string | null
+}
 const DEFAULT_SEARCH_OPTS: SearchOpts = { caseSensitive: false, wholeWord: false, regex: false }
 
 export const searchText = (root: string, query: string, opts: SearchOpts = DEFAULT_SEARCH_OPTS) =>
@@ -367,12 +377,24 @@ export const searchText = (root: string, query: string, opts: SearchOpts = DEFAU
     caseSensitive: opts.caseSensitive,
     wholeWord: opts.wholeWord,
     regex: opts.regex,
+    scope: opts.scope ?? null,
   })
 
 /** Replace every literal occurrence of `query` across the project. Returns the
  * number of files changed. */
-export const replaceText = (root: string, query: string, replacement: string) =>
-  invoke<number>("replace_text", { root, query, replacement, exclude: excludeGlobs() })
+export const replaceText = (
+  root: string,
+  query: string,
+  replacement: string,
+  scope?: string | null,
+) =>
+  invoke<number>("replace_text", {
+    root,
+    query,
+    replacement,
+    exclude: excludeGlobs(),
+    scope: scope ?? null,
+  })
 
 export interface Definition {
   path: string

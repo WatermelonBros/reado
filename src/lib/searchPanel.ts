@@ -38,6 +38,7 @@ const FLAG_BASE =
   "grid h-6 w-6 flex-none place-items-center rounded border font-mono text-[11px] font-semibold transition-colors"
 const FLAG_ON = "border-accent bg-[color-mix(in_oklch,var(--accent)_18%,transparent)] text-accent"
 const FLAG_OFF = "border-line text-muted hover:bg-surface hover:text-ink"
+const COUNT = "flex-none px-1 text-[11px] text-faint tabular-nums whitespace-nowrap"
 const ICON_BTN =
   "grid h-6 w-6 flex-none place-items-center rounded text-muted transition-colors hover:bg-surface hover:text-ink"
 const FIELD =
@@ -157,6 +158,32 @@ export function readoSearchPanel(view: EditorView): Panel {
     (v) => (regexp = v),
   )
 
+  // "3 of 17", like every other editor's find bar. Counting is capped: on a
+  // very large document an exact total is not worth a full scan per keystroke,
+  // so past the cap it reads "1000+" instead of lying or stalling.
+  const COUNT_CAP = 1000
+  const counter = el("span", COUNT)
+  const renderCount = () => {
+    const query = getSearchQuery(view.state)
+    if (!query.search || !query.valid) {
+      counter.textContent = ""
+      return
+    }
+    const sel = view.state.selection.main
+    const cursor = query.getCursor(view.state)
+    let total = 0
+    let current = 0
+    for (let it = cursor.next(); !it.done; it = cursor.next()) {
+      total++
+      if (it.value.from === sel.from && it.value.to === sel.to) current = total
+      if (total >= COUNT_CAP) {
+        counter.textContent = t("search.countCapped", { cap: COUNT_CAP })
+        return
+      }
+    }
+    counter.textContent = total ? t("search.count", { current, total }) : t("search.noResults")
+  }
+
   const prevBtn = iconBtn(CHEVRON_UP, t("search.prev"), () => findPrevious(view))
   const nextBtn = iconBtn(CHEVRON_DOWN, t("search.next"), () => findNext(view))
   const closeBtn = iconBtn(CLOSE, t("settings.close"), () => {
@@ -173,7 +200,7 @@ export function readoSearchPanel(view: EditorView): Panel {
   nav.append(prevBtn, nextBtn, closeBtn)
 
   const row1 = el("div", "flex items-start gap-1.5")
-  row1.append(searchInput, toggles, nav)
+  row1.append(searchInput, counter, toggles, nav)
   const row2 = el("div", "flex items-start gap-1.5")
   row2.append(replaceInput, replaceBtn, replaceAllBtn)
 
@@ -185,6 +212,17 @@ export function readoSearchPanel(view: EditorView): Panel {
   return {
     dom,
     top: true,
+    update(u) {
+      // The count depends on the document, the query, and which match is
+      // selected — recompute on exactly those, not on every scroll.
+      if (
+        u.docChanged ||
+        u.selectionSet ||
+        u.transactions.some((tr) => tr.effects.some((e) => e.is(setSearchQuery)))
+      ) {
+        renderCount()
+      }
+    },
     mount() {
       // Seed from a single-line selection if the field is empty (VS Code-like).
       if (!searchInput.value) {
@@ -199,6 +237,7 @@ export function readoSearchPanel(view: EditorView): Panel {
       }
       autoRows(searchInput)
       autoRows(replaceInput)
+      renderCount()
       searchInput.focus()
       searchInput.select()
     },

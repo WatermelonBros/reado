@@ -25,7 +25,7 @@ import { PdfView } from "@/components/organisms/PdfView"
 import { type FileContent, gitDiffLines, gitShowRef, readFile, reanchorFile } from "@/lib/api"
 import { commentsForFile, toRelative, useComments } from "@/lib/comments"
 import { prRefsFor, useGuidedReview } from "@/lib/guidedReview"
-import { useEditorActions, useProject, useSettings } from "@/lib/store"
+import { SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTextView } from "@/lib/textView"
 import { CodeView } from "./editor/CodeView"
 import { human, isMarkdown, PLACEHOLDER } from "./editor/extensions"
@@ -43,6 +43,9 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   const archived = useComments((s) => s.archived)
   const reanchoringId = useComments((s) => s.reanchoringId)
   const diffing = useEditorActions((s) => s.diffing)
+  const diffBase = useEditorActions((s) => s.diffBase)
+  const compareSnapshot = useEditorActions((s) => s.compareBuffer)
+  const compareBuffer = diffBase === SAVED_BASE ? compareSnapshot : null
   const resolvingConflict = useEditorActions((s) => s.resolvingConflict)
   const { wrap, codeFont, focusMode, renderWhitespace } = useSettings()
   const showResolvedComments = useSettings((s) => s.showResolvedComments)
@@ -145,7 +148,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
     const rel = toRelative(root, active)
     const un = listen<{ file: string }>("file-changed", (e) => {
       // In PR mode the shown bytes come from the ref, not disk — ignore writes.
-      if (e.payload.file !== rel || useEditorActions.getState().dirty || prRef) return
+      if (e.payload.file !== rel || useEditorActions.getState().isDirty(rel) || prRef) return
       readFile(root, active, forceText.has(active), guardBytes)
         // Guard staleness: if the user switched files while this read was in
         // flight, applying it would strand the editor on the loading placeholder
@@ -170,7 +173,10 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   useEffect(() => {
     if (!primary) return
     const actions = useEditorActions.getState()
-    actions.setDirty(false)
+    // A captured buffer belongs to one compare of one file; opening another file
+    // must not diff the new one against the old one's text.
+    actions.setCompareBuffer(null)
+    if (actions.diffBase === SAVED_BASE) actions.setDiffBase("HEAD")
     const requested = actions.takePendingView()
     if (requested === "diff") actions.setDiffing(true)
     else if (requested === "conflict") actions.setResolvingConflict(true)
@@ -285,7 +291,10 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   if (diffing) {
     // In PR review, diff the PR head (what's shown) against the PR base ref —
     // not the working tree's HEAD, which is the reviewer's own branch.
-    return <DiffView key={relPath} relPath={relPath} text={content.text} base={prRefs?.base} />
+    // Comparing with saved is the one case where the document is *not* what was
+    // read from disk: it's the unsaved buffer, captured when the compare ran.
+    const doc = compareBuffer ?? content.text
+    return <DiffView key={relPath} relPath={relPath} text={doc} base={prRefs?.base} />
   }
   // Open comments inline; resolved ones too when the setting allows (see
   // `inlineCommentSource`), so a finished task stays readable unless hidden.

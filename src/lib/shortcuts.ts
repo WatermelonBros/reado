@@ -7,7 +7,7 @@ import type { MessageKey } from "@/i18n"
 // Platform modifier glyphs. `navigator.platform` is deprecated, so sniff the
 // user agent. On non-macOS the Apple symbols (⌘ ⌥ ⌃) become plain key names so
 // Windows/Linux users see keys that exist on their keyboard.
-const isMacUA = /mac|iphone|ipad/i.test(navigator.userAgent)
+export const isMacUA = /mac|iphone|ipad/i.test(navigator.userAgent)
 export const mod = isMacUA ? "⌘" : "Ctrl"
 export const alt = isMacUA ? "⌥" : "Alt"
 export const ctrl = isMacUA ? "⌃" : "Ctrl"
@@ -53,7 +53,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { label: "Go to Definition", combo: "F12" },
       { label: "Find References", combo: `${shift}F12` },
       { label: "Peek Definition", combo: `${alt}F12` },
-      { label: "Go to Line", combo: `${mod}G` },
+      { label: "Go to Line", combo: `${ctrl}G` },
       { label: "Back / Forward", combo: `${alt}← / ${alt}→` },
       { label: "Switch Tabs", combo: `${ctrl}Tab / ${ctrl}${shift}Tab` },
       { label: "Reopen Closed Tab", combo: `${mod}${shift}T` },
@@ -68,17 +68,35 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { label: "Find / Replace", combo: `${mod}F` },
       { label: "Add Selection to Next Match", combo: `${mod}D` },
       { label: "Expand / Shrink Selection", combo: `${shift}${alt}→ / ${shift}${alt}←` },
+      { label: "Select Line", combo: `${mod}L` },
+      { label: "Insert Line Below / Above", combo: `${mod}↵ / ${mod}${shift}↵` },
+      { label: "Indent / Outdent", combo: `Tab / ${shift}Tab` },
+      { label: "Add Cursors to Line Ends", combo: `${shift}${alt}I` },
       { label: "Move Line Up / Down", combo: `${alt}↑ / ${alt}↓` },
       { label: "Copy Line Up / Down", combo: `${shift}${alt}↑ / ${shift}${alt}↓` },
       { label: "Delete Line", combo: `${shift}${mod}K` },
       { label: "Format Document", combo: `${shift}${alt}F` },
       { label: "Save", combo: `${mod}S` },
+      { label: "Compare with Saved", combo: "—" },
+    ],
+  },
+  {
+    titleKey: "sc.files",
+    items: [
+      { label: "Rename", combo: "F2" },
+      { label: "Delete", combo: isMacUA ? `${mod}⌫` : "Del" },
+      { label: "Cut / Copy / Paste", combo: `${mod}X / ${mod}C / ${mod}V` },
+      { label: "Duplicate", combo: `${mod}D` },
+      { label: "Walk Rows", combo: "↑ ↓ ← → / Home / End" },
+      { label: "Multi-select", combo: `${mod}click / ${shift}click / ${shift}↑↓` },
+      { label: "Jump by Name", combo: "type a letter" },
     ],
   },
   {
     titleKey: "sc.view",
     items: [
       { label: "Toggle Sidebar", combo: `${mod}B` },
+      { label: "Toggle Word Wrap", combo: `${alt}Z` },
       { label: "Toggle Secondary Sidebar", combo: `${alt}${mod}B` },
       { label: "Toggle Terminal", combo: `${mod}J` },
       { label: "Zen Mode", combo: ZEN_COMBO },

@@ -66,7 +66,7 @@ beforeEach(() => {
   gitShowRef.mockResolvedValue(null)
   useProject.setState({ root: ROOT, active: FILE, landing: null })
   useComments.setState({ comments: [], archived: [], reanchoringId: null })
-  useEditorActions.setState({ diffing: false, resolvingConflict: false, dirty: false })
+  useEditorActions.setState({ diffing: false, resolvingConflict: false, dirtyPaths: [] })
   useSettings.setState({ largeFileGuardMb: 5, showResolvedComments: false })
   useTextView.setState({ force: new Set() })
   useGuidedReview.setState({ sessions: [], currentId: null })
@@ -216,7 +216,7 @@ describe("re-anchoring and external edits", () => {
   it("won't clobber unsaved edits", async () => {
     render(<Editor />)
     await screen.findByTestId("code-view")
-    useEditorActions.setState({ dirty: true })
+    useEditorActions.setState({ dirtyPaths: ["src/a.ts"] })
     readFile.mockClear()
     fileChanged?.({ payload: { file: "src/a.ts" } })
     expect(readFile).not.toHaveBeenCalled()

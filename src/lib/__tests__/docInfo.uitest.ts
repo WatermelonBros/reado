@@ -45,12 +45,18 @@ const project = {
   bumpTree: vi.fn(),
 }
 const setDirty = vi.fn()
+const setCompareBuffer = vi.fn()
+const setDiffBase = vi.fn()
+const setDiffing = vi.fn()
 const searchFor = vi.fn()
 const { workspaceSetState } = vi.hoisted(() => ({ workspaceSetState: vi.fn() }))
 vi.mock("../store", () => ({
   useProject: { getState: () => project },
   useSettings: { getState: () => settings },
-  useEditorActions: { getState: () => ({ setDirty }) },
+  useEditorActions: {
+    getState: () => ({ setDirty, setCompareBuffer, setDiffBase, setDiffing }),
+  },
+  SAVED_BASE: "reado:saved",
   useWorkspace: Object.assign(() => ({ searchFor }), {
     getState: () => ({ searchFor }),
     setState: workspaceSetState,
@@ -64,6 +70,7 @@ import {
   addCursorsToLineEnds,
   addNextOccurrence,
   askAboutSelection,
+  compareWithSaved,
   convertEol,
   copyLineDownCmd,
   copyLineUpCmd,
@@ -247,7 +254,7 @@ describe("convertEol", () => {
     convertEol("CRLF")
     expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\r\nb\r\n")
     await vi.waitFor(() => expect(useDocInfo.getState().eol).toBe("CRLF"))
-    expect(setDirty).toHaveBeenCalledWith(false)
+    expect(setDirty).toHaveBeenCalledWith("src/a.ts", false)
   })
 
   it("normalises back to LF without doubling anything", () => {
@@ -315,7 +322,7 @@ describe("revertFile", () => {
     mount("edited")
     revertFile()
     await vi.waitFor(() => expect(view.state.doc.toString()).toBe("from disk"))
-    expect(setDirty).toHaveBeenCalledWith(false)
+    expect(setDirty).toHaveBeenCalledWith("src/a.ts", false)
   })
 
   it("won't overwrite the buffer with a binary read", async () => {
@@ -324,6 +331,24 @@ describe("revertFile", () => {
     revertFile()
     await flush()
     expect(view.state.doc.toString()).toBe("edited")
+  })
+})
+
+describe("compareWithSaved", () => {
+  it("captures the live buffer, then switches to the saved-file diff", () => {
+    // The capture has to happen here: switching to the diff unmounts the code
+    // view, and with it the only copy of the unsaved text.
+    mount("edited in the buffer")
+    compareWithSaved()
+    expect(setCompareBuffer).toHaveBeenCalledWith("edited in the buffer")
+    expect(setDiffBase).toHaveBeenCalledWith("reado:saved")
+    expect(setDiffing).toHaveBeenCalledWith(true)
+  })
+
+  it("does nothing without an editor", () => {
+    useDocInfo.setState({ view: null })
+    compareWithSaved()
+    expect(setDiffing).not.toHaveBeenCalled()
   })
 })
 

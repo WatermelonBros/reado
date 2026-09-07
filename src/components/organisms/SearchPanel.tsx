@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
+import { CloseIcon } from "@/components/atoms/icons"
 import { Textarea } from "@/components/atoms/Textarea"
 import { replaceText, type SearchMatch, type SearchOpts, searchText } from "@/lib/api"
 import { toRelative } from "@/lib/comments"
@@ -29,6 +30,10 @@ export function SearchPanel() {
   const open = useProject((s) => s.open)
   const pendingSearch = useWorkspace((s) => s.pendingSearch)
   const clearPendingSearch = useWorkspace((s) => s.clearPendingSearch)
+  // "Find in Folder": everything below (search, replace, the counts) is limited
+  // to this folder while it is set.
+  const scope = useWorkspace((s) => s.searchScope)
+  const setScope = useWorkspace((s) => s.setSearchScope)
   const { t } = useTranslation()
 
   // Restore the last query so leaving and returning to the Search tool doesn't
@@ -58,15 +63,17 @@ export function SearchPanel() {
   const [wholeWord, setWholeWord] = useState(false)
   const [regex, setRegex] = useState(false)
   const opts = useMemo<SearchOpts>(
-    () => ({ caseSensitive, wholeWord, regex }),
-    [caseSensitive, wholeWord, regex],
+    () => ({ caseSensitive, wholeWord, regex, scope }),
+    [caseSensitive, wholeWord, regex, scope],
   )
 
   // Literal project-wide replace, with a confirm step (it writes files, no undo).
   const doReplace = async () => {
     setConfirming(false)
     try {
-      const n = await replaceText(root, query, replacement)
+      // Scoped results, scoped rewrite: replacing project-wide while showing one
+      // folder's matches would be a trap.
+      const n = await replaceText(root, query, replacement, scope)
       setStatus(t("search.replaced", { count: n }))
       setMatches(await searchText(root, query, opts))
     } catch (e) {
@@ -100,6 +107,20 @@ export function SearchPanel() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-col gap-1.5 border-b border-line p-2">
+        {scope && (
+          <div className="flex items-center gap-1 text-xs text-muted">
+            <span className="shrink-0">{t("search.inFolder")}</span>
+            <span className="min-w-0 flex-1 truncate font-mono text-ink" title={scope}>
+              {scope}
+            </span>
+            <IconButton
+              size="xxs"
+              label={t("search.clearScope")}
+              onClick={() => setScope(null)}
+              icon={<CloseIcon className="h-3 w-3" />}
+            />
+          </div>
+        )}
         {/* The case / whole-word / regex toggles sit inside the input, right edge. */}
         <div className="relative">
           <Textarea

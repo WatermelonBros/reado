@@ -56,6 +56,7 @@ import {
   FileJsxIcon as FileJsx,
   FileMdIcon as FileMd,
   FilePdfIcon as FilePdf,
+  FilePlusIcon as FilePlus,
   FilePngIcon as FilePng,
   FilePptIcon as FilePpt,
   FilePyIcon as FilePy,
@@ -73,6 +74,7 @@ import {
   FingerprintIcon as Fingerprint,
   FolderIcon as Folder,
   FolderOpenIcon as FolderOpen,
+  FolderPlusIcon as FolderPlus,
   GearSixIcon as GearSix,
   GitBranchIcon as GitBranch,
   GitDiffIcon as GitDiff,
@@ -275,6 +277,8 @@ export const CrosshairIcon = wrap(Crosshair)
 export const MoreVerticalIcon = wrap(DotsThreeVertical)
 export const RobotIcon = wrap(Robot)
 export const PlusIcon = wrap(Plus)
+export const NewFileIcon = wrap(FilePlus)
+export const NewFolderIcon = wrap(FolderPlus)
 export const BlameIcon = wrap(Fingerprint)
 export const OutlineIcon = wrap(ListBullets)
 export const CoverageIcon = wrap(ChartDonut)

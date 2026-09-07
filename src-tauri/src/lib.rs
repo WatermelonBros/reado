@@ -136,6 +136,7 @@ pub fn run() {
             fs::read_file,
             fs::write_file,
             fs::create_file,
+            fs::create_dir,
             fs::move_path,
             fs::trash_path,
             fs::import_paths,

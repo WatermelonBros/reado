@@ -8,8 +8,9 @@
 import { create } from "zustand"
 import { t } from "@/i18n"
 import { movePath, trashPath } from "./api"
+import { toRelative } from "./comments"
 import { notify, notifyError } from "./notice"
-import { useProject } from "./store"
+import { useEditorActions, useProject } from "./store"
 
 type FileOp =
   | { kind: "move"; from: string; to: string }
@@ -52,6 +53,14 @@ export async function trashAndRecord(path: string): Promise<void> {
   const root = useProject.getState().root
   try {
     const trashed = await trashPath(root, path)
+    // Forget any unsaved edits on what was just deleted (a folder takes its
+    // subtree with it). Closing the tab tears the editor down, and a buffer
+    // still marked unsaved would be flushed to disk on the way out — recreating
+    // the file the user just deleted.
+    const rel = toRelative(root, path)
+    for (const p of useEditorActions.getState().dirtyPaths) {
+      if (p === rel || p.startsWith(`${rel}/`)) useEditorActions.getState().setDirty(p, false)
+    }
     useProject.getState().close(path) // drop any open tab on the deleted file
     useFileUndo.getState().record({ kind: "trash", original: path, trashed })
     useProject.getState().bumpTree()
