@@ -3,6 +3,7 @@
 // menu.uitest.ts against the real stores; here every dependency is a double, so
 // what's asserted is the wiring — which id runs what.
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import menuRs from "../../../src-tauri/src/menu.rs?raw"
 
 const h = vi.hoisted(() => {
   /** An object of vi.fn()s, one per named export a module contributes. */
@@ -35,6 +36,7 @@ const h = vi.hoisted(() => {
       "openGotoLine",
       "openReplace",
       "prevProblem",
+      "redoEdit",
       "revertFile",
       "saveAs",
       "saveDocument",
@@ -44,6 +46,7 @@ const h = vi.hoisted(() => {
       "shrinkSelectionCmd",
       "toggleBlockCommentCmd",
       "toggleLineComment",
+      "undoEdit",
     ),
     agents: fns("clearTerminal", "dispatchToAgent", "launchAgent", "restartTerminal"),
     window: fns("closeProject", "openFileDialog", "openInNewWindow", "pickFolderAndOpen"),
@@ -185,6 +188,8 @@ describe("file commands", () => {
 
 describe("edit and selection commands", () => {
   const cases: Array<[string, () => unknown]> = [
+    ["edit:undo", () => docInfo.undoEdit],
+    ["edit:redo", () => docInfo.redoEdit],
     ["find", () => docInfo.openFind],
     ["edit:replace", () => docInfo.openReplace],
     ["edit:toggleComment", () => docInfo.toggleLineComment],
@@ -444,5 +449,26 @@ describe("listenForMenu", () => {
     // …and the returned function really is the backend's unsubscribe.
     unlisten()
     expect(off).toHaveBeenCalled()
+  })
+})
+
+describe("the native Edit menu", () => {
+  it("does not take ⌘Z off the editor", () => {
+    // A predefined undo/redo item carries the accelerator, so macOS claims the
+    // keystroke before the webview sees it and sends the native `undo:` — which
+    // asks WebKit's undo manager, not CodeMirror's history, and does nothing.
+    // Undo was dead in the editor for exactly this reason; keep it dead-free.
+    expect(menuRs).not.toMatch(/^\s*\.undo\(\)/m)
+    expect(menuRs).not.toMatch(/^\s*\.redo\(\)/m)
+    expect(menuRs).toContain('.text("edit:undo", "Undo")')
+    expect(menuRs).toContain('.text("edit:redo", "Redo")')
+  })
+
+  it("keeps the clipboard items predefined — those the editor does receive", () => {
+    // Cut/copy/paste arrive as DOM events CodeMirror already handles, so the
+    // system items are the better ones: they carry the platform's own behaviour.
+    expect(menuRs).toMatch(/^\s*\.cut\(\)/m)
+    expect(menuRs).toMatch(/^\s*\.copy\(\)/m)
+    expect(menuRs).toMatch(/^\s*\.paste\(\)/m)
   })
 })

@@ -1,10 +1,19 @@
 //! Native application menu (macOS/Windows/Linux).
 //!
-//! Standard edit/window items are predefined (the webview handles undo, copy,
-//! …); Reado's own actions are custom items that emit a `menu` event with their
-//! id, which the frontend maps to the matching command. Custom items carry no
-//! accelerators, so the existing in-app keyboard shortcuts keep working without
-//! being intercepted by the menu.
+//! Clipboard and window items are predefined; Reado's own actions are custom
+//! items that emit a `menu` event with their id, which the frontend maps to the
+//! matching command. Custom items carry no accelerators, so the existing in-app
+//! keyboard shortcuts keep working without being intercepted by the menu.
+//!
+//! Undo/redo are **not** predefined, and that is the point. A predefined item
+//! carries ⌘Z, so macOS claims the keystroke before the webview ever sees it and
+//! sends the native `undo:` down the responder chain — which asks WebKit's own
+//! undo manager, not CodeMirror's history. The editor keeps its own history and
+//! rewrites the DOM from its state after every transaction, so WebKit's stack is
+//! empty and the keystroke did nothing: ⌘Z in a file was dead. As custom items
+//! without accelerators they still work from the menu, and ⌘Z reaches the editor.
+//! Cut/copy/paste stay predefined because those *are* dispatched as DOM events
+//! the editor already handles.
 
 use std::sync::Mutex;
 
@@ -85,8 +94,8 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .build()?;
 
     let edit_menu = SubmenuBuilder::new(app, "Edit")
-        .undo()
-        .redo()
+        .text("edit:undo", "Undo")
+        .text("edit:redo", "Redo")
         .separator()
         .cut()
         .copy()

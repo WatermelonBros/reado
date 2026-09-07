@@ -45,6 +45,9 @@ export const APP_MENUS: Menu[] = [
   {
     label: "Edit",
     items: [
+      { id: "edit:undo", label: "Undo" },
+      { id: "edit:redo", label: "Redo" },
+      { sep: true },
       { id: "find", label: "Find…" },
       { id: "edit:replace", label: "Replace…" },
       { sep: true },

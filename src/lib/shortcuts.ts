@@ -62,6 +62,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     titleKey: "sc.editing",
     items: [
+      { label: "Undo / Redo", combo: `${mod}Z / ${mod}${shift}Z` },
       { label: "Comment on Selection", combo: `${mod}${shift}M` },
       { label: "Toggle Line Comment", combo: `${mod}/` },
       { label: "Find / Replace", combo: `${mod}F` },

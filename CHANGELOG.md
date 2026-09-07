@@ -40,6 +40,13 @@ commit.
   in-app pane is a system webview and can't load browser extensions.
 
 ### Fixed
+- **Undo works in the editor again.** ⌘Z was being taken by the native Edit menu
+  before the editor ever saw it: a predefined Undo item carries the accelerator and
+  asks the system's undo manager, which knows nothing about the editor's own
+  history — so the keystroke did nothing at all. Undo and Redo are now Reado's own
+  menu items without accelerators, so the key reaches the editor, and the menu
+  entries still work. Cut, copy and paste stay predefined, because those the editor
+  really does receive.
 - **The address bar goes where you ask.** A bare host now gets `https://` (`http://`
   when it looks like a dev server — loopback, a `.local`/`.test` name, or an explicit
   port), and anything that isn't an address searches the web instead of silently

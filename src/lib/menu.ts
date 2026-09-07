@@ -34,6 +34,7 @@ import {
   openGotoLine,
   openReplace,
   prevProblem,
+  redoEdit,
   revertFile,
   saveAs,
   saveDocument,
@@ -43,6 +44,7 @@ import {
   shrinkSelectionCmd,
   toggleBlockCommentCmd,
   toggleLineComment,
+  undoEdit,
   useDocInfo,
 } from "./docInfo"
 import { logPath } from "./logger"
@@ -94,6 +96,8 @@ const MENU_PRECOND: Record<string, MenuCond> = {
   closeEditor: "file",
   gotoLine: "file",
   find: "file",
+  "edit:undo": "file",
+  "edit:redo": "file",
   "edit:replace": "file",
   "edit:toggleComment": "file",
   "edit:toggleBlockComment": "file",
@@ -257,6 +261,12 @@ export function runMenuCommand(id: string): void {
     // Edit
     case "find":
       openFind()
+      break
+    case "edit:undo":
+      undoEdit()
+      break
+    case "edit:redo":
+      redoEdit()
       break
     case "edit:replace":
       openReplace()

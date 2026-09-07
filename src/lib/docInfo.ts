@@ -13,8 +13,10 @@ import {
   cursorMatchingBracket,
   moveLineDown,
   moveLineUp,
+  redo,
   toggleBlockComment,
   toggleComment,
+  undo,
 } from "@codemirror/commands"
 import { forEachDiagnostic } from "@codemirror/lint"
 import {
@@ -307,6 +309,12 @@ function runOnView(cmd: (v: EditorView) => boolean): void {
   cmd(view)
   view.focus()
 }
+
+// Undo/redo run the editor's own history. ⌘Z reaches the editor directly (the
+// menu items deliberately carry no accelerator — see `menu.rs`); these are for
+// the menu itself, and for the in-app menu bar on Windows and Linux.
+export const undoEdit = () => runOnView(undo)
+export const redoEdit = () => runOnView(redo)
 
 export const toggleLineComment = () => runOnView(toggleComment)
 export const toggleBlockCommentCmd = () => runOnView(toggleBlockComment)
