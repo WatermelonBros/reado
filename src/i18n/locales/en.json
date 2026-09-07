@@ -521,6 +521,26 @@
       "custom": "Custom"
     }
   },
+  "vault": {
+    "fill": "Fill a credential from your password manager",
+    "checking": "Looking for your password manager…",
+    "noBackend": "No password manager CLI found. Install 1Password's `op` or Bitwarden's `bw` to fill credentials here.",
+    "openExtensions": "Show me",
+    "locked": "Bitwarden is locked — master password:",
+    "masterPassword": "Bitwarden master password",
+    "noMatch": "No saved login for this site.",
+    "otp": "Code",
+    "create": "Generate and save",
+    "close": "Close credentials",
+    "missing": {
+      "username": "Couldn't find the username field on this page.",
+      "password": "Couldn't find the password field on this page.",
+      "otp": "Couldn't find the one-time code field on this page."
+    },
+    "accessRequest": "The agent asked for access to this page. If you allow it, the agent can see what you enter here — mind any password or secret you don't want to share.",
+    "grant": "Allow for this page",
+    "deny": "Not now"
+  },
   "inspector": {
     "toggle": "Console & Network",
     "console": "Console",

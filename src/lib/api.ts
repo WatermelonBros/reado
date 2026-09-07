@@ -7,6 +7,8 @@
  */
 // Route every command through the traced wrapper so the IPC boundary (command
 // name, duration, outcome) is logged without changing any call site.
+
+import type { VaultItem, VaultStatus } from "@/lib/vault"
 import { tracedInvoke as invoke } from "./logger"
 import { useSettings } from "./store"
 
@@ -1166,3 +1168,26 @@ export const previewSetVisible = (visible: boolean) =>
 export const previewBack = () => invoke<void>("preview_back")
 export const previewForward = () => invoke<void>("preview_forward")
 export const previewReload = () => invoke<void>("preview_reload")
+
+// --- The user's password manager, through its own CLI (see `vault.rs`) ---------
+// Reado's own UI only: these are deliberately absent from the agent's control
+// channel and from the MCP tool surface.
+
+/** Which password-manager CLI is available, and whether it needs unlocking. */
+export const vaultStatus = () => invoke<VaultStatus>("vault_status")
+
+/** Unlock Bitwarden; the session it returns stays in the backend's memory. */
+export const vaultUnlock = (password: string) => invoke<void>("vault_unlock", { password })
+
+/** The logins matching a page's origin — ids and usernames, never a secret. */
+export const vaultLookup = (url: string) => invoke<VaultItem[]>("vault_lookup", { url })
+
+/** One item's password, fetched at the moment of the fill. */
+export const vaultSecret = (id: string) => invoke<string>("vault_secret", { id })
+
+/** One item's current one-time code. */
+export const vaultOtp = (id: string) => invoke<string>("vault_otp", { id })
+
+/** Save a new login for `url`, and return the generated password to fill with. */
+export const vaultCreate = (url: string, title: string, username: string) =>
+  invoke<string>("vault_create", { url, title, username })

@@ -31,6 +31,7 @@ mod search;
 mod semantic;
 mod sessions;
 mod symbols;
+mod vault;
 mod watcher;
 
 /// Build and run the Tauri application.
@@ -292,6 +293,12 @@ pub fn run() {
             preview::preview_back,
             preview::preview_forward,
             preview::preview_reload,
+            vault::vault_status,
+            vault::vault_unlock,
+            vault::vault_lookup,
+            vault::vault_secret,
+            vault::vault_otp,
+            vault::vault_create,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")

@@ -103,6 +103,9 @@ beforeEach(() => {
     net: [],
     pinRequest: null,
     inspectRequest: null,
+    secrets: [],
+    grantedUrl: null,
+    accessRequest: null,
   })
   useComments.setState({ comments: [] })
   usePalette.setState({
@@ -798,5 +801,120 @@ describe("a comment clicked in the list", () => {
     expect(vi.mocked(api.previewEval).mock.calls.some(([s]) => s.includes("still here"))).toBe(true)
     expect(usePreview.getState().pinRequest).toBeNull()
     vi.useRealTimers()
+  })
+})
+
+describe("a page holding a credential", () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+  const tick = () => vi.advanceTimersByTimeAsync(750)
+
+  /** The page answers the gate probe; anything else is the command's own script. */
+  const pageHolds = (hasSecret: boolean, href = "http://localhost:5173/login") =>
+    api.previewEval.mockImplementation(async (s: string) => {
+      if (s.includes("hasSecret")) return JSON.stringify({ href, hasSecret })
+      if (s.includes("drain()")) return "null"
+      return '"the password is s3cr3t!"'
+    })
+
+  const command = () =>
+    api.previewTakeCmd.mockResolvedValue(
+      JSON.stringify({ id: "9", op: "eval", arg: "document.querySelector('input').value" }),
+    )
+
+  it("refuses the agent's command and asks the user instead", async () => {
+    usePreview.setState({ agentAccess: true })
+    pageHolds(true)
+    command()
+    render(<BrowserPanel />)
+    await tick()
+    expect(api.previewPutResult).toHaveBeenCalledWith(
+      ROOT,
+      expect.stringContaining("has not granted access"),
+    )
+    // Refused, not filtered: the command's own script never ran.
+    expect(api.previewEval).not.toHaveBeenCalledWith("document.querySelector('input').value")
+    expect(usePreview.getState().accessRequest).toBe("http://localhost:5173/login")
+  })
+
+  it("runs the command once the user grants that page", async () => {
+    usePreview.setState({ agentAccess: true, grantedUrl: "http://localhost:5173/login" })
+    pageHolds(true)
+    command()
+    render(<BrowserPanel />)
+    await tick()
+    expect(api.previewEval).toHaveBeenCalledWith("document.querySelector('input').value")
+  })
+
+  it("does not honour a grant given for another page", async () => {
+    usePreview.setState({ agentAccess: true, grantedUrl: "http://localhost:5173/other" })
+    pageHolds(true)
+    command()
+    render(<BrowserPanel />)
+    await tick()
+    expect(api.previewEval).not.toHaveBeenCalledWith("document.querySelector('input').value")
+  })
+
+  it("lets commands through when no password field holds anything", async () => {
+    usePreview.setState({ agentAccess: true })
+    pageHolds(false)
+    command()
+    render(<BrowserPanel />)
+    await tick()
+    expect(api.previewEval).toHaveBeenCalledWith("document.querySelector('input').value")
+  })
+
+  it("asks the user once per page, not on every refused command", async () => {
+    usePreview.setState({ agentAccess: true })
+    pageHolds(true)
+    command()
+    render(<BrowserPanel />)
+    await tick()
+    usePreview.getState().setAccessRequest(null) // the user said "not now"
+    api.previewTakeCmd.mockResolvedValue(JSON.stringify({ id: "10", op: "eval", arg: "x" }))
+    await tick()
+    expect(usePreview.getState().accessRequest).toBeNull()
+  })
+
+  it("offers the agent no way to reach the vault", async () => {
+    usePreview.setState({ agentAccess: true })
+    pageHolds(false)
+    api.previewTakeCmd.mockResolvedValue(
+      JSON.stringify({ id: "11", op: "vault_lookup", arg: "https://example.com" }),
+    )
+    render(<BrowserPanel />)
+    await tick()
+    expect(api.previewPutResult).toHaveBeenCalledWith(ROOT, expect.stringContaining("unknown op"))
+  })
+
+  it("drops the grant when the pane navigates", async () => {
+    usePreview.setState({ grantedUrl: "http://localhost:5173/login", secrets: ["s3cr3t!"] })
+    usePreview.getState().setUrl("http://localhost:5173/app")
+    expect(usePreview.getState().grantedUrl).toBeNull()
+    expect(usePreview.getState().secrets).toEqual([])
+  })
+
+  it("redacts a filled secret from what reaches the agent", async () => {
+    usePreview.setState({ agentAccess: true, secrets: ["s3cr3t!"] })
+    pageHolds(false)
+    command()
+    render(<BrowserPanel />)
+    await tick()
+    const calls = api.previewPutResult.mock.calls
+    const sent = calls[calls.length - 1]?.[1] as string
+    expect(sent).not.toContain("s3cr3t!")
+    expect(sent).toContain("«redacted»")
+  })
+
+  it("redacts the mirrored capture but leaves the inspector's copy intact", async () => {
+    usePreview.setState({ agentAccess: true, secrets: ["s3cr3t!"] })
+    bridgeReturns({ logs: [{ level: "log", args: ["sending s3cr3t! now"], t: 1 }], net: [] })
+    render(<BrowserPanel />)
+    await tick()
+    const mirrored = api.previewPersistState.mock.calls
+    const [, consoleJson] = mirrored[mirrored.length - 1] as string[]
+    expect(consoleJson).not.toContain("s3cr3t!")
+    // The store the inspector renders keeps the real page, as DevTools would.
+    expect(JSON.stringify(usePreview.getState().logs)).toContain("s3cr3t!")
   })
 })

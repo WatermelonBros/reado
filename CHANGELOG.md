@@ -12,6 +12,20 @@ commit.
 ## [Unreleased]
 
 ### Added
+- **Your password manager, in the browser pane.** A key in the pane's toolbar lists
+  the logins your vault holds for the page's origin and fills the form with one —
+  including the one-time code, and including generating and saving a new login when
+  you are signing up. It talks to 1Password's `op` or Bitwarden's `bw`, whichever is
+  installed, so the credential comes from the vault you already trust; nothing is
+  read out of a browser profile and no secret is ever cached, persisted or logged.
+  (The pane is a system webview, which cannot load browser extensions — this is the
+  interface both vendors ship for exactly that reason.)
+- **A page holding a password is off limits to the agent.** While any password field
+  in the page has something in it, the agent's commands are refused rather than
+  filtered — the refusal surfaces as a request you can allow for that page, and the
+  permission lapses as soon as the page navigates. Anything Reado filled from the
+  vault is redacted from what the agent reads: the `.reado/` mirror, every command
+  result, "send to agent". Your own inspector keeps showing the real page.
 - **Open in your browser.** The browser pane's toolbar can hand the current page to
   your real browser — where your password manager's extension lives, since the
   in-app pane is a system webview and can't load browser extensions.

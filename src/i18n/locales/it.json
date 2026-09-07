@@ -521,6 +521,26 @@
       "custom": "Custom"
     }
   },
+  "vault": {
+    "fill": "Inserisci una credenziale dal gestore password",
+    "checking": "Cerco il gestore password…",
+    "noBackend": "Nessuna CLI di gestore password trovata. Installa `op` di 1Password o `bw` di Bitwarden per inserire credenziali qui.",
+    "openExtensions": "Mostrami",
+    "locked": "Bitwarden è bloccato — password principale:",
+    "masterPassword": "Password principale di Bitwarden",
+    "noMatch": "Nessun accesso salvato per questo sito.",
+    "otp": "Codice",
+    "create": "Genera e salva",
+    "close": "Chiudi credenziali",
+    "missing": {
+      "username": "Non ho trovato il campo nome utente in questa pagina.",
+      "password": "Non ho trovato il campo password in questa pagina.",
+      "otp": "Non ho trovato il campo del codice temporaneo in questa pagina."
+    },
+    "accessRequest": "L'agente ha richiesto accesso ai dati di questa pagina. Se accetti, l'agente può vedere cosa inserisci qui — attenzione a password o segreti che non vuoi condividere.",
+    "grant": "Consenti per questa pagina",
+    "deny": "Non ora"
+  },
   "inspector": {
     "toggle": "Console e Rete",
     "console": "Console",

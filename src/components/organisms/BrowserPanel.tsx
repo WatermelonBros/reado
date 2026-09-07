@@ -26,11 +26,13 @@ import {
   DetachIcon,
   DevicesIcon,
   FetchIcon,
+  KeyIcon,
   MessageIcon,
   MinusIcon,
   PlusIcon,
   RobotIcon,
 } from "@/components/atoms/icons"
+import { AccessRequest, VaultBar } from "@/components/molecules/VaultBar"
 import {
   type Comment,
   type CommentKind,
@@ -64,6 +66,7 @@ import {
   usePreview,
 } from "@/lib/preview"
 import { usePalette, useProject, useSettings, useWorkspace } from "@/lib/store"
+import { GATED_REASON, PAGE_STATE_JS, type PageState, redact } from "@/lib/vault"
 import { BrowserInspector } from "./BrowserInspector"
 
 /** Two URLs point at the same document (ignoring query/hash) — for matching a
@@ -145,6 +148,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // Design-comment dots are injected from the drain tick (it reads the store
   // fresh), so no reactive selector is needed here — just the toggle state.
   const [showMarks, setShowMarks] = useState(true)
+  // The credential strip, opened from the toolbar — never on its own.
+  const [vaultOpen, setVaultOpen] = useState(false)
+  const accessRequest = usePreview((s) => s.accessRequest)
   // Reado's overlays (palette, settings, dialogs, graph/docs) render in the DOM,
   // which a native child window would cover — hide the preview while any is open.
   // A dock drag or open dock menu counts too: hide the preview so drop targets and
@@ -178,6 +184,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // The URL input is focused (being edited) → don't auto-switch, or the key={url}
   // remount would discard the user's in-progress typing.
   const urlFocused = useRef(false)
+  // The page we've already put an access request up for, so a refused agent that
+  // keeps trying doesn't re-prompt the user who already said "not now".
+  const askedFor = useRef("")
   // Whether the current URL responded last check → reload on a dead→live transition.
   const wasLive = useRef(false)
   showMarksRef.current = showMarks
@@ -347,8 +356,11 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       // when the snapshot actually changed, not on every idle tick.
       const s = usePreview.getState()
       if (root && s.agentAccess) {
-        const logsJson = JSON.stringify(s.logs)
-        const netJson = JSON.stringify(s.net)
+        // Redacted on the way out: this file is what the agent reads. The store
+        // above keeps the real values, so the user's own inspector still shows
+        // their own page the way a browser's developer tools would.
+        const logsJson = redact(JSON.stringify(s.logs), s.secrets)
+        const netJson = redact(JSON.stringify(s.net), s.secrets)
         const snap = `${logsJson}${netJson}`
         if (snap !== lastPersisted.current) {
           lastPersisted.current = snap
@@ -366,6 +378,24 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
             lastCmdId.current = cmd.id
             let ok = true
             let result = ""
+            // The gate: ask the page, right now, whether it holds a credential.
+            // Checked per command rather than on the poll tick, so a password
+            // typed a moment ago cannot be beaten by a command already queued.
+            // A refusal is an answer — we never block waiting for the user.
+            const state = await previewEval(PAGE_STATE_JS)
+              .then((raw) => JSON.parse(raw || "null") as PageState | null)
+              .catch(() => null)
+            if (state?.hasSecret && s.grantedUrl !== state.href) {
+              if (askedFor.current !== state.href) {
+                askedFor.current = state.href
+                usePreview.getState().setAccessRequest(state.href)
+              }
+              await previewPutResult(
+                root,
+                JSON.stringify({ id: cmd.id, ok: false, result: GATED_REASON }),
+              )
+              return
+            }
             try {
               if (cmd.op === "eval") {
                 result = await previewEval(cmd.arg ?? "")
@@ -400,7 +430,10 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               ok = false
               result = String(e)
             }
-            await previewPutResult(root, JSON.stringify({ id: cmd.id, ok, result }))
+            await previewPutResult(
+              root,
+              redact(JSON.stringify({ id: cmd.id, ok, result }), usePreview.getState().secrets),
+            )
           }
         } catch {
           /* no pending command */
@@ -723,6 +756,13 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
         />
         <IconButton
           size="sm"
+          label={t("vault.fill")}
+          active={vaultOpen}
+          icon={<KeyIcon className="h-3.5 w-3.5" />}
+          onClick={() => setVaultOpen((v) => !v)}
+        />
+        <IconButton
+          size="sm"
           label={t("preview.agentAccess")}
           active={agentAccess}
           icon={<RobotIcon className="h-3.5 w-3.5" />}
@@ -764,6 +804,10 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
           onClick={close}
         />
       </header>
+      {vaultOpen && (
+        <VaultBar url={url} evalInPage={previewEval} onClose={() => setVaultOpen(false)} />
+      )}
+      {accessRequest && <AccessRequest url={accessRequest} />}
       {/* Device-size bar: emulate a viewport, or fill the pane (Responsive). */}
       <div className="flex h-8 flex-none items-center gap-1 border-b border-line px-2 text-xs">
         <DevicesIcon className="h-3.5 w-3.5 flex-none text-faint" />

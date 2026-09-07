@@ -90,6 +90,16 @@ interface PreviewState {
   agentAccess: boolean
   /** Extra origins the agent may navigate to (localhost is always allowed). */
   allowlist: string[]
+  /** Values Reado filled into the page from the vault, kept only to redact them
+   *  from everything that crosses to the agent. Never persisted; dropped the
+   *  moment the pane navigates or closes. */
+  secrets: string[]
+  /** The page URL the user granted the agent access to while a credential is in
+   *  it. One page, this run only — never persisted. */
+  grantedUrl: string | null
+  /** A refused agent command waiting on the user: the page it asked about. The
+   *  agent already got its refusal; this only drives Reado's own prompt. */
+  accessRequest: string | null
   /** Chosen viewport size to emulate, or null for "fit the pane" (responsive). */
   device: { w: number; h: number; label: string } | null
   /** Docked pane width in px (layout space); the editor takes the rest. */
@@ -112,6 +122,9 @@ interface PreviewState {
   setPinRequest: (p: { url: string; x: number; y: number; id: string } | null) => void
   setAgentAccess: (on: boolean) => void
   addAllowedOrigin: (origin: string) => void
+  addSecret: (value: string) => void
+  grantPage: (url: string | null) => void
+  setAccessRequest: (url: string | null) => void
   setDevice: (d: { w: number; h: number; label: string } | null) => void
   setPaneWidth: (w: number) => void
   setBrowserZoom: (z: number) => void
@@ -135,13 +148,21 @@ export const usePreview = create<PreviewState>()(
       pinRequest: null,
       agentAccess: true,
       allowlist: [],
+      secrets: [],
+      grantedUrl: null,
+      accessRequest: null,
       device: null,
       paneWidth: 640,
       browserZoom: 1,
       logs: [],
       net: [],
       openPane: (url) => set((s) => ({ open: true, url: url ?? s.url })),
-      setUrl: (url) => set({ url }),
+      // A new URL is a new page: the credentials Reado filled are gone from it, and
+      // so is any access the user granted for it.
+      setUrl: (url) =>
+        set((s) =>
+          s.url === url ? { url } : { url, secrets: [], grantedUrl: null, accessRequest: null },
+        ),
       toggleInspector: () => set((s) => ({ inspector: !s.inspector })),
       setInspectorPos: (p) => set({ inspectorPos: p }),
       setInspectorSize: (n) => set({ inspectorSize: Math.max(120, n) }),
@@ -151,6 +172,10 @@ export const usePreview = create<PreviewState>()(
       setAgentAccess: (on) => set({ agentAccess: on }),
       addAllowedOrigin: (origin) =>
         set((s) => (s.allowlist.includes(origin) ? s : { allowlist: [...s.allowlist, origin] })),
+      addSecret: (value) =>
+        set((s) => (s.secrets.includes(value) ? s : { secrets: [...s.secrets, value] })),
+      grantPage: (grantedUrl) => set({ grantedUrl, accessRequest: null }),
+      setAccessRequest: (accessRequest) => set({ accessRequest }),
       setDevice: (device) => set({ device }),
       setPaneWidth: (w) => set({ paneWidth: Math.max(320, w) }),
       setBrowserZoom: (z) => set({ browserZoom: Math.min(3, Math.max(0.1, z)) }),
@@ -160,7 +185,15 @@ export const usePreview = create<PreviewState>()(
       // changed, so the detail panel doesn't churn every tick.
       setNet: (net) => set({ net: net.slice(-MAX) }),
       clearCaptured: () => set({ logs: [], net: [] }),
-      close: () => set({ open: false, logs: [], net: [] }),
+      close: () =>
+        set({
+          open: false,
+          logs: [],
+          net: [],
+          secrets: [],
+          grantedUrl: null,
+          accessRequest: null,
+        }),
     }),
     // Persist the URL and the agent opt-in across restarts.
     {

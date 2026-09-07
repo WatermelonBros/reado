@@ -25,6 +25,7 @@ import {
   BrowserIcon as Browser,
   CaretRightIcon as CaretRight,
   ChartDonutIcon as ChartDonut,
+  KeyIcon as Key,
   ChatCircleIcon as ChatCircle,
   CheckIcon as Check,
   ClipboardTextIcon as ClipboardText,
@@ -288,6 +289,7 @@ export const TrashIcon = wrap(Trash)
 export const WarningIcon = wrap(Warning)
 export const DiscardIcon = wrap(ArrowCounterClockwise)
 export const MessageIcon = wrap(ChatCircle)
+export const KeyIcon = wrap(Key)
 
 /** Claude's official mark. Filled via currentColor. */
 export const ClaudeIcon = ({ className }: IconProps) => (
