@@ -118,3 +118,56 @@ jobs:
           # Emit latest.json (the updater manifest) alongside the installers.
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+  # Announce the finished release in Discord.
+  #
+  # `needs: build` is the point: tauri-action publishes the release from the
+  # *first* matrix job, so a webhook fired on "release published" would announce
+  # it while three platforms are still building — readers would arrive at a page
+  # with half the installers missing. This waits for every build to land, and is
+  # skipped entirely if any of them failed: a broken release is not announced.
+  announce:
+    name: Announce on Discord
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Post the release notes
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          # Set this secret to switch the announcement on; without it the job is
+          # a no-op, so a fork never fails here for want of someone else's hook.
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBHOOK}" ]; then
+            echo "No DISCORD_WEBHOOK secret set — nothing to announce to."
+            exit 0
+          fi
+          # The notes are already written: the release body is this version's
+          # CHANGELOG section, lifted out at tag time by release-notes.sh.
+          name=$(gh release view "$TAG" --json name --jq '.name // ""')
+          url=$(gh release view "$TAG" --json url --jq '.url')
+          gh release view "$TAG" --json body --jq '.body' > notes.md
+          # ponytail: truncated to Discord's 4096-character embed limit, minus
+          # room for the ellipsis. If the changelogs outgrow it, split into
+          # several embeds rather than cutting the tail off.
+          body=$(head -c 4000 notes.md)
+          # An `[ … ] && …` here would exit the script under `set -e` every time
+          # the notes fit, which is every normal release.
+          if [ "$(wc -c < notes.md)" -gt 4000 ]; then
+            body="${body}"$'\n\n'"…full notes: ${url}"
+          fi
+          # Everything crosses into jq as data, never as shell interpolation: a
+          # release body is Markdown someone wrote, not a script.
+          jq -n --arg n "${name:-$TAG}" --arg b "$body" --arg u "$url" \
+            '{content: "\($n) is out.",
+              embeds: [{title: $n, url: $u, description: $b, color: 5814783}]}' \
+            > payload.json
+          curl -sS --fail-with-body -X POST \
+            -H "Content-Type: application/json" \
+            --data @payload.json "$WEBHOOK"
