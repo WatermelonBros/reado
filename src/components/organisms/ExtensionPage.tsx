@@ -15,12 +15,20 @@ import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
 import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
-import { CheckIcon, CloseIcon, SealCheckIcon } from "@/components/atoms/icons"
+import {
+  BitwardenIcon,
+  CheckIcon,
+  CloseIcon,
+  OnePasswordIcon,
+  SealCheckIcon,
+} from "@/components/atoms/icons"
 import { ovsxReadme } from "@/lib/api"
+import { currentOS, installCmd, VAULTS, type VaultExt } from "@/lib/extensions"
 import { markdownRehype, markdownRemark, markdownUrlTransform } from "@/lib/markdown"
 import { useMarketplace } from "@/lib/marketplace"
 import { notify } from "@/lib/notice"
 import { useWorkspace } from "@/lib/store"
+import { vaultGuide } from "@/lib/vaultGuide"
 import { Activate } from "./extensions/Activate"
 import { EnableToggle } from "./extensions/EnableToggle"
 import { compact, ExtensionIcon } from "./extensions/ExtensionRow"
@@ -31,6 +39,7 @@ import {
   useFormatterStatus,
   useLinuxPm,
   useServerStatus,
+  useVaultStatus,
 } from "./extensions/useCurated"
 
 export function ExtensionPage() {
@@ -74,7 +83,10 @@ export function ExtensionPage() {
   }, [close])
 
   if (!reading) return null
-  if (reading.kind === "curated") return <CuratedPage id={reading.id} />
+  if (reading.kind === "curated") {
+    const vault = VAULTS.find((v) => v.id === reading.id)
+    return vault ? <VaultPage def={vault} /> : <CuratedPage id={reading.id} />
+  }
   const id = `${reading.namespace}.${reading.name}`
   const installed = installedAll.find((e) => e.id === id)
   const updateTo = latest[id] && latest[id] !== installed?.version ? latest[id] : undefined
@@ -288,6 +300,61 @@ function CuratedPage({ id }: { id: string }) {
           )}
 
           <p className="text-xs leading-relaxed text-faint">{t("ext.curatedWhy")}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The page for a password manager's CLI.
+ *
+ * These have no README to fetch — they are a vendor's binary, not a package — and
+ * the questions someone arrives with aren't answered by a description anyway:
+ * *what is this for, why not the browser extension I already use, and what does
+ * Reado do with my password once it has it.* So Reado writes the page itself.
+ */
+function VaultPage({ def }: { def: VaultExt }) {
+  const { t, i18n } = useTranslation()
+  const close = useWorkspace((s) => s.readExtension)
+  const linuxPm = useLinuxPm()
+  const vaults = useVaultStatus()
+  const installed = Boolean(vaults.installed[def.id])
+  const cmd = installCmd(def, currentOS(), linuxPm)
+  const Mark = def.id === "op" ? OnePasswordIcon : BitwardenIcon
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col overflow-hidden bg-canvas">
+      <header className="flex flex-none items-start gap-3 border-b border-line px-6 py-4">
+        <ExtensionIcon icon={<Mark className="h-8 w-8" />} name={def.name} size={12} />
+        <div className="min-w-0 flex-1">
+          <h1 className="m-0 truncate text-lg font-semibold text-ink">{def.name}</h1>
+          <p className="mt-0.5 text-xs text-faint">
+            {t("ext.curated")} · {t("ext.contributes", { kinds: t("ext.kindVault") })}
+          </p>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            {installed ? (
+              <span className="flex items-center gap-1 text-xs text-ok">
+                <CheckIcon className="h-3.5 w-3.5" />
+                {t("ext.installed")}
+              </span>
+            ) : cmd ? (
+              <Button variant="primary" size="sm" onClick={() => runInstall(cmd)}>
+                {t("ext.install")}
+              </Button>
+            ) : (
+              <span className="text-xs text-faint">{t("ext.manual")}</span>
+            )}
+          </div>
+        </div>
+        <IconButton label={t("settings.close")} icon={<CloseIcon />} onClick={() => close(null)} />
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+        <div className="prose-reado mx-auto max-w-[72ch]">
+          <ReactMarkdown remarkPlugins={markdownRemark} rehypePlugins={markdownRehype}>
+            {vaultGuide(def.id, i18n.language)}
+          </ReactMarkdown>
         </div>
       </div>
     </div>

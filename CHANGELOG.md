@@ -20,6 +20,15 @@ commit.
   read out of a browser profile and no secret is ever cached, persisted or logged.
   (The pane is a system webview, which cannot load browser extensions — this is the
   interface both vendors ship for exactly that reason.)
+- **Both CLIs are listed in Extensions.** 1Password's `op` and Bitwarden's `bw`
+  show up under their own marks, like anything else Reado can use: installed,
+  among your extensions;
+  missing, as a row with the install command for your OS and whatever else the
+  binary alone doesn't cover. If you run the desktop app and never knew the CLI
+  existed, that is where you find out — and the browser pane points you there when
+  it can't find one. Each one opens onto a guide Reado wrote — what the CLI is for,
+  why the browser extension can't serve here, how to set it up, how filling works,
+  and what Reado does with your password once it has it.
 - **A page holding a password is off limits to the agent.** While any password field
   in the page has something in it, the agent's commands are refused rather than
   filtered — the refusal surfaces as a request you can allow for that page, and the

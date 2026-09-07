@@ -18,15 +18,19 @@ vi.mock("../../../../lib/api", async (orig) => ({
 }))
 
 import { Activate } from "@/components/organisms/extensions/Activate"
+import { EntryRow } from "@/components/organisms/extensions/EntryRow"
 import { ExtensionIcon } from "@/components/organisms/extensions/ExtensionRow"
+import { vaultEntry } from "@/components/organisms/extensions/entries"
 import { FormatterOverride } from "@/components/organisms/extensions/FormatterOverride"
 import { ReloadNotice } from "@/components/organisms/extensions/ReloadNotice"
 import { forgetServerProbe, runInstall } from "@/components/organisms/extensions/useCurated"
 import type { InstalledExt } from "@/lib/api"
+import { VAULTS } from "@/lib/extensions"
 import { useFormatterOverrides } from "@/lib/formatters"
 import { useMarketplace } from "@/lib/marketplace"
 import { useProject, useSettings } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
+import { vaultGuide } from "@/lib/vaultGuide"
 
 const ext = (contributes: unknown): InstalledExt => ({
   id: "Pub.pack",
@@ -158,5 +162,73 @@ describe("running a curated install", () => {
     const term = useTerminals.getState()
     expect(term.open).toBe(true)
     expect(term.activeId).toBeTruthy()
+  })
+})
+
+describe("a password manager's CLI in the list", () => {
+  const bw = VAULTS.find((v) => v.id === "bw") as (typeof VAULTS)[number]
+  const op = VAULTS.find((v) => v.id === "op") as (typeof VAULTS)[number]
+
+  it("is offered with an install command when the CLI isn't there", async () => {
+    // The case that matters: someone runs the Bitwarden *app* and has no idea
+    // the browser pane needs the CLI.
+    const { submitToTerminal } = await import("@/lib/api")
+    vi.mocked(submitToTerminal).mockClear()
+    render(<EntryRow entry={vaultEntry(bw, false)} linuxPm={null} />)
+    expect(screen.getByText("Bitwarden CLI")).toBeInTheDocument()
+    await userEvent.click(screen.getByText("ext.install"))
+    // Whichever OS the test host reports, the command installs Bitwarden's CLI.
+    expect(submitToTerminal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringMatching(/bitwarden/i),
+      expect.anything(),
+    )
+  })
+
+  it("states the prerequisite the CLI alone doesn't satisfy", () => {
+    // `op` unlocks through the 1Password app, so installing the binary is only
+    // half the story — the row says the other half rather than failing later.
+    render(<EntryRow entry={vaultEntry(op, false)} linuxPm={null} />)
+    expect(screen.getByText(/ext.requires/)).toBeInTheDocument()
+  })
+
+  it("carries the vendor's own mark, not a grey monogram", () => {
+    const { container } = render(<EntryRow entry={vaultEntry(bw, false)} linuxPm={null} />)
+    // Brand colour, drawn inline: no URL to fetch and nothing to 404.
+    expect(container.querySelector('svg[fill="#175DDC"]')).toBeTruthy()
+  })
+
+  it("reads as installed once it resolves on the PATH", () => {
+    render(<EntryRow entry={vaultEntry(bw, true)} linuxPm={null} />)
+    expect(screen.getByText("ext.installed")).toBeInTheDocument()
+    expect(screen.queryByText("ext.install")).not.toBeInTheDocument()
+  })
+})
+
+describe("the guide Reado writes for a password manager", () => {
+  it("answers the three questions the row can't, in the reader's language", () => {
+    for (const id of ["op", "bw"] as const) {
+      const en = vaultGuide(id, "en")
+      const it = vaultGuide(id, "it")
+      // Why not the extension you already use, how to set it up, what happens to
+      // the password once Reado has it.
+      expect(en).toMatch(/extension/i)
+      expect(en).toMatch(/install/i)
+      expect(en).toMatch(/redacted/i)
+      expect(it).toMatch(/estensione/i)
+      expect(it).toMatch(/oscurato/i)
+      expect(it).not.toBe(en)
+      // An unwritten locale reads the English one rather than nothing at all.
+      expect(vaultGuide(id, "de")).toBe(en)
+    }
+  })
+
+  it("tells each vault's own setup story, then the part they share", () => {
+    // The prose wraps, so the phrase is matched across the line break.
+    expect(vaultGuide("op", "en")).toMatch(/Integrate with 1Password\s+CLI/)
+    expect(vaultGuide("bw", "en")).toMatch(/bw login/)
+    // One copy of the shared half, appended to both.
+    for (const id of ["op", "bw"] as const)
+      expect(vaultGuide(id, "en")).toMatch(/## When it doesn't work/)
   })
 })

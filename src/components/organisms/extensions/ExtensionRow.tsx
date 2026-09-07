@@ -10,7 +10,7 @@
  * can't do here, arrive as sentences the panel has already worked out, so a
  * marketplace extension, a formatter and a language server all read the same.
  */
-import { type ReactNode, useState } from "react"
+import { type ReactElement, type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
@@ -32,7 +32,7 @@ export interface RowProps {
   /** Publisher, or the source when there isn't one ("Reado" for the curated). */
   publisher: string
   description: string
-  icon?: string | null
+  icon?: string | ReactElement | null
   downloads?: number
   verified?: boolean
   /** What it adds, in the product's words. */
@@ -177,12 +177,24 @@ export function ExtensionIcon({
   name,
   size,
 }: {
-  icon?: string | null
+  icon?: string | ReactElement | null
   name: string
   size: 7 | 12
 }) {
   const [failed, setFailed] = useState(false)
   const box = size === 7 ? "h-7 w-7" : "h-12 w-12"
+
+  // A curated tool brings its mark as a component (no URL to fetch, nothing to
+  // 404), so it is drawn rather than loaded.
+  if (icon && typeof icon !== "string")
+    return (
+      <span
+        aria-hidden
+        className={`grid ${box} flex-none place-items-center rounded-md bg-overlay p-1`}
+      >
+        {icon}
+      </span>
+    )
 
   if (!icon || failed) {
     return (

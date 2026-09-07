@@ -18,7 +18,7 @@ import { Input } from "@/components/atoms/Input"
 import { CloseIcon, FetchIcon, SearchIcon } from "@/components/atoms/icons"
 import { Select } from "@/components/atoms/Select"
 import { type ExtListing, ovsxSearch } from "@/lib/api"
-import { FORMATTERS, LANG_SERVERS } from "@/lib/extensions"
+import { FORMATTERS, LANG_SERVERS, VAULTS } from "@/lib/extensions"
 import { isInstallable, type Package, useMarketplace } from "@/lib/marketplace"
 import { notify } from "@/lib/notice"
 import { useWorkspace } from "@/lib/store"
@@ -32,11 +32,17 @@ import {
   matchesFacet,
   matchesQuery,
   serverEntry,
+  vaultEntry,
 } from "./extensions/entries"
 import { FormatterOverride } from "./extensions/FormatterOverride"
 import { ReloadNotice } from "./extensions/ReloadNotice"
 import { Section } from "./extensions/Section"
-import { useFormatterStatus, useLinuxPm, useServerStatus } from "./extensions/useCurated"
+import {
+  useFormatterStatus,
+  useLinuxPm,
+  useServerStatus,
+  useVaultStatus,
+} from "./extensions/useCurated"
 
 /** One page of registry results. Small: this is a sidebar, not a store front. */
 const PAGE = 20
@@ -59,6 +65,8 @@ const CATEGORIES: Record<Filter, string[]> = {
   snippets: ["Snippets"],
   // Formatters are Reado's own; the registry has none it can run.
   formatters: [],
+  // Neither are password-manager CLIs — they are the vendors' own tools.
+  credentials: [],
 }
 
 /** Drop repeats: an extension can sit in several registry categories, so fanning
@@ -94,6 +102,7 @@ export function ExtensionsPanel() {
   const linuxPm = useLinuxPm()
   const servers = useServerStatus()
   const { status: formatters, recheck: recheckFormatters } = useFormatterStatus()
+  const vaults = useVaultStatus()
 
   useEffect(() => {
     // Then ask the registry what has moved on since. Installed extensions are
@@ -113,9 +122,10 @@ export function ExtensionsPanel() {
         formatterEntry(f, formatters[f.id]),
       ),
       ...LANG_SERVERS.filter((s) => servers.installed[s.id]).map((s) => serverEntry(s, true)),
+      ...VAULTS.filter((v) => vaults.installed[v.id]).map((v) => vaultEntry(v, true)),
     ]
     return rows.filter((e) => matchesFacet(e, filter) && matchesQuery(e, needle))
-  }, [installed, formatters, servers.installed, filter, needle])
+  }, [installed, formatters, servers.installed, vaults.installed, filter, needle])
 
   /** Everything Reado can offer that isn't installed yet. */
   const available = useMemo(() => {
@@ -125,6 +135,9 @@ export function ExtensionsPanel() {
         formatterEntry(f, formatters[f.id]),
       ),
       ...LANG_SERVERS.filter((s) => !servers.installed[s.id]).map((s) => serverEntry(s, false)),
+      // Suggested even unasked-for: someone running the Bitwarden or 1Password
+      // *app* has no way to guess that the browser pane needs the CLI instead.
+      ...VAULTS.filter((v) => !vaults.installed[v.id]).map((v) => vaultEntry(v, false)),
     ]
     const fromRegistry = results.filter((l) => !have.has(l.id)).map(listingEntry)
     const shown = [...rows, ...fromRegistry].filter(
@@ -141,7 +154,16 @@ export function ExtensionsPanel() {
     // for a language that isn't open is not — it waits behind its own filter,
     // one click away in the Show menu, where it was actually asked for.
     return shown.filter((e) => (e.kind === "formatter" ? e.status?.declared : e.kind !== "server"))
-  }, [installed, formatters, servers.installed, results, filter, needle, searchMode])
+  }, [
+    installed,
+    formatters,
+    servers.installed,
+    vaults.installed,
+    results,
+    filter,
+    needle,
+    searchMode,
+  ])
 
   const search = useCallback(async (q: string, f: Filter, offset: number) => {
     const categories = CATEGORIES[f]
@@ -273,6 +295,7 @@ export function ExtensionsPanel() {
               { value: "languages", label: t("ext.filterLanguages") },
               { value: "formatters", label: t("ext.filterFormatters") },
               { value: "snippets", label: t("ext.filterSnippets") },
+              { value: "credentials", label: t("ext.filterCredentials") },
             ]}
           />
         </div>

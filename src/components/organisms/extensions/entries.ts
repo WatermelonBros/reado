@@ -9,17 +9,18 @@
  * survive only where they change what you can actually do with a row.
  */
 import type { ExtListing, ExtManifest, FormatterStatus, InstalledExt } from "@/lib/api"
-import type { FormatterExt, LangServerExt } from "@/lib/extensions"
+import type { FormatterExt, LangServerExt, VaultExt } from "@/lib/extensions"
 import { type ContributionKind, classify } from "@/lib/marketplace"
 
 /** What a row is about, for the filter to reason over. */
-export type Facet = "themes" | "languages" | "formatters" | "snippets"
+export type Facet = "themes" | "languages" | "formatters" | "snippets" | "credentials"
 
 /** A row, whatever it came from. */
 export type Entry =
   | { kind: "marketplace"; id: string; listing: ExtListing; facets: Facet[] }
   | { kind: "installed"; id: string; ext: InstalledExt; facets: Facet[] }
   | { kind: "server"; id: string; def: LangServerExt; installed: boolean; facets: Facet[] }
+  | { kind: "vault"; id: string; def: VaultExt; installed: boolean; facets: Facet[] }
   | {
       kind: "formatter"
       id: string
@@ -71,6 +72,14 @@ export const formatterEntry = (def: FormatterExt, status?: FormatterStatus): Ent
   def,
   status,
   facets: ["formatters"],
+})
+
+export const vaultEntry = (def: VaultExt, installed: boolean): Entry => ({
+  kind: "vault",
+  id: `vault:${def.id}`,
+  def,
+  installed,
+  facets: ["credentials"],
 })
 
 export const installedEntry = (ext: InstalledExt): Entry => ({

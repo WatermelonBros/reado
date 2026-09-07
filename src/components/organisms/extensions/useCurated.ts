@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react"
 import {
+  agentInstalled,
   type FormatterStatus,
   formatterStatus,
   linuxPackageManager,
@@ -22,6 +23,7 @@ import {
   LANG_SERVERS,
   type LangServerExt,
   type LinuxPm,
+  VAULTS,
 } from "@/lib/extensions"
 import { useProject } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
@@ -131,6 +133,30 @@ export function useFormatterStatus() {
   useProbeWatcher(recheck)
 
   return { status, recheck }
+}
+
+/**
+ * Which password-manager CLIs resolve on the user's real PATH.
+ *
+ * The same login-shell probe every other tool uses (`agent_installed`): someone
+ * with the Bitwarden *app* installed has no CLI, and that is exactly the case the
+ * Extensions list has to be honest about.
+ */
+export function useVaultStatus() {
+  const [installed, setInstalled] = useState<Record<string, boolean>>({})
+
+  const recheck = useCallback(() => {
+    Promise.all(VAULTS.map((v) => agentInstalled(v.id).catch(() => false)))
+      .then((flags) => setInstalled(Object.fromEntries(VAULTS.map((v, i) => [v.id, flags[i]]))))
+      .catch(() => setInstalled({}))
+  }, [])
+
+  useEffect(() => {
+    recheck()
+  }, [recheck])
+  useProbeWatcher(recheck)
+
+  return { installed, recheck }
 }
 
 /**

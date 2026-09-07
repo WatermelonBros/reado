@@ -25,7 +25,6 @@ import {
   BrowserIcon as Browser,
   CaretRightIcon as CaretRight,
   ChartDonutIcon as ChartDonut,
-  KeyIcon as Key,
   ChatCircleIcon as ChatCircle,
   CheckIcon as Check,
   ClipboardTextIcon as ClipboardText,
@@ -79,6 +78,7 @@ import {
   GitDiffIcon as GitDiff,
   GraphIcon as Graph,
   InfoIcon as Info,
+  KeyIcon as Key,
   LayoutIcon as Layout,
   LinkBreakIcon as LinkBreak,
   ListBulletsIcon as ListBullets,
@@ -290,6 +290,27 @@ export const WarningIcon = wrap(Warning)
 export const DiscardIcon = wrap(ArrowCounterClockwise)
 export const MessageIcon = wrap(ChatCircle)
 export const KeyIcon = wrap(Key)
+
+/**
+ * Vendor marks for the password managers Reado can fill from — their own logos,
+ * so the rows read as *their* tool rather than as two more grey monograms.
+ *
+ * Drawn in the vendor's brand colour rather than `currentColor`: a logo that
+ * changes colour with the theme stops being the logo. Paths from Simple Icons
+ * (CC0); the marks themselves remain each vendor's trademark, used here only to
+ * identify their own software.
+ */
+export const BitwardenIcon = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" className={className} fill="#175DDC" aria-hidden="true">
+    <path d="M21.722.296A.964.964 0 0 0 21.018 0H2.982a.959.959 0 0 0-.703.296.96.96 0 0 0-.297.702v12c0 .895.174 1.783.523 2.665.349.88.783 1.66 1.3 2.345.517.68 1.132 1.346 1.848 1.993a21.807 21.807 0 0 0 1.98 1.609c.605.427 1.235.83 1.893 1.212.657.381 1.125.638 1.4.772.276.134.5.241.664.311a.916.916 0 0 0 .814 0c.168-.073.389-.177.667-.311.275-.134.743-.394 1.401-.772a25.305 25.305 0 0 0 1.894-1.212A21.891 21.891 0 0 0 18.348 20c.716-.647 1.33-1.31 1.847-1.993s.949-1.463 1.3-2.345c.35-.879.524-1.767.524-2.665V1.001a.95.95 0 0 0-.297-.705zm-2.325 12.815c0 4.344-7.397 8.087-7.397 8.087V2.57h7.397v10.54z" />
+  </svg>
+)
+
+export const OnePasswordIcon = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" className={className} fill="#145FE4" aria-hidden="true">
+    <path d="M12 0c6.627 0 12 5.373 12 12 0 6.628-5.373 12-12 12S0 18.628 0 12C0 5.373 5.373 0 12 0m-.893 4.86c-.485 0-.727.001-.913.095a.87.87 0 0 0-.378.379c-.094.185-.095.428-.095.912v2.747c0 .12 0 .182.016.238q.02.075.065.138a1 1 0 0 0 .175.162l.695.564c.113.092.17.139.19.194a.22.22 0 0 1 0 .15c-.02.056-.077.102-.19.194l-.695.564a1 1 0 0 0-.175.162.4.4 0 0 0-.065.138 1 1 0 0 0-.016.238v6.019c0 .485 0 .728.095.913a.87.87 0 0 0 .378.378c.186.094.428.094.913.094h1.786c.485 0 .727 0 .913-.094a.87.87 0 0 0 .378-.378c.095-.185.095-.428.095-.913v-2.747c0-.12 0-.182-.016-.238a.4.4 0 0 0-.065-.138 1 1 0 0 0-.175-.162l-.695-.564c-.113-.092-.17-.138-.191-.193a.22.22 0 0 1 0-.152c.02-.055.078-.1.19-.193l.696-.564a1 1 0 0 0 .175-.162.4.4 0 0 0 .065-.138 1 1 0 0 0 .016-.238V6.246c0-.484 0-.727-.095-.912a.87.87 0 0 0-.378-.379c-.186-.094-.428-.094-.913-.094Z" />
+  </svg>
+)
 
 /** Claude's official mark. Filled via currentColor. */
 export const ClaudeIcon = ({ className }: IconProps) => (

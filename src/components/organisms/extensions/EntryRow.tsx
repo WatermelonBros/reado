@@ -8,7 +8,8 @@
  * project actually asks for it. Everything else reads the same.
  */
 import { useTranslation } from "react-i18next"
-import type { LinuxPm } from "@/lib/extensions"
+import { BitwardenIcon, OnePasswordIcon } from "@/components/atoms/icons"
+import { currentOS, installCmd, type LinuxPm } from "@/lib/extensions"
 import { classify } from "@/lib/marketplace"
 import { Activate } from "./Activate"
 import { EnableToggle } from "./EnableToggle"
@@ -82,6 +83,32 @@ export function EntryRow({
         busy={busy}
         onInstall={onInstall}
         onOpen={onOpen}
+      />
+    )
+  }
+
+  // A password manager's CLI: the only way a system webview can reach a vault,
+  // so the row exists to tell someone running the *app* that this is what Reado
+  // needs from them.
+  if (entry.kind === "vault") {
+    const cmd = installCmd(entry.def, currentOS(), linuxPm)
+    const Mark = entry.def.id === "op" ? OnePasswordIcon : BitwardenIcon
+    return (
+      <ExtensionRow
+        icon={<Mark className="h-5 w-5" />}
+        displayName={entry.def.name}
+        publisher={t("ext.curated")}
+        description={entry.def.description}
+        contributes={t("ext.contributes", { kinds: t("ext.kindVault") })}
+        installed={entry.installed}
+        onOpen={onOpen}
+        action={
+          entry.installed || cmd ? undefined : (
+            <span className="flex-none text-xs text-faint">{t("ext.manual")}</span>
+          )
+        }
+        onInstall={cmd ? () => runInstall(cmd) : undefined}
+        note={entry.def.requires ? t("ext.requires", { name: entry.def.requires }) : undefined}
       />
     )
   }

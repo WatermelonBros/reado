@@ -40,7 +40,7 @@ const all = (cmd: string): Install => ({ mac: cmd, linux: cmd, windows: cmd })
 /** The install command for the current OS (and Linux package manager), or
  * undefined when none is configured (→ manual install). */
 export function installCmd(
-  ext: LangServerExt,
+  ext: { install: Install },
   os: OS,
   linuxPm: LinuxPm | null,
 ): string | undefined {
@@ -433,5 +433,55 @@ export const FORMATTERS: FormatterExt[] = [
     install: all("gem install rubocop"),
     requires: "Ruby (gem)",
     declaredBy: ".rubocop.yml, or rubocop in the Gemfile",
+  },
+]
+
+/**
+ * Password managers, as manifests.
+ *
+ * The browser pane can fill a login from the user's own vault, but only through
+ * the vendor's CLI — a system webview has no extension host, so Bitwarden's and
+ * 1Password's browser extensions cannot live in it. Someone running the desktop
+ * app has no way to guess that, so the CLI is listed here like anything else
+ * Reado can use: installed, it shows up among your extensions; missing, it is
+ * one row and one install command away.
+ *
+ * Same rule as the rest of this file: the manifest names it, the Rust side
+ * decides what may actually be spawned (`vault.rs` runs `op`/`bw` and nothing
+ * else).
+ */
+export interface VaultExt {
+  /** The binary's name, and what `vault.rs` looks for on the PATH. */
+  id: "op" | "bw"
+  name: string
+  description: string
+  install: Install
+  requires?: string
+}
+
+export const VAULTS: VaultExt[] = [
+  {
+    id: "op",
+    name: "1Password CLI",
+    description:
+      "Fill logins, one-time codes and new credentials in the browser pane from your 1Password vault.",
+    install: {
+      mac: "brew install 1password-cli",
+      windows: "winget install AgileBits.1Password.CLI",
+      linux: { brew: "brew install 1password-cli" },
+    },
+    requires: "the 1Password app, with Developer → “Integrate with 1Password CLI” turned on",
+  },
+  {
+    id: "bw",
+    name: "Bitwarden CLI",
+    description:
+      "Fill logins, one-time codes and new credentials in the browser pane from your Bitwarden vault.",
+    install: {
+      mac: "brew install bitwarden-cli",
+      windows: "winget install Bitwarden.CLI",
+      linux: "npm install -g @bitwarden/cli",
+    },
+    requires: "a Bitwarden account (`bw login`, then unlock from the pane)",
   },
 ]
