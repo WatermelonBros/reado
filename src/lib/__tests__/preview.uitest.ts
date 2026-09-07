@@ -32,6 +32,15 @@ describe("isOriginAllowed", () => {
     expect(isOriginAllowed("http://127.0.0.1:8080", [])).toBe(true)
   })
 
+  it("allows the other loopback spellings — ::1, 0.0.0.0, *.localhost", () => {
+    expect(isOriginAllowed("http://[::1]:5173", [])).toBe(true)
+    expect(isOriginAllowed("http://0.0.0.0:3000", [])).toBe(true)
+    expect(isOriginAllowed("http://api.localhost:3000", [])).toBe(true)
+    expect(isOriginAllowed("http://127.0.0.2:3000", [])).toBe(true)
+    // Not loopback: a public host that merely *contains* the word.
+    expect(isOriginAllowed("http://localhost.evil.example", [])).toBe(false)
+  })
+
   it("rejects a foreign origin that isn't in the allowlist", () => {
     expect(isOriginAllowed("https://evil.example/steal", [])).toBe(false)
     expect(isOriginAllowed("https://evil.example", ["https://good.example"])).toBe(false)

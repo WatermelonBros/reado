@@ -12,12 +12,27 @@ import { persist } from "zustand/middleware"
 const DEFAULT_URL = "http://localhost:5173"
 const MAX = 500
 
-/** Agent navigation is confined to this: localhost/127.0.0.1 (any port) is always
- *  allowed, plus any origins the user added. Human navigation isn't restricted. */
+/** Hostnames that are the local machine by definition: loopback literals and the
+ *  reserved `localhost` names (RFC 6761 — `*.localhost` always resolves to loopback).
+ *  A custom `/etc/hosts` alias pointing at 127.0.0.1 isn't detectable from here — the
+ *  user's own navigation allowlists it (see `go` in BrowserPanel). */
+export function isLoopbackHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "")
+  return (
+    h === "localhost" ||
+    h.endsWith(".localhost") ||
+    h === "::1" ||
+    h === "0.0.0.0" ||
+    /^127(\.\d{1,3}){3}$/.test(h)
+  )
+}
+
+/** Agent navigation is confined to this: loopback (any port) is always allowed,
+ *  plus any origins the user added. Human navigation isn't restricted. */
 export function isOriginAllowed(url: string, extra: string[]): boolean {
   try {
     const u = new URL(url)
-    if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return true
+    if (isLoopbackHost(u.hostname)) return true
     return extra.some((o) => {
       try {
         return new URL(o).origin === u.origin

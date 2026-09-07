@@ -6,6 +6,17 @@
        system dialog explains *why* in Reado's words instead of a bare default.
        (The dialogs themselves are OS-owned and can't be replaced; we prime them
        with our own modal where possible — see the app's permission priming.) -->
+  <!-- The browser pane is a WKWebView, and macOS App Transport Security blocks
+       plain http:// to anything but loopback — which silently breaks previewing a
+       dev server reached by name (an /etc/hosts alias, a LAN IP, a .local host).
+       The pane is a developer tool pointed at the user's own machine, so allow it. -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+  </dict>
   <key>NSLocalNetworkUsageDescription</key>
   <string>Reado Anywhere serves your review pages to your phone over your local network. Nothing leaves your network.</string>
   <key>NSDocumentsFolderUsageDescription</key>

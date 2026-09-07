@@ -184,6 +184,42 @@ describe("the toolbar", () => {
     )
   })
 
+  it("uses https for a bare public host, http when it looks local", async () => {
+    render(<BrowserPanel />)
+    // The input is keyed on the URL, so it remounts after each go — re-query it.
+    const type = async (v: string) => {
+      fireEvent.keyDown(screen.getByLabelText("preview.url"), {
+        key: "Enter",
+        target: { value: v },
+      })
+      return usePreview.getState().url
+    }
+    expect(await type("example.com")).toBe("https://example.com")
+    // An explicit port, a dev TLD or loopback → a dev server, which speaks http.
+    expect(await type("local.aws.pippo.com:3000")).toBe("http://local.aws.pippo.com:3000")
+    expect(await type("myapp.local/dash")).toBe("http://myapp.local/dash")
+  })
+
+  it("searches the web when what was typed isn't an address", async () => {
+    render(<BrowserPanel />)
+    fireEvent.keyDown(screen.getByLabelText("preview.url"), {
+      key: "Enter",
+      target: { value: "how do i center a div" },
+    })
+    expect(usePreview.getState().url).toBe(
+      "https://duckduckgo.com/?q=how%20do%20i%20center%20a%20div",
+    )
+  })
+
+  it("allowlists the origin the user navigated to, so the agent can follow", async () => {
+    render(<BrowserPanel />)
+    fireEvent.keyDown(screen.getByLabelText("preview.url"), {
+      key: "Enter",
+      target: { value: "http://local.aws.pippo.com:3000/app" },
+    })
+    expect(usePreview.getState().allowlist).toEqual(["http://local.aws.pippo.com:3000"])
+  })
+
   it("keeps a URL that already has a scheme", async () => {
     render(<BrowserPanel />)
     const bar = screen.getByLabelText("preview.url")

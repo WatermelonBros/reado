@@ -507,6 +507,7 @@
     "reload": "Ricarica",
     "close": "Chiudi anteprima",
     "detach": "Stacca in una finestra",
+    "external": "Apri nel tuo browser",
     "agentAccess": "Attiva/disattiva accesso agente al preview (console/rete)",
     "open": "Apri anteprima browser",
     "zoomIn": "Zoom avanti",

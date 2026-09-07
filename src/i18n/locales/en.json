@@ -507,6 +507,7 @@
     "reload": "Reload",
     "close": "Close preview",
     "detach": "Detach to a window",
+    "external": "Open in your browser",
     "agentAccess": "Toggle agent access to preview (console/network)",
     "open": "Open browser preview",
     "zoomIn": "Zoom in",

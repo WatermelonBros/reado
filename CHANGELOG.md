@@ -11,6 +11,22 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **Open in your browser.** The browser pane's toolbar can hand the current page to
+  your real browser — where your password manager's extension lives, since the
+  in-app pane is a system webview and can't load browser extensions.
+
+### Fixed
+- **The address bar goes where you ask.** A bare host now gets `https://` (`http://`
+  when it looks like a dev server — loopback, a `.local`/`.test` name, or an explicit
+  port), and anything that isn't an address searches the web instead of silently
+  failing. macOS App Transport Security no longer blocks the pane from loading a
+  plain-`http://` dev server reached by name (an `/etc/hosts` alias, a LAN IP).
+- **Agent navigation follows you.** Navigating the pane yourself allowlists that
+  origin for the agent, so a local server behind an `/etc/hosts` alias stops
+  answering "origin not allowed"; `*.localhost`, `::1`, `0.0.0.0` and the whole
+  `127.0.0.0/8` range count as loopback.
+
 ## [1.12.0] — 2026-09-07
 
 ### Added

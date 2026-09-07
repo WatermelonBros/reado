@@ -13,11 +13,13 @@
  */
 
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { openUrl } from "@tauri-apps/plugin-opener"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import {
+  BrowserIcon,
   ChevronIcon,
   CloseIcon,
   CodeIcon,
@@ -54,7 +56,13 @@ import {
 } from "@/lib/api"
 import { useComments } from "@/lib/comments"
 import { useLayout } from "@/lib/layout"
-import { isOriginAllowed, type LogEntry, type NetEntry, usePreview } from "@/lib/preview"
+import {
+  isLoopbackHost,
+  isOriginAllowed,
+  type LogEntry,
+  type NetEntry,
+  usePreview,
+} from "@/lib/preview"
 import { usePalette, useProject, useSettings, useWorkspace } from "@/lib/store"
 import { BrowserInspector } from "./BrowserInspector"
 
@@ -92,10 +100,22 @@ function injectCommentBox(c: Comment): void {
   ).catch(() => {})
 }
 
-/** Add a scheme if the user typed a bare host, so `previewNavigate` gets a URL. */
+/** Where a non-URL address-bar entry goes. */
+const SEARCH = "https://duckduckgo.com/?q="
+
+/** Turn whatever was typed into a navigable URL: a bare host gets a scheme (http
+ *  when it looks local — loopback, a dev TLD, or an explicit port — https otherwise,
+ *  since plain http to a public host is blocked by the platform), and anything that
+ *  isn't host-shaped is a web search, like every other browser's address bar. */
 function normalizeUrl(s: string): string {
   const v = s.trim()
-  return /^[a-z]+:\/\//i.test(v) ? v : `http://${v}`
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return v
+  const host = v.split(/[/?#]/)[0]
+  const name = host.replace(/:\d+$/, "")
+  if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host) || !(name.includes(".") || isLoopbackHost(name)))
+    return `${SEARCH}${encodeURIComponent(v)}`
+  const local = isLoopbackHost(name) || /\.(local|test|localdomain)$/i.test(name) || host !== name
+  return `${local ? "http" : "https"}://${v}`
 }
 
 export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
@@ -632,6 +652,13 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     manualUrl.current = true // the user chose this URL — stop auto-switching
     wasLive.current = false // let a dead→live reload fire for the new URL
     setUrl(u)
+    // Typing an address is the consent gesture: the agent may follow the user to
+    // that origin (a `/etc/hosts` alias for a local server can't be sniffed).
+    try {
+      usePreview.getState().addAllowedOrigin(new URL(u).origin)
+    } catch {
+      /* not a parseable origin — nothing to allow */
+    }
     openAt(u)
   }
 
@@ -714,6 +741,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
           active={inspector}
           icon={<CodeIcon className="h-3.5 w-3.5" />}
           onClick={toggleInspector}
+        />
+        <IconButton
+          size="sm"
+          label={t("preview.external")}
+          icon={<BrowserIcon className="h-3.5 w-3.5" />}
+          onClick={() => void openUrl(url)}
         />
         <IconButton
           size="sm"
