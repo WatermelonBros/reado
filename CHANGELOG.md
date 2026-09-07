@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-09-08
+
 ### Added
 - **Tab indents.** It never did — `indentWithTab` was simply never bound, so Tab
   walked focus out of the editor. Tab now indents the selection and Shift+Tab
@@ -1318,7 +1320,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/WatermelonBros/reado/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/WatermelonBros/reado/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/WatermelonBros/reado/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/WatermelonBros/reado/compare/v1.10.0...v1.11.0
