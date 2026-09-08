@@ -10,6 +10,8 @@ mod anywhere;
 mod bookmarks;
 mod cli;
 mod defaults;
+mod editorconfig;
+mod encoding;
 mod error;
 mod fileopen;
 mod forge;
@@ -141,6 +143,10 @@ pub fn run() {
             fs::trash_path,
             fs::import_paths,
             fs::allow_project_assets,
+            fs::write_settings_file,
+            fs::read_settings_file,
+            editorconfig::editor_config_for,
+            encoding::list_encodings,
             fs::resolve_import,
             fs::resolve_path,
             fs::clipboard_image_to_temp,
@@ -184,6 +190,10 @@ pub fn run() {
             semantic::semantic_reindex_file,
             semantic::semantic_query,
             search::replace_text,
+            search::replace_in_file,
+            search::restore_backups,
+            search::write_lines,
+            search::write_backed,
             symbols::find_definition,
             symbols::list_symbols,
             format::format_file,
@@ -209,6 +219,7 @@ pub fn run() {
             annotations::delete_comment,
             annotations::add_reado_gitignore,
             annotations::read_project_config,
+            annotations::read_reado_file,
             annotations::write_project_config,
             annotations::reanchor_file,
             annotations::set_anchor,

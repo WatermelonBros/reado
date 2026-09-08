@@ -18,6 +18,8 @@ import {
   EyeOffIcon,
   NewFileIcon,
   NewFolderIcon,
+  RefreshIcon,
+  SearchIcon,
   SwapIcon,
 } from "@/components/atoms/icons"
 import { Breadcrumb } from "@/components/molecules/Breadcrumb"
@@ -28,6 +30,7 @@ import { DockRegion } from "@/components/organisms/DockRegion"
 import { DocsView } from "@/components/organisms/DocsView"
 import { Editor } from "@/components/organisms/Editor"
 import { ExtensionPage } from "@/components/organisms/ExtensionPage"
+import { useTreeFilter } from "@/components/organisms/FileTree"
 import { KnowledgeGraph } from "@/components/organisms/KnowledgeGraph"
 import { Tabs } from "@/components/organisms/Tabs"
 import { TOOL_TITLE, ToolPanelBody } from "@/components/organisms/ToolPanelBody"
@@ -50,7 +53,7 @@ import {
   startWatching,
 } from "@/lib/api"
 import { useBookmarks } from "@/lib/bookmarks"
-import { toRelative, useComments } from "@/lib/comments"
+import { baseName, toRelative, useComments } from "@/lib/comments"
 import { newFile, newFolder } from "@/lib/docInfo"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { type DockArea, findPanel, useLayout } from "@/lib/layout"
@@ -64,6 +67,7 @@ import { loadProjectConfig, watchProjectConfig } from "@/lib/projectConfig"
 import { useQa } from "@/lib/qa"
 import { useReadProgress, wasSelfWrite } from "@/lib/readProgress"
 import { useReasoning } from "@/lib/reasoning"
+import { offerRecommendations } from "@/lib/recommended"
 import { useResolveLoop } from "@/lib/resolveLoop"
 import { composeReviewPrompt } from "@/lib/review"
 import { useSpecs } from "@/lib/specs"
@@ -71,14 +75,9 @@ import { type Tool, useProject, useSessions, useSettings, useWorkspace } from "@
 import { useTerminals } from "@/lib/terminals"
 import { useTours } from "@/lib/tours"
 import { clearOpenFile, currentOpenFile, setWindowTitle } from "@/lib/window"
+import { acrossRoots, loadWorkspace, workspaceRoots } from "@/lib/workspace"
 
 const log = createLogger("project")
-
-const basename = (p: string) =>
-  p
-    .replace(/[\\/]+$/, "")
-    .split(/[\\/]/)
-    .pop() ?? p
 
 // Keep at least this much room for the editor when applying the sidebar width,
 // so a width persisted on a large monitor can't squeeze the editor to nothing
@@ -123,6 +122,12 @@ export function ProjectView({ root }: { root: string }) {
       session,
     )
     restored.current = true
+    // The workspace's other folders, if this one has any. Loaded after `init`
+    // (which seeds the list with the primary folder) so a slow read can never
+    // leave the tree with no root at all.
+    void loadWorkspace(root).then((folders) => {
+      for (const folder of folders) useProject.getState().addRoot(folder)
+    })
     // Opened from an OS file association: open the requested file, then drop the
     // hash param so a reload doesn't re-open it.
     const openFile = currentOpenFile()
@@ -130,7 +135,7 @@ export function ProjectView({ root }: { root: string }) {
       useProject.getState().open(openFile)
       clearOpenFile()
     }
-    setWindowTitle(basename(root))
+    setWindowTitle(baseName(root))
     useComments.getState().load(root)
     useReadProgress.getState().load(root)
     useBookmarks.getState().load(root)
@@ -139,7 +144,7 @@ export function ProjectView({ root }: { root: string }) {
     usePreReview.getState().load(root)
     useGuidedReview.getState().load(root)
     void useResolveLoop.getState().load(root)
-    listFiles(root)
+    acrossRoots(workspaceRoots(), listFiles)
       .then((f) => setTotalFiles(f.length))
       .catch(() => setTotalFiles(0))
     // Build the SQLite index on open if missing/stale (rebuildable cache).
@@ -178,7 +183,7 @@ export function ProjectView({ root }: { root: string }) {
   useEffect(() => {
     if (!root) return
     const id = getCurrentWindow().label
-    anywhereSetProject(id, root, basename(root)).catch(() => {})
+    anywhereSetProject(id, root, baseName(root)).catch(() => {})
     const subs = [
       listen<string>("anywhere://run-agent", (e) => {
         if (e.payload !== root) return
@@ -251,6 +256,11 @@ export function ProjectView({ root }: { root: string }) {
   useEffect(() => {
     loadProjectConfig(root)
     return watchProjectConfig(root)
+  }, [root])
+
+  // What the repository says a reader needs, once per project per session.
+  useEffect(() => {
+    void offerRecommendations(root)
   }, [root])
 
   // Watch the project and re-anchor a file's comments when it changes on disk
@@ -369,6 +379,7 @@ export function ProjectView({ root }: { root: string }) {
   const setSidebarWidth = useWorkspace((s) => s.setSidebarWidth)
   const showHidden = useProject((s) => s.showHidden)
   const setShowHidden = useProject((s) => s.setShowHidden)
+  const filterOpen = useTreeFilter((s) => s.open)
   const showActivityBar = useSettings((s) => s.showActivityBar)
   // Auto-hide activity bar: revealed while hovered at the left edge.
   const [railHover, setRailHover] = useState(false)
@@ -600,6 +611,19 @@ export function ProjectView({ root }: { root: string }) {
                     label={t("tree.newFolder")}
                     onClick={() => void newFolder()}
                     icon={<NewFolderIcon className="h-[15px] w-[15px]" />}
+                  />
+                  <IconButton
+                    size="sm"
+                    label={t("tree.filter")}
+                    active={filterOpen}
+                    onClick={() => useTreeFilter.getState().toggle()}
+                    icon={<SearchIcon className="h-[15px] w-[15px]" />}
+                  />
+                  <IconButton
+                    size="sm"
+                    label={t("tree.refresh")}
+                    onClick={() => useProject.getState().bumpTree()}
+                    icon={<RefreshIcon className="h-[15px] w-[15px]" />}
                   />
                   <IconButton
                     size="sm"

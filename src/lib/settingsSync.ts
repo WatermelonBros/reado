@@ -2,15 +2,23 @@
  * Settings sync via a portable bundle (clipboard / pasted text).
  *
  * Exports the user's global preferences + disabled-extension list as a versioned
- * JSON bundle and re-applies it on another machine. Deliberately clipboard-based
- * (not file I/O) to avoid an unconfined filesystem surface. Never includes
- * secrets or project-local state (recents, sessions, window layout, `.reado/`).
+ * JSON bundle and re-applies it on another machine — to the clipboard, or to a
+ * file you picked, so the bundle can live in a dotfiles repo. The file path is
+ * always one the OS dialog returned and must end in `.json`; the backend has no
+ * general read/write-any-file command behind it.
+ *
+ * Never includes secrets or project-local state (recents, sessions, window
+ * layout, `.reado/` — that is `lib/projectConfig.ts`, which is shared through
+ * the repository instead).
  */
-import { ask } from "@tauri-apps/plugin-dialog"
+import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog"
 import { t } from "@/i18n"
+import { readSettingsFile, writeSettingsFile } from "./api"
 import { useExtensions } from "./extensions"
 import { createLogger, safeError } from "./logger"
+import { notify, notifyError } from "./notice"
 import { prompt } from "./prompt"
+import { sanitizeSettings } from "./settingsJson"
 import { type SettingsState, useSettings } from "./store"
 
 const log = createLogger("settingsSync")
@@ -86,12 +94,18 @@ export function summarizeBundle(b: Bundle): string {
 
 /** Apply a parsed bundle. */
 export function applyBundle(b: Bundle): void {
-  useSettings.getState().set(b.settings)
+  // Through the same validation the JSON dialog uses. A bundle is a file people
+  // hand-edit and keep in a dotfiles repo — accepting a wrong-typed value here
+  // while rejecting it by name three files over would be the same store, two
+  // standards.
+  const { patch, rejected } = sanitizeSettings((b.settings ?? {}) as Record<string, unknown>)
+  useSettings.getState().set(patch)
+  if (rejected.length > 0) log.warn("bundle had unusable settings", { rejected })
   if (Array.isArray(b.extensionsDisabled)) {
     useExtensions.setState({ disabled: b.extensionsDisabled })
   }
   log.info("settings imported", {
-    settings: Object.keys(b.settings ?? {}).length,
+    settings: Object.keys(patch).length,
     disabled: b.extensionsDisabled?.length ?? 0,
   })
 }
@@ -104,6 +118,44 @@ export async function exportSettings(): Promise<void> {
   } catch (e) {
     log.error("settings export failed", { error: safeError(e) })
   }
+}
+
+/** Ask where to put the bundle, then write it there. */
+export async function exportSettingsToFile(): Promise<void> {
+  const path = await saveDialog({
+    title: t("sync.exportFile"),
+    defaultPath: "reado-settings.json",
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  })
+  if (!path) return
+  try {
+    await writeSettingsFile(path, `${JSON.stringify(buildBundle(), null, 2)}\n`)
+    notify("info", t("sync.exported", { path }))
+  } catch (e) {
+    notifyError("settingsSync", t("sync.projectFailed"), e)
+  }
+}
+
+/** Pick a bundle file, show a summary, and apply it on confirm. */
+export async function importSettingsFromFile(): Promise<void> {
+  const picked = await openDialog({
+    title: t("sync.importFile"),
+    multiple: false,
+    directory: false,
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  })
+  if (typeof picked !== "string") return
+  const json = await readSettingsFile(picked).catch(() => null)
+  const bundle = json && parseBundle(json)
+  if (!bundle) {
+    await ask(t("sync.invalid"), { title: t("sync.import"), kind: "error" })
+    return
+  }
+  const ok = await ask(summarizeBundle(bundle), {
+    title: t("sync.import"),
+    okLabel: t("sync.apply"),
+  })
+  if (ok) applyBundle(bundle)
 }
 
 /** Prompt for a pasted bundle, show a summary, and apply it on confirm. */

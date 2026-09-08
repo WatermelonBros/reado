@@ -49,6 +49,12 @@ reado-core = { path = "../crates/reado-core" }
 # `ignore` is ripgrep's gitignore-aware directory walker; we reuse it so the
 # file tree and search honour the exact same ignore rules as ripgrep.
 ignore = "0.4"
+# The glob matcher behind `ignore`, used directly for `.editorconfig` sections.
+# Already in the tree; declaring it costs nothing to build.
+globset = "0.4"
+# Text-encoding detection/decoding, so a latin-1 or Shift-JIS file opens as the
+# text it is instead of as mojibake. Also already in the tree.
+encoding_rs = "0.8"
 # Regex engine for the symbol/definition index (go-to-definition).
 regex = "1"
 # Filesystem watcher (no polling) for re-anchoring comments on external edits.

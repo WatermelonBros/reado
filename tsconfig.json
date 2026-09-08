@@ -13,7 +13,10 @@
       // vscode-textmate ships types but doesn't point at them from its
       // package.json, so resolution has to be told where they are. Types only:
       // Vite and Vitest resolve the runtime module normally.
-      "vscode-textmate": ["./node_modules/vscode-textmate/types/vscode-textmate.d.ts"]
+      "vscode-textmate": ["./node_modules/vscode-textmate/types/vscode-textmate.d.ts"],
+      // Same story: `emmet` publishes declarations but its `exports` map has no
+      // `types` condition, so bundler resolution can't see them.
+      "emmet": ["./node_modules/emmet/dist/index.d.ts"]
     },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,

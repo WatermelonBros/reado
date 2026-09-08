@@ -18,6 +18,7 @@ import { FileTree } from "./FileTree"
 import { GitPanel } from "./GitPanel"
 import { GuidedReviewPanel } from "./GuidedReviewPanel"
 import { HierarchyPanel } from "./HierarchyPanel"
+import { OpenEditors } from "./OpenEditors"
 import { OrphansPanel } from "./OrphansPanel"
 import { OutlinePanel } from "./OutlinePanel"
 import { PreReviewPanel } from "./PreReviewPanel"
@@ -62,7 +63,14 @@ export function isTool(id: string): id is Tool {
 export function ToolPanelBody({ tool }: { tool: Tool }) {
   switch (tool) {
     case "files":
-      return <FileTree />
+      return (
+        <div className="flex h-full flex-col overflow-hidden">
+          <OpenEditors />
+          <div className="min-h-0 flex-1">
+            <FileTree />
+          </div>
+        </div>
+      )
     case "search":
       return <SearchPanel />
     case "comments":

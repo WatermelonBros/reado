@@ -6,8 +6,8 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it } from "vitest"
-import { Tabs } from "@/components/organisms/Tabs"
-import { useProject, useSettings } from "@/lib/store"
+import { Tabs, tabLabels } from "@/components/organisms/Tabs"
+import { useEditorActions, useProject, useSettings } from "@/lib/store"
 
 // Seed just the slice Tabs reads (the store's action functions stay intact).
 // `closedTabs` is needed because close() pushes onto it.
@@ -18,6 +18,8 @@ beforeEach(() => {
     closedTabs: [],
   })
   useSettings.setState({ tabBar: "multiple" })
+  useEditorActions.setState({ dirtyPaths: [] })
+  useProject.setState({ previewPath: null, pinnedTabs: [] })
 })
 
 describe("Tabs", () => {
@@ -44,7 +46,7 @@ describe("Tabs", () => {
 
   it("closes a tab via its × button, removing it from the store", async () => {
     render(<Tabs />)
-    await userEvent.click(screen.getByRole("button", { name: "Close b.ts" }))
+    await userEvent.click(screen.getByRole("button", { name: "tabs.close b.ts" }))
     expect(useProject.getState().tabs).toEqual(["/proj/src/a.ts", "/proj/README.md"])
     expect(screen.queryByRole("tab", { name: "b.ts" })).not.toBeInTheDocument()
   })
@@ -67,5 +69,79 @@ describe("Tabs", () => {
     useProject.setState({ tabs: [], active: null })
     const { container } = render(<Tabs />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it("marks a tab with unsaved edits", () => {
+    // Dirty paths are project-relative; the strip holds absolute paths.
+    useProject.setState({ root: "/proj" })
+    useEditorActions.setState({ dirtyPaths: ["src/b.ts"] })
+    render(<Tabs />)
+    expect(screen.getByLabelText("tabs.unsaved")).toBeInTheDocument()
+    expect(screen.getAllByLabelText("tabs.unsaved")).toHaveLength(1)
+  })
+
+  it("disambiguates same-named tabs with their folder, and leaves unique ones alone", () => {
+    const labels = tabLabels(["/proj/a/index.ts", "/proj/b/index.ts", "/proj/README.md"])
+    expect(labels.get("/proj/a/index.ts")).toEqual({ name: "index.ts", dir: "a" })
+    expect(labels.get("/proj/b/index.ts")).toEqual({ name: "index.ts", dir: "b" })
+    expect(labels.get("/proj/README.md")).toEqual({ name: "README.md", dir: undefined })
+  })
+
+  it("offers the file actions on right-click, not just the close set", async () => {
+    render(<Tabs />)
+    await userEvent.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByRole("tab", { name: "b.ts" }),
+    })
+    for (const label of [
+      "tabs.closeSaved",
+      "tabs.splitRight",
+      "tree.copyPath",
+      "tree.copyRelativePath",
+      "tree.openInTerminal",
+    ]) {
+      expect(screen.getByRole("menuitem", { name: label })).toBeInTheDocument()
+    }
+  })
+
+  it("shows a preview tab in italics, and keeps it open on a double-click", async () => {
+    // A preview is the tab the next file you look at replaces; a double-click
+    // is how you say you meant to keep this one.
+    useProject.setState({ previewPath: "/proj/src/b.ts" })
+    render(<Tabs />)
+    const tab = screen.getByRole("tab", { name: "b.ts" })
+    expect(tab.querySelector("span.italic")).not.toBeNull()
+    await userEvent.dblClick(tab)
+    expect(useProject.getState().previewPath).toBeNull()
+  })
+
+  it("sorts pinned tabs to the front and marks them", () => {
+    useProject.setState({ pinnedTabs: ["/proj/README.md"] })
+    render(<Tabs />)
+    const names = screen.getAllByRole("tab").map((el) => el.textContent)
+    expect(names[0]).toContain("README.md")
+    expect(screen.getByLabelText("tabs.pinned")).toBeInTheDocument()
+  })
+
+  it("spares a pinned tab from the bulk closes", async () => {
+    // A pin the user set is exactly the tab "close everything" must not take.
+    useProject.setState({ pinnedTabs: ["/proj/README.md"] })
+    render(<Tabs />)
+    await userEvent.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByRole("tab", { name: "a.ts" }),
+    })
+    await userEvent.click(screen.getByRole("menuitem", { name: "tabs.closeAll" }))
+    expect(useProject.getState().tabs).toEqual(["/proj/README.md"])
+  })
+
+  it("pins and unpins from the tab menu", async () => {
+    render(<Tabs />)
+    await userEvent.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByRole("tab", { name: "a.ts" }),
+    })
+    await userEvent.click(screen.getByRole("menuitem", { name: "tabs.pin" }))
+    expect(useProject.getState().pinnedTabs).toEqual(["/proj/src/a.ts"])
   })
 })

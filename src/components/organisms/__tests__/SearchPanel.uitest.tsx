@@ -8,18 +8,21 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { searchText, replaceText } = vi.hoisted(() => ({
+const { searchText, replaceText, replaceInFile } = vi.hoisted(() => ({
   searchText: vi.fn(),
   replaceText: vi.fn(),
+  replaceInFile: vi.fn(),
 }))
 vi.mock("../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../lib/api")>()),
   searchText,
   replaceText,
+  replaceInFile,
 }))
 
 import { SearchPanel } from "@/components/organisms/SearchPanel"
 import type { SearchMatch } from "@/lib/api"
+import { useFileUndo } from "@/lib/fileUndo"
 import { useProject, useWorkspace } from "@/lib/store"
 
 const ROOT = "/repo"
@@ -32,14 +35,18 @@ const MATCHES: SearchMatch[] = [
 ]
 
 function seed() {
+  // Results preview: walking a list is browsing, so each click lands in the tab
+  // the next one replaces rather than adding to the strip.
   const open = vi.fn()
-  useProject.setState({ root: ROOT, open })
+  useProject.setState({ root: ROOT, openPreview: open })
   return { open }
 }
 
 beforeEach(() => {
   searchText.mockReset().mockResolvedValue(MATCHES)
-  replaceText.mockReset().mockResolvedValue(3)
+  replaceText.mockReset().mockResolvedValue({ changed: 3, backups: [] })
+  replaceInFile.mockReset().mockResolvedValue({ changed: 1, backups: [] })
+  useFileUndo.setState({ stack: [] })
   // A stale query would auto-run a search on mount; start each test clean.
   useWorkspace.setState({ searchQuery: "", pendingSearch: null, searchScope: null })
 })
@@ -59,6 +66,8 @@ describe("SearchPanel", () => {
     expect(screen.getByText("src/b.ts:7")).toBeInTheDocument()
 
     expect(searchText).toHaveBeenCalledWith(ROOT, "foo", {
+      include: "",
+      exclude: "",
       caseSensitive: false,
       wholeWord: false,
       regex: false,
@@ -66,7 +75,7 @@ describe("SearchPanel", () => {
     })
   })
 
-  it("clicking a result opens it at its path and line", async () => {
+  it("clicking a result previews it at its path and line", async () => {
     const { open } = seed()
     render(<SearchPanel />)
     await userEvent.type(screen.getByPlaceholderText("search.placeholder"), "foo")
@@ -116,13 +125,64 @@ describe("SearchPanel", () => {
 
     await userEvent.type(screen.getByPlaceholderText("search.replacePlaceholder"), "bar")
 
-    // Replace All arms a confirm step (it writes files with no undo).
+    // Replace All arms a confirm step, then records one undoable batch.
     await userEvent.click(screen.getByRole("button", { name: "search.replaceAll" }))
     await userEvent.click(screen.getByRole("button", { name: "search.replaceConfirm" }))
 
     expect(replaceText).toHaveBeenCalledWith(ROOT, "foo", "bar", null)
-    // The panel surfaces the "replaced" status (count is fed to i18n).
-    expect(await screen.findByText("search.replaced")).toBeInTheDocument()
+    // The status now says how to take it back, not just how many files moved.
+    expect(await screen.findByText("search.replaceUndo")).toBeInTheDocument()
+  })
+
+  it("records a project-wide replace as one undoable action", async () => {
+    // Forty rewritten files, one ⌘Z: the user made one decision.
+    replaceText.mockResolvedValue({
+      changed: 2,
+      backups: [
+        { path: "/repo/src/a.ts", backup: "/repo/.reado/.undo/1__a.ts" },
+        { path: "/repo/src/b.ts", backup: "/repo/.reado/.undo/2__b.ts" },
+      ],
+    })
+    seed()
+    render(<SearchPanel />)
+    await userEvent.type(screen.getByPlaceholderText("search.placeholder"), "foo")
+    await screen.findByText("const foo = 1;")
+    await userEvent.type(screen.getByPlaceholderText("search.replacePlaceholder"), "bar")
+    await userEvent.click(screen.getByRole("button", { name: "search.replaceAll" }))
+    await userEvent.click(screen.getByRole("button", { name: "search.replaceConfirm" }))
+
+    await waitFor(() => expect(useFileUndo.getState().stack).toHaveLength(1))
+    expect(useFileUndo.getState().stack[0]).toMatchObject({ kind: "replace" })
+  })
+
+  it("replaces a single match by its position, not by an index", async () => {
+    // Two occurrences on one line are different matches; the row you clicked is
+    // the one you meant.
+    seed()
+    render(<SearchPanel />)
+    await userEvent.type(screen.getByPlaceholderText("search.placeholder"), "foo")
+    await screen.findByText("const foo = 1;")
+    await userEvent.type(screen.getByPlaceholderText("search.replacePlaceholder"), "bar")
+    await userEvent.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByText("const foo = 1;"),
+    })
+    await userEvent.click(screen.getByRole("menuitem", { name: "search.replaceThis" }))
+
+    expect(replaceInFile).toHaveBeenCalledWith(ROOT, "/repo/src/a.ts", "foo", "bar", [[12, 3]])
+  })
+
+  it("offers no replace action until there is something to replace with", async () => {
+    // An empty replacement would silently delete the match.
+    seed()
+    render(<SearchPanel />)
+    await userEvent.type(screen.getByPlaceholderText("search.placeholder"), "foo")
+    await screen.findByText("const foo = 1;")
+    await userEvent.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByText("const foo = 1;"),
+    })
+    expect(screen.queryByRole("menuitem", { name: "search.replaceThis" })).not.toBeInTheDocument()
   })
 
   it("a folder scope reaches the search, the replace, and back out of the chip", async () => {

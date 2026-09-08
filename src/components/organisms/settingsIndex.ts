@@ -1,7 +1,7 @@
 /**
  * Where every setting lives.
  *
- * Thirty-eight controls across six tabs is past the point where a taxonomy —
+ * Fifty-odd controls across six tabs is past the point where a taxonomy —
  * any taxonomy — reliably takes you to the one you want. Search is what makes
  * that survivable, and search needs the settings as data, not as JSX.
  *
@@ -48,11 +48,16 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     "settings.activeLine",
     "settings.indentGuides",
   ]),
-  ...group("editor", "autosave", "settings.autoSave", ["settings.autoSave"]),
+  ...group("editor", "autosave", "settings.autoSave", [
+    "settings.autoSave",
+    "settings.autoSaveDelay",
+  ]),
   ...group("editor", "aids", "settings.aids", [
     "settings.colorSwatches",
     "settings.renderWhitespace",
     "settings.bracketMatching",
+    "settings.bracketPairColors",
+    "settings.suggestOnTyping",
   ]),
 
   ...group("interface", "accessibility", "settings.accessibility", [
@@ -66,6 +71,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ]),
   ...group("interface", "surfaces", "settings.surfaces", [
     "settings.tabBar",
+    "settings.previewTabs",
     "settings.scrollbar",
     "settings.fileIcons",
     "settings.iconTheme",
@@ -80,11 +86,16 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     "settings.restoreSession",
     "settings.largeFileGuard",
     "settings.exclude",
+    "settings.searchExclude",
+    "settings.explorerSort",
+    "settings.fileNesting",
+    "settings.fileNestingRules",
   ]),
   ...group("files", "onSave", "settings.onSave", [
     "settings.formatOnSave",
     "settings.trimTrailingWhitespace",
     "settings.insertFinalNewline",
+    "settings.defaultEol",
   ]),
   ...group("files", "gitSignals", "settings.gitSignals", [
     "settings.inlineBlame",
@@ -98,6 +109,13 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ...group("system", "notifications", "settings.notifications", [
     "settings.notifications",
     "settings.completionSound",
+  ]),
+  ...group("system", "terminal", "settings.terminal", [
+    "settings.terminalFontSize",
+    "settings.terminalScrollback",
+    "settings.terminalCursor",
+    "settings.terminalShell",
+    "settings.terminalShellArgs",
   ]),
   ...group("system", "logging", "settings.logging", ["settings.logEnabled"]),
   ...group("system", "cli", "settings.cli", ["settings.cliInstall"]),

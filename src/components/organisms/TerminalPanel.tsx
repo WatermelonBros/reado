@@ -39,6 +39,7 @@ import { AGENT_BIN, AGENT_ORDER, type Agent, launchAgent } from "@/lib/agents"
 import { agentInstalled } from "@/lib/api"
 import { toRelative, useComments } from "@/lib/comments"
 import { findPanel, useLayout } from "@/lib/layout"
+import { prompt } from "@/lib/prompt"
 import { useProject, useSettings } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
 
@@ -74,6 +75,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
   const removeGroup = useTerminals((s) => s.removeGroup)
   const setActive = useTerminals((s) => s.setActive)
   const setActiveGroup = useTerminals((s) => s.setActiveGroup)
+  const setTitle = useTerminals((s) => s.setTitle)
   const setGroupDir = useTerminals((s) => s.setGroupDir)
   const setSizes = useTerminals((s) => s.setSizes)
   const toggle = useTerminals((s) => s.toggle)
@@ -143,6 +145,12 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
     return [
       { label: t("terminal.new"), onSelect: () => add() },
       { label: t("terminal.split"), onSelect: () => split() },
+      {
+        // Four terminals called "Terminal 1..4" are four terminals you have to
+        // click through to tell apart.
+        label: t("terminal.rename"),
+        onSelect: () => void renamePane(paneMenu.paneId),
+      },
       ...(isMulti && group
         ? [{ label: t("terminal.orientation"), onSelect: () => setGroupDir(group.id) }]
         : []),
@@ -167,6 +175,17 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
       },
     ]
   }
+  /** Ask for a new name for a pane's tab, keeping the old one on cancel. */
+  const renamePane = async (paneId: string) => {
+    const current = sessions.find((p) => p.id === paneId)?.title ?? ""
+    const next = await prompt({
+      title: t("terminal.renameTitle"),
+      value: current,
+      placeholder: t("terminal.renamePlaceholder"),
+    })
+    if (next?.trim()) setTitle(paneId, next.trim())
+  }
+
   const openAudit = () =>
     setAuditTarget(
       active ? { path: toRelative(root, active), isDir: false } : { path: ".", isDir: true },

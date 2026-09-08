@@ -31,7 +31,11 @@ vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
   writeText: (s: string) => clipboardWrite(s),
 }))
 const openUrl = vi.fn<(u: string) => Promise<void>>(async () => {})
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: (u: string) => openUrl(u) }))
+const revealItemInDir = vi.fn<(p: string) => Promise<void>>(async () => {})
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: (u: string) => openUrl(u),
+  revealItemInDir: (p: string) => revealItemInDir(p),
+}))
 
 // The search addon is xterm's; stub it so "what did the search box ask for" is
 // observable, and the theme builder so a re-theme can be counted.
@@ -57,6 +61,7 @@ const ptyWrite = vi.fn(async (_id: string, _d: string) => {})
 const ptyResize = vi.fn(async (..._a: unknown[]) => {})
 const anywherePublishAgent = vi.fn(async (_id: string, _text: string) => {})
 const clipboardImageToTemp = vi.fn<() => Promise<string | null>>(async () => null)
+const resolvePath = vi.fn<(...a: unknown[]) => Promise<string | null>>(async () => "/repo/src/a.ts")
 vi.mock("../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../lib/api")>()),
   ptySpawn: (...a: unknown[]) => ptySpawn(...a),
@@ -65,10 +70,10 @@ vi.mock("../../../lib/api", async (orig) => ({
   ptyResize: (...a: unknown[]) => ptyResize(...a),
   anywherePublishAgent: (id: string, text: string) => anywherePublishAgent(id, text),
   clipboardImageToTemp: () => clipboardImageToTemp(),
-  resolvePath: vi.fn(async () => "/repo/src/a.ts"),
+  resolvePath: (...a: unknown[]) => resolvePath(...(a as [])),
 }))
 
-import { Terminal as XTerm } from "@xterm/xterm"
+import { type ILink, type ILinkProvider, Terminal as XTerm } from "@xterm/xterm"
 import { Terminal } from "@/components/organisms/Terminal"
 import { useSettings } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
@@ -93,6 +98,7 @@ beforeEach(() => {
   ptySpawn.mockResolvedValue(undefined)
   clipboardRead.mockResolvedValue("")
   clipboardImageToTemp.mockResolvedValue(null)
+  resolvePath.mockResolvedValue("/repo/src/a.ts")
   useTerminals.setState({ agentTerminals: [] })
 })
 
@@ -188,6 +194,31 @@ describe("output", () => {
     expect(decorate).toHaveBeenCalled()
     decorate.mockRestore()
     vi.useRealTimers()
+  })
+
+  it("reveals a path outside the project in the file manager, rather than failing", async () => {
+    // The editor only opens files under the root, so `resolve_path` returns
+    // null for anything else — a dead end for a path the shell just printed.
+    const providers: ILinkProvider[] = []
+    const spy = vi.spyOn(XTerm.prototype, "registerLinkProvider").mockImplementation((p) => {
+      providers.push(p)
+      return { dispose: () => {} }
+    })
+    resolvePath.mockResolvedValue(null)
+    render(<Terminal id="t1" cwd="/repo" active />)
+    await waitFor(() => expect(listeners.has("pty-output-t1")).toBe(true))
+    listeners.get("pty-output-t1")?.({ payload: b64("wrote /Users/me/Desktop/notes.md") })
+    const links = await waitFor(async () => {
+      // WebLinksAddon registers one too; ours is the last in.
+      const found = await new Promise<ILink[] | undefined>((res) =>
+        providers[providers.length - 1]?.provideLinks(1, res),
+      )
+      expect(found?.length).toBeTruthy()
+      return found as ILink[]
+    })
+    links[0].activate(new MouseEvent("click"), links[0].text)
+    await waitFor(() => expect(revealItemInDir).toHaveBeenCalledWith("/Users/me/Desktop/notes.md"))
+    spy.mockRestore()
   })
 
   it("doesn't mirror a plain shell pane", async () => {

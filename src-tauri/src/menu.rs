@@ -2,8 +2,15 @@
 //!
 //! Clipboard and window items are predefined; Reado's own actions are custom
 //! items that emit a `menu` event with their id, which the frontend maps to the
-//! matching command. Custom items carry no accelerators, so the existing in-app
-//! keyboard shortcuts keep working without being intercepted by the menu.
+//! matching command.
+//!
+//! Items built with `acc!` carry a keyboard accelerator, which on macOS both
+//! *displays* the shortcut in the menu and *claims* the keystroke before the
+//! webview sees it. That is only safe where the menu command does the same thing
+//! as the in-app binding it shadows, so the list is deliberately partial and
+//! lives in `src/lib/appMenu.ts` (`ACCELERATORS`); `appMenu.test.ts` fails the
+//! build if this file and that table disagree. Every other item stays a plain
+//! `.text(…)` and leaves its keystroke to the frontend.
 //!
 //! Undo/redo are **not** predefined, and that is the point. A predefined item
 //! carries ⌘Z, so macOS claims the keystroke before the webview ever sees it and
@@ -42,17 +49,32 @@ pub fn init(app: &App) -> tauri::Result<()> {
     }
 }
 
+/// A custom menu item that carries a keyboard accelerator.
+///
+/// Keep every use of this macro in sync with `ACCELERATORS` in
+/// `src/lib/appMenu.ts` — the drift guard parses this file looking for exactly
+/// this call shape.
+#[cfg(target_os = "macos")]
+macro_rules! acc {
+    ($app:expr, $id:expr, $label:expr, $accel:expr) => {
+        tauri::menu::MenuItemBuilder::new($label)
+            .id($id)
+            .accelerator($accel)
+            .build($app)?
+    };
+}
+
 /// Build the macOS global menu and forward custom-item clicks to the frontend.
 #[cfg(target_os = "macos")]
 fn init_macos(app: &App) -> tauri::Result<()> {
-    use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+    use tauri::menu::{MenuBuilder, SubmenuBuilder};
     use tauri::{Emitter, Manager};
 
     let app_menu = SubmenuBuilder::new(app, "Reado")
         .about(None)
         .separator()
         .text("checkUpdates", "Check for Updates…")
-        .text("settings", "Settings…")
+        .item(&acc!(app, "settings", "Settings…", "CmdOrCtrl+,"))
         .separator()
         .services()
         .separator()
@@ -63,12 +85,7 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .quit()
         .build()?;
 
-    // New Window carries an accelerator (a window-management action with no
-    // in-app handler to shadow), unlike the other custom items.
-    let new_window = MenuItemBuilder::new("New Window")
-        .id("window:new")
-        .accelerator("CmdOrCtrl+Shift+N")
-        .build(app)?;
+    let new_window = acc!(app, "window:new", "New Window", "CmdOrCtrl+Shift+N");
     let autosave_menu = SubmenuBuilder::new(app, "Auto Save")
         .text("autosave:off", "Off")
         .text("autosave:afterDelay", "After Delay")
@@ -76,20 +93,28 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .build()?;
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&new_window)
-        .text("newFile", "New File…")
-        .text("openFile", "Open File…")
+        .item(&acc!(app, "newFile", "New File…", "CmdOrCtrl+N"))
+        .item(&acc!(app, "openFile", "Open File…", "CmdOrCtrl+O"))
         .text("openFolder", "Open Folder…")
         .text("openRecent", "Open Recent…")
+        .text("workspace:addFolder", "Add Folder to Workspace…")
         .separator()
-        .text("save", "Save")
-        .text("saveAs", "Save As…")
+        .item(&acc!(app, "save", "Save", "CmdOrCtrl+S"))
+        .item(&acc!(app, "saveAll", "Save All", "CmdOrCtrl+Alt+S"))
+        .item(&acc!(app, "saveAs", "Save As…", "CmdOrCtrl+Shift+S"))
         .item(&autosave_menu)
         .text("revert", "Revert File")
         .text("compareSaved", "Compare with Saved")
-        .text("format", "Format Document")
+        .item(&acc!(app, "format", "Format Document", "Alt+Shift+F"))
+        .text("formatSelection", "Format Selection")
         .separator()
-        .text("reopenClosed", "Reopen Closed Editor")
-        .text("closeEditor", "Close Editor")
+        .item(&acc!(
+            app,
+            "reopenClosed",
+            "Reopen Closed Editor",
+            "CmdOrCtrl+Shift+T"
+        ))
+        .item(&acc!(app, "closeEditor", "Close Editor", "CmdOrCtrl+W"))
         .text("closeProject", "Close Project")
         .close_window()
         .build()?;
@@ -103,14 +128,39 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .paste()
         .select_all()
         .separator()
-        .text("find", "Find…")
-        .text("edit:replace", "Replace…")
+        .item(&acc!(app, "find", "Find…", "CmdOrCtrl+F"))
+        .item(&acc!(app, "edit:replace", "Replace…", "CmdOrCtrl+Alt+F"))
         .separator()
         .text("edit:findInFiles", "Find in Files…")
         .text("edit:replaceInFiles", "Replace in Files…")
         .separator()
-        .text("edit:toggleComment", "Toggle Line Comment")
+        .item(&acc!(
+            app,
+            "edit:toggleComment",
+            "Toggle Line Comment",
+            "CmdOrCtrl+/"
+        ))
         .text("edit:toggleBlockComment", "Toggle Block Comment")
+        .item(&acc!(app, "gotoLine", "Go to Line…", "Ctrl+G"))
+        .separator()
+        .item(&acc!(app, "edit:quickFix", "Quick Fix…", "CmdOrCtrl+."))
+        .text("edit:organizeImports", "Organize Imports")
+        .separator()
+        .text("edit:cursorUndo", "Cursor Undo")
+        .text("edit:cursorRedo", "Cursor Redo")
+        .separator()
+        .text("edit:upperCase", "Transform to Uppercase")
+        .text("edit:lowerCase", "Transform to Lowercase")
+        .text("edit:titleCase", "Transform to Title Case")
+        .text("edit:sortAsc", "Sort Lines Ascending")
+        .text("edit:sortDesc", "Sort Lines Descending")
+        .text("edit:dedupe", "Delete Duplicate Lines")
+        .text("edit:joinLines", "Join Lines")
+        .separator()
+        .text("edit:trimWhitespace", "Trim Trailing Whitespace")
+        .text("edit:reindent", "Reindent Lines")
+        .text("edit:convertSpaces", "Convert Indentation to Spaces")
+        .text("edit:convertTabs", "Convert Indentation to Tabs")
         .build()?;
 
     let selection_menu = SubmenuBuilder::new(app, "Selection")
@@ -121,7 +171,12 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("sel:allOccurrences", "Select All Occurrences")
         .text("sel:cursorAbove", "Add Cursor Above")
         .text("sel:cursorBelow", "Add Cursor Below")
-        .text("sel:lineEnds", "Add Cursors to Line Ends")
+        .item(&acc!(
+            app,
+            "sel:lineEnds",
+            "Add Cursors to Line Ends",
+            "Shift+Alt+I"
+        ))
         .text("sel:duplicate", "Duplicate Selection")
         .separator()
         .text("sel:explain", "Explain Selection with AI")
@@ -137,25 +192,44 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("go:back", "Back")
         .text("go:forward", "Forward")
         .separator()
-        .text("palette:files", "Go to File…")
-        .text("palette:symbols", "Go to Symbol in File…")
-        .text("palette:wsymbols", "Go to Symbol in Project…")
-        .text("palette:commands", "Command Palette…")
-        .text("palette:search", "Search in Project…")
+        .item(&acc!(app, "palette:files", "Go to File…", "CmdOrCtrl+P"))
+        .item(&acc!(
+            app,
+            "palette:symbols",
+            "Go to Symbol in File…",
+            "CmdOrCtrl+Shift+O"
+        ))
+        .item(&acc!(
+            app,
+            "palette:wsymbols",
+            "Go to Symbol in Project…",
+            "CmdOrCtrl+T"
+        ))
+        .item(&acc!(
+            app,
+            "palette:commands",
+            "Command Palette…",
+            "CmdOrCtrl+Shift+P"
+        ))
+        .item(&acc!(
+            app,
+            "palette:search",
+            "Search in Project…",
+            "CmdOrCtrl+Shift+F"
+        ))
         .separator()
-        .text("gotodef", "Go to Definition")
-        .text("go:peek", "Peek Definition")
+        .item(&acc!(app, "gotodef", "Go to Definition", "F12"))
+        .item(&acc!(app, "go:peek", "Peek Definition", "Alt+F12"))
         .text("go:typedef", "Go to Type Definition")
         .text("go:impl", "Go to Implementation")
-        .text("go:references", "Find References")
+        .item(&acc!(app, "go:references", "Find References", "Shift+F12"))
         .text("go:callHierarchy", "Show Call Hierarchy")
         .text("go:typeHierarchy", "Show Type Hierarchy")
-        .text("gotoLine", "Go to Line…")
         .text("go:bracket", "Go to Bracket")
         .text("go:lastEdit", "Go to Last Edit Location")
         .separator()
-        .text("go:nextProblem", "Next Problem")
-        .text("go:prevProblem", "Previous Problem")
+        .item(&acc!(app, "go:nextProblem", "Next Problem", "F8"))
+        .item(&acc!(app, "go:prevProblem", "Previous Problem", "Shift+F8"))
         .separator()
         .text("go:nextTab", "Next Editor")
         .text("go:prevTab", "Previous Editor")
@@ -180,14 +254,22 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("palette:commands", "Command Palette…")
         .item(&open_view_menu)
         .separator()
-        .text("view:sidebar", "Toggle Sidebar")
+        .item(&acc!(app, "view:sidebar", "Toggle Sidebar", "CmdOrCtrl+B"))
         .text("view:activityBar", "Toggle Activity Bar")
         .text("view:statusBar", "Toggle Status Bar")
         .text("view:breadcrumbs", "Toggle Breadcrumbs")
-        .text("terminal", "Toggle Terminal")
-        .text("view:split", "Split Editor")
+        .item(&acc!(app, "terminal", "Toggle Terminal", "CmdOrCtrl+J"))
+        .item(&acc!(
+            app,
+            "view:splitToggle",
+            "Split Editor",
+            "CmdOrCtrl+\\"
+        ))
         .separator()
-        .text("view:wrap", "Toggle Word Wrap")
+        .text("view:foldAll", "Fold All")
+        .text("view:unfoldAll", "Unfold All")
+        .separator()
+        .item(&acc!(app, "view:wrap", "Toggle Word Wrap", "Alt+Z"))
         .text("view:whitespace", "Render Whitespace")
         .text("view:ribbon", "Structure Ribbon")
         .text("view:focus", "Focus Mode")

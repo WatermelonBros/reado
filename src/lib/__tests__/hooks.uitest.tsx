@@ -11,6 +11,9 @@ const h = vi.hoisted(() => {
   const fakeStore = <T extends object>(state: T, extra: object = {}) =>
     Object.assign((sel?: (s: T) => unknown) => (sel ? sel(state) : state), {
       getState: () => state,
+      // The real stores are settable; a test that needs to change one (say, to
+      // rebind a key) would otherwise have to reach into the fixture object.
+      setState: (patch: Partial<T>) => Object.assign(state as object, patch),
       ...extra,
     })
   return {
@@ -20,8 +23,10 @@ const h = vi.hoisted(() => {
     rehydrateExtensions: vi.fn(),
     undo: vi.fn(),
     toggleZenMode: vi.fn(),
-    readState: { read: new Set<string>(), mark: vi.fn() },
     terminals: { toggle: vi.fn() },
+    workspace: { toggleSidebar: vi.fn(), selectTool: vi.fn() },
+    editorActions: { requestCompose: vi.fn() },
+    readState: { read: new Set<string>(), mark: vi.fn() },
     settings: {
       mode: "manual",
       theme: "reado-dark",
@@ -45,8 +50,6 @@ const h = vi.hoisted(() => {
       openSplit: vi.fn(),
       closeSplit: vi.fn(),
     },
-    workspace: { toggleSidebar: vi.fn(), selectTool: vi.fn() },
-    editorActions: { requestCompose: vi.fn() },
   }
 })
 
@@ -58,12 +61,22 @@ vi.mock("../colorVision", () => ({
 vi.mock("../comments", () => ({
   toRelative: (root: string, p: string) => p.slice(root.length + 1),
 }))
-vi.mock("../docInfo", () => ({
+const doc = vi.hoisted(() => ({
   formatDocument: vi.fn(),
   nextProblem: vi.fn(),
   prevProblem: vi.fn(),
+  focusPane: vi.fn(() => true),
+  foldAllCmd: vi.fn(),
+  foldLevel: vi.fn(),
+  unfoldAllCmd: vi.fn(),
+  newFile: vi.fn(),
+  saveAll: vi.fn(),
+  saveDocument: vi.fn(),
 }))
+vi.mock("../docInfo", () => doc)
 vi.mock("../panels", () => ({ toggleDockArea: vi.fn() }))
+const { runMenuCommand } = vi.hoisted(() => ({ runMenuCommand: vi.fn() }))
+vi.mock("../menu", () => ({ runMenuCommand }))
 vi.mock("../updater", () => ({ checkForUpdates: vi.fn() }))
 vi.mock("../window", () => ({ toggleFullscreen: vi.fn() }))
 // The theme hooks read the disabled list as a hook now, so the mock has to be
@@ -90,22 +103,12 @@ vi.mock("../store", () => ({
   useEditorActions: h.fakeStore(h.editorActions),
 }))
 
-const {
-  editorActions,
-  palette,
-  project,
-  readState,
-  rehydrateExtensions,
-  rehydrateSettings,
-  settings,
-  setTheme,
-  terminals,
-  toggleZenMode,
-  undo,
-  workspace,
-} = h
+// Only what the assertions read. The rest of `h` is consumed by the `vi.mock`
+// factories above, which reference it directly.
+const { palette, project, readState, rehydrateExtensions, rehydrateSettings, settings, setTheme } =
+  h
 
-import { formatDocument, nextProblem, prevProblem } from "@/lib/docInfo"
+import { useChords } from "@/lib/chords"
 import {
   useApplyColorVision,
   useApplyReduceMotion,
@@ -115,9 +118,8 @@ import {
   useCrossWindowSync,
   useGlobalShortcuts,
 } from "@/lib/hooks"
-import { toggleDockArea } from "@/lib/panels"
+import { useSettings } from "@/lib/store"
 import { checkForUpdates } from "@/lib/updater"
-import { toggleFullscreen } from "@/lib/window"
 
 // These tests drive the macOS bindings: the command modifier is Cmd there, and
 // the ⌃⌘F / ⌥⌘Z combos only exist there. The non-macOS half of the split — Ctrl
@@ -304,164 +306,76 @@ describe("useAutoUpdateCheck", () => {
 })
 
 describe("useGlobalShortcuts", () => {
-  beforeEach(() => renderHook(() => useGlobalShortcuts()))
+  beforeEach(() => {
+    renderHook(() => useGlobalShortcuts())
+    useSettings.setState({ keybindings: [] })
+  })
 
-  it("opens the palettes", () => {
-    press({ key: "p", metaKey: true })
-    expect(palette.open).toHaveBeenCalledWith("files")
-    press({ key: "k", metaKey: true })
-    expect(palette.open).toHaveBeenCalledWith("commands")
-    press({ key: "F", metaKey: true, shiftKey: true })
-    expect(palette.open).toHaveBeenCalledWith("search")
-    press({ key: "O", metaKey: true, shiftKey: true })
-    expect(palette.open).toHaveBeenCalledWith("symbols")
-    press({ key: "t", metaKey: true })
-    expect(palette.open).toHaveBeenCalledWith("wsymbols")
+  /** The command id a keystroke dispatched, or undefined. */
+  const dispatched = (init: KeyboardEventInit) => {
+    runMenuCommand.mockClear()
+    press(init)
+    return runMenuCommand.mock.calls[0]?.[0]
+  }
+
+  it("dispatches through the same command registry the menu uses", () => {
+    // The point of the table: a rebound key and a menu click can't diverge,
+    // because they are the same call.
+    expect(dispatched({ key: "p", metaKey: true })).toBe("palette:files")
+    expect(dispatched({ key: "P", metaKey: true, shiftKey: true })).toBe("palette:commands")
+    expect(dispatched({ key: "s", metaKey: true, code: "KeyS" })).toBe("save")
+    expect(dispatched({ key: "F8" })).toBe("go:nextProblem")
+    expect(dispatched({ key: "F8", shiftKey: true })).toBe("go:prevProblem")
   })
 
   it("ignores unmodified keys", () => {
-    press({ key: "p" })
-    expect(palette.open).not.toHaveBeenCalled()
+    expect(dispatched({ key: "p", code: "KeyP" })).toBeUndefined()
   })
 
   it("leaves the Ctrl keys alone on macOS — they belong to the editor and the shell", () => {
     // Ctrl+P/K/B are readline motion in the editor and tmux/shell keys in the
     // terminal. Treating Ctrl as a second command modifier stole all of them.
-    press({ key: "p", ctrlKey: true })
-    press({ key: "k", ctrlKey: true })
-    expect(palette.open).not.toHaveBeenCalled()
-    press({ key: "b", ctrlKey: true })
-    expect(workspace.toggleSidebar).not.toHaveBeenCalled()
+    expect(dispatched({ key: "p", ctrlKey: true, code: "KeyP" })).toBeUndefined()
+    expect(dispatched({ key: "b", ctrlKey: true, code: "KeyB" })).toBeUndefined()
   })
 
-  it("toggles word wrap on ⌥Z, off the physical key", () => {
-    press({ key: "Ω", code: "KeyZ", altKey: true })
-    expect(settings.set).toHaveBeenCalledWith({ wrap: false })
+  it("reads the physical key, so a composed character still matches", () => {
+    // ⌥Z is "Ω" on macOS; matching on `e.key` lost the binding entirely.
+    expect(dispatched({ key: "Ω", altKey: true, code: "KeyZ" })).toBe("view:wrap")
   })
 
-  it("formats the document on Shift+Alt+F, without a Cmd/Ctrl", () => {
-    // Read off the physical key: with Option held macOS composes (⇧⌥F is "Ï").
-    press({ key: "Ï", code: "KeyF", shiftKey: true, altKey: true })
-    expect(formatDocument).toHaveBeenCalled()
+  it("honours a rebound key, and forgets the one it replaced", () => {
+    useSettings.setState({ keybindings: ["Mod+Alt+P = palette:files", "Mod+P ="] })
+    expect(dispatched({ key: "p", metaKey: true, altKey: true, code: "KeyP" })).toBe(
+      "palette:files",
+    )
+    expect(dispatched({ key: "p", metaKey: true, code: "KeyP" })).toBeUndefined()
   })
 
-  it("walks the diagnostics with F8 / Shift+F8", () => {
-    press({ key: "F8" })
-    expect(nextProblem).toHaveBeenCalled()
-    press({ key: "F8", shiftKey: true })
-    expect(prevProblem).toHaveBeenCalled()
-  })
-
-  it("toggles full screen on F11 and on Ctrl+Cmd+F", () => {
-    press({ key: "F11" })
-    press({ key: "f", ctrlKey: true, metaKey: true })
-    expect(toggleFullscreen).toHaveBeenCalledTimes(2)
-  })
-
-  it("reads Zen mode off the physical key — ⌥Z composes to Ω on macOS", () => {
-    press({ key: "Ω", code: "KeyZ", altKey: true, metaKey: true })
-    expect(toggleZenMode).toHaveBeenCalled()
-  })
-
-  it("cycles tabs with Ctrl+Tab in both directions", () => {
-    press({ key: "Tab", ctrlKey: true })
-    expect(project.cycleTab).toHaveBeenCalledWith(1)
-    press({ key: "Tab", ctrlKey: true, shiftKey: true })
-    expect(project.cycleTab).toHaveBeenCalledWith(-1)
-  })
-
-  it("walks the navigation history", () => {
-    press({ key: "ArrowLeft", metaKey: true, altKey: true })
-    expect(project.goBack).toHaveBeenCalled()
-    press({ key: "ArrowRight", metaKey: true, altKey: true })
-    expect(project.goForward).toHaveBeenCalled()
-  })
-
-  it("zooms in, out and back to 1, clamped to the bounds", () => {
-    press({ key: "=", metaKey: true })
-    expect(settings.set).toHaveBeenCalledWith({ zoom: 1.1 })
-    press({ key: "-", metaKey: true })
-    expect(settings.set).toHaveBeenCalledWith({ zoom: 0.9 })
-    press({ key: "0", metaKey: true })
-    expect(settings.set).toHaveBeenCalledWith({ zoom: 1 })
-    settings.zoom = 2
-    press({ key: "+", metaKey: true })
-    expect(settings.set).toHaveBeenLastCalledWith({ zoom: 2 })
-    settings.zoom = 0.6
-    press({ key: "-", metaKey: true })
-    expect(settings.set).toHaveBeenLastCalledWith({ zoom: 0.6 })
-  })
-
-  it("toggles the panels", () => {
-    press({ key: "b", metaKey: true })
-    expect(workspace.toggleSidebar).toHaveBeenCalled()
-    press({ key: "∫", code: "KeyB", altKey: true, metaKey: true })
-    expect(toggleDockArea).toHaveBeenCalledWith("right")
-    press({ key: "j", metaKey: true })
-    expect(terminals.toggle).toHaveBeenCalled()
-    press({ key: ",", metaKey: true })
-    expect(palette.toggleSettings).toHaveBeenCalledWith(true)
-  })
-
-  it("selects the sidebar tools", () => {
-    press({ key: "e", metaKey: true, shiftKey: true })
-    expect(workspace.selectTool).toHaveBeenCalledWith("files")
-    press({ key: "g", metaKey: true, shiftKey: true })
-    expect(workspace.selectTool).toHaveBeenCalledWith("git")
-    press({ key: "c", metaKey: true, shiftKey: true })
-    expect(workspace.selectTool).toHaveBeenCalledWith("comments")
-  })
-
-  it("composes a comment from the selection", () => {
-    press({ key: "m", metaKey: true, shiftKey: true })
-    expect(editorActions.requestCompose).toHaveBeenCalled()
-  })
-
-  it("reopens the last closed tab", () => {
-    press({ key: "t", metaKey: true, shiftKey: true })
-    expect(project.reopenClosed).toHaveBeenCalled()
-    expect(palette.open).not.toHaveBeenCalled()
-  })
-
-  it("opens and closes the split editor", () => {
-    press({ key: "\\", metaKey: true })
-    expect(project.openSplit).toHaveBeenCalled()
-    project.splitPath = "/root/b.ts"
-    press({ key: "\\", metaKey: true })
-    expect(project.closeSplit).toHaveBeenCalled()
-  })
-
-  it("toggles read/unread for the active file, by relative path", () => {
-    press({ key: "r", metaKey: true, altKey: true })
-    expect(readState.mark).toHaveBeenCalledWith("/root", "src/a.ts", true)
-    readState.read = new Set(["src/a.ts"])
-    press({ key: "r", metaKey: true, altKey: true })
-    expect(readState.mark).toHaveBeenLastCalledWith("/root", "src/a.ts", false)
-  })
-
-  it("does nothing for read/unread with no file open", () => {
-    project.active = null
-    press({ key: "r", metaKey: true, altKey: true })
-    expect(readState.mark).not.toHaveBeenCalled()
-  })
-
-  it("undoes a file operation with Cmd+Z", () => {
-    press({ key: "z", metaKey: true })
-    expect(undo).toHaveBeenCalled()
-  })
-
-  it("defers Cmd+Z to a focused input, which owns its own undo", () => {
+  it("leaves ⌘Z to the editor and every text field", () => {
+    // Undo means the file operation only *outside* something with its own
+    // history; inside one, taking the key would eat a real undo.
     const input = document.createElement("input")
     document.body.appendChild(input)
     input.focus()
-    press({ key: "z", metaKey: true })
-    expect(undo).not.toHaveBeenCalled()
+    expect(dispatched({ key: "z", metaKey: true, code: "KeyZ" })).toBeUndefined()
     input.remove()
+    expect(dispatched({ key: "z", metaKey: true, code: "KeyZ" })).toBe("edit:undoFile")
   })
 
-  it("prevents the browser default on a shortcut it handles", () => {
-    expect(press({ key: "p", metaKey: true }).defaultPrevented).toBe(true)
-    expect(press({ key: "y", metaKey: true }).defaultPrevented).toBe(false)
+  it("stands aside for a key the editor already handled", () => {
+    // ⌘S is bound inside CodeMirror too; running it twice would save twice.
+    runMenuCommand.mockClear()
+    const e = new KeyboardEvent("keydown", {
+      key: "s",
+      code: "KeyS",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    e.preventDefault()
+    window.dispatchEvent(e)
+    expect(runMenuCommand).not.toHaveBeenCalled()
   })
 })
 
@@ -484,5 +398,73 @@ describe("mouse navigation buttons", () => {
   it("leaves the normal buttons alone", () => {
     window.dispatchEvent(new MouseEvent("mouseup", { button: 0 }))
     expect(project.goBack).not.toHaveBeenCalled()
+  })
+})
+
+describe("the ⌘K chord", () => {
+  beforeEach(() => {
+    renderHook(() => useGlobalShortcuts())
+    useChords.getState().cancel()
+  })
+
+  it("arms on ⌘K instead of firing a command", () => {
+    press({ key: "k", metaKey: true })
+    expect(useChords.getState().pending).toBe(true)
+    expect(palette.open).not.toHaveBeenCalled()
+  })
+
+  it("⌘K ⌘K still opens the palette — the habit keeps working", () => {
+    // Through the same registry as everything else, so a chord and a menu click
+    // cannot do different things.
+    runMenuCommand.mockClear()
+    press({ key: "k", metaKey: true })
+    press({ key: "k", metaKey: true })
+    expect(runMenuCommand).toHaveBeenCalledWith("palette:commands")
+    expect(useChords.getState().pending).toBe(false)
+  })
+
+  it("runs a plain second key, and one held with the modifier, as different chords", () => {
+    // ⌘K Z is zen; ⌘K ⌘0 is fold all. Same position, different chord.
+    runMenuCommand.mockClear()
+    press({ key: "k", metaKey: true })
+    press({ key: "z" })
+    expect(runMenuCommand).toHaveBeenCalledWith("view:zen")
+
+    runMenuCommand.mockClear()
+    press({ key: "k", metaKey: true })
+    press({ key: "0", metaKey: true })
+    expect(runMenuCommand).toHaveBeenCalledWith("view:foldAll")
+  })
+
+  it("folds to a numbered level", () => {
+    runMenuCommand.mockClear()
+    press({ key: "k", metaKey: true })
+    press({ key: "3", metaKey: true })
+    expect(runMenuCommand).toHaveBeenCalledWith("view:foldLevel:3")
+  })
+
+  it("cancels on Escape without running anything", () => {
+    press({ key: "k", metaKey: true })
+    press({ key: "Escape" })
+    expect(useChords.getState().pending).toBe(false)
+    expect(palette.open).not.toHaveBeenCalled()
+  })
+
+  it("waits through the modifier key itself on the way to the second stroke", () => {
+    // Holding ⌘ for ⌘K ⌘S fires a keydown for Meta first; treating that as the
+    // second key would cancel every modified chord.
+    press({ key: "k", metaKey: true })
+    press({ key: "Meta", metaKey: true })
+    expect(useChords.getState().pending).toBe(true)
+  })
+
+  it("cancels quietly on a key that isn't a chord, rather than eating the next one", () => {
+    press({ key: "k", metaKey: true })
+    press({ key: "q" })
+    expect(useChords.getState().pending).toBe(false)
+    // And the keystroke after it reaches its own shortcut again.
+    runMenuCommand.mockClear()
+    press({ key: "p", metaKey: true, code: "KeyP" })
+    expect(runMenuCommand).toHaveBeenCalledWith("palette:files")
   })
 })

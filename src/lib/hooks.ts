@@ -3,42 +3,18 @@
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { useEffect } from "react"
 import { t } from "@/i18n"
+import { CHORD_TIMEOUT_MS, matchChord, useChords } from "./chords"
 import { OVERRIDDEN_TOKENS, tokensFor } from "./colorVision"
-import { toRelative } from "./comments"
-import { formatDocument, nextProblem, prevProblem } from "./docInfo"
 import { useExtensions } from "./extensions"
 import { allIconThemes, useIconTheme } from "./extIcons"
 import { applyExtTheme, clearExtTheme } from "./extThemes"
-import { useFileUndo } from "./fileUndo"
+import { activeBindings, CHORDS, comboOf } from "./keybindings"
 import { enabledExtensions, useMarketplace } from "./marketplace"
+import { runMenuCommand } from "./menu"
 import { notify } from "./notice"
-import { toggleDockArea } from "./panels"
-import { useReadProgress } from "./readProgress"
 import { isMacUA } from "./shortcuts"
-import {
-  type BuiltinTheme,
-  isExtTheme,
-  type ThemeName,
-  toggleZenMode,
-  useEditorActions,
-  usePalette,
-  useProject,
-  useSettings,
-  useWorkspace,
-} from "./store"
-import { useTerminals } from "./terminals"
+import { type BuiltinTheme, isExtTheme, type ThemeName, useProject, useSettings } from "./store"
 import { checkForUpdates } from "./updater"
-import { toggleFullscreen } from "./window"
-
-/** Toggle the read/unread state of the active file (⌘⌥R). Read progress is keyed
- *  by project-relative path, so convert the absolute active path first. */
-function toggleActiveRead(): void {
-  const { root, active } = useProject.getState()
-  if (!active) return
-  const rel = toRelative(root, active)
-  const isRead = useReadProgress.getState().read.has(rel)
-  useReadProgress.getState().mark(root, rel, !isRead)
-}
 
 /** The dark Reado themes — used to match the native window (title bar) chrome. */
 const DARK_THEMES: BuiltinTheme[] = ["reado-dark", "reado-high-contrast"]
@@ -223,141 +199,57 @@ export function useCrossWindowSync(): void {
   }, [])
 }
 
-/** Interface zoom bounds. */
-const ZOOM_MIN = 0.6
-const ZOOM_MAX = 2
-const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10))
-
 /** Bind Reado's global keyboard shortcuts. */
 export function useGlobalShortcuts(): void {
-  const open = usePalette((s) => s.open)
-  const toggleSettings = usePalette((s) => s.toggleSettings)
-
   useEffect(() => {
+    let chordTimer: number | undefined
+    const cancelChord = () => {
+      clearTimeout(chordTimer)
+      useChords.getState().cancel()
+    }
+
     const onKey = (e: KeyboardEvent) => {
-      // Format Document (Shift+Alt+F), like VS Code — not a Cmd/Ctrl shortcut.
-      if (e.shiftKey && e.altKey && e.code === "KeyF") {
+      // The second half of a `⌘K …` chord takes priority over everything: the
+      // prefix is armed, so this keystroke belongs to it whatever it is.
+      if (useChords.getState().pending) {
         e.preventDefault()
-        void formatDocument()
+        cancelChord()
+        if (e.key === "Escape") return
+        // Modifier keys on their own are not the second key — ignore them and
+        // keep waiting rather than cancelling on the way to ⌘S.
+        if (["Meta", "Control", "Shift", "Alt"].includes(e.key)) {
+          useChords.getState().arm()
+          chordTimer = window.setTimeout(cancelChord, CHORD_TIMEOUT_MS)
+          return
+        }
+        const chord = matchChord(CHORDS, e.key, isMacUA ? e.metaKey : e.ctrlKey)
+        if (chord) runMenuCommand(chord.command)
         return
       }
-      // Full screen on Windows/Linux, where ⌃⌘F doesn't exist and Ctrl+F is
-      // Find. macOS gets ⌃⌘F below; F11 works there too, and costs nothing.
-      if (e.key === "F11") {
+
+      // ⌘K arms the prefix instead of running anything. Checked before the
+      // table so a user who rebinds something to ⌘K can't shadow it silently —
+      // the prefix is structural, not a command.
+      // Computed once: `comboOf` runs two regexes, and this handler sees every
+      // keystroke in the window.
+      const combo = comboOf(e)
+      if (combo === "Mod+K") {
         e.preventDefault()
-        toggleFullscreen()
+        useChords.getState().arm()
+        chordTimer = window.setTimeout(cancelChord, CHORD_TIMEOUT_MS)
         return
       }
-      // Next / previous problem (F8 / Shift+F8), like VS Code — no modifier.
-      if (e.key === "F8") {
-        e.preventDefault()
-        if (e.shiftKey) prevProblem()
-        else nextProblem()
-        return
-      }
-      // Toggle word wrap (⌥Z), like VS Code. `e.code`, not `e.key`: with Option
-      // held macOS composes (⌥Z is "Ω"). Checked before the modifier block, and
-      // guarded against ⌥⌘Z (zen mode) below.
-      if (e.code === "KeyZ" && e.altKey && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault()
-        const s = useSettings.getState()
-        s.set({ wrap: !s.wrap })
-        return
-      }
-      // Ctrl+Tab / Ctrl+Shift+Tab cycle the open tabs — Ctrl on macOS too,
-      // matching editors, so it is checked before the Cmd-only gate below.
-      if (e.ctrlKey && e.key.toLowerCase() === "tab") {
-        e.preventDefault()
-        useProject.getState().cycleTab(e.shiftKey ? -1 : 1)
-        return
-      }
-      // The command modifier: Cmd on macOS, Ctrl elsewhere. Never "either" —
-      // macOS gives Ctrl+A/E/K/P/N to the editor (readline-style motion) and to
-      // the terminal (tmux's prefix, kill-line, history), and claiming those for
-      // workbench commands broke both.
-      const mod = isMacUA ? e.metaKey : e.ctrlKey
-      if (!mod) return
-      const key = e.key.toLowerCase()
-      // Full screen (⌃⌘F), like VS Code. Both modifiers, checked before the
-      // plain Cmd/Ctrl block below, or `f` alone would be read as Find.
-      if (key === "f" && e.ctrlKey && e.metaKey) {
-        e.preventDefault()
-        toggleFullscreen()
-        return
-      }
-      // Zen mode. VS Code puts this on the ⌘K chord, which Reado can't have —
-      // ⌘K is the command palette and opens on the first key, so the second
-      // would land in its input. ⌥⌘Z instead (Ctrl+Alt+Z off macOS): one shape
-      // that exists on every keyboard, unbound in Reado, and checked before the
-      // plain Cmd/Ctrl+Z undo below.
-      // `e.code`, not `e.key`: with Option held macOS composes (⌥Z is "Ω"), and
-      // only the physical key is stable across layouts.
-      if (e.code === "KeyZ" && e.altKey) {
-        e.preventDefault()
-        toggleZenMode()
-        return
-      }
-      // Back / forward through the navigation history (Cmd/Ctrl+Alt+←/→).
-      if (e.altKey && key === "arrowleft") {
-        e.preventDefault()
-        useProject.getState().goBack()
-        return
-      } else if (e.altKey && key === "arrowright") {
-        e.preventDefault()
-        useProject.getState().goForward()
-        return
-      }
-      // Interface zoom: Cmd/Ctrl with +/=, -, or 0 to reset.
-      if (key === "=" || key === "+") {
-        e.preventDefault()
-        const z = useSettings.getState().zoom
-        useSettings.getState().set({ zoom: clampZoom(z + 0.1) })
-        return
-      } else if (key === "-") {
-        e.preventDefault()
-        const z = useSettings.getState().zoom
-        useSettings.getState().set({ zoom: clampZoom(z - 0.1) })
-        return
-      } else if (key === "0") {
-        e.preventDefault()
-        useSettings.getState().set({ zoom: 1 })
-        return
-      }
-      if (key === "p") {
-        e.preventDefault()
-        open("files")
-      } else if (key === "k") {
-        e.preventDefault()
-        open("commands")
-      } else if (key === "f" && e.shiftKey) {
-        e.preventDefault()
-        open("search")
-      } else if (key === "o" && e.shiftKey) {
-        e.preventDefault()
-        open("symbols")
-      } else if (key === "m" && e.shiftKey) {
-        // Create a comment from the current selection (or cursor line).
-        e.preventDefault()
-        useEditorActions.getState().requestCompose()
-      } else if (key === ",") {
-        e.preventDefault()
-        toggleSettings(true)
-      } else if (key === "j") {
-        // Toggle the integrated terminal.
-        e.preventDefault()
-        useTerminals.getState().toggle()
-      } else if (e.code === "KeyB" && e.altKey) {
-        // Toggle the secondary sidebar (the right dock), as ⌥⌘B does elsewhere.
-        // Physical key again — ⌥B composes to "∫" on macOS.
-        e.preventDefault()
-        toggleDockArea("right")
-      } else if (key === "b") {
-        // Toggle the sidebar.
-        e.preventDefault()
-        useWorkspace.getState().toggleSidebar()
-      } else if (key === "z" && !e.shiftKey) {
-        // Undo the last file operation (move / delete). The editor and text
-        // inputs own their own undo, so defer to them when focused.
+
+      const command = activeBindings(useSettings.getState().keybindings).get(combo)
+      if (!command) return
+      // ⌘S and ⌘. are bound inside the editor too; when it handled the key
+      // there is nothing left to do here. Every other command is window-level
+      // and has no editor binding to conflict with.
+      if (e.defaultPrevented) return
+      // Undo is the one command whose meaning depends on where you are: the
+      // editor and every text field own their own history, and only outside
+      // them does ⌘Z mean "take back that file operation".
+      if (command === "edit:undoFile") {
         const el = document.activeElement as HTMLElement | null
         const inField =
           !!el?.closest?.(".cm-editor") ||
@@ -365,43 +257,17 @@ export function useGlobalShortcuts(): void {
           el?.tagName === "TEXTAREA" ||
           !!el?.isContentEditable
         if (inField) return
-        e.preventDefault()
-        void useFileUndo.getState().undo()
-      } else if (key === "t" && e.shiftKey) {
-        // Reopen the most recently closed tab.
-        e.preventDefault()
-        useProject.getState().reopenClosed()
-      } else if (key === "t") {
-        // Go to symbol in the whole project.
-        e.preventDefault()
-        open("wsymbols")
-      } else if (key === "\\") {
-        // Toggle the split (side-by-side) editor.
-        e.preventDefault()
-        const p = useProject.getState()
-        if (p.splitPath) p.closeSplit()
-        else p.openSplit()
-      } else if (key === "r" && e.altKey) {
-        // Toggle read/unread for the active file (most frequent per-file verb).
-        e.preventDefault()
-        toggleActiveRead()
-      } else if (key === "e" && e.shiftKey) {
-        // Reveal the file tree.
-        e.preventDefault()
-        useWorkspace.getState().selectTool("files")
-      } else if (key === "g" && e.shiftKey) {
-        // Source control.
-        e.preventDefault()
-        useWorkspace.getState().selectTool("git")
-      } else if (key === "c" && e.shiftKey) {
-        // Comments panel.
-        e.preventDefault()
-        useWorkspace.getState().selectTool("comments")
       }
+      e.preventDefault()
+      runMenuCommand(command)
     }
+
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [open, toggleSettings])
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      cancelChord()
+    }
+  }, [])
 
   // Mouse back/forward buttons (X1/X2) should walk Reado's read-history, not the
   // webview's page history (which would jump to the launcher). preventDefault on

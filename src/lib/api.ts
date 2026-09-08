@@ -15,14 +15,27 @@ import { useSettings } from "./store"
 /** The user's exclude-from-tree/search globs, read at call time. */
 const excludeGlobs = () => useSettings.getState().excludeGlobs
 
+/** Globs excluded from project search: the search-specific list when the user
+ *  set one, otherwise the tree's. Empty means "same as the tree", so the common
+ *  case stays a single list to maintain. */
+const searchExcludeGlobs = () => {
+  const s = useSettings.getState()
+  return s.searchExcludeGlobs.length > 0 ? s.searchExcludeGlobs : s.excludeGlobs
+}
+
 export interface DirEntry {
   name: string
   path: string
   isDir: boolean
+  /** Last-modified time (ms since the epoch), when the platform reports one. */
+  modified?: number
 }
 
 export type FileContent =
-  | { kind: "text"; text: string }
+  /** `encoding` is the charset the backend decoded with, and the one a save
+   *  writes back. Optional because "absent" and "utf-8" mean the same thing —
+   *  the overwhelmingly common case stays untyped noise-free. */
+  | { kind: "text"; text: string; encoding?: string }
   | { kind: "image"; dataUrl: string }
   | { kind: "pdf"; dataUrl: string }
   | { kind: "binary"; size: number }
@@ -62,7 +75,7 @@ export interface SearchMatch {
 export const listDir = (root: string, dir: string, showHidden: boolean) =>
   invoke<DirEntry[]>("list_dir", { root, dir, showHidden, exclude: excludeGlobs() })
 
-/** Every file path in the project, for the fuzzy finder. */
+/** Every file path in one folder, for the fuzzy finder. */
 export const listFiles = (root: string) =>
   invoke<string[]>("list_files", { root, exclude: excludeGlobs() })
 
@@ -91,8 +104,17 @@ export const cliInstalled = () => invoke<boolean>("cli_installed")
 /** Read a file for display. `guardBytes` applies the user's large-file guard;
  *  pass 0 to bypass it ("open anyway"), and omit it where the guard shouldn't
  *  apply at all (agent results, sidecars — files Reado itself wrote). */
-export const readFile = (root: string, path: string, asText?: boolean, guardBytes?: number) =>
-  invoke<FileContent>("read_file", { root, path, asText, guardBytes })
+export const readFile = (
+  root: string,
+  path: string,
+  asText?: boolean,
+  guardBytes?: number,
+  /** Force an encoding ("Reopen with Encoding"); omitted, the backend detects. */
+  encoding?: string,
+) => invoke<FileContent>("read_file", { root, path, asText, guardBytes, encoding })
+
+/** The encodings "Reopen with Encoding" offers. */
+export const listEncodings = () => invoke<string[]>("list_encodings")
 
 /** One ranked answer from the local semantic index. */
 export interface SemanticHit {
@@ -177,8 +199,8 @@ export const gitWorkingDiffLines = (root: string, file: string) =>
   invoke<Array<[number, number]>>("git_working_diff_lines", { root, file })
 
 /** Write UTF-8 text back to a file (manual editing). */
-export const writeFile = (root: string, path: string, content: string) =>
-  invoke<void>("write_file", { root, path, content })
+export const writeFile = (root: string, path: string, content: string, encoding?: string) =>
+  invoke<void>("write_file", { root, path, content, encoding })
 
 /** Create a new empty file (project-relative path); returns its absolute path. */
 export const createFile = (root: string, path: string) =>
@@ -366,14 +388,27 @@ export type SearchOpts = {
   regex: boolean
   /** Project-relative folder to search in ("Find in Folder"); absent = all of it. */
   scope?: string | null
+  /** Comma-separated globs to restrict this search to ("files to include"). */
+  include?: string
+  /** Comma-separated globs to skip for this search only, on top of the settings. */
+  exclude?: string
 }
 const DEFAULT_SEARCH_OPTS: SearchOpts = { caseSensitive: false, wholeWord: false, regex: false }
+
+/** Split a comma/space-separated glob field into patterns. Not exported: the
+ *  wrapper sweep in `api.uitest.ts` treats every export here as a command. */
+const globList = (s?: string): string[] =>
+  (s ?? "")
+    .split(/[,\s]+/)
+    .map((g) => g.trim())
+    .filter(Boolean)
 
 export const searchText = (root: string, query: string, opts: SearchOpts = DEFAULT_SEARCH_OPTS) =>
   invoke<SearchMatch[]>("search_text", {
     root,
     query,
-    exclude: excludeGlobs(),
+    exclude: [...searchExcludeGlobs(), ...globList(opts.exclude)],
+    include: globList(opts.include),
     caseSensitive: opts.caseSensitive,
     wholeWord: opts.wholeWord,
     regex: opts.regex,
@@ -382,19 +417,61 @@ export const searchText = (root: string, query: string, opts: SearchOpts = DEFAU
 
 /** Replace every literal occurrence of `query` across the project. Returns the
  * number of files changed. */
+/** One file's pre-replace content, parked so the rewrite can be undone. */
+export interface Backup {
+  path: string
+  backup: string
+}
+
+/** What a replace did, and how to take it back. */
+export interface ReplaceResult {
+  changed: number
+  backups: Backup[]
+}
+
 export const replaceText = (
   root: string,
   query: string,
   replacement: string,
   scope?: string | null,
 ) =>
-  invoke<number>("replace_text", {
+  invoke<ReplaceResult>("replace_text", {
     root,
     query,
     replacement,
-    exclude: excludeGlobs(),
+    // The search list is what the user is looking at, so a rewrite must obey the
+    // same exclusions it does — not the tree's.
+    exclude: searchExcludeGlobs(),
     scope: scope ?? null,
   })
+
+/** Replace inside one file: every occurrence, or only the ones at the given
+ *  1-based `[line, column]` positions ("replace this result"). */
+export const replaceInFile = (
+  root: string,
+  path: string,
+  query: string,
+  replacement: string,
+  positions: Array<[number, number]> = [],
+) => invoke<ReplaceResult>("replace_in_file", { root, path, query, replacement, positions })
+
+/** Replace whole lines of one file, by 1-based line number — how the editable
+ *  search results are written back. Backed up like any other bulk write. */
+export const writeLines = (
+  root: string,
+  path: string,
+  edits: Array<{ line: number; text: string }>,
+) => invoke<ReplaceResult>("write_lines", { root, path, edits })
+
+/** Write over a project file, parking a copy for undo first — the door language
+ *  server workspace edits go through, so a cross-file rename is one ⌘Z. */
+export const writeBacked = (root: string, path: string, content: string, encoding?: string) =>
+  invoke<ReplaceResult>("write_backed", { root, path, content, encoding })
+
+/** Put parked content back — the undo of a replace. Returns how many files were
+ *  restored (a backup someone deleted meanwhile is skipped, not an error). */
+export const restoreBackups = (root: string, backups: Backup[]) =>
+  invoke<number>("restore_backups", { root, backups })
 
 export interface Definition {
   path: string
@@ -708,12 +785,50 @@ export const deleteComment = (root: string, id: string) =>
 export const addReadoGitignore = (root: string, versioned: boolean) =>
   invoke<void>("add_reado_gitignore", { root, versioned })
 
+/** Write a settings bundle to a path the user picked in the OS save dialog.
+ *  The backend requires a `.json` extension; nothing else outside the open
+ *  project is writable. */
+export const writeSettingsFile = (path: string, json: string) =>
+  invoke<void>("write_settings_file", { path, json })
+
+/** Read a settings bundle back from a path the user picked in the open dialog. */
+export const readSettingsFile = (path: string) => invoke<string>("read_settings_file", { path })
+
+/**
+ * What `.editorconfig` says about one file.
+ *
+ * Every field is optional because "the project didn't say" and "the project
+ * said no" are different answers: Reado falls back to its own detection only
+ * for the properties nobody set.
+ */
+export interface EditorConfig {
+  indentStyle?: "tab" | "space"
+  indentSize?: number
+  tabWidth?: number
+  endOfLine?: "lf" | "crlf" | "cr"
+  trimTrailingWhitespace?: boolean
+  insertFinalNewline?: boolean
+  /** 0 means `max_line_length = off` — an explicit "no ruler". */
+  maxLineLength?: number
+  /** Whether any `.editorconfig` applied to this file at all. */
+  applies: boolean
+}
+
+export const editorConfigFor = (root: string, path: string) =>
+  invoke<EditorConfig>("editor_config_for", { root, path })
+
+/** A shared, repository-versioned file under the project's `.reado/` directory
+ *  (snippets, recommended extensions), or null when absent. `name` must be a
+ *  bare file name — the backend rejects anything with a path in it. */
+export const readReadoFile = (root: string, name: string) =>
+  invoke<string | null>("read_reado_file", { root, name })
+
 /** Per-project config (`.reado/config.json`) as raw JSON, or null when absent. */
 export const readProjectConfig = (root: string) =>
   invoke<string | null>("read_project_config", { root })
 
-export const writeProjectConfig = (root: string, json: string) =>
-  invoke<void>("write_project_config", { root, json })
+export const writeProjectConfig = (root: string, json: string, name?: string) =>
+  invoke<void>("write_project_config", { root, json, name })
 
 // ---- Guided Pair Review sessions -----------------------------------------
 
@@ -1000,8 +1115,19 @@ export const rebuildIndex = (root: string) => invoke<number>("rebuild_index", { 
 // ---- Integrated terminal (PTY) -------------------------------------------
 
 /** Spawn a login shell in a PTY for terminal tab `id`. */
-export const ptySpawn = (id: string, cwd: string, rows: number, cols: number) =>
-  invoke<void>("pty_spawn", { id, cwd, rows, cols })
+export const ptySpawn = (id: string, cwd: string, rows: number, cols: number) => {
+  const { terminalShell, terminalShellArgs } = useSettings.getState()
+  return invoke<void>("pty_spawn", {
+    id,
+    cwd,
+    rows,
+    cols,
+    // Null, not "", so the backend can tell "no override" from "a shell whose
+    // name is the empty string" and fall back to the platform's login shell.
+    shell: terminalShell.trim() || null,
+    shellArgs: terminalShell.trim() ? terminalShellArgs : null,
+  })
+}
 
 /** The executable used by PTY sessions (used for shell-specific command syntax). */
 export const ptyDefaultShell = () => invoke<string>("pty_default_shell")

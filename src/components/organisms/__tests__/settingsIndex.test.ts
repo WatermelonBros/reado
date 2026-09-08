@@ -82,8 +82,10 @@ describe("the index against the tabs it describes", () => {
       // not a setting.
       [...settingsSource.matchAll(/(?<!aria-)label=\{t\("(settings\.\w+)"\)/g)].map((m) => m[1]),
     )
-    // Chrome, not settings: the close button's label lives in the same file.
-    const CHROME = new Set(["settings.close", "settings.title"])
+    // Chrome, not settings: the header's own controls live in the same file.
+    // `settings.json` opens the text view of everything — it is a way to reach
+    // the settings, not one of them.
+    const CHROME = new Set(["settings.close", "settings.title", "settings.json"])
     const indexed = new Set<string>(SETTINGS_INDEX.map((e) => e.key))
 
     // A rendered control with no entry is unfindable by search.

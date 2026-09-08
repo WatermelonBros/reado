@@ -92,6 +92,21 @@
   --syn-comment: oklch(0.63 0.02 250); /* 5.2:1 on --bg */
   --syn-punctuation: oklch(0.6 0.012 250);
 
+  /* Bracket-pair colours, by nesting depth.
+     Two knobs (lightness, chroma) per theme instead of six literal colours: the
+     hues are fixed and well separated, and what actually changes between a dark
+     and a light background is how bright and how saturated they need to be. A
+     contributed theme resolves to one of the built-in bases, so it inherits the
+     knobs of the polarity it declared. */
+  --bracket-l: 0.78;
+  --bracket-c: 0.13;
+  --bracket-l0: oklch(var(--bracket-l) var(--bracket-c) 250);
+  --bracket-l1: oklch(var(--bracket-l) var(--bracket-c) 95);
+  --bracket-l2: oklch(var(--bracket-l) var(--bracket-c) 330);
+  --bracket-l3: oklch(var(--bracket-l) var(--bracket-c) 150);
+  --bracket-l4: oklch(var(--bracket-l) var(--bracket-c) 55);
+  --bracket-l5: oklch(var(--bracket-l) var(--bracket-c) 195);
+
   /* Reado's own annotation marker — deliberately outside the syntax palette. */
   --marker: oklch(0.72 0.16 35);
   --marker-soft: oklch(0.72 0.16 35 / 0.16);
@@ -118,6 +133,8 @@
 
 /* ---- Reado Light — warm off-white, daytime detail reading --------------- */
 [data-theme="reado-light"] {
+  --bracket-l: 0.52;
+  --bracket-c: 0.15;
   color-scheme: light;
 
   --bg: oklch(0.97 0.008 90);
@@ -174,6 +191,8 @@
 
 /* ---- Reado High-Contrast — accessibility variant (dark base) ------------ */
 [data-theme="reado-high-contrast"] {
+  --bracket-l: 0.88;
+  --bracket-c: 0.18;
   color-scheme: dark;
 
   --bg: oklch(0.16 0.015 250);
@@ -227,6 +246,8 @@
 
 /* ---- Reado Sepia — warm light variant for long sessions ----------------- */
 [data-theme="reado-sepia"] {
+  --bracket-l: 0.48;
+  --bracket-c: 0.13;
   color-scheme: light;
 
   --bg: oklch(0.94 0.025 75);

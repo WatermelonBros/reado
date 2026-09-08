@@ -21,7 +21,7 @@ import { readoAppearance } from "@/lib/codemirror"
 import { languages } from "@/lib/languages"
 import { diffRuler } from "@/lib/overviewRuler"
 import { LAST_READ_BASE, useReadProgress } from "@/lib/readProgress"
-import { SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
+import { FILE_BASE, SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
 
 interface Props {
   relPath: string
@@ -45,6 +45,8 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
   // "Compare with Saved": the base is the file on disk, not a git ref — so this
   // works on an untracked file, and outside a repository entirely.
   const isSaved = base === SAVED_BASE
+  // "Compare with Selected": the base is another file in the project.
+  const otherFile = base.startsWith(FILE_BASE) ? base.slice(FILE_BASE.length) : null
 
   // Fetch the base version whenever the file or chosen base changes.
   useEffect(() => {
@@ -52,16 +54,18 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
     setHead(undefined)
     // `gitDiffBase`, not `gitShowRef`: a file added since the base is not "no
     // base", it's an empty one — so a new file reads as an all-added diff.
-    const fetchBase = isSaved
-      ? readFile(root, relPath).then((c) => (c.kind === "text" ? c.text : null))
-      : isDelta
-        ? getReadSnapshot(root, relPath)
-        : gitDiffBase(root, relPath, base)
+    const fetchBase = otherFile
+      ? readFile(root, otherFile).then((c) => (c.kind === "text" ? c.text : null))
+      : isSaved
+        ? readFile(root, relPath).then((c) => (c.kind === "text" ? c.text : null))
+        : isDelta
+          ? getReadSnapshot(root, relPath)
+          : gitDiffBase(root, relPath, base)
     fetchBase.then((h) => !cancelled && setHead(h)).catch(() => !cancelled && setHead(null))
     return () => {
       cancelled = true
     }
-  }, [root, relPath, base, isDelta, isSaved, refresh])
+  }, [root, relPath, base, isDelta, isSaved, otherFile, refresh])
 
   // "Mark reviewed": re-snapshot the current content as read and leave the delta.
   const markReviewed = () => {

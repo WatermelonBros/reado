@@ -951,6 +951,36 @@ pub fn read_config(root: &str) -> Option<String> {
     std::fs::read_to_string(reado_dir(root).join("config.json")).ok()
 }
 
+/// Read a named file from the project's `.reado/` directory, or `None` when it
+/// is absent.
+///
+/// `name` must be a bare file name: these files are shared through the
+/// repository, so the *project* chooses their content, and a path with
+/// separators or `..` in it would let that choice reach outside `.reado/`.
+pub fn read_reado_file(root: &str, name: &str) -> Option<String> {
+    if name.is_empty() || name.contains(['/', '\\']) || name.contains("..") {
+        return None;
+    }
+    std::fs::read_to_string(reado_dir(root).join(name)).ok()
+}
+
+/// Write a named file into the project's `.reado/` directory.
+///
+/// Same filename rule as [`read_reado_file`]: a bare name, so a project-shared
+/// file can never be written outside `.reado/`.
+pub fn write_reado_file(root: &str, name: &str, content: &str) -> Result<()> {
+    if name.is_empty() || name.contains(['/', '\\']) || name.contains("..") {
+        return Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "invalid .reado file name",
+        )));
+    }
+    let dir = reado_dir(root);
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join(name), content)?;
+    Ok(())
+}
+
 /// Write the per-project config (`.reado/config.json`). `json` is stored verbatim.
 pub fn write_config(root: &str, json: &str) -> Result<()> {
     let dir = reado_dir(root);
@@ -963,21 +993,30 @@ pub fn write_config(root: &str, json: &str) -> Result<()> {
 /// Idempotent.
 pub fn add_reado_gitignore(root: &str, versioned: bool) -> Result<()> {
     let gitignore = Path::new(root).join(".gitignore");
-    let entry = if versioned {
-        ".reado/index.sqlite"
+    // Versioning `.reado/` means versioning the *annotations*. The rest of what
+    // lives there is machine-local scratch — a rebuildable index, deleted files
+    // waiting for an undo, the pre-replace copies behind ⌘Z — and committing any
+    // of it would push one person's undo history to everyone else.
+    let entries: &[&str] = if versioned {
+        &[".reado/index.sqlite", ".reado/.trash/", ".reado/.undo/"]
     } else {
-        ".reado/"
+        &[".reado/"]
     };
     let existing = std::fs::read_to_string(&gitignore).unwrap_or_default();
-    if existing.lines().any(|l| l.trim() == entry) {
-        return Ok(());
-    }
-    let mut content = existing;
-    if !content.is_empty() && !content.ends_with('\n') {
+    let mut content = existing.clone();
+    for entry in entries {
+        if existing.lines().any(|l| l.trim() == *entry) {
+            continue;
+        }
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(entry);
         content.push('\n');
     }
-    content.push_str(entry);
-    content.push('\n');
+    if content == existing {
+        return Ok(());
+    }
     std::fs::write(gitignore, content)?;
     Ok(())
 }
@@ -1241,6 +1280,70 @@ pub fn reanchor_file(root: &str, file: &str) -> Result<Vec<Comment>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_reado_file_name_cannot_climb_out_of_the_directory() {
+        // These files are named by the *project* (snippets, recommended
+        // extensions, the workspace list), so the name is untrusted input.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        std::fs::write(dir.path().join("secret.txt"), "safe").unwrap();
+
+        for name in ["../secret.txt", "sub/x.json", "..\\secret.txt", ""] {
+            assert!(read_reado_file(&root, name).is_none(), "read {name}");
+            assert!(write_reado_file(&root, name, "pwned").is_err(), "write {name}");
+        }
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("secret.txt")).unwrap(),
+            "safe"
+        );
+    }
+
+    #[test]
+    fn a_reado_file_round_trips_under_the_reado_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        assert!(read_reado_file(&root, "workspace.json").is_none());
+        write_reado_file(&root, "workspace.json", "{}").unwrap();
+        assert_eq!(read_reado_file(&root, "workspace.json").as_deref(), Some("{}"));
+        assert!(dir.path().join(".reado/workspace.json").exists());
+    }
+
+    #[test]
+    fn gitignoring_reado_takes_the_whole_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        add_reado_gitignore(&root, false).unwrap();
+        let ignored = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        assert_eq!(ignored, ".reado/\n");
+    }
+
+    #[test]
+    fn versioning_reado_still_keeps_the_machine_local_parts_out() {
+        // Versioning `.reado/` means versioning the annotations. The index, the
+        // trash and the pre-replace copies behind undo are one machine's scratch
+        // — committing them would push your undo history to everyone else.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        add_reado_gitignore(&root, true).unwrap();
+        let ignored = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        for entry in [".reado/index.sqlite", ".reado/.trash/", ".reado/.undo/"] {
+            assert!(ignored.lines().any(|l| l == entry), "missing {entry}");
+        }
+    }
+
+    #[test]
+    fn gitignoring_is_idempotent_and_keeps_what_is_already_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        std::fs::write(dir.path().join(".gitignore"), "node_modules").unwrap();
+        add_reado_gitignore(&root, true).unwrap();
+        let once = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        add_reado_gitignore(&root, true).unwrap();
+        let twice = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        assert_eq!(once, twice);
+        assert!(twice.starts_with("node_modules\n"));
+    }
 
     #[test]
     fn a_handoff_is_written_where_the_watcher_looks() {

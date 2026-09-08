@@ -87,10 +87,26 @@
     "markFolderUnread": "Mark folder unread",
     "delete": "Delete",
     "deleted": "Moved to trash — press Ctrl/Cmd+Z to undo",
-    "deleteFailed": "Couldn't move that to the trash."
+    "deleteFailed": "Couldn't move that to the trash.",
+    "refresh": "Refresh",
+    "filter": "Filter this folder",
+    "filterPlaceholder": "Filter listed files",
+    "filterHint": "Filters the rows on screen — {key} searches the whole project.",
+    "sort": "Sort by",
+    "sortName": "Name",
+    "sortType": "Type",
+    "sortModified": "Last modified",
+    "unsaved": "Unsaved changes",
+    "noFilterMatch": "Nothing here matches.",
+    "selectForCompare": "Select for Compare",
+    "compareWithSelected": "Compare with “{name}”",
+    "clearCompare": "Clear compare selection",
+    "expandNest": "Show the files nested under this one",
+    "collapseNest": "Hide the files nested under this one"
   },
   "undo": {
-    "failed": "Couldn't undo the last file change."
+    "failed": "Couldn't undo the last file change.",
+    "replaced": "Put {count} files back the way they were."
   },
   "editor": {
     "empty": "Select a file from the tree to start reading.",
@@ -128,7 +144,27 @@
     "unsaved": "Unsaved changes",
     "large": "This file is {size} — above your large-file guard.",
     "openAnyway": "Open anyway",
-    "formatDisabled": "Formatting is turned off for this file type in this project."
+    "formatDisabled": "Formatting is turned off for this file type in this project.",
+    "formatSelection": "Format Selection",
+    "formatNoRange": "No language server here can format a selection — use Format Document.",
+    "upperCase": "Transform to Uppercase",
+    "lowerCase": "Transform to Lowercase",
+    "titleCase": "Transform to Title Case",
+    "sortAsc": "Sort Lines Ascending",
+    "sortDesc": "Sort Lines Descending",
+    "deleteDuplicates": "Delete Duplicate Lines",
+    "joinLines": "Join Lines",
+    "trimWhitespace": "Trim Trailing Whitespace",
+    "reindent": "Reindent Lines",
+    "cursorUndo": "Cursor Undo",
+    "cursorRedo": "Cursor Redo",
+    "convertToSpaces": "Convert Indentation to Spaces",
+    "convertToTabs": "Convert Indentation to Tabs",
+    "foldAll": "Fold All",
+    "unfoldAll": "Unfold All",
+    "foldLevel": "Fold Level {level}",
+    "saveAll": "Save All",
+    "saveAllDone": "Saved {count} files."
   },
   "pdf": {
     "zoomIn": "Zoom in",
@@ -156,7 +192,11 @@
     "empty": "No problems detected.",
     "error": "errors",
     "warn": "warnings",
-    "info": "info"
+    "info": "info",
+    "copyMessage": "Copy Message",
+    "copyAll": "Copy All Problems",
+    "copyLocation": "Copy Location",
+    "createTask": "Create a task from this problem"
   },
   "bookmarks": {
     "panel": "Bookmarks",
@@ -179,7 +219,13 @@
     "importTitle": "Paste a settings bundle",
     "apply": "Apply",
     "invalid": "That doesn't look like a valid Reado settings bundle (or it's from a newer version).",
-    "summary": "Import {settings} settings and {disabled} disabled extension(s)? This replaces matching preferences on this machine."
+    "summary": "Import {settings} settings and {disabled} disabled extension(s)? This replaces matching preferences on this machine.",
+    "projectSaved": "Wrote {count} settings to .reado/config.json — commit it to share them.",
+    "projectFailed": "Couldn't write the project settings.",
+    "saveToProject": "Save Settings to This Project",
+    "exportFile": "Export Settings to a File…",
+    "importFile": "Import Settings from a File…",
+    "exported": "Settings written to {path}."
   },
   "timeline": {
     "panel": "Timeline",
@@ -440,7 +486,9 @@
     "clear": "Clear",
     "empty": "No file changes yet this session.",
     "comments_one": "{count} comment",
-    "comments_other": "{count} comments"
+    "comments_other": "{count} comments",
+    "hide": "Hide “{name}”",
+    "reset": "Show every view"
   },
   "hier": {
     "panel": "Hierarchy",
@@ -463,7 +511,16 @@
     "close": "Close",
     "closeOthers": "Close Others",
     "closeRight": "Close to the Right",
-    "closeAll": "Close All"
+    "closeAll": "Close All",
+    "closeSaved": "Close Saved",
+    "splitRight": "Open to the Side",
+    "unsaved": "Unsaved changes",
+    "openEditors": "Open Editors",
+    "preview": "Preview — the next file you open replaces it",
+    "keepOpen": "Keep Open",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "pinned": "Pinned"
   },
   "sidebar": {
     "toggle": "Toggle sidebar"
@@ -675,7 +732,17 @@
     "useTabs": "Indent Using Tabs",
     "language": "Select language mode",
     "eol": "Line endings",
-    "openComments": "Open comments"
+    "openComments": "Open comments",
+    "hideItem": "Hide this indicator",
+    "hideBar": "Hide the status bar",
+    "fromEditorconfig": "set by this project's .editorconfig",
+    "encoding": "Text encoding",
+    "reopenWith": "Reopen with…",
+    "saveWith": "Save with…",
+    "encodingReopened": "Reopened as {name}.",
+    "encodingSaveSet": "Will be saved as {name}.",
+    "encodingDirty": "Save your changes before reopening with another encoding.",
+    "encodingFailed": "Couldn't read this file as {name}."
   },
   "palette": {
     "placeholder": "Type a command…",
@@ -705,7 +772,29 @@
     "results": "{count} matches",
     "truncated": "Showing {shown} of {total} — refine your search.",
     "ripgrepMissing": "Search needs ripgrep (rg), which isn't installed or on your PATH. Install it, then try again.",
-    "searching": "Searching…"
+    "searching": "Searching…",
+    "include": "files to include",
+    "exclude": "files to exclude",
+    "globs": "Filter by file",
+    "globsHint": "Globs, comma-separated — src/**/*.ts, !**/*.test.ts",
+    "dismiss": "Dismiss this result",
+    "dismissFile": "Dismiss every result in this file",
+    "history": "Previous searches (↑ / ↓ in the field)",
+    "copyMatch": "Copy match",
+    "copyPath": "Copy path",
+    "dismissed": "{count} dismissed",
+    "restore": "Show again",
+    "replaceFile": "Replace every match in this file",
+    "replacedOne": "Replaced 1 match.",
+    "replaceUndo": "Replaced in {count} files — {key} puts them back.",
+    "replaceThis": "Replace this match",
+    "openInEditor": "Open Results in an Editor",
+    "resultsTitle": "Search results — edit and apply",
+    "resultsHint": "Every match as a line of text. Change what you want changed, leave the rest, and Apply writes only the lines you touched. {key} takes the whole thing back.",
+    "resultsApply": "Apply {count} edits",
+    "resultsNone": "Nothing changed yet.",
+    "resultsShape": "Rows were added or removed — Reado can only apply edits to the rows it built.",
+    "resultsApplied": "Rewrote {files} files."
   },
   "settings": {
     "title": "Settings",
@@ -852,7 +941,48 @@
     "searchPlaceholder": "Search settings…",
     "surfaces": "Surfaces",
     "themeFollowing": "Following your system appearance — picking a theme switches to Manual.",
-    "typography": "Typography"
+    "typography": "Typography",
+    "modified": "changed",
+    "resetOne": "Reset this setting to Reado's default",
+    "suggestOnTyping": "Suggest while typing",
+    "suggestOnTypingHint": "Off, the completion list opens only on ⌃Space. It always includes the words already in the document.",
+    "bracketPairColors": "Colour bracket pairs",
+    "bracketPairColorsHint": "Tints each ()[]{} by how deeply it nests, and underlines a closer with no opener.",
+    "autoSaveDelay": "Auto-save delay (ms)",
+    "autoSaveDelayHint": "How long “After Delay” waits after you stop typing.",
+    "searchExclude": "Exclude from search",
+    "searchExcludeHint": "One glob per line. Empty means the search uses the tree's list above.",
+    "explorerSort": "Sort files by",
+    "explorerSortHint": "Folders always come first.",
+    "defaultEol": "Line endings for new files",
+    "defaultEolAuto": "This platform's",
+    "terminal": "Terminal",
+    "terminalFontSize": "Terminal text size",
+    "terminalScrollback": "Scrollback (lines)",
+    "terminalCursor": "Terminal cursor",
+    "terminalShell": "Shell",
+    "terminalShellHint": "Absolute path, or empty for your login shell.",
+    "terminalShellArgs": "Shell arguments",
+    "terminalShellArgsHint": "One per line, passed before the shell starts.",
+    "cursorBar": "Bar",
+    "editorconfigNote": "A project's .editorconfig wins over these for its own files.",
+    "fromProject": "from this project",
+    "fromProjectHint": "This project sets it in .reado/config.json, so it applies here and everywhere else it is opened.",
+    "clearProject": "Stop this project overriding it",
+    "json": "Settings (JSON)",
+    "jsonHint": "The same preferences as text — diffable, pasteable, and editable. Applying writes every value Reado recognises.",
+    "jsonApply": "Apply",
+    "jsonCopy": "Copy",
+    "jsonRevert": "Reload from settings",
+    "jsonInvalid": "That isn't valid JSON.",
+    "jsonApplied": "Applied {count} settings.",
+    "jsonRejected": "Skipped {count}: {names}",
+    "fileNesting": "Nest generated files",
+    "fileNestingHint": "Tucks a lock file under its manifest, and a compiled file under its source, so the tree shows what you wrote rather than what a tool produced.",
+    "fileNestingRules": "Nesting rules",
+    "fileNestingRulesHint": "One rule per line, `parent : child, child`. ${capture} is what the parent's * matched. Empty uses Reado's own set.",
+    "previewTabs": "Preview tabs",
+    "previewTabsHint": "A file you click into opens as a preview and is replaced by the next one. Double-click it, edit it, or pin it to keep it."
   },
   "defaultApp": {
     "title": "Default app for text files",
@@ -871,7 +1001,16 @@
     "navigation": "Navigation",
     "editing": "Editing",
     "files": "Files",
-    "view": "View"
+    "view": "View",
+    "chords": "Two-key shortcuts",
+    "edit": "Edit shortcuts",
+    "editTitle": "Keyboard Shortcuts (text)",
+    "editHint": "One binding per line, `combo = command`. Leave the command empty to unbind a key and give it back to the editor. Mod is ⌘ on macOS and Ctrl elsewhere.",
+    "editApply": "Apply",
+    "editReset": "Back to the defaults",
+    "editUnknown": "Unknown command: {names}",
+    "editSaved": "{count} shortcuts in force.",
+    "commands": "Command ids"
   },
   "empty": {
     "firstComment": "Select one or more lines, then press the comment shortcut to leave your first note."
@@ -948,7 +1087,10 @@
     "searchPrev": "Previous match",
     "searchNext": "Next match",
     "noFile": "{path} isn't in this project.",
-    "pasteImageFailed": "Couldn't paste the clipboard image."
+    "pasteImageFailed": "Couldn't paste the clipboard image.",
+    "rename": "Rename Terminal…",
+    "renameTitle": "Name this terminal",
+    "renamePlaceholder": "dev server, tests, …"
   },
   "review": {
     "title": "Send review",
@@ -1037,7 +1179,18 @@
   "lsp": {
     "createTask": "Create task",
     "createTaskFromProblem": "Create task from problem",
-    "serverStopped": "The {name} language server stopped. Code intelligence will resume when you next open or edit a file of that language."
+    "serverStopped": "The {name} language server stopped. Code intelligence will resume when you next open or edit a file of that language.",
+    "quickFix": "Quick Fix…",
+    "refactor": "Refactor…",
+    "sourceAction": "Source Action…",
+    "organizeImports": "Organize Imports",
+    "noActions": "Nothing to fix or refactor here.",
+    "noServer": "No language server is running for this file.",
+    "actionFailed": "That action didn't apply.",
+    "actionKindFix": "Fix",
+    "actionKindRefactor": "Refactor",
+    "actionKindSource": "Source",
+    "actionKindOther": "Other"
   },
   "file": {
     "newFile": "New file",
@@ -1119,7 +1272,11 @@
     "enable": "Enable",
     "disable": "Disable",
     "uninstallAsk": "Remove it?",
-    "updateTo": "Update to {version}"
+    "updateTo": "Update to {version}",
+    "recommended": "This project recommends {count} extensions you don't have: {names}",
+    "recommendedTitle": "Recommended by this project",
+    "recommendedHint": "Listed in .reado/extensions.json, so everyone who opens this repository sees the same list.",
+    "recommendedDismiss": "Dismiss"
   },
   "specs": {
     "panel": "Specs",
@@ -1216,7 +1373,11 @@
     "sent": "Sent to agent"
   },
   "breadcrumb": {
-    "label": "File path"
+    "label": "File path",
+    "folder": "Files in {name}",
+    "symbols": "Symbols in this file",
+    "noSymbols": "No symbols found here.",
+    "root": "Project root"
   },
   "imageView": {
     "zoomIn": "Zoom in",
@@ -1231,6 +1392,31 @@
     "needForward": "Nothing to go forward to.",
     "needReopen": "No recently closed editors to reopen.",
     "needTerminal": "Open a terminal first.",
-    "needProblems": "No problems to jump to."
+    "needProblems": "No problems to jump to.",
+    "needSplit": "That editor pane isn't open — split the editor first."
+  },
+  "chord": {
+    "pending": "{key} — waiting for the second key",
+    "palette": "Command Palette",
+    "shortcuts": "Keyboard Shortcuts",
+    "zen": "Zen Mode",
+    "preview": "Preview to the Side",
+    "foldAll": "Fold All",
+    "unfoldAll": "Unfold All",
+    "foldLevel": "Fold Level 1–9",
+    "closeAll": "Close All Editors",
+    "copyPath": "Copy Path of the Active File",
+    "reveal": "Reveal the Active File",
+    "settings": "Settings",
+    "settingsJson": "Settings (JSON)"
+  },
+  "workspace": {
+    "addFolder": "Add Folder to Workspace…",
+    "removeFolder": "Remove Folder from Workspace",
+    "expandFolder": "Expand",
+    "collapseFolder": "Collapse",
+    "added": "Added {name} to the workspace.",
+    "removed": "Removed {name} from the workspace.",
+    "primaryNote": "The first folder holds the workspace list and the comments; the others are read and searched alongside it."
   }
 }

@@ -2,15 +2,28 @@
  * The Search side panel: full-text project search via ripgrep, with results
  * grouped by file. Selecting a result navigates the editor to that line.
  */
-import { useEffect, useMemo, useState } from "react"
+import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
+import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
-import { CloseIcon } from "@/components/atoms/icons"
+import { Input } from "@/components/atoms/Input"
+import { CloseIcon, MoreIcon } from "@/components/atoms/icons"
 import { Textarea } from "@/components/atoms/Textarea"
-import { replaceText, type SearchMatch, type SearchOpts, searchText } from "@/lib/api"
+import { SearchResultsEditor } from "@/components/organisms/SearchResultsEditor"
+import {
+  replaceInFile,
+  replaceText,
+  type SearchMatch,
+  type SearchOpts,
+  searchText,
+} from "@/lib/api"
 import { toRelative } from "@/lib/comments"
+import { useFileUndo } from "@/lib/fileUndo"
+import { mod } from "@/lib/shortcuts"
 import { useProject, useWorkspace } from "@/lib/store"
+import { acrossRoots, rootFor, workspaceRoots } from "@/lib/workspace"
 
 /** Enter searches live; Shift+Enter inserts a newline (multi-line snippets). */
 const multilineKeys = (e: React.KeyboardEvent) => {
@@ -27,7 +40,9 @@ const RENDER_CAP = 300
 
 export function SearchPanel() {
   const root = useProject((s) => s.root)
-  const open = useProject((s) => s.open)
+  // Walking a result list is browsing, so each one lands in the preview tab the
+  // next one replaces, instead of leaving twenty tabs behind.
+  const open = useProject((s) => s.openPreview)
   const pendingSearch = useWorkspace((s) => s.pendingSearch)
   const clearPendingSearch = useWorkspace((s) => s.clearPendingSearch)
   // "Find in Folder": everything below (search, replace, the counts) is limited
@@ -62,20 +77,92 @@ export function SearchPanel() {
   const [caseSensitive, setCaseSensitive] = useState(false)
   const [wholeWord, setWholeWord] = useState(false)
   const [regex, setRegex] = useState(false)
+  // "Files to include" / "files to exclude", remembered like the query itself.
+  const include = useWorkspace((s) => s.searchInclude)
+  const exclude = useWorkspace((s) => s.searchExclude)
+  const setGlobs = useWorkspace((s) => s.setSearchGlobs)
+  const [showGlobs, setShowGlobs] = useState(() => !!include || !!exclude)
   const opts = useMemo<SearchOpts>(
-    () => ({ caseSensitive, wholeWord, regex, scope }),
-    [caseSensitive, wholeWord, regex, scope],
+    () => ({ caseSensitive, wholeWord, regex, scope, include, exclude }),
+    [caseSensitive, wholeWord, regex, scope, include, exclude],
   )
 
-  // Literal project-wide replace, with a confirm step (it writes files, no undo).
+  // Results the user has waved away for this query. A key, not an index, so
+  // dismissing one doesn't shift the rest.
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const [menu, setMenu] = useState<{ x: number; y: number; match: SearchMatch } | null>(null)
+  // The editable view of the whole result list.
+  const [editingResults, setEditingResults] = useState(false)
+  const matchKey = (m: SearchMatch) => `${m.path}:${m.line}`
+
+  // Walking the history with ↑/↓ from the query field. -1 is "what I typed".
+  const history = useWorkspace((s) => s.searchHistory)
+  const pushHistory = useWorkspace((s) => s.pushSearchHistory)
+  const historyPos = useRef(-1)
+  const onQueryKeys = (e: React.KeyboardEvent) => {
+    multilineKeys(e)
+    // Only from a single-line query: in a multi-line snippet ↑/↓ are movement.
+    if (query.includes("\n") || history.length === 0) return
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return
+    e.preventDefault()
+    const next = e.key === "ArrowUp" ? historyPos.current + 1 : historyPos.current - 1
+    historyPos.current = Math.max(-1, Math.min(history.length - 1, next))
+    setQuery(historyPos.current === -1 ? "" : history[historyPos.current])
+  }
+
+  /** Re-run the current search — after a rewrite the old result list is a lie. */
+  // Search covers every folder in the workspace: "search the project" has to
+  // mean the project you have open, not the first folder of it.
+  const runSearch = () => acrossRoots(workspaceRoots(), (r) => searchText(r, query, opts))
+  const refresh = async () => setMatches(await runSearch())
+
+  // Literal project-wide replace, behind a confirm step and recorded as one
+  // undoable action: it rewrites files, and ⌘Z has to be able to take it back.
   const doReplace = async () => {
     setConfirming(false)
     try {
       // Scoped results, scoped rewrite: replacing project-wide while showing one
       // folder's matches would be a trap.
-      const n = await replaceText(root, query, replacement, scope)
-      setStatus(t("search.replaced", { count: n }))
-      setMatches(await searchText(root, query, opts))
+      // One call per workspace folder: search spans them, so the rewrite has to.
+      const results = await Promise.all(
+        workspaceRoots().map((r) => replaceText(r, query, replacement, scope)),
+      )
+      const res = {
+        changed: results.reduce((n, r) => n + r.changed, 0),
+        backups: results.flatMap((r) => r.backups),
+      }
+      if (res.backups.length > 0) useFileUndo.getState().record({ kind: "replace", ...res })
+      setStatus(t("search.replaceUndo", { count: res.changed, key: `${mod}Z` }))
+      await refresh()
+    } catch (e) {
+      setStatus(String(e))
+    }
+  }
+
+  /**
+   * Replace one match, or every match in one file.
+   *
+   * The position is what identifies a match, not an index: two occurrences on
+   * one line are different matches, and the row you right-clicked is the one you
+   * meant. Recorded on the same undo stack as the project-wide replace.
+   */
+  const replaceSome = async (m: SearchMatch, wholeFile: boolean) => {
+    try {
+      const res = await replaceInFile(
+        // The folder that owns the match, not the window's first one.
+        rootFor(m.path),
+        m.path,
+        query,
+        replacement,
+        wholeFile ? [] : [[m.line, m.column]],
+      )
+      if (res.backups.length > 0) useFileUndo.getState().record({ kind: "replace", ...res })
+      setStatus(
+        wholeFile
+          ? t("search.replaceUndo", { count: res.changed, key: `${mod}Z` })
+          : t("search.replacedOne"),
+      )
+      await refresh()
     } catch (e) {
       setStatus(String(e))
     }
@@ -89,20 +176,65 @@ export function SearchPanel() {
       setSearching(false)
       return
     }
+    setDismissed(new Set())
     const id = setTimeout(() => {
       // A slow ripgrep on a big repo shouldn't read as "no results / frozen":
       // flag the pending state so the panel can say it's searching.
       setSearching(true)
-      searchText(root, query, opts)
+      runSearch()
         .then((m) => {
           setMatches(m)
           setError(null)
+          pushHistory(query)
         })
         .catch((e) => setError(String(e)))
         .finally(() => setSearching(false))
     }, 180)
     return () => clearTimeout(id)
-  }, [query, root, opts])
+  }, [query, root, opts, pushHistory])
+
+  const shown = matches.filter((m) => !dismissed.has(matchKey(m)))
+  const dismiss = (keys: string[]) => setDismissed((prev) => new Set([...prev, ...keys]))
+  const menuItems: ContextMenuItem[] = menu
+    ? [
+        // Replace is only offered with something to replace *with*; an empty
+        // replacement field would silently delete the match.
+        ...(replacement
+          ? [
+              {
+                label: t("search.replaceThis"),
+                onSelect: () => void replaceSome(menu.match, false),
+              },
+              {
+                label: t("search.replaceFile"),
+                separatorBefore: false,
+                onSelect: () => void replaceSome(menu.match, true),
+              },
+            ]
+          : []),
+        {
+          label: t("search.copyMatch"),
+          separatorBefore: !!replacement,
+          onSelect: () => void clipboardWriteText(menu.match.text.trim()).catch(() => {}),
+        },
+        {
+          label: t("search.copyPath"),
+          onSelect: () =>
+            void clipboardWriteText(
+              `${toRelative(rootFor(menu.match.path), menu.match.path)}:${menu.match.line}`,
+            ).catch(() => {}),
+        },
+        {
+          label: t("search.dismiss"),
+          separatorBefore: true,
+          onSelect: () => dismiss([matchKey(menu.match)]),
+        },
+        {
+          label: t("search.dismissFile"),
+          onSelect: () => dismiss(matches.filter((m) => m.path === menu.match.path).map(matchKey)),
+        },
+      ]
+    : []
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -131,7 +263,7 @@ export function SearchPanel() {
               setStatus(null)
               setConfirming(false)
             }}
-            onKeyDown={multilineKeys}
+            onKeyDown={onQueryKeys}
             rows={rowsFor(query)}
             placeholder={t("search.placeholder")}
             spellCheck={false}
@@ -156,8 +288,39 @@ export function SearchPanel() {
               label=".*"
               title={t("search.regex")}
             />
+            <IconButton
+              size="sm"
+              active={showGlobs}
+              label={t("search.globs")}
+              icon={<MoreIcon className="h-3.5 w-3.5" />}
+              onClick={() => setShowGlobs((v) => !v)}
+              className={`border ${
+                showGlobs || include || exclude
+                  ? "border-accent bg-[color-mix(in_oklch,var(--accent)_18%,transparent)]"
+                  : "border-line"
+              }`}
+            />
           </div>
         </div>
+        {showGlobs && (
+          <div className="flex flex-col gap-1">
+            <Input
+              value={include}
+              onChange={(e) => setGlobs({ include: e.target.value })}
+              placeholder={t("search.include")}
+              spellCheck={false}
+              className="bg-canvas font-mono text-xs placeholder:font-sans"
+            />
+            <Input
+              value={exclude}
+              onChange={(e) => setGlobs({ exclude: e.target.value })}
+              placeholder={t("search.exclude")}
+              spellCheck={false}
+              className="bg-canvas font-mono text-xs placeholder:font-sans"
+            />
+            <span className="text-[10px] leading-relaxed text-faint">{t("search.globsHint")}</span>
+          </div>
+        )}
         <div className="flex items-start gap-1.5">
           <Textarea
             mono
@@ -190,7 +353,30 @@ export function SearchPanel() {
             </Button>
           )}
         </div>
+        {/* The careful alternative to Replace All: every hit as text, edited by
+            hand, with the ones that shouldn't change simply left alone. */}
+        {matches.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setEditingResults(true)}
+            className="self-start text-xs text-accent underline underline-offset-2 hover:text-ink"
+          >
+            {t("search.openInEditor")}
+          </button>
+        )}
         {status && <span className="text-xs text-faint">{status}</span>}
+        {dismissed.size > 0 && (
+          <div className="flex items-center gap-2 text-[10px] text-faint">
+            <span>{t("search.dismissed", { count: dismissed.size })}</span>
+            <button
+              type="button"
+              onClick={() => setDismissed(new Set())}
+              className="underline underline-offset-2 hover:text-ink"
+            >
+              {t("search.restore")}
+            </button>
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto">
         {error ? (
@@ -205,28 +391,41 @@ export function SearchPanel() {
           </p>
         ) : (
           <ul className="m-0 list-none p-0">
-            {matches.slice(0, RENDER_CAP).map((m, i) => (
-              <li key={`${m.path}-${m.line}-${i}`}>
+            {shown.slice(0, RENDER_CAP).map((m, i) => (
+              <li key={`${m.path}-${m.line}-${i}`} className="group relative">
                 <button
                   type="button"
                   onClick={() => open(m.path, m.line)}
-                  title={`${toRelative(root, m.path)}:${m.line}`}
-                  className="flex w-full flex-col gap-0.5 px-3 py-1.5 text-left hover:bg-surface"
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setMenu({ x: e.clientX, y: e.clientY, match: m })
+                  }}
+                  title={`${toRelative(rootFor(m.path), m.path)}:${m.line}`}
+                  className="flex w-full flex-col gap-0.5 py-1.5 pr-7 pl-3 text-left hover:bg-surface"
                 >
                   <span className="overflow-hidden font-mono text-sm text-ellipsis whitespace-nowrap text-muted">
                     {m.text.trim()}
                   </span>
                   <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] text-faint">
-                    {toRelative(root, m.path)}:{m.line}
+                    {toRelative(rootFor(m.path), m.path)}:{m.line}
                   </span>
                 </button>
+                {/* Waving a result away is the fastest way to work a long list
+                    down; it costs nothing because the next search restores it. */}
+                <IconButton
+                  size="xxs"
+                  label={t("search.dismiss")}
+                  icon={<CloseIcon className="h-3 w-3" />}
+                  onClick={() => dismiss([matchKey(m)])}
+                  className="absolute top-1.5 right-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                />
               </li>
             ))}
-            {matches.length > RENDER_CAP && (
+            {shown.length > RENDER_CAP && (
               <li className="px-3 py-2 text-[10px] leading-relaxed text-faint">
                 {t("search.truncated", {
                   shown: RENDER_CAP,
-                  total: matches.length,
+                  total: shown.length,
                   defaultValue: "Showing {shown} of {total} — refine your search.",
                 })}
               </li>
@@ -234,6 +433,15 @@ export function SearchPanel() {
           </ul>
         )}
       </div>
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
+      )}
+      <SearchResultsEditor
+        matches={matches}
+        open={editingResults}
+        onClose={() => setEditingResults(false)}
+        onApplied={() => void refresh()}
+      />
     </div>
   )
 }

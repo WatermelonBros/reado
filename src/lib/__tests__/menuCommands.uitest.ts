@@ -53,6 +53,7 @@ const h = vi.hoisted(() => {
     opener: fns("openUrl", "revealItemInDir"),
     notify: vi.fn(),
     checkForUpdates: vi.fn(),
+    organizeImports: vi.fn(async () => {}),
     logPath: vi.fn<() => Promise<string | null>>(async () => "/tmp/reado.log"),
     openCount: vi.fn(() => 3),
     palette: {
@@ -114,7 +115,12 @@ const listen = vi.hoisted(() =>
 vi.mock("@tauri-apps/api/event", () => ({ listen }))
 vi.mock("../notice", () => ({ notify: h.notify }))
 vi.mock("../updater", () => ({ checkForUpdates: h.checkForUpdates }))
-vi.mock("../logger", () => ({ logPath: h.logPath }))
+vi.mock("../logger", () => ({
+  logPath: h.logPath,
+  createLogger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+  safeError: (e: unknown) => String(e),
+}))
+vi.mock("../codeActions", () => ({ organizeImports: h.organizeImports }))
 vi.mock("../review", () => ({ composeReviewPrompt: (n: number) => `review ${n}` }))
 vi.mock("../comments", () => ({
   openCount: h.openCount,
@@ -195,6 +201,7 @@ describe("edit and selection commands", () => {
     ["edit:toggleComment", () => docInfo.toggleLineComment],
     ["edit:toggleBlockComment", () => docInfo.toggleBlockCommentCmd],
     ["gotoLine", () => docInfo.openGotoLine],
+    ["edit:organizeImports", () => h.organizeImports],
     ["sel:expand", () => docInfo.expandSelectionCmd],
     ["sel:shrink", () => docInfo.shrinkSelectionCmd],
     ["sel:addNext", () => docInfo.addNextOccurrence],

@@ -528,7 +528,7 @@ describe("what typing does", () => {
     // the write still pending — the edits went nowhere.
     unmount()
     await vi.advanceTimersByTimeAsync(1100)
-    expect(writeFile).toHaveBeenCalledWith(ROOT, REL, `x${TEXT}`)
+    expect(writeFile).toHaveBeenCalledWith(ROOT, REL, `x${TEXT}`, undefined)
     vi.useRealTimers()
   })
 
@@ -537,7 +537,7 @@ describe("what typing does", () => {
     const { unmount } = mount()
     view().dispatch({ changes: { from: 0, insert: "x" } })
     unmount()
-    await waitFor(() => expect(writeFile).toHaveBeenCalledWith(ROOT, REL, `x${TEXT}`))
+    await waitFor(() => expect(writeFile).toHaveBeenCalledWith(ROOT, REL, `x${TEXT}`, undefined))
   })
 
   it("never writes a PR-pinned buffer on close — those bytes are the ref's", async () => {

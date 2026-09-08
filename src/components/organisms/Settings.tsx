@@ -3,29 +3,40 @@
 import { getVersion } from "@tauri-apps/api/app"
 import { revealItemInDir } from "@tauri-apps/plugin-opener"
 import type { TFunction } from "i18next"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { Checkbox } from "@/components/atoms/Checkbox"
 import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
-import { CloseIcon, SearchIcon } from "@/components/atoms/icons"
+import { CloseIcon, CodeIcon, SearchIcon } from "@/components/atoms/icons"
 import { Modal } from "@/components/atoms/Modal"
 import { SegmentedControl } from "@/components/atoms/SegmentedControl"
 import { Select } from "@/components/atoms/Select"
 import { Textarea } from "@/components/atoms/Textarea"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
+import { SettingsJson } from "@/components/organisms/SettingsJson"
 import { type Locale, type MessageKey, useLocale } from "@/i18n"
 import { cliInstalled, installCli } from "@/lib/api"
 import { makeDefaultApp } from "@/lib/defaults"
 import { allIconThemes } from "@/lib/extIcons"
 import { type ExtThemePreview, loadExtThemePreviews } from "@/lib/extThemes"
+import { DEFAULT_NESTING } from "@/lib/fileNesting"
 import { BUNDLED_FONTS, fontName, fontStack, isPresetFont, SYSTEM_FONTS } from "@/lib/fonts"
 import { logPath } from "@/lib/logger"
 import { useMarketplace } from "@/lib/marketplace"
 import { notify } from "@/lib/notice"
 import {
+  dropProjectOverride,
+  isProjectOverride,
+  overridesVersion,
+  type ProjectKey,
+  subscribeOverrides,
+} from "@/lib/projectConfig"
+import {
+  DEFAULTS,
   FONT_SIZE_RANGE,
+  isDefaultSetting,
   LETTER_SPACING_RANGE,
   LINE_HEIGHT_RANGE,
   type SettingsState,
@@ -53,6 +64,8 @@ const TABS: { id: TabId; labelKey: MessageKey }[] = [
 export function Settings() {
   const open = usePalette((s) => s.settingsOpen)
   const toggle = usePalette((s) => s.toggleSettings)
+  const jsonOpen = usePalette((s) => s.settingsJsonOpen)
+  const toggleJson = usePalette((s) => s.toggleSettingsJson)
   const { t } = useTranslation()
   const [tab, setTab] = useState<TabId>("appearance")
   // The section a search result asked for. Cleared once it has been revealed,
@@ -100,6 +113,13 @@ export function Settings() {
           wrapperClassName="max-w-sm min-w-0 flex-1"
         />
         <span className="flex-1" />
+        {/* The text view of the same preferences — the one form you can diff,
+            paste into an issue, or carry between machines by hand. */}
+        <IconButton
+          label={t("settings.json")}
+          icon={<CodeIcon className="h-4 w-4" />}
+          onClick={() => toggleJson(true)}
+        />
         <IconButton
           label={t("settings.close")}
           icon={<CloseIcon />}
@@ -153,6 +173,7 @@ export function Settings() {
           <AppVersion />
         </div>
       </div>
+      <SettingsJson open={jsonOpen} onClose={() => toggleJson(false)} />
     </Modal>
   )
 }
@@ -165,7 +186,7 @@ function AppearanceTab() {
   return (
     <>
       <Section id="theme" title={t("settings.theme")}>
-        <Field label={t("settings.themeMode")}>
+        <Field label={t("settings.themeMode")} settingKey="mode">
           <Select
             value={settings.mode}
             onChange={(v) => settings.set({ mode: v as ThemeMode })}
@@ -223,7 +244,7 @@ function EditorTab() {
   return (
     <>
       <Section id="typography" title={t("settings.typography")}>
-        <Field label={t("settings.codeFont")}>
+        <Field label={t("settings.codeFont")} settingKey="codeFont">
           <Select
             value={isPresetFont(settings.codeFont) ? settings.codeFont : ""}
             onChange={(v) => settings.set({ codeFont: v })}
@@ -247,6 +268,7 @@ function EditorTab() {
 
         <div className="grid grid-cols-2 gap-4">
           <NumberField
+            settingKey="fontSize"
             label={t("settings.fontSize")}
             value={settings.fontSize}
             min={FONT_SIZE_RANGE.min}
@@ -255,6 +277,7 @@ function EditorTab() {
             onCommit={(n) => settings.set({ fontSize: n })}
           />
           <NumberField
+            settingKey="lineHeight"
             label={t("settings.lineHeight")}
             value={settings.lineHeight}
             min={LINE_HEIGHT_RANGE.min}
@@ -265,6 +288,7 @@ function EditorTab() {
         </div>
 
         <NumberField
+          settingKey="letterSpacing"
           label={t("settings.letterSpacing")}
           value={settings.letterSpacing}
           min={LETTER_SPACING_RANGE.min}
@@ -275,6 +299,7 @@ function EditorTab() {
         />
 
         <NumberField
+          settingKey="rulerColumn"
           label={t("settings.ruler")}
           value={settings.rulerColumn}
           min={0}
@@ -285,7 +310,7 @@ function EditorTab() {
         />
       </Section>
       <Section id="gutter" title={t("settings.gutter")}>
-        <Field label={t("settings.lineNumbers")}>
+        <Field label={t("settings.lineNumbers")} settingKey="lineNumbers">
           <Select
             value={settings.lineNumbers}
             onChange={(v) => settings.set({ lineNumbers: v as SettingsState["lineNumbers"] })}
@@ -297,7 +322,7 @@ function EditorTab() {
           />
         </Field>
 
-        <Field label={t("settings.activeLine")}>
+        <Field label={t("settings.activeLine")} settingKey="activeLine">
           <Select
             value={settings.activeLine}
             onChange={(v) => settings.set({ activeLine: v as SettingsState["activeLine"] })}
@@ -310,7 +335,7 @@ function EditorTab() {
           />
         </Field>
 
-        <Field label={t("settings.indentGuides")}>
+        <Field label={t("settings.indentGuides")} settingKey="indentGuides">
           <Select
             value={settings.indentGuides}
             onChange={(v) => settings.set({ indentGuides: v as SettingsState["indentGuides"] })}
@@ -323,7 +348,7 @@ function EditorTab() {
         </Field>
       </Section>
       <Section id="autosave" title={t("settings.autoSave")}>
-        <Field label={t("settings.autoSave")}>
+        <Field label={t("settings.autoSave")} settingKey="autoSave">
           <Select
             value={settings.autoSave}
             onChange={(v) => settings.set({ autoSave: v as SettingsState["autoSave"] })}
@@ -334,39 +359,71 @@ function EditorTab() {
             ]}
           />
         </Field>
+        {settings.autoSave === "afterDelay" && (
+          <NumberField
+            settingKey="autoSaveDelay"
+            label={t("settings.autoSaveDelay")}
+            value={settings.autoSaveDelay}
+            min={200}
+            max={10000}
+            step={100}
+            onCommit={(n) => settings.set({ autoSaveDelay: n })}
+            hint={t("settings.autoSaveDelayHint")}
+          />
+        )}
       </Section>
       <Section id="aids" title={t("settings.aids")}>
         <ToggleField
+          settingKey="wrap"
           checked={settings.wrap}
           onChange={(v) => settings.set({ wrap: v })}
           label={t("editor.wrap")}
           hint={t("settings.wrapHint")}
         />
         <ToggleField
+          settingKey="stickyScroll"
           checked={settings.stickyScroll}
           onChange={(v) => settings.set({ stickyScroll: v })}
           label={t("editor.sticky")}
           hint={t("settings.stickyHint")}
         />
         <ToggleField
+          settingKey="colorSwatches"
           checked={settings.colorSwatches}
           onChange={(v) => settings.set({ colorSwatches: v })}
           label={t("settings.colorSwatches")}
           hint={t("settings.colorSwatchesHint")}
         />
         <ToggleField
+          settingKey="renderWhitespace"
           checked={settings.renderWhitespace}
           onChange={(v) => settings.set({ renderWhitespace: v })}
           label={t("settings.renderWhitespace")}
           hint={t("settings.whitespaceHint")}
         />
         <ToggleField
+          settingKey="bracketMatching"
           checked={settings.bracketMatching}
           onChange={(v) => settings.set({ bracketMatching: v })}
           label={t("settings.bracketMatching")}
           hint={t("settings.bracketMatchingHint")}
         />
         <ToggleField
+          settingKey="bracketPairColors"
+          checked={settings.bracketPairColors}
+          onChange={(v) => settings.set({ bracketPairColors: v })}
+          label={t("settings.bracketPairColors")}
+          hint={t("settings.bracketPairColorsHint")}
+        />
+        <ToggleField
+          settingKey="suggestOnTyping"
+          checked={settings.suggestOnTyping}
+          onChange={(v) => settings.set({ suggestOnTyping: v })}
+          label={t("settings.suggestOnTyping")}
+          hint={t("settings.suggestOnTypingHint")}
+        />
+        <ToggleField
+          settingKey="focusMode"
           checked={settings.focusMode}
           onChange={(v) => settings.set({ focusMode: v })}
           label={t("editor.focus")}
@@ -389,7 +446,7 @@ function InterfaceTab() {
   return (
     <>
       <Section id="accessibility" title={t("settings.accessibility")}>
-        <Field label={t("settings.zoom")}>
+        <Field label={t("settings.zoom")} settingKey="zoom">
           <Select
             value={String(settings.zoom)}
             onChange={(v) => settings.set({ zoom: Number(v) })}
@@ -402,7 +459,7 @@ function InterfaceTab() {
 
         {/* Labelled by what the reader can't separate, with the clinical name in
         brackets — most people know the experience, not the term. */}
-        <Field label={t("settings.colorVision")}>
+        <Field label={t("settings.colorVision")} settingKey="colorVision">
           <Select
             value={settings.colorVision}
             onChange={(v) => settings.set({ colorVision: v as SettingsState["colorVision"] })}
@@ -417,7 +474,7 @@ function InterfaceTab() {
           </span>
         </Field>
 
-        <Field label={t("settings.reduceMotion")}>
+        <Field label={t("settings.reduceMotion")} settingKey="reduceMotion">
           <Select
             value={settings.reduceMotion}
             onChange={(v) => settings.set({ reduceMotion: v as SettingsState["reduceMotion"] })}
@@ -431,7 +488,7 @@ function InterfaceTab() {
       </Section>
       <Section id="cursor" title={t("settings.cursor")}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label={t("settings.cursorStyle")}>
+          <Field label={t("settings.cursorStyle")} settingKey="cursorStyle">
             <Select
               value={settings.cursorStyle}
               onChange={(v) => settings.set({ cursorStyle: v as SettingsState["cursorStyle"] })}
@@ -442,7 +499,7 @@ function InterfaceTab() {
               ]}
             />
           </Field>
-          <Field label={t("settings.cursorBlink")}>
+          <Field label={t("settings.cursorBlink")} settingKey="cursorBlink">
             <Select
               value={settings.cursorBlink}
               onChange={(v) => settings.set({ cursorBlink: v as SettingsState["cursorBlink"] })}
@@ -457,7 +514,7 @@ function InterfaceTab() {
       </Section>
       <Section id="surfaces" title={t("settings.surfaces")}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label={t("settings.tabBar")}>
+          <Field label={t("settings.tabBar")} settingKey="tabBar">
             <Select
               value={settings.tabBar}
               onChange={(v) => settings.set({ tabBar: v as SettingsState["tabBar"] })}
@@ -468,7 +525,7 @@ function InterfaceTab() {
               ]}
             />
           </Field>
-          <Field label={t("settings.scrollbar")}>
+          <Field label={t("settings.scrollbar")} settingKey="scrollbar">
             <Select
               value={settings.scrollbar}
               onChange={(v) => settings.set({ scrollbar: v as SettingsState["scrollbar"] })}
@@ -481,7 +538,14 @@ function InterfaceTab() {
           </Field>
         </div>
 
-        <Field label={t("settings.fileIcons")}>
+        <ToggleField
+          settingKey="previewTabs"
+          checked={settings.previewTabs}
+          onChange={(v) => settings.set({ previewTabs: v })}
+          label={t("settings.previewTabs")}
+          hint={t("settings.previewTabsHint")}
+        />
+        <Field label={t("settings.fileIcons")} settingKey="fileIcons">
           <Select
             value={settings.fileIcons}
             onChange={(v) => settings.set({ fileIcons: v as SettingsState["fileIcons"] })}
@@ -534,17 +598,62 @@ function FilesTab() {
   return (
     <>
       <Section id="project" title={t("settings.project")}>
-        <ExcludeGlobs
+        <LinesField
+          settingKey="excludeGlobs"
+          label={t("settings.exclude")}
           value={settings.excludeGlobs}
           onCommit={(g) => settings.set({ excludeGlobs: g })}
+          placeholder={"node_modules\ndist\n*.log"}
+          hint={t("settings.excludeHint")}
+        />
+        <LinesField
+          settingKey="searchExcludeGlobs"
+          label={t("settings.searchExclude")}
+          value={settings.searchExcludeGlobs}
+          onCommit={(g) => settings.set({ searchExcludeGlobs: g })}
+          rows={3}
+          placeholder={"**/*.snap\n**/fixtures/**"}
+          hint={t("settings.searchExcludeHint")}
         />
         <ToggleField
+          settingKey="fileNesting"
+          checked={settings.fileNesting}
+          onChange={(v) => settings.set({ fileNesting: v })}
+          label={t("settings.fileNesting")}
+          hint={t("settings.fileNestingHint")}
+        />
+        {settings.fileNesting && (
+          <LinesField
+            settingKey="fileNestingRules"
+            label={t("settings.fileNestingRules")}
+            value={settings.fileNestingRules}
+            onCommit={(rules) => settings.set({ fileNestingRules: rules })}
+            rows={5}
+            placeholder={DEFAULT_NESTING.join("\n")}
+            hint={t("settings.fileNestingRulesHint")}
+          />
+        )}
+        <Field label={t("settings.explorerSort")} settingKey="explorerSort">
+          <Select
+            value={settings.explorerSort}
+            onChange={(v) => settings.set({ explorerSort: v as SettingsState["explorerSort"] })}
+            options={[
+              { value: "name", label: t("tree.sortName") },
+              { value: "type", label: t("tree.sortType") },
+              { value: "modified", label: t("tree.sortModified") },
+            ]}
+          />
+          <p className="text-xs leading-relaxed text-faint">{t("settings.explorerSortHint")}</p>
+        </Field>
+        <ToggleField
+          settingKey="restoreSession"
           checked={settings.restoreSession}
           onChange={(v) => settings.set({ restoreSession: v })}
           label={t("settings.restoreSession")}
           hint={t("settings.restoreSessionHint")}
         />
         <NumberField
+          settingKey="largeFileGuardMb"
           label={t("settings.largeFileGuard")}
           value={settings.largeFileGuardMb}
           min={0}
@@ -557,35 +666,54 @@ function FilesTab() {
 
       <Section id="onSave" title={t("settings.onSave")}>
         <ToggleField
+          settingKey="formatOnSave"
           checked={settings.formatOnSave}
           onChange={(v) => settings.set({ formatOnSave: v })}
           label={t("settings.formatOnSave")}
           hint={t("settings.formatOnSaveHint")}
         />
         <ToggleField
+          settingKey="trimTrailingWhitespace"
           checked={settings.trimTrailingWhitespace}
           onChange={(v) => settings.set({ trimTrailingWhitespace: v })}
           label={t("settings.trimTrailingWhitespace")}
           hint={t("settings.trimTrailingWhitespaceHint")}
         />
         <ToggleField
+          settingKey="insertFinalNewline"
           checked={settings.insertFinalNewline}
           onChange={(v) => settings.set({ insertFinalNewline: v })}
           label={t("settings.insertFinalNewline")}
           hint={t("settings.insertFinalNewlineHint")}
         />
+        <p className="text-xs leading-relaxed text-faint">{t("settings.editorconfigNote")}</p>
+        {/* Files Reado creates. An existing file keeps whatever it already has —
+          the status bar converts that one, per document. */}
+        <Field label={t("settings.defaultEol")} settingKey="defaultEol">
+          <Select
+            value={settings.defaultEol}
+            onChange={(v) => settings.set({ defaultEol: v as SettingsState["defaultEol"] })}
+            options={[
+              { value: "auto", label: t("settings.defaultEolAuto") },
+              { value: "LF", label: "LF" },
+              { value: "CRLF", label: "CRLF" },
+            ]}
+          />
+        </Field>
       </Section>
       {/* Repo-gated: both read git, so outside a repository they would be two
         switches that do nothing. */}
       {isRepo && (
         <Section id="gitSignals" title={t("settings.gitSignals")}>
           <ToggleField
+            settingKey="inlineBlame"
             checked={settings.inlineBlame}
             onChange={(v) => settings.set({ inlineBlame: v })}
             label={t("settings.inlineBlame")}
             hint={t("settings.inlineBlameHint")}
           />
           <ToggleField
+            settingKey="diffGutter"
             checked={settings.diffGutter}
             onChange={(v) => settings.set({ diffGutter: v })}
             label={t("settings.diffGutter")}
@@ -606,7 +734,7 @@ function CustomFont({ value, onCommit }: { value: string; onCommit: (name: strin
   const [draft, setDraft] = useState(bare)
   useEffect(() => setDraft(bare), [bare])
   return (
-    <Field label={t("settings.codeFontCustom")}>
+    <Field label={t("settings.codeFontCustom")} settingKey="codeFont">
       <Input
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -618,32 +746,53 @@ function CustomFont({ value, onCommit }: { value: string; onCommit: (name: strin
   )
 }
 
-/** Editable list of exclude globs — one per line, committed on blur so the tree
- *  doesn't re-list on every keystroke. */
-function ExcludeGlobs({ value, onCommit }: { value: string[]; onCommit: (g: string[]) => void }) {
-  const { t } = useTranslation()
+/**
+ * A newline-separated list, committed on blur.
+ *
+ * Four settings are edited this way (tree excludes, search excludes, nesting
+ * rules, and the terminal's shell arguments); they differed only in their label,
+ * placeholder and height, which are values — so they are parameters, not four
+ * copies of the same parse.
+ */
+function LinesField({
+  label,
+  settingKey,
+  value,
+  onCommit,
+  rows = 4,
+  placeholder,
+  hint,
+}: {
+  label: string
+  settingKey: SettingKey
+  value: string[]
+  onCommit: (lines: string[]) => void
+  rows?: number
+  placeholder?: string
+  hint?: string
+}) {
   const [draft, setDraft] = useState(value.join("\n"))
   useEffect(() => setDraft(value.join("\n")), [value])
-  const commit = () =>
-    onCommit(
-      draft
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    )
   return (
-    <Field label={t("settings.exclude")}>
+    <Field label={label} settingKey={settingKey}>
       <Textarea
         mono
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        rows={4}
+        onBlur={() =>
+          onCommit(
+            draft
+              .split("\n")
+              .map((line) => line.trim())
+              .filter(Boolean),
+          )
+        }
+        rows={rows}
         spellCheck={false}
-        placeholder={"node_modules\ndist\n*.log"}
+        placeholder={placeholder}
         className="bg-canvas text-xs"
       />
-      <span className="text-xs leading-relaxed text-faint">{t("settings.excludeHint")}</span>
+      {hint && <span className="text-xs leading-relaxed text-faint">{hint}</span>}
     </Field>
   )
 }
@@ -656,12 +805,14 @@ function SystemTab() {
     <>
       <Section id="review" title={t("settings.review")}>
         <ToggleField
+          settingKey="showResolvedComments"
           checked={settings.showResolvedComments}
           onChange={(v) => settings.set({ showResolvedComments: v })}
           label={t("settings.showResolvedComments")}
           hint={t("settings.showResolvedCommentsHint")}
         />
         <ToggleField
+          settingKey="inlineDiagnostics"
           checked={settings.inlineDiagnostics}
           onChange={(v) => settings.set({ inlineDiagnostics: v })}
           label={t("settings.inlineDiagnostics")}
@@ -678,10 +829,78 @@ function SystemTab() {
         />
       </Section>
 
+      <TerminalSettings />
       <DefaultApp />
       <LoggingSettings />
       <CliInstall />
     </>
+  )
+}
+
+/** The integrated terminal's own appearance and shell. Its font family follows
+ *  the editor's; everything else here is the terminal's alone. */
+function TerminalSettings() {
+  const settings = useSettings()
+  const { t } = useTranslation()
+  return (
+    <Section id="terminal" title={t("settings.terminal")}>
+      <NumberField
+        settingKey="terminalFontSize"
+        label={t("settings.terminalFontSize")}
+        value={settings.terminalFontSize}
+        min={8}
+        max={24}
+        step={1}
+        onCommit={(n) => settings.set({ terminalFontSize: n })}
+      />
+      <NumberField
+        settingKey="terminalScrollback"
+        label={t("settings.terminalScrollback")}
+        value={settings.terminalScrollback}
+        min={200}
+        max={100000}
+        step={500}
+        onCommit={(n) => settings.set({ terminalScrollback: n })}
+      />
+      <Field label={t("settings.terminalCursor")} settingKey="terminalCursorStyle">
+        <Select
+          value={settings.terminalCursorStyle}
+          onChange={(v) =>
+            settings.set({ terminalCursorStyle: v as SettingsState["terminalCursorStyle"] })
+          }
+          options={[
+            { value: "block", label: t("settings.cursorBlock") },
+            { value: "bar", label: t("settings.cursorBar") },
+            { value: "underline", label: t("settings.cursorUnderline") },
+          ]}
+        />
+      </Field>
+      <Field label={t("settings.terminalShell")} settingKey="terminalShell">
+        <Input
+          value={settings.terminalShell}
+          onChange={(e) => settings.set({ terminalShell: e.target.value })}
+          placeholder="/bin/zsh"
+          spellCheck={false}
+          className="bg-canvas font-mono text-xs"
+        />
+        <span className="text-xs leading-relaxed text-faint">
+          {t("settings.terminalShellHint")}
+        </span>
+      </Field>
+      {/* Only with an override: the default shell's `-il` is chosen for it, and
+        an arguments box that does nothing is worse than no box. */}
+      {settings.terminalShell.trim() !== "" && (
+        <LinesField
+          settingKey="terminalShellArgs"
+          label={t("settings.terminalShellArgs")}
+          value={settings.terminalShellArgs}
+          onCommit={(a) => settings.set({ terminalShellArgs: a })}
+          rows={2}
+          placeholder={"-l\n-i"}
+          hint={t("settings.terminalShellArgsHint")}
+        />
+      )}
+    </Section>
   )
 }
 
@@ -892,12 +1111,80 @@ const SECTION_TITLE = "text-[11px] font-semibold uppercase tracking-[0.08em] tex
 const FIELD_LABEL = "text-xs font-medium text-ink/70"
 
 /** A single labelled control (label wraps the input for a clean click target). */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  settingKey,
+  children,
+}: {
+  label: string
+  /** The setting this field edits, so it can be marked and undone on its own. */
+  settingKey: SettingKey
+  children: React.ReactNode
+}) {
   return (
-    <label className="flex flex-col gap-2.5">
-      <span className={FIELD_LABEL}>{label}</span>
-      {children}
-    </label>
+    // The mark is a sibling of the <label>, not a child of it: a button inside a
+    // label is associated with that label, so `getByLabelText` (and a screen
+    // reader) would find two controls under one name.
+    <div className="relative flex flex-col">
+      <label className="flex flex-col gap-2.5">
+        <span className={FIELD_LABEL}>{label}</span>
+        {children}
+      </label>
+      <span className="absolute top-0 right-0">
+        <ModifiedMark settingKey={settingKey} />
+      </span>
+    </div>
+  )
+}
+
+/** A setting Reado ships a default for — everything in `SettingsState` except
+ *  the store's own actions. */
+type SettingKey = keyof typeof DEFAULTS
+
+/**
+ * Where a setting's value came from, and a one-click way back.
+ *
+ * Two things a settings dialog has to be able to say, and Reado could say
+ * neither: "you changed this" (otherwise the only way to find out is to reset
+ * everything and start over) and "this project pins it" — without which you
+ * change a value, watch it stick, and never learn that everyone opening this
+ * repository gets it too.
+ *
+ * The project mark wins when both apply: it is the one that explains why the
+ * value is what it is.
+ */
+function ModifiedMark({ settingKey }: { settingKey: SettingKey }) {
+  const { t } = useTranslation()
+  const modified = useSettings((s) => !isDefaultSetting(settingKey, s))
+  const set = useSettings((s) => s.set)
+  const root = useProject((s) => s.root)
+  // The declared set isn't a store (it is read on hot paths), so re-render on
+  // its own version counter instead.
+  useSyncExternalStore(subscribeOverrides, overridesVersion)
+  const fromProject = isProjectOverride(settingKey)
+  if (!fromProject && !modified) return null
+  const label = fromProject ? t("settings.clearProject") : t("settings.resetOne")
+  return (
+    <button
+      type="button"
+      title={fromProject ? t("settings.fromProjectHint") : label}
+      aria-label={label}
+      onClick={(e) => {
+        // The label wraps its control: without this the click would also focus
+        // (and, for a checkbox, toggle) the field being acted on.
+        e.preventDefault()
+        if (fromProject) void dropProjectOverride(root, settingKey as ProjectKey)
+        else set({ [settingKey]: DEFAULTS[settingKey] } as Partial<SettingsState>)
+      }}
+      className={`ml-1.5 inline-flex cursor-pointer items-center gap-1 align-middle hover:text-ink ${
+        fromProject ? "text-marker" : "text-accent"
+      }`}
+    >
+      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+      <span className="text-[10px] normal-case">
+        {fromProject ? t("settings.fromProject") : t("settings.modified")}
+      </span>
+    </button>
   )
 }
 
@@ -963,15 +1250,25 @@ function ToggleField({
   onChange,
   label,
   hint,
+  settingKey,
 }: {
   checked: boolean
   onChange: (v: boolean) => void
   label: string
   hint: string
+  settingKey: SettingKey
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <Checkbox checked={checked} onChange={onChange} label={label} className="text-sm text-ink" />
+      <span className="flex items-center">
+        <Checkbox
+          checked={checked}
+          onChange={onChange}
+          label={label}
+          className="text-sm text-ink"
+        />
+        <ModifiedMark settingKey={settingKey} />
+      </span>
       <span className="pl-[22px] text-xs leading-relaxed text-faint">{hint}</span>
     </div>
   )
@@ -986,6 +1283,7 @@ function NumberField({
   step,
   onCommit,
   hint,
+  settingKey,
 }: {
   label: string
   value: number
@@ -994,6 +1292,7 @@ function NumberField({
   step: number
   onCommit: (n: number) => void
   hint?: string
+  settingKey: SettingKey
 }) {
   const [draft, setDraft] = useState(String(value))
   useEffect(() => setDraft(String(value)), [value])
@@ -1002,7 +1301,7 @@ function NumberField({
     onCommit(Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : value)
   }
   return (
-    <Field label={label}>
+    <Field label={label} settingKey={settingKey}>
       <Input
         type="number"
         value={draft}
@@ -1028,7 +1327,7 @@ function IconThemeField({ t }: { t: TFunction }) {
   const themes = allIconThemes(installed)
   if (themes.length === 0) return null
   return (
-    <Field label={t("settings.iconTheme")}>
+    <Field label={t("settings.iconTheme")} settingKey="iconTheme">
       <Select
         value={chosen ?? ""}
         onChange={(v) => set({ iconTheme: v || null })}

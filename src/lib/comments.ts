@@ -27,6 +27,19 @@ import {
 } from "./api"
 
 /** Convert an absolute path to a project-relative, forward-slashed path. */
+/**
+ * The last component of a path, on either separator.
+ *
+ * Trailing separators are stripped first, so a folder path names the folder
+ * rather than coming back empty — the difference between the copies this
+ * replaced, which disagreed on exactly that.
+ */
+export const baseName = (p: string): string =>
+  p
+    .replace(/[\\/]+$/, "")
+    .split(/[\\/]/)
+    .pop() ?? p
+
 export function toRelative(root: string, path: string): string {
   // Compare against root with a trailing separator so a sibling dir sharing a
   // string prefix (e.g. `/home/me/proj-backup` vs root `/home/me/proj`) doesn't

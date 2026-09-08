@@ -32,13 +32,15 @@ beforeEach(() => {
 
 describe("record", () => {
   it("pushes onto the stack", () => {
-    useFileUndo.getState().record({ kind: "move", from: "a.ts", to: "b/a.ts" })
+    useFileUndo.getState().record({ kind: "move", root: "/root", from: "a.ts", to: "b/a.ts" })
     expect(useFileUndo.getState().stack).toHaveLength(1)
   })
 
   it("keeps only the last 50 ops", () => {
     for (let i = 0; i < 60; i++) {
-      useFileUndo.getState().record({ kind: "move", from: `${i}.ts`, to: `b/${i}.ts` })
+      useFileUndo
+        .getState()
+        .record({ kind: "move", root: "/root", from: `${i}.ts`, to: `b/${i}.ts` })
     }
     const stack = useFileUndo.getState().stack
     expect(stack).toHaveLength(50)
@@ -53,7 +55,7 @@ describe("undo", () => {
   })
 
   it("moves a moved file back and re-points its open tab", async () => {
-    useFileUndo.getState().record({ kind: "move", from: "a.ts", to: "b/a.ts" })
+    useFileUndo.getState().record({ kind: "move", root: "/root", from: "a.ts", to: "b/a.ts" })
     await useFileUndo.getState().undo()
     expect(movePath).toHaveBeenCalledWith("/root", "b/a.ts", "a.ts")
     expect(project.renamePath).toHaveBeenCalledWith("b/a.ts", "a.ts")
@@ -64,6 +66,7 @@ describe("undo", () => {
   it("restores a trashed file from the project trash", async () => {
     useFileUndo.getState().record({
       kind: "trash",
+      root: "/root",
       original: "a.ts",
       trashed: ".reado/.trash/a.ts",
     })
@@ -74,15 +77,19 @@ describe("undo", () => {
   })
 
   it("undoes the most recent op first", async () => {
-    useFileUndo.getState().record({ kind: "move", from: "first.ts", to: "b/first.ts" })
-    useFileUndo.getState().record({ kind: "move", from: "second.ts", to: "b/second.ts" })
+    useFileUndo
+      .getState()
+      .record({ kind: "move", root: "/root", from: "first.ts", to: "b/first.ts" })
+    useFileUndo
+      .getState()
+      .record({ kind: "move", root: "/root", from: "second.ts", to: "b/second.ts" })
     await useFileUndo.getState().undo()
     expect(movePath).toHaveBeenCalledWith("/root", "b/second.ts", "second.ts")
   })
 
   it("drops an unreversible op instead of getting stuck, and says so", async () => {
     vi.mocked(movePath).mockRejectedValueOnce(new Error("name taken"))
-    useFileUndo.getState().record({ kind: "move", from: "a.ts", to: "b/a.ts" })
+    useFileUndo.getState().record({ kind: "move", root: "/root", from: "a.ts", to: "b/a.ts" })
     await useFileUndo.getState().undo()
     expect(useFileUndo.getState().stack).toHaveLength(0)
     expect(notifyError).toHaveBeenCalledWith("fileUndo", "undo.failed")
@@ -95,7 +102,7 @@ describe("trashAndRecord", () => {
     expect(trashPath).toHaveBeenCalledWith("/root", "a.ts")
     expect(project.close).toHaveBeenCalledWith("a.ts")
     expect(useFileUndo.getState().stack).toEqual([
-      { kind: "trash", original: "a.ts", trashed: ".reado/.trash/a.ts" },
+      { kind: "trash", root: "/root", original: "a.ts", trashed: ".reado/.trash/a.ts" },
     ])
   })
 

@@ -4,7 +4,7 @@
 // File and command basics live in Palette.uitest.tsx; this is the rest.
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const { listFiles, listSymbols, searchText } = vi.hoisted(() => ({
   listFiles: vi.fn(async () => ["src/a.ts"]),
@@ -45,6 +45,22 @@ const doc = vi.hoisted(() => ({
   formatDocument: vi.fn(),
   askAboutSelection: vi.fn(),
   goToLine: vi.fn(),
+  formatSelection: vi.fn(),
+  saveAll: vi.fn(),
+  upperCaseCmd: vi.fn(),
+  lowerCaseCmd: vi.fn(),
+  titleCaseCmd: vi.fn(),
+  sortLinesAsc: vi.fn(),
+  sortLinesDesc: vi.fn(),
+  deleteDuplicateLinesCmd: vi.fn(),
+  joinLinesCmd: vi.fn(),
+  foldAllCmd: vi.fn(),
+  unfoldAllCmd: vi.fn(),
+  trimWhitespaceCmd: vi.fn(),
+  reindentLines: vi.fn(),
+  convertIndentationTo: vi.fn(),
+  cursorUndo: vi.fn(),
+  cursorRedo: vi.fn(),
 }))
 vi.mock("../../../lib/docInfo", async (orig) => ({
   ...(await orig<typeof import("../../../lib/docInfo")>()),
@@ -60,8 +76,21 @@ vi.mock("../../../lib/mcp", () => ({ enableMcp }))
 const sync = vi.hoisted(() => ({
   exportSettings: vi.fn(async () => {}),
   importSettings: vi.fn(async () => {}),
+  exportSettingsToFile: vi.fn(async () => {}),
+  importSettingsFromFile: vi.fn(async () => {}),
 }))
 vi.mock("../../../lib/settingsSync", () => sync)
+const { saveSettingsToProject } = vi.hoisted(() => ({
+  saveSettingsToProject: vi.fn(async () => {}),
+}))
+vi.mock("../../../lib/projectConfig", () => ({ saveSettingsToProject }))
+const { organizeImports } = vi.hoisted(() => ({ organizeImports: vi.fn(async () => {}) }))
+vi.mock("../../../lib/codeActions", () => ({ organizeImports }))
+const { addWorkspaceFolder } = vi.hoisted(() => ({ addWorkspaceFolder: vi.fn(async () => {}) }))
+vi.mock("../../../lib/workspace", async (orig) => ({
+  ...(await orig<typeof import("../../../lib/workspace")>()),
+  addWorkspaceFolder,
+}))
 const { promptDialog } = vi.hoisted(() => ({
   promptDialog: vi.fn(async () => null as string | null),
 }))
@@ -81,16 +110,19 @@ vi.mock("../../../lib/lsp", async (orig) => ({
   lspDocumentSymbols: () => null,
 }))
 
+import { EditorView } from "@codemirror/view"
 import { Palette } from "@/components/organisms/Palette"
 import { useBookmarks } from "@/lib/bookmarks"
 import { useDocInfo } from "@/lib/docInfo"
 import { useGuidedReview } from "@/lib/guidedReview"
+import { knownCommands } from "@/lib/menu"
 import { useOnboarding } from "@/lib/onboarding"
 import { usePreReview } from "@/lib/preReview"
 import { usePreview } from "@/lib/preview"
 import { useReadProgress } from "@/lib/readProgress"
 import { useResolveLoop } from "@/lib/resolveLoop"
 import { useSemanticSearch } from "@/lib/semanticSearch"
+import { alt, mod } from "@/lib/shortcuts"
 import {
   useEditorActions,
   usePalette,
@@ -100,10 +132,35 @@ import {
   useWorkspace,
 } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
+import paletteSrc from "../Palette.tsx?raw"
 
-/** An editor view exposing only what the command gating reads. */
-const view = (empty: boolean) =>
-  ({ state: { selection: { main: { empty } }, doc: { toString: () => "const x = 1" } } }) as never
+/**
+ * A *real* editor view for the commands to act on.
+ *
+ * The palette no longer offers only gating-shaped commands: the text transforms
+ * walk `state.selection.ranges`, and folding reaches into the view's own
+ * geometry. A hand-rolled stub would pin the shape of the stub rather than the
+ * behaviour, and grew a `lineBlockAt is not a function` the first time a command
+ * did real work.
+ */
+let liveView: EditorView | undefined
+const view = (empty: boolean) => {
+  liveView?.destroy()
+  const doc = "const x = 1"
+  // Deliberately detached: mounted into the document it would be a second
+  // `textbox`, and every `getByRole("textbox")` in this file means the palette's
+  // own input.
+  liveView = new EditorView({
+    doc,
+    parent: document.createElement("div"),
+    selection: empty ? { anchor: 0 } : { anchor: 0, head: doc.length },
+  })
+  return liveView as never
+}
+afterEach(() => {
+  liveView?.destroy()
+  liveView = undefined
+})
 
 const project = {
   root: "/repo",
@@ -502,6 +559,9 @@ describe("running a command", () => {
       "comment.new": () => expect(useEditorActions.getState().composeNonce).toBe(1),
       "editor.explain": () => expect(useEditorActions.getState().explainNonce).toBe(1),
       "peek.def": () => expect(useEditorActions.getState().peekNonce).toBe(1),
+      "lsp.quickFix": () => expect(useEditorActions.getState().quickFixNonce).toBe(1),
+      "lsp.organizeImports": () => expect(organizeImports).toHaveBeenCalled(),
+      "workspace.addFolder": () => expect(addWorkspaceFolder).toHaveBeenCalled(),
       "qa.ask": () => expect(doc.askAboutSelection).toHaveBeenCalled(),
       "editor.goToBracket": () => expect(doc.goToBracket).toHaveBeenCalled(),
       "editor.lastEdit": () => expect(doc.gotoLastEdit).toHaveBeenCalled(),
@@ -538,8 +598,30 @@ describe("running a command", () => {
       },
       "mcp.enable": () => expect(enableMcp).toHaveBeenCalledWith("/repo"),
       "anywhere.open": () => expect(usePalette.getState().anywhereOpen).toBe(true),
+      "settings.json": () => expect(usePalette.getState().settingsJsonOpen).toBe(true),
       "sync.export": () => expect(sync.exportSettings).toHaveBeenCalled(),
       "sync.import": () => expect(sync.importSettings).toHaveBeenCalled(),
+      "sync.exportFile": () => expect(sync.exportSettingsToFile).toHaveBeenCalled(),
+      "sync.importFile": () => expect(sync.importSettingsFromFile).toHaveBeenCalled(),
+      "sync.saveToProject": () => expect(saveSettingsToProject).toHaveBeenCalledWith("/repo"),
+      "editor.formatSelection": () => expect(doc.formatSelection).toHaveBeenCalled(),
+      "editor.saveAll": () => expect(doc.saveAll).toHaveBeenCalled(),
+      "editor.upperCase": () => expect(doc.upperCaseCmd).toHaveBeenCalled(),
+      "editor.lowerCase": () => expect(doc.lowerCaseCmd).toHaveBeenCalled(),
+      "editor.titleCase": () => expect(doc.titleCaseCmd).toHaveBeenCalled(),
+      "editor.sortAsc": () => expect(doc.sortLinesAsc).toHaveBeenCalled(),
+      "editor.sortDesc": () => expect(doc.sortLinesDesc).toHaveBeenCalled(),
+      "editor.deleteDuplicates": () => expect(doc.deleteDuplicateLinesCmd).toHaveBeenCalled(),
+      "editor.joinLines": () => expect(doc.joinLinesCmd).toHaveBeenCalled(),
+      "editor.foldAll": () => expect(doc.foldAllCmd).toHaveBeenCalled(),
+      "editor.unfoldAll": () => expect(doc.unfoldAllCmd).toHaveBeenCalled(),
+      "editor.trimWhitespace": () => expect(doc.trimWhitespaceCmd).toHaveBeenCalled(),
+      "editor.reindent": () => expect(doc.reindentLines).toHaveBeenCalled(),
+      "editor.convertToSpaces": () =>
+        expect(doc.convertIndentationTo).toHaveBeenCalledWith("spaces"),
+      "editor.convertToTabs": () => expect(doc.convertIndentationTo).toHaveBeenCalledWith("tabs"),
+      "editor.cursorUndo": () => expect(doc.cursorUndo).toHaveBeenCalled(),
+      "editor.cursorRedo": () => expect(doc.cursorRedo).toHaveBeenCalled(),
       "terminal.clear": () => expect(agents.clearTerminal).toHaveBeenCalled(),
       "terminal.restart": () => expect(agents.restartTerminal).toHaveBeenCalled(),
       "terminal.move": () => expect(togglePosition).toHaveBeenCalled(),
@@ -638,7 +720,12 @@ describe("running a command", () => {
       useOnboarding.setState({ open: false })
       usePreview.setState({ open: false, agentAccess: false })
       useReadProgress.setState({ read: new Set(), changed: new Set() })
-      useEditorActions.setState({ composeNonce: 0, explainNonce: 0, peekNonce: 0 })
+      useEditorActions.setState({
+        composeNonce: 0,
+        explainNonce: 0,
+        peekNonce: 0,
+        quickFixNonce: 0,
+      })
 
       const { unmount } = render(<Palette />)
       const row = screen.getAllByRole("option").find((r) => r.textContent === label)
@@ -825,5 +912,33 @@ describe("where the palette sits", () => {
     useSettings.setState({ quickInputPosition: "center" })
     openCommands()
     expect(screen.getByRole("dialog").parentElement?.className).toContain("items-center")
+  })
+})
+
+describe("the shortcut chips", () => {
+  it("only name commands the dispatcher answers to", () => {
+    // A row whose id is a typo would render, filter and click — and do nothing
+    // at all, with no error anywhere to say why.
+    const known = knownCommands()
+    const ids = [...paletteSrc.matchAll(/\bcmd\(\s*\n?\s*"([^"]+)"/g)].map((m) => m[1])
+    expect(ids.length).toBeGreaterThan(40)
+    for (const id of ids) expect(known, id).toContain(id)
+  })
+
+  it("come from the bindings in force, not from a copy beside each row", () => {
+    const { labels } = openCommands()
+    const row = (prefix: string) => labels().find((l) => l.startsWith(prefix)) ?? ""
+    // Folding moved to a ⌘K chord; the rows went on advertising ⌘⌥⇧[ and ⌘⌥⇧]
+    // because each one spelled its own shortcut out.
+    expect(row("editor.foldAll")).toContain(`${mod}K ${mod}0`)
+    expect(row("editor.unfoldAll")).toContain(`${mod}K ${mod}J`)
+    expect(row("finder.placeholder")).toContain(`${mod}P`)
+  })
+
+  it("follow a rebound key", () => {
+    useSettings.setState({ keybindings: ["Mod+P = ", "Mod+Alt+P = palette:files"] })
+    const { labels } = openCommands()
+    const finder = labels().find((l) => l.startsWith("finder.placeholder")) ?? ""
+    expect(finder).toContain(`${mod}${alt}P`)
   })
 })

@@ -106,8 +106,20 @@ pub fn read_project_config(root: String) -> Option<String> {
     core::read_config(&root)
 }
 
+/// A shared, repository-versioned file under the project's `.reado/` directory
+/// (snippets, recommended extensions). Absent is `None`, not an error.
 #[tauri::command]
-pub fn write_project_config(root: String, json: String) -> Result<()> {
+pub fn read_reado_file(root: String, name: String) -> Option<String> {
+    core::read_reado_file(&root, &name)
+}
+
+/// Write a shared, repository-versioned file under `.reado/`. `name` defaults to
+/// the per-project config; the workspace folder list uses the same door.
+#[tauri::command]
+pub fn write_project_config(root: String, json: String, name: Option<String>) -> Result<()> {
+    if let Some(name) = name {
+        return Ok(core::write_reado_file(&root, &name, &json)?);
+    }
     core::write_config(&root, &json).inspect_err(|e| {
         crate::log::error(
             "annotations",

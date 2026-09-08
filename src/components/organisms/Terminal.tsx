@@ -19,7 +19,7 @@ import {
   readText as clipboardReadText,
   writeText as clipboardWriteText,
 } from "@tauri-apps/plugin-clipboard-manager"
-import { openUrl } from "@tauri-apps/plugin-opener"
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener"
 import { FitAddon } from "@xterm/addon-fit"
 import { SearchAddon } from "@xterm/addon-search"
 import { WebLinksAddon } from "@xterm/addon-web-links"
@@ -46,7 +46,6 @@ import { xtermFontFamily, xtermLinkColor, xtermTheme } from "@/lib/xtermTheme"
 const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
 
 /** Terminal font size at 100% interface zoom (multiplied by the zoom factor). */
-const BASE_FONT_SIZE = 13
 
 interface Props {
   id: string
@@ -109,9 +108,11 @@ export function Terminal({ id, cwd, active }: Props) {
       // The interface zoom is applied to the terminal via the font size (and the
       // host is counter-scaled below), not the ancestor CSS transform — so xterm's
       // mouse→cell mapping stays correct and selection/copy land on the right cell.
-      fontSize: BASE_FONT_SIZE * (useSettings.getState().zoom || 1),
+      fontSize: useSettings.getState().terminalFontSize * (useSettings.getState().zoom || 1),
       lineHeight: 1.2,
       cursorBlink: true,
+      cursorStyle: useSettings.getState().terminalCursorStyle,
+      scrollback: useSettings.getState().terminalScrollback,
       allowProposedApi: true,
     })
     const fit = new FitAddon()
@@ -159,11 +160,15 @@ export function Terminal({ id, cwd, active }: Props) {
             // `search`: agents print `Terminal.tsx:104`, not the path from the
             // project root, so the plain root-join misses almost every time.
             resolvePath(root, path, true)
-              .then((abs) =>
-                abs
-                  ? useProject.getState().open(abs, l.line)
-                  : notify("info", t("terminal.noFile", { path })),
-              )
+              .then((abs) => {
+                if (abs) return useProject.getState().open(abs, l.line)
+                // Outside the project: the editor only opens files under the
+                // root, so an absolute path elsewhere on disk goes to the file
+                // manager instead of dead-ending on "isn't in this project".
+                // A path that doesn't exist rejects, and lands in the catch.
+                if (/^(?:\/|[A-Za-z]:[\\/])/.test(path)) return revealItemInDir(path)
+                notify("info", t("terminal.noFile", { path }))
+              })
               .catch((e) => notifyError("terminal", t("terminal.noFile", { path }), e))
           },
         }))
@@ -405,12 +410,24 @@ export function Terminal({ id, cwd, active }: Props) {
   // xterm's coordinate mapping (selection, links) correct at any zoom. Re-fit so
   // the cols/rows track the new cell size.
   const zoom = useSettings((s) => s.zoom) || 1
+  const termFontSize = useSettings((s) => s.terminalFontSize)
   useEffect(() => {
     const term = termRef.current
     if (!term) return
-    term.options.fontSize = BASE_FONT_SIZE * zoom
+    term.options.fontSize = termFontSize * zoom
     requestAnimationFrame(syncSize)
-  }, [zoom, syncSize])
+  }, [zoom, termFontSize, syncSize])
+
+  // The rest of the terminal's own appearance/behaviour settings. No re-fit:
+  // neither the caret shape nor the scrollback depth changes the cell size.
+  const termCursor = useSettings((s) => s.terminalCursorStyle)
+  const termScrollback = useSettings((s) => s.terminalScrollback)
+  useEffect(() => {
+    const term = termRef.current
+    if (!term) return
+    term.options.cursorStyle = termCursor
+    term.options.scrollback = termScrollback
+  }, [termCursor, termScrollback])
 
   const find = (q: string, back = false) => {
     if (!q) return

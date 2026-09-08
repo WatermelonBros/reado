@@ -64,7 +64,7 @@ describe("the command boundary", () => {
   it("still sees every wrapper — bump this when you add one", () => {
     // A tripwire on the sweep itself. Exact, not `>=`: a loosened filter or a
     // broken mock would otherwise shrink the sweep silently.
-    expect(wrappers).toHaveLength(165)
+    expect(wrappers).toHaveLength(174)
   })
 
   for (const [name, fn] of wrappers) {
@@ -103,13 +103,37 @@ describe("the wrappers that do more than forward", () => {
       root: "/root",
       query: "needle",
       exclude: ["**/node_modules/**"],
+      include: [],
       caseSensitive: false,
       wholeWord: false,
       regex: false,
       scope: null,
     })
     await api.replaceText("/root", "a", "b")
+    // The rewrite obeys the *search* exclusions, since the search list is what
+    // the user is looking at when they press Replace.
     expect(lastArgs().exclude).toEqual(["**/node_modules/**"])
+  })
+
+  it("prefers the search-only exclude list when the user has set one", async () => {
+    // Empty means "same as the tree", so the common case stays one list; a
+    // non-empty search list replaces it rather than adding to it.
+    useSettings.setState({ searchExcludeGlobs: ["**/dist/**"] })
+    await api.searchText("/root", "needle")
+    expect(lastArgs().exclude).toEqual(["**/dist/**"])
+    useSettings.setState({ searchExcludeGlobs: [] })
+  })
+
+  it("splits the per-search glob fields on commas and whitespace", async () => {
+    await api.searchText("/root", "needle", {
+      caseSensitive: false,
+      wholeWord: false,
+      regex: false,
+      include: "src/**/*.ts, docs/**",
+      exclude: "**/*.test.ts",
+    })
+    expect(lastArgs().include).toEqual(["src/**/*.ts", "docs/**"])
+    expect(lastArgs().exclude).toEqual(["**/node_modules/**", "**/*.test.ts"])
   })
 
   it("searchText flattens its options into flat arguments", async () => {
@@ -182,7 +206,24 @@ describe("the wrappers that do more than forward", () => {
 
   it("ptySpawn carries the terminal's size, not just its id", async () => {
     await api.ptySpawn("t1", "/root", 40, 120)
-    expect(lastArgs()).toEqual({ id: "t1", cwd: "/root", rows: 40, cols: 120 })
+    expect(lastArgs()).toEqual({
+      id: "t1",
+      cwd: "/root",
+      rows: 40,
+      cols: 120,
+      shell: null,
+      shellArgs: null,
+    })
+  })
+
+  it("ptySpawn passes a configured shell, with its own arguments", async () => {
+    // The default `-il` belongs to zsh/bash: an overridden shell brings its own
+    // arguments rather than inheriting flags it may not understand.
+    useSettings.setState({ terminalShell: "/usr/bin/fish", terminalShellArgs: ["-l"] })
+    await api.ptySpawn("t1", "/root", 40, 120)
+    expect(lastArgs().shell).toBe("/usr/bin/fish")
+    expect(lastArgs().shellArgs).toEqual(["-l"])
+    useSettings.setState({ terminalShell: "", terminalShellArgs: [] })
   })
 })
 

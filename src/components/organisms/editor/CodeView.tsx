@@ -15,11 +15,14 @@ import { ContextMenu } from "@/components/atoms/ContextMenu"
 import { CommentComposer } from "@/components/organisms/CommentComposer"
 import { CommentThread } from "@/components/organisms/CommentThread"
 import { type RibbonMark, StructureRibbon } from "@/components/organisms/StructureRibbon"
+import type { MessageKey } from "@/i18n"
 import { dispatchToAgent } from "@/lib/agents"
 import {
   type Comment,
   type CommentType,
   type Context,
+  type EditorConfig as EditorConfigProps,
+  editorConfigFor,
   findDefinition,
   gitBlame,
   gitWorkingDiffLines,
@@ -29,17 +32,31 @@ import {
 import { blameGutter, inlineBlame } from "@/lib/blameGutter"
 import { bookmarkGutter } from "@/lib/bookmarkGutter"
 import { useBookmarks } from "@/lib/bookmarks"
+import { bracketColors } from "@/lib/bracketColors"
 import { changedLinesHighlight, diffGutter } from "@/lib/changedLines"
+import {
+  actionsAtCursor,
+  GROUP_LABEL,
+  groupOf,
+  organizeImports,
+  runAction,
+} from "@/lib/codeActions"
 import { colorSwatches, type SwatchHit } from "@/lib/colorSwatch"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
 import { toRelative, useComments } from "@/lib/comments"
 import { useDiagnostics } from "@/lib/diagnostics"
 import {
+  applyEol,
   applyHygiene,
   compareWithSaved,
   detectEol,
   detectIndent,
+  type Eol,
+  encodingFor,
+  eolFor,
   formatDocument,
+  setEditorConfig as recordEditorConfig,
+  registerView,
   textToSave,
   useDocInfo,
 } from "@/lib/docInfo"
@@ -47,8 +64,9 @@ import { grammarSupport } from "@/lib/extGrammars"
 import { resolvedLanguageId } from "@/lib/extLanguages"
 import { languages } from "@/lib/languages"
 import { createLogger, safeError } from "@/lib/logger"
-import { hasServer, lspDefinition, lspHover, lspSupport } from "@/lib/lsp"
+import { hasServer, lspDefinition, lspHover, lspSupport, type ResolvedAction } from "@/lib/lsp"
 import { enabledExtensions, useMarketplace } from "@/lib/marketplace"
+import { notify } from "@/lib/notice"
 import { extractSymbols } from "@/lib/outline"
 import { noteSelfWrite, useReadProgress } from "@/lib/readProgress"
 import { composeExplainPrompt, composeSymbolExplainPrompt } from "@/lib/review"
@@ -62,6 +80,7 @@ import {
   useSessions,
   useSettings,
 } from "@/lib/store"
+import { rootFor } from "@/lib/workspace"
 import { buildCodeExtensions } from "./buildCodeExtensions"
 import {
   AddCommentButton,
@@ -130,6 +149,9 @@ interface CodeViewProps {
   pinned: boolean
   /** Head-side line ranges the PR changed, to mark inline (empty when not a PR). */
   changedLines: Array<[number, number]>
+  /** The charset the file was decoded with, and the one a save writes back.
+   *  Absent means UTF-8. */
+  encoding?: string
 }
 
 /** The CodeMirror-backed read-only code viewer, with the comment overlay. */
@@ -146,7 +168,13 @@ export function CodeView({
   landingLine,
   pinned,
   changedLines,
+  encoding,
 }: CodeViewProps) {
+  // The workspace folder this file belongs to. Resolved once, here: reading
+  // "the project's root" from the store at each call site is right only while
+  // there is one folder open, and silently resolves a second folder's file
+  // against the first as soon as there are two.
+  const fileRoot = useMemo(() => rootFor(path), [path])
   const hostRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -154,6 +182,7 @@ export function CodeView({
   const cursorSaveTimer = useRef<number | undefined>(undefined)
   const wrapComp = useMemo(() => new Compartment(), [])
   const colorComp = useMemo(() => new Compartment(), [])
+  const bracketColorComp = useMemo(() => new Compartment(), [])
   const whitespaceComp = useMemo(() => new Compartment(), [])
   const langComp = useMemo(() => new Compartment(), [])
   const focusComp = useMemo(() => new Compartment(), [])
@@ -183,7 +212,10 @@ export function CodeView({
   const activeLineMode = useSettings((s) => s.activeLine)
   const indentGuidesMode = useSettings((s) => s.indentGuides)
   const bracketMatchingOn = useSettings((s) => s.bracketMatching)
+  const bracketColorsOn = useSettings((s) => s.bracketPairColors)
   const rulerColumn = useSettings((s) => s.rulerColumn)
+  /** What `.editorconfig` says about this file, once it has been read. */
+  const [editorConfig, setEditorConfig] = useState<EditorConfigProps | null>(null)
   const cursorStyle = useSettings((s) => s.cursorStyle)
   const cursorBlink = useSettings((s) => s.cursorBlink)
   const scrollbar = useSettings((s) => s.scrollbar)
@@ -206,8 +238,10 @@ export function CodeView({
   const lastComposeNonce = useRef(composeNonce)
   const explainNonce = useEditorActions((s) => s.explainNonce)
   const peekNonce = useEditorActions((s) => s.peekNonce)
+  const quickFixNonce = useEditorActions((s) => s.quickFixNonce)
   const lastExplainNonce = useRef(explainNonce)
   const lastPeekNonce = useRef(peekNonce)
+  const lastQuickFixNonce = useRef(quickFixNonce)
   const { t } = useTranslation()
 
   // Comment-overlay state, local to this file's view.
@@ -227,6 +261,12 @@ export function CodeView({
   // Peek definition: an inline preview of where the symbol at the cursor is
   // defined, without navigating away.
   const [peek, setPeek] = useState<PeekInfo | null>(null)
+  // The code-action menu (⌘.), anchored under the cursor.
+  const [actionMenu, setActionMenu] = useState<{
+    x: number
+    y: number
+    actions: ResolvedAction[]
+  } | null>(null)
   // Bumped on scroll/resize so the overlays re-read their anchor coordinates.
   const [, setTick] = useState(0)
   // A failed write (read-only file, permission, disk full). Surfaced as a small
@@ -264,7 +304,7 @@ export function CodeView({
       const view = viewRef.current
       if (!view) return
       const snippet = view.state.doc.line(line).text.trim().slice(0, 120)
-      useBookmarks.getState().toggle(useProject.getState().root, { path: relPath, line, snippet })
+      useBookmarks.getState().toggle(fileRoot, { path: relPath, line, snippet })
     },
     [relPath],
   )
@@ -351,7 +391,7 @@ export function CodeView({
     const text = await textToSave(view)
     if (viewRef.current !== view) return // the tab changed while formatting ran
     noteSelfWrite(relPath) // our own save — don't let it mark the file unread
-    writeFile(useProject.getState().root, relPath, text)
+    writeFile(fileRoot, relPath, text)
       .then(() => {
         useEditorActions.getState().setDirty(relPath, false)
         setSaveError(false) // clear any prior failure on a successful save
@@ -371,7 +411,12 @@ export function CodeView({
   // this point is the file being switched *to*.
   const flushOnClose = (view: EditorView, root: string) => {
     noteSelfWrite(relPath)
-    writeFile(root, relPath, applyHygiene(view.state.doc.toString()))
+    writeFile(
+      root,
+      relPath,
+      applyEol(applyHygiene(view.state.doc.toString(), relPath), eolFor(view)),
+      encodingFor(view),
+    )
       .then(() => useEditorActions.getState().setDirty(relPath, false))
       .catch((e) => log.error("flush on close failed", { path: relPath, error: safeError(e) }))
   }
@@ -386,6 +431,33 @@ export function CodeView({
   const anchorOrCompose = (start: number, end: number) => {
     if (reanchoringId) applyReanchor(relPath, start, end)
     else openComposerFor(start, end)
+  }
+
+  /**
+   * Ask the server what it can do here, and show it under the cursor.
+   *
+   * Anchored to the caret rather than the pointer: ⌘. is a keyboard gesture, and
+   * a menu that opens wherever the mouse happens to be is a menu you have to go
+   * looking for.
+   */
+  const openActionMenu = async () => {
+    const view = viewRef.current
+    if (!view) return
+    const actions = await actionsAtCursor()
+    if (actions === null) {
+      notify("info", t("lsp.noServer"))
+      return
+    }
+    if (actions.length === 0) {
+      notify("info", t("lsp.noActions"))
+      return
+    }
+    const coords = view.coordsAtPos(view.state.selection.main.head)
+    setActionMenu({
+      x: coords?.left ?? 0,
+      y: coords?.bottom ?? 0,
+      actions,
+    })
   }
 
   // Dismiss the peek panel on Escape.
@@ -406,7 +478,7 @@ export function CodeView({
     if (!word) return false
     const name = view.state.doc.sliceString(word.from, word.to)
     const top = toLocalTop(view.coordsAtPos(word.from)?.bottom ?? 0) ?? 8
-    const root = useProject.getState().root
+    const root = fileRoot
     // Render a peek panel for a resolved definition location.
     const showAt = async (path: string, line: number) => {
       const content = await readFile(root, path).catch(() => null)
@@ -491,6 +563,12 @@ export function CodeView({
     if (primary) peekDefinition()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peekNonce])
+  useEffect(() => {
+    if (quickFixNonce === lastQuickFixNonce.current) return
+    lastQuickFixNonce.current = quickFixNonce
+    if (primary) void openActionMenu()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickFixNonce])
 
   // Create the editor once per file.
   useEffect(() => {
@@ -498,7 +576,7 @@ export function CodeView({
     // The project this buffer belongs to, captured now: by the time the cleanup
     // runs the store may already point at another project, and the flush must
     // not write this file's bytes into that one.
-    const rootAtOpen = useProject.getState().root
+    const rootAtOpen = fileRoot
     const config = {
       doc: text,
       extensions: buildCodeExtensions({
@@ -518,13 +596,15 @@ export function CodeView({
         wrapComp,
         colorComp,
         colorSwatchesExt: colorSwatchesOn ? colorSwatches(onPickColor) : [],
+        bracketColorComp,
+        bracketColorsOn,
         whitespaceComp,
         focusComp,
         langComp,
         lineNumbersMode,
         activeLineMode,
         bracketMatchingOn,
-        rulerColumn,
+        rulerColumn: effectiveRuler,
         indentGuidesMode,
         wrap,
         renderWhitespace,
@@ -561,7 +641,7 @@ export function CodeView({
     if (primary) useDocInfo.getState().set({ view })
 
     // Restore the saved scroll offset for this file, after first layout.
-    const savedScroll = useSessions.getState().byRoot[useProject.getState().root]?.scroll?.[relPath]
+    const savedScroll = useSessions.getState().byRoot[fileRoot]?.scroll?.[relPath]
     if (savedScroll) {
       requestAnimationFrame(() => {
         if (viewRef.current === view) view.scrollDOM.scrollTop = savedScroll
@@ -571,7 +651,7 @@ export function CodeView({
     // Restore the saved cursor position, unless the file was opened with an
     // explicit landing/goToLine target (that jump wins). Clamp to the current
     // doc so a stale cursor can never throw or land out of bounds.
-    const savedCursor = useSessions.getState().byRoot[useProject.getState().root]?.cursor?.[relPath]
+    const savedCursor = useSessions.getState().byRoot[fileRoot]?.cursor?.[relPath]
     if (savedCursor && !landingLine) {
       try {
         const doc = view.state.doc
@@ -604,11 +684,14 @@ export function CodeView({
       })
     }
 
+    const unregister = registerView(view, relPath, rootAtOpen, primary, detectEol(text), encoding)
+
     return () => {
       // A pending debounced auto-save would fire into a destroyed view and drop
       // the edits on the floor: write them now instead.
       clearTimeout(autoSaveTimer.current)
       if (!pinned && useEditorActions.getState().isDirty(relPath)) flushOnClose(view, rootAtOpen)
+      unregister()
       parkHistory(path, view.state)
       view.destroy()
       viewRef.current = null
@@ -663,7 +746,14 @@ export function CodeView({
     bracketMatchingOn,
     bracketComp,
   ])
-  useReconfigure(viewRef, rulerComp, rulerExt(rulerColumn), [rulerColumn, rulerComp])
+  // `max_line_length` is the project's own answer about its line width, so it
+  // outranks the reader's ruler setting. `0` is editorconfig's explicit "off".
+  const effectiveRuler = editorConfig?.maxLineLength ?? rulerColumn
+  useReconfigure(viewRef, rulerComp, rulerExt(effectiveRuler), [effectiveRuler, rulerComp])
+  useReconfigure(viewRef, bracketColorComp, bracketColorsOn ? bracketColors : [], [
+    bracketColorsOn,
+    bracketColorComp,
+  ])
 
   // Update the PR change markers when they arrive (async) or the file changes.
   useReconfigure(viewRef, changedComp, changedLinesHighlight(changedLines), [
@@ -692,7 +782,7 @@ export function CodeView({
       return
     }
     let cancelled = false
-    lspSupport(useProject.getState().root, path).then((ext) => {
+    lspSupport(fileRoot, path).then((ext) => {
       if (!cancelled) viewRef.current?.dispatch({ effects: lspComp.reconfigure(ext ?? []) })
     })
     return () => {
@@ -734,12 +824,45 @@ export function CodeView({
     const indent = detectIndent(text)
     useDocInfo.getState().set({
       eol: detectEol(text),
+      encoding: encoding ?? "utf-8",
       indentKind: indent.kind,
       indentSize: indent.size,
       language,
       languageOverride: null,
     })
-  }, [text, path, primary])
+  }, [text, path, primary, encoding])
+
+  // `.editorconfig` outranks what the file looks like.
+  //
+  // Detection is a guess made from the bytes; the project's own file is the
+  // answer, and honouring it is why committing one is worth anything. Applied
+  // after the detection effect above (both run on open, in order), and recorded
+  // per file so the save paths can obey the trim / final-newline rules too.
+  useEffect(() => {
+    let cancelled = false
+    editorConfigFor(fileRoot, path)
+      .then((cfg) => {
+        if (cancelled) return
+        setEditorConfig(cfg.applies ? cfg : null)
+        recordEditorConfig(relPath, cfg)
+        if (!cfg.applies || !primary) return
+        const patch: { indentKind?: "spaces" | "tabs"; indentSize?: number; eol?: Eol } = {}
+        if (cfg.indentStyle) patch.indentKind = cfg.indentStyle === "tab" ? "tabs" : "spaces"
+        if (cfg.indentSize) patch.indentSize = cfg.indentSize
+        // `cr`-only endings are a real editorconfig value and not something
+        // Reado writes, so it is read as LF rather than silently mangled.
+        if (cfg.endOfLine === "lf" || cfg.endOfLine === "crlf") {
+          patch.eol = cfg.endOfLine.toUpperCase() as Eol
+        }
+        if (Object.keys(patch).length > 0) useDocInfo.getState().set(patch)
+      })
+      .catch(() => {
+        if (!cancelled) setEditorConfig(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [path, relPath, primary])
 
   // Toggle focus mode live.
   useReconfigure(viewRef, focusComp, focusExtension(focusMode), [focusMode, focusComp])
@@ -769,7 +892,7 @@ export function CodeView({
       return
     }
     let cancelled = false
-    gitBlame(useProject.getState().root, relPath)
+    gitBlame(fileRoot, relPath)
       .then((lines) => {
         if (cancelled || !lines.length) return
         const ext = blame ? blameGutter(lines) : inlineBlame(lines)
@@ -789,7 +912,7 @@ export function CodeView({
       return
     }
     let cancelled = false
-    gitWorkingDiffLines(useProject.getState().root, relPath)
+    gitWorkingDiffLines(fileRoot, relPath)
       .then((ranges) => {
         if (!cancelled) {
           viewRef.current?.dispatch({ effects: diffComp.reconfigure(diffGutter(ranges)) })
@@ -825,7 +948,7 @@ export function CodeView({
     const markRead = () => {
       if (autoMarked) return
       autoMarked = true
-      useReadProgress.getState().mark(useProject.getState().root, relPath, true)
+      useReadProgress.getState().mark(fileRoot, relPath, true)
     }
     const fits = () => !!scroller && scroller.scrollHeight <= scroller.clientHeight + 24
     const maybeMarkRead = () => {
@@ -851,9 +974,7 @@ export function CodeView({
       maybeMarkRead()
       window.clearTimeout(timer)
       timer = window.setTimeout(() => {
-        useSessions
-          .getState()
-          .saveScroll(useProject.getState().root, relPath, scroller?.scrollTop ?? 0)
+        useSessions.getState().saveScroll(fileRoot, relPath, scroller?.scrollTop ?? 0)
       }, 300)
     }
     scroller?.addEventListener("scroll", bump, { passive: true })
@@ -1046,29 +1167,35 @@ export function CodeView({
       if (to >= clickLine.from && from <= clickLine.to) diagMessage = d.message
     })
     const hasSelection = !view.state.selection.main.empty
+    // With no selection, cut and copy take the whole line — the way they do in
+    // VS Code, and the reason the pair is worth reaching for without selecting
+    // anything first. `to` spans the line break so a cut removes the line rather
+    // than leaving a blank one behind.
+    const clipRange = () => {
+      const sel = view.state.selection.main
+      if (!sel.empty)
+        return { from: sel.from, to: sel.to, text: view.state.sliceDoc(sel.from, sel.to) }
+      const line = view.state.doc.lineAt(sel.head)
+      return {
+        from: line.from,
+        to: Math.min(line.to + 1, view.state.doc.length),
+        text: `${line.text}\n`,
+      }
+    }
     return [
       // The webview has no native context menu, so the clipboard verbs have to
       // be here or right-click offers no way to copy at all.
-      hasSelection && {
+      !pinned && {
         label: t("editor.cut"),
         run: () => {
-          const sel = view.state.sliceDoc(
-            view.state.selection.main.from,
-            view.state.selection.main.to,
-          )
-          void clipboardWriteText(sel).catch(() => {})
-          view.dispatch(view.state.replaceSelection(""))
+          const { from, to, text } = clipRange()
+          void clipboardWriteText(text).catch(() => {})
+          view.dispatch({ changes: { from, to, insert: "" } })
         },
       },
-      hasSelection && {
+      {
         label: t("editor.copy"),
-        run: () => {
-          const sel = view.state.sliceDoc(
-            view.state.selection.main.from,
-            view.state.selection.main.to,
-          )
-          void clipboardWriteText(sel).catch(() => {})
-        },
+        run: () => void clipboardWriteText(clipRange().text).catch(() => {}),
       },
       !pinned && {
         label: t("editor.paste"),
@@ -1125,6 +1252,15 @@ export function CodeView({
       hasSelection && {
         label: t("editor.allOccurrences"),
         run: () => selectSelectionMatches(view),
+      },
+      hasServer(path) && {
+        label: t("lsp.quickFix"),
+        separatorBefore: true,
+        run: () => void openActionMenu(),
+      },
+      hasServer(path) && {
+        label: t("lsp.organizeImports"),
+        run: () => void organizeImports(),
       },
       diagMessage && {
         label: t("lsp.createTaskFromProblem"),
@@ -1277,6 +1413,25 @@ export function CodeView({
 
       {openComment && threadTop !== null && (
         <CommentThread comment={openComment} top={threadTop} onClose={closeOverlays} />
+      )}
+
+      {actionMenu && (
+        <ContextMenu
+          x={actionMenu.x}
+          y={actionMenu.y}
+          items={actionMenu.actions.map((action, i) => ({
+            // The group heading rides on the first item of each run, so the
+            // shared menu doesn't need a heading concept it has no other use for.
+            label:
+              i === 0 || groupOf(action.kind) !== groupOf(actionMenu.actions[i - 1].kind)
+                ? `${t(GROUP_LABEL[groupOf(action.kind)] as MessageKey)} · ${action.title}`
+                : action.title,
+            separatorBefore:
+              i > 0 && groupOf(action.kind) !== groupOf(actionMenu.actions[i - 1].kind),
+            onSelect: () => void runAction(action),
+          }))}
+          onClose={() => setActionMenu(null)}
+        />
       )}
 
       {ctxMenu && (

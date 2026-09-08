@@ -16,7 +16,6 @@ import { useTranslation } from "react-i18next"
 import { Input } from "@/components/atoms/Input"
 import { Kbd } from "@/components/atoms/Kbd"
 import type { MessageKey } from "@/i18n"
-import { clearTerminal, restartTerminal } from "@/lib/agents"
 import {
   listFiles,
   listSymbols,
@@ -26,44 +25,31 @@ import {
 } from "@/lib/api"
 import { useBookmarks } from "@/lib/bookmarks"
 import { toRelative } from "@/lib/comments"
-import {
-  addCursorsToLineEnds,
-  askAboutSelection,
-  compareWithSaved,
-  formatDocument,
-  goToBracket,
-  goToLine,
-  gotoLastEdit,
-  showCallHierarchy,
-  showTypeHierarchy,
-  toggleBookmarkAtCursor,
-  useDocInfo,
-} from "@/lib/docInfo"
+import { goToLine, toggleBookmarkAtCursor, useDocInfo } from "@/lib/docInfo"
 import { useGuidedReview } from "@/lib/guidedReview"
+import { shortcutFor } from "@/lib/keybindings"
 import { lspDocumentSymbols } from "@/lib/lsp"
 import { enableMcp } from "@/lib/mcp"
+import { runMenuCommand } from "@/lib/menu"
 import { useOnboarding } from "@/lib/onboarding"
 import { extractSymbols, type OutlineSymbol } from "@/lib/outline"
 import { usePreReview } from "@/lib/preReview"
 import { usePreview } from "@/lib/preview"
+import { saveSettingsToProject } from "@/lib/projectConfig"
 import { prompt as promptDialog } from "@/lib/prompt"
 import { useReadProgress } from "@/lib/readProgress"
 import { useResolveLoop } from "@/lib/resolveLoop"
 import { useSemanticSearch } from "@/lib/semanticSearch"
-import { exportSettings, importSettings } from "@/lib/settingsSync"
-import { alt, mod, shift } from "@/lib/shortcuts"
 import {
-  THEMES,
-  useEditorActions,
-  usePalette,
-  useProject,
-  useRecents,
-  useSettings,
-  useWorkspace,
-} from "@/lib/store"
+  exportSettings,
+  exportSettingsToFile,
+  importSettings,
+  importSettingsFromFile,
+} from "@/lib/settingsSync"
+import { THEMES, usePalette, useProject, useRecents, useSettings, useWorkspace } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
-import { checkForUpdates } from "@/lib/updater"
 import { openProjectHere } from "@/lib/window"
+import { acrossRoots, workspaceRoots } from "@/lib/workspace"
 
 interface Row {
   /** Primary line. */
@@ -125,7 +111,9 @@ export function Palette() {
   // Load the file index lazily when entering file mode.
   useEffect(() => {
     if (mode === "files" && files.length === 0) {
-      listFiles(project.root)
+      // Go to File spans the workspace: with two folders open, the file you
+      // are looking for is as likely to be in the second as the first.
+      acrossRoots(workspaceRoots(), listFiles)
         .then(setFiles)
         .catch(() => setFiles([]))
     }
@@ -134,7 +122,7 @@ export function Palette() {
   // Load the project symbol index lazily when entering workspace-symbol mode.
   useEffect(() => {
     if (mode === "wsymbols" && wsymbols.length === 0) {
-      listSymbols(project.root)
+      acrossRoots(workspaceRoots(), listSymbols)
         .then(setWsymbols)
         .catch(() => setWsymbols([]))
     }
@@ -182,33 +170,9 @@ export function Palette() {
   /** The list of rows for the current mode and query. */
   const rows: Row[] = useMemo(() => {
     if (mode === "commands") {
-      return commandRows(t, {
-        project,
-        settings,
-        open,
-        close,
-        toggleSettings,
-        requestCompose: () => {
-          useEditorActions.getState().requestCompose()
-          close()
-        },
-        requestExplain: () => {
-          useEditorActions.getState().requestExplain()
-          close()
-        },
-        requestPeek: () => {
-          useEditorActions.getState().requestPeek()
-          close()
-        },
-        openGraph: () => {
-          useWorkspace.getState().toggleGraph(true)
-          close()
-        },
-        openDocs: () => {
-          useWorkspace.getState().toggleDocs(true)
-          close()
-        },
-      }).filter((r) => r.label.toLowerCase().includes(query.toLowerCase()))
+      return commandRows(t, { project, settings, close }).filter((r) =>
+        r.label.toLowerCase().includes(query.toLowerCase()),
+      )
     }
     if (mode === "files") {
       const results = query
@@ -445,34 +409,13 @@ function relative(root: string, path: string): string {
 interface CommandCtx {
   project: ReturnType<typeof useProject.getState>
   settings: ReturnType<typeof useSettings.getState>
-  open: (mode: "commands" | "files" | "search" | "symbols" | "wsymbols") => void
   /** Dismiss the palette. Must be passed in: `commandRows` is module-level, so
    *  a bare `close()` here would silently resolve to the DOM global. */
   close: () => void
-  toggleSettings: (open?: boolean) => void
-  requestCompose: () => void
-  requestExplain: () => void
-  requestPeek: () => void
-  openGraph: () => void
-  openDocs: () => void
 }
 
 /** Static command list for Cmd+K. */
-function commandRows(
-  t: TFunction,
-  {
-    project,
-    settings,
-    open,
-    close,
-    toggleSettings,
-    requestCompose,
-    requestExplain,
-    requestPeek,
-    openGraph,
-    openDocs,
-  }: CommandCtx,
-): Row[] {
+function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Row[] {
   // Context flags: gate each command on its precondition so the palette only
   // lists what's actually applicable here (a "comment on selection" with nothing
   // selected, or "clear terminal" with no terminal, is just noise).
@@ -486,21 +429,38 @@ function commandRows(
   const hasClosed = project.closedTabs.length > 0
   const canSplit = hasFile || !!project.splitPath
   const hasBookmarks = useBookmarks.getState().bookmarks.length > 0
+  /** Run a command and dismiss the palette — the shape most rows want. */
+  const then = (fn: () => unknown) => () => {
+    void fn()
+    close()
+  }
+
+  /**
+   * A row that runs a registered command.
+   *
+   * The palette used to carry its own copy of what each command does, and its
+   * own idea of which key ran it — the fold rows still advertised `⌘⌥⇧[` long
+   * after folding moved to `⌘K ⌘0`. Both now come from the one registry: the
+   * chip is whatever is bound *now*, including a key the reader rebound.
+   */
+  const cmd = (id: string, label: string, o: { when?: boolean; stayOpen?: boolean } = {}): Row => ({
+    label,
+    hint: shortcutFor(id, settings.keybindings),
+    when: o.when,
+    // Most commands act and get out of the way; the ones that put something on
+    // screen behind the palette, or that you may want to run twice, don't.
+    run: o.stayOpen ? () => runMenuCommand(id) : then(() => runMenuCommand(id)),
+  })
 
   const rows: Row[] = [
-    { label: t("comment.new"), hint: `${mod}⇧M`, when: hasSelection, run: requestCompose },
-    { label: t("editor.explain"), when: hasSelection, run: requestExplain },
-    {
-      label: t("qa.ask"),
-      when: hasSelection,
-      run: () => {
-        void askAboutSelection()
-        close()
-      },
-    },
-    { label: t("peek.def"), when: hasFile, run: requestPeek },
-    { label: t("editor.goToBracket"), when: hasFile, run: goToBracket },
-    { label: t("editor.lastEdit"), when: hasFile, run: gotoLastEdit },
+    cmd("comment:new", t("comment.new"), { when: hasSelection }),
+    cmd("sel:explain", t("editor.explain"), { when: hasSelection }),
+    cmd("sel:ask", t("qa.ask"), { when: hasSelection }),
+    cmd("go:peek", t("peek.def"), { when: hasFile }),
+    cmd("edit:quickFix", t("lsp.quickFix"), { when: hasFile }),
+    cmd("edit:organizeImports", t("lsp.organizeImports"), { when: hasFile }),
+    cmd("go:bracket", t("editor.goToBracket"), { when: hasFile, stayOpen: true }),
+    cmd("go:lastEdit", t("editor.lastEdit"), { when: hasFile, stayOpen: true }),
     {
       label: t("onboarding.open"),
       run: () => {
@@ -508,15 +468,7 @@ function commandRows(
         close()
       },
     },
-    {
-      label: t("preview.toggle"),
-      run: () => {
-        const p = usePreview.getState()
-        if (p.open) p.close()
-        else p.openPane()
-        close()
-      },
-    },
+    cmd("preview:toggle", t("preview.toggle")),
     {
       label: t("preview.agentAccess"),
       run: () => {
@@ -580,23 +532,9 @@ function commandRows(
         close()
       },
     },
-    {
-      label: t("hier.showCall"),
-      when: hasFile,
-      run: () => {
-        showCallHierarchy()
-        close()
-      },
-    },
-    {
-      label: t("hier.showType"),
-      when: hasFile,
-      run: () => {
-        showTypeHierarchy()
-        close()
-      },
-    },
-    { label: t("editor.cursorsLineEnds"), when: hasFile, run: addCursorsToLineEnds },
+    cmd("go:callHierarchy", t("hier.showCall"), { when: hasFile }),
+    cmd("go:typeHierarchy", t("hier.showType"), { when: hasFile }),
+    cmd("sel:lineEnds", t("editor.cursorsLineEnds"), { when: hasFile, stayOpen: true }),
     {
       label: t("bookmarks.toggle"),
       when: hasFile,
@@ -625,27 +563,59 @@ function commandRows(
       },
     },
     {
-      label: t("editor.format"),
-      hint: `${shift}${alt}F`,
-      when: hasFile,
-      run: () => void formatDocument(),
-    },
-    {
-      label: t("diff.compareWithSaved"),
-      when: hasFile,
+      label: t("sync.exportFile"),
       run: () => {
-        compareWithSaved()
+        void exportSettingsToFile()
         close()
       },
     },
-    { label: t("terminal.clear"), when: hasTerminal, run: clearTerminal },
-    { label: t("terminal.restart"), when: hasTerminal, run: restartTerminal },
-    { label: t("symbols.goto"), hint: `${mod}⇧O`, when: hasFile, run: () => open("symbols") },
-    { label: t("symbols.gotoWorkspace"), hint: `${mod}T`, run: () => open("wsymbols") },
-    { label: t("graph.title"), run: openGraph },
-    { label: t("kb.title"), run: openDocs },
-    { label: t("finder.placeholder"), hint: `${mod}P`, run: () => open("files") },
-    { label: t("search.placeholder"), hint: `${mod}⇧F`, run: () => open("search") },
+    {
+      label: t("sync.importFile"),
+      run: () => {
+        void importSettingsFromFile()
+        close()
+      },
+    },
+    {
+      label: t("sync.saveToProject"),
+      when: !!project.root,
+      run: () => {
+        void saveSettingsToProject(project.root)
+        close()
+      },
+    },
+    cmd("format", t("editor.format"), { when: hasFile, stayOpen: true }),
+    // Editor commands run against the buffer and then get out of the way — the
+    // palette is a launcher, not a panel, so each of these dismisses it.
+    cmd("formatSelection", t("editor.formatSelection"), { when: hasSelection }),
+    cmd("saveAll", t("editor.saveAll"), { when: hasFile }),
+    // Text and line transforms. Each acts on the selection, or on the caret's
+    // line when there is none, so they are useful without one.
+    cmd("edit:upperCase", t("editor.upperCase"), { when: hasFile }),
+    cmd("edit:lowerCase", t("editor.lowerCase"), { when: hasFile }),
+    cmd("edit:titleCase", t("editor.titleCase"), { when: hasFile }),
+    cmd("edit:sortAsc", t("editor.sortAsc"), { when: hasFile }),
+    cmd("edit:sortDesc", t("editor.sortDesc"), { when: hasFile }),
+    cmd("edit:dedupe", t("editor.deleteDuplicates"), { when: hasFile }),
+    cmd("edit:joinLines", t("editor.joinLines"), { when: hasFile }),
+    cmd("view:foldAll", t("editor.foldAll"), { when: hasFile }),
+    cmd("view:unfoldAll", t("editor.unfoldAll"), { when: hasFile }),
+    cmd("edit:trimWhitespace", t("editor.trimWhitespace"), { when: hasFile }),
+    cmd("edit:reindent", t("editor.reindent"), { when: hasFile }),
+    cmd("edit:convertSpaces", t("editor.convertToSpaces"), { when: hasFile }),
+    cmd("edit:convertTabs", t("editor.convertToTabs"), { when: hasFile }),
+    cmd("edit:cursorUndo", t("editor.cursorUndo"), { when: hasFile }),
+    cmd("edit:cursorRedo", t("editor.cursorRedo"), { when: hasFile }),
+    cmd("compareSaved", t("diff.compareWithSaved"), { when: hasFile }),
+    cmd("terminal:clear", t("terminal.clear"), { when: hasTerminal, stayOpen: true }),
+    cmd("terminal:restart", t("terminal.restart"), { when: hasTerminal, stayOpen: true }),
+    // These four hand the palette to another mode rather than dismissing it.
+    cmd("palette:symbols", t("symbols.goto"), { when: hasFile, stayOpen: true }),
+    cmd("palette:wsymbols", t("symbols.gotoWorkspace"), { stayOpen: true }),
+    cmd("palette:files", t("finder.placeholder"), { stayOpen: true }),
+    cmd("palette:search", t("search.placeholder"), { stayOpen: true }),
+    cmd("graph", t("graph.title")),
+    cmd("docs", t("kb.title")),
     {
       label: t("semantic.search"),
       run: () => {
@@ -656,81 +626,45 @@ function commandRows(
         }).then((q) => q && useSemanticSearch.getState().run(q))
       },
     },
-    {
-      label: `${t("editor.wrap")}: ${settings.wrap ? "on" : "off"}`,
-      run: () => settings.set({ wrap: !settings.wrap }),
-    },
-    {
-      label: `${t("editor.focus")}: ${settings.focusMode ? "on" : "off"}`,
-      run: () => settings.set({ focusMode: !settings.focusMode }),
-    },
+    cmd("view:wrap", `${t("editor.wrap")}: ${settings.wrap ? "on" : "off"}`, { stayOpen: true }),
+    cmd("view:focus", `${t("editor.focus")}: ${settings.focusMode ? "on" : "off"}`, {
+      stayOpen: true,
+    }),
     {
       label: `${t("editor.sticky")}: ${settings.stickyScroll ? "on" : "off"}`,
       run: () => settings.set({ stickyScroll: !settings.stickyScroll }),
     },
-    {
-      label: `${t("editor.ribbon")}: ${settings.showRibbon ? "on" : "off"}`,
-      run: () => settings.set({ showRibbon: !settings.showRibbon }),
-    },
-    {
-      label:
-        project.active &&
+    cmd("view:ribbon", `${t("editor.ribbon")}: ${settings.showRibbon ? "on" : "off"}`, {
+      stayOpen: true,
+    }),
+    cmd(
+      "read:toggle",
+      project.active &&
         useReadProgress.getState().read.has(toRelative(project.root, project.active))
-          ? t("tree.markUnread")
-          : t("tree.markRead"),
-      when: hasFile,
-      run: () => {
-        if (!project.active) return
-        const rel = toRelative(project.root, project.active)
-        const isRead = useReadProgress.getState().read.has(rel)
-        useReadProgress.getState().mark(project.root, rel, !isRead)
-      },
-    },
+        ? t("tree.markUnread")
+        : t("tree.markRead"),
+      { when: hasFile, stayOpen: true },
+    ),
     {
       label: `${t("tree.showHidden")}: ${project.showHidden ? "on" : "off"}`,
       run: () => project.setShowHidden(!project.showHidden),
     },
-    {
-      label: t("nav.back"),
-      hint: `${alt}←`,
-      when: canBack,
-      run: () => useProject.getState().goBack(),
-    },
-    {
-      label: t("nav.forward"),
-      hint: `${alt}→`,
-      when: canForward,
-      run: () => useProject.getState().goForward(),
-    },
-    {
-      label: t("tabs.reopen"),
-      hint: `${mod}⇧T`,
-      when: hasClosed,
-      run: () => useProject.getState().reopenClosed(),
-    },
-    {
-      label: t("sidebar.toggle"),
-      hint: `${mod}B`,
-      run: () => useWorkspace.getState().toggleSidebar(),
-    },
+    cmd("go:back", t("nav.back"), { when: canBack, stayOpen: true }),
+    cmd("go:forward", t("nav.forward"), { when: canForward, stayOpen: true }),
+    cmd("reopenClosed", t("tabs.reopen"), { when: hasClosed, stayOpen: true }),
+    cmd("view:sidebar", t("sidebar.toggle"), { stayOpen: true }),
     {
       label: t("terminal.move"),
       when: hasTerminal,
       run: () => useTerminals.getState().togglePosition(),
     },
-    {
-      label: t("split.toggle"),
-      hint: `${mod}\\`,
-      when: canSplit,
-      run: () => {
-        const p = useProject.getState()
-        if (p.splitPath) p.closeSplit()
-        else p.openSplit()
-      },
-    },
-    { label: t("settings.title"), hint: `${mod},`, run: () => toggleSettings(true) },
-    { label: t("sc.title"), run: () => usePalette.getState().toggleShortcuts(true) },
-    { label: t("settings.checkUpdates"), run: () => checkForUpdates(true) },
+    cmd("view:splitToggle", t("split.toggle"), { when: canSplit, stayOpen: true }),
+    cmd("workspace:addFolder", t("workspace.addFolder")),
+    cmd("settings", t("settings.title"), { stayOpen: true }),
+    // Opens the settings dialog *on* its JSON view, not merely next to it.
+    cmd("settings:json", t("settings.json"), { stayOpen: true }),
+    cmd("help:shortcuts", t("sc.title"), { stayOpen: true }),
+    cmd("checkUpdates", t("settings.checkUpdates"), { stayOpen: true }),
   ]
   // Quick theme switches.
   for (const theme of THEMES) {

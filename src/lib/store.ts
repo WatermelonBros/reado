@@ -12,6 +12,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { ExtListing, GitInfo } from "./api"
+import { baseName } from "./comments"
 import { findPanel, useLayout } from "./layout"
 
 export type BuiltinTheme = "reado-dark" | "reado-light" | "reado-high-contrast" | "reado-sepia"
@@ -96,6 +97,9 @@ export interface SettingsState {
   reduceMotion: "system" | "on" | "off"
   /** Editor tab strip: full row, single tab, or hidden. */
   tabBar: "multiple" | "single" | "hidden"
+  /** Open a file you only clicked into as a *preview*: the next one you look at
+   *  replaces it, so a session of reading doesn't leave forty tabs behind. */
+  previewTabs: boolean
   /** Editor scrollbar visibility. */
   scrollbar: "auto" | "always" | "hidden"
   /** Caret shape. */
@@ -106,8 +110,19 @@ export interface SettingsState {
   showResolvedComments: boolean
   /** Draw diagnostic squiggles inline (the Problems panel is unaffected). */
   inlineDiagnostics: boolean
-  /** Glob patterns hidden from the file tree and project search. */
+  /** Glob patterns hidden from the file tree (and, unless `searchExcludeGlobs`
+   *  overrides it, from project search too). */
   excludeGlobs: string[]
+  /** Glob patterns excluded from project search only. Empty means "use
+   *  `excludeGlobs`" — so the common case stays one list. */
+  searchExcludeGlobs: string[]
+  /** File-tree ordering within a folder (directories always come first). */
+  explorerSort: "name" | "type" | "modified"
+  /** Tuck generated files under the one that generated them, in the tree. */
+  fileNesting: boolean
+  /** The nesting rules, as `parent : child, child` lines. Empty means the set
+   *  Reado ships (`DEFAULT_NESTING`); a project can share its own. */
+  fileNestingRules: string[]
   /** Restore a project's tabs/scroll/caret on reopen, or start clean. */
   restoreSession: boolean
   /** File icons contributed by an extension, or null for Reado's own glyphs. */
@@ -136,12 +151,23 @@ export interface SettingsState {
   zoom: number
   /** Version `.reado/` (except the rebuildable index) instead of gitignoring it. */
   versionReado: boolean
+  /** Keyboard-shortcut overrides, as `combo = command` lines. Empty means the
+   *  bindings Reado ships (`DEFAULT_BINDINGS`). */
+  keybindings: string[]
   /** Suppress the first-comment gitignore prompt once the user opts out. */
   gitignoreDontAsk: boolean
   /** Play a soft chime when the agent finishes resolving tasks. */
   completionSound: boolean
   /** Automatically write edits to disk: never / after a short pause / on blur. */
   autoSave: "off" | "afterDelay" | "onFocusChange"
+  /** How long "after a short pause" waits, in milliseconds. */
+  autoSaveDelay: number
+  /** Show the completion popup while typing, instead of only on ⌃Space. */
+  suggestOnTyping: boolean
+  /** Tint brackets by nesting depth. */
+  bracketPairColors: boolean
+  /** Line endings for files Reado creates; "auto" means the platform's. */
+  defaultEol: "auto" | "LF" | "CRLF"
   /** Chrome visibility toggles (View menu). */
   /** Which edge the tool sidebar (and its activity bar) lives on. */
   sidebarSide: "left" | "right"
@@ -152,6 +178,8 @@ export interface SettingsState {
    *  one edge of the workbench, or the full width (`justify`). The activity bar
    *  is never covered — it is the window's spine, not a region. */
   panelAlignment: PanelAlignment
+  /** Status-bar indicators the user has hidden, by id (see `STATUS_ITEMS`). */
+  hiddenStatusItems: string[]
   /** Where the command palette opens: pinned near the top, or centred. */
   quickInputPosition: "top" | "center"
   /** Zen mode: everything but the editor steps back. The chrome it hides is
@@ -179,6 +207,14 @@ export interface SettingsState {
   logLevel: "error" | "warn" | "info" | "debug" | "trace"
   /** Show hidden & git-ignored files in the tree (remembered across sessions). */
   showHidden: boolean
+  /** Integrated-terminal appearance and behaviour. */
+  terminalFontSize: number
+  terminalScrollback: number
+  terminalCursorStyle: "block" | "bar" | "underline"
+  /** Shell to launch, or "" for the user's login shell. */
+  terminalShell: string
+  /** Extra arguments for `terminalShell`, one per entry. */
+  terminalShellArgs: string[]
   /** Last-used guided-review objective, so it isn't re-picked every time. */
   reviewObjective: string
   /** The user dismissed the "make Reado the default app for text files" prompt. */
@@ -202,8 +238,9 @@ const REMEMBERED = [
   "zenRestore",
 ] as const
 
-/** How Reado ships. Named so "reset" has something to reset *to*. */
-const DEFAULTS = {
+/** How Reado ships. Named so "reset" has something to reset *to*, and exported
+ *  so the settings dialog can mark — and individually undo — what you changed. */
+export const DEFAULTS = {
   theme: "reado-dark",
   lightTheme: "reado-light",
   darkTheme: "reado-dark",
@@ -220,12 +257,17 @@ const DEFAULTS = {
   colorVision: "normal",
   reduceMotion: "system",
   tabBar: "multiple",
+  previewTabs: true,
   scrollbar: "auto",
   cursorStyle: "line",
   cursorBlink: "smooth",
   showResolvedComments: true,
   inlineDiagnostics: true,
   excludeGlobs: [],
+  searchExcludeGlobs: [],
+  explorerSort: "name",
+  fileNesting: false,
+  fileNestingRules: [],
   restoreSession: true,
   iconTheme: null,
   formatOnSave: false,
@@ -242,14 +284,20 @@ const DEFAULTS = {
   colorSwatches: true,
   zoom: 1,
   versionReado: false,
+  keybindings: [],
   gitignoreDontAsk: false,
   completionSound: false,
   autoSave: "afterDelay",
+  autoSaveDelay: 1000,
+  suggestOnTyping: false,
+  bracketPairColors: true,
+  defaultEol: "auto",
   sidebarSide: "left",
   showActivityBar: true,
   showStatusBar: true,
   showBreadcrumbs: true,
   panelAlignment: "center",
+  hiddenStatusItems: [],
   quickInputPosition: "top",
   zenMode: false,
   zenRestore: null,
@@ -260,9 +308,26 @@ const DEFAULTS = {
   logEnabled: true,
   logLevel: "info",
   showHidden: false,
+  terminalFontSize: 12,
+  terminalScrollback: 5000,
+  terminalCursorStyle: "block",
+  terminalShell: "",
+  terminalShellArgs: [],
   reviewObjective: "bug_risk",
   defaultAppsDismissed: false,
 } satisfies Omit<SettingsState, "set" | "reset">
+
+/** Whether a setting still holds the value Reado ships. Arrays are compared by
+ *  content — `excludeGlobs` is a fresh array on every change, so identity would
+ *  call an untouched list "modified". */
+export function isDefaultSetting(key: keyof typeof DEFAULTS, s: SettingsState): boolean {
+  const now = s[key] as unknown
+  const def = DEFAULTS[key] as unknown
+  if (Array.isArray(now) && Array.isArray(def)) {
+    return now.length === def.length && now.every((v, i) => v === def[i])
+  }
+  return now === def
+}
 
 export const useSettings = create<SettingsState>()(
   persist(
@@ -307,12 +372,6 @@ interface RecentsState {
   remove: (path: string) => void
 }
 
-const basename = (p: string) =>
-  p
-    .replace(/[\\/]+$/, "")
-    .split(/[\\/]/)
-    .pop() ?? p
-
 export const useRecents = create<RecentsState>()(
   persist(
     (set) => ({
@@ -321,7 +380,7 @@ export const useRecents = create<RecentsState>()(
         set((s) => {
           const rest = s.projects.filter((p) => p.path !== path)
           return {
-            projects: [{ path, name: basename(path), openedAt: Date.now() }, ...rest].slice(0, 30),
+            projects: [{ path, name: baseName(path), openedAt: Date.now() }, ...rest].slice(0, 30),
           }
         }),
       remove: (path) => set((s) => ({ projects: s.projects.filter((p) => p.path !== path) })),
@@ -457,10 +516,27 @@ interface WorkspaceState {
   /** Last search-panel query, so leaving and returning doesn't lose it. */
   searchQuery: string
   setSearchQuery: (q: string) => void
+  /** Queries actually run, newest first — ↑/↓ in the search field walks them. */
+  searchHistory: string[]
+  pushSearchHistory: (q: string) => void
+  /** "Files to include" / "files to exclude" globs for the search panel,
+   *  remembered like the query. Comma- or space-separated. */
+  searchInclude: string
+  searchExclude: string
+  setSearchGlobs: (patch: { include?: string; exclude?: string }) => void
   /** User's custom activity-bar order (tool ids). Tools not listed keep their
    *  natural order after the listed ones. Empty = default order. */
   toolOrder: Tool[]
   setToolOrder: (order: Tool[]) => void
+  /** Extension ids this project recommends and that aren't installed. Read
+   *  from `.reado/extensions.json` on open; the Extensions panel surfaces them. */
+  recommended: string[]
+  setRecommended: (ids: string[]) => void
+  /** Views the user has hidden from the activity bar. They stay reachable from
+   *  View ▸ Open View and the command palette — hiding is about the rail. */
+  hiddenTools: Tool[]
+  hideTool: (tool: Tool) => void
+  showAllTools: () => void
 }
 
 /** Tool sidebar state (which side panel is shown), persisted per user. */
@@ -505,7 +581,38 @@ export const useWorkspace = create<WorkspaceState>()(
       setCommentFilter: (patch) =>
         set((s) => ({ commentFilter: { ...s.commentFilter, ...patch } })),
       searchQuery: "",
+      searchHistory: [],
+      // Newest first, de-duplicated, and bounded: this is a convenience list,
+      // not a log.
+      pushSearchHistory: (q) =>
+        set((s) => {
+          const query = q.trim()
+          if (!query) return s
+          return {
+            searchHistory: [query, ...s.searchHistory.filter((h) => h !== query)].slice(0, 25),
+          }
+        }),
+      searchInclude: "",
+      searchExclude: "",
+      setSearchGlobs: ({ include, exclude }) =>
+        set((s) => ({
+          searchInclude: include ?? s.searchInclude,
+          searchExclude: exclude ?? s.searchExclude,
+        })),
       setSearchQuery: (q) => set({ searchQuery: q }),
+      recommended: [],
+      setRecommended: (recommended) => set({ recommended }),
+      hiddenTools: [],
+      hideTool: (tool) =>
+        set((s) => ({
+          hiddenTools: s.hiddenTools.includes(tool)
+            ? s.hiddenTools.filter((x) => x !== tool)
+            : [...s.hiddenTools, tool],
+          // Hiding the view you are looking at would leave the sidebar showing
+          // a panel with no way back to it.
+          tool: s.tool === tool ? null : s.tool,
+        })),
+      showAllTools: () => set({ hiddenTools: [] }),
       toolOrder: [],
       setToolOrder: (order) => set({ toolOrder: order }),
     }),
@@ -536,6 +643,9 @@ interface PaletteState {
   mode: PaletteMode
   /** True while the settings panel is shown. */
   settingsOpen: boolean
+  /** The settings dialog's JSON view. A flag here rather than local state so the
+   *  command palette can open straight onto it. */
+  settingsJsonOpen: boolean
   /** True while the keyboard-shortcuts reference is shown. */
   shortcutsOpen: boolean
   /** True while the Reado Anywhere (phone pairing) dialog is shown. */
@@ -543,6 +653,8 @@ interface PaletteState {
   open: (mode: Exclude<PaletteMode, null>) => void
   close: () => void
   toggleSettings: (open?: boolean) => void
+  /** Open the settings dialog on its JSON view (or close that view). */
+  toggleSettingsJson: (open?: boolean) => void
   toggleShortcuts: (open?: boolean) => void
   toggleAnywhere: (open?: boolean) => void
 }
@@ -551,11 +663,24 @@ interface PaletteState {
 export const usePalette = create<PaletteState>((set) => ({
   mode: null,
   settingsOpen: false,
+  settingsJsonOpen: false,
   shortcutsOpen: false,
   anywhereOpen: false,
   open: (mode) => set({ mode }),
   close: () => set({ mode: null }),
-  toggleSettings: (open) => set((s) => ({ settingsOpen: open ?? !s.settingsOpen, mode: null })),
+  toggleSettings: (open) =>
+    set((s) => ({
+      settingsOpen: open ?? !s.settingsOpen,
+      // Closing the dialog closes the view it was showing, so reopening lands
+      // on the tabs rather than on a JSON blob nobody asked for again.
+      settingsJsonOpen: open === false ? false : s.settingsJsonOpen,
+      mode: null,
+    })),
+  toggleSettingsJson: (open) =>
+    set((s) => {
+      const next = open ?? !s.settingsJsonOpen
+      return { settingsJsonOpen: next, settingsOpen: next || s.settingsOpen, mode: null }
+    }),
   toggleShortcuts: (open) => set((s) => ({ shortcutsOpen: open ?? !s.shortcutsOpen, mode: null })),
   toggleAnywhere: (open) => set((s) => ({ anywhereOpen: open ?? !s.anywhereOpen, mode: null })),
 }))
@@ -570,6 +695,9 @@ interface EditorActionsState {
   /** Bumped to ask the active view to peek the definition at the cursor. */
   peekNonce: number
   requestPeek: () => void
+  /** Bumped to open the code-action menu at the cursor (⌘.). */
+  quickFixNonce: number
+  requestQuickFix: () => void
   /** Manual editing enabled for the active file (read-first stays the default). */
   editing: boolean
   setEditing: (editing: boolean) => void
@@ -625,6 +753,8 @@ export const useEditorActions = create<EditorActionsState>()(
       requestExplain: () => set((s) => ({ explainNonce: s.explainNonce + 1 })),
       peekNonce: 0,
       requestPeek: () => set((s) => ({ peekNonce: s.peekNonce + 1 })),
+      quickFixNonce: 0,
+      requestQuickFix: () => set((s) => ({ quickFixNonce: s.quickFixNonce + 1 })),
       editing: false,
       setEditing: (editing) => set({ editing }),
       dirtyPaths: [],
@@ -668,6 +798,11 @@ export const useEditorActions = create<EditorActionsState>()(
  *  as a diff ("Compare with Saved"). Not a git ref — no repository needed. */
 export const SAVED_BASE = "reado:saved"
 
+/** Diff base prefix for "compare these two files": the rest of the string is
+ *  the project-relative path of the *other* file. Same sentinel shape as
+ *  `SAVED_BASE`/`LAST_READ_BASE`, so a base is still one string. */
+export const FILE_BASE = "reado:file:"
+
 interface CursorState {
   line: number
   col: number
@@ -691,7 +826,22 @@ export interface Landing {
 }
 
 interface ProjectState {
+  /**
+   * The primary folder: the one whose `.reado/` holds the workspace list, and
+   * the one every root-scoped call falls back to.
+   *
+   * Most code should ask `rootFor(path)` instead — with more than one folder
+   * open, "the root" is a property of the file you are acting on, not of the
+   * window.
+   */
   root: string
+  /** Every folder in the workspace, primary first. */
+  roots: string[]
+  /** Add a folder to the workspace (no-op if it is already there). */
+  addRoot: (path: string) => void
+  /** Remove a folder. The primary one can't be removed — that is "close
+   *  project", a different thing. */
+  removeRoot: (path: string) => void
   git: GitInfo
   tabs: string[]
   active: string | null
@@ -724,8 +874,19 @@ interface ProjectState {
   closeSplit: () => void
   /** Swap which file is primary (left) and which is in the split (right). */
   swapSplit: () => void
-  init: (root: string, git: GitInfo, session?: Session) => void
+  init: (root: string, git: GitInfo, session?: Session, roots?: string[]) => void
   setGit: (git: GitInfo) => void
+  /** Open a file as a *preview* tab: it replaces the previous preview instead
+   *  of adding to the strip, and the next preview replaces it. That is what
+   *  keeps a session of reading from turning into forty tabs. */
+  openPreview: (path: string, line?: number) => void
+  /** The tab currently in preview, if any. */
+  previewPath: string | null
+  /** Promote the preview tab to an ordinary one ("keep it open"). */
+  keepOpen: (path: string) => void
+  /** Tabs the user has pinned. They sort first and survive the bulk closes. */
+  pinnedTabs: string[]
+  togglePinned: (path: string) => void
   open: (path: string, line?: number) => void
   close: (path: string) => void
   /** Repoint an open tab after its file moved on disk. */
@@ -743,7 +904,7 @@ interface ProjectState {
   setShowHidden: (show: boolean) => void
 }
 
-export const useProject = create<ProjectState>((set) => ({
+export const useProject = create<ProjectState>((set, get) => ({
   root: "",
   git: {
     isRepo: false,
@@ -827,9 +988,10 @@ export const useProject = create<ProjectState>((set) => ({
   openSplit: (path) => set((s) => ({ splitPath: path ?? s.active })),
   closeSplit: () => set({ splitPath: null }),
   swapSplit: () => set((s) => (s.splitPath ? { active: s.splitPath, splitPath: s.active } : s)),
-  init: (root, git, session) =>
+  init: (root, git, session, roots) =>
     set({
       root,
+      roots: roots?.length ? [root, ...roots.filter((r) => r !== root)] : [root],
       git,
       tabs: session?.tabs ?? [],
       active: session?.active ?? null,
@@ -841,8 +1003,36 @@ export const useProject = create<ProjectState>((set) => ({
       navStack: session?.active ? [{ path: session.active }] : [],
       navIndex: session?.active ? 0 : -1,
       closedTabs: [],
+      previewPath: null,
+      pinnedTabs: [],
     }),
   setGit: (git) => set({ git }),
+  roots: [],
+  addRoot: (path) => set((s) => (s.roots.includes(path) ? s : { roots: [...s.roots, path] })),
+  removeRoot: (path) =>
+    set((s) => {
+      // The primary folder owns the workspace file and the annotations; taking
+      // it out would leave the window with nowhere to write them.
+      if (path === s.root) return s
+      return {
+        roots: s.roots.filter((r) => r !== path),
+        // Files from a folder that is no longer in the workspace can't stay
+        // open: nothing would know which root to save them against.
+        tabs: s.tabs.filter((t) => !t.startsWith(`${path}/`)),
+        active: s.active?.startsWith(`${path}/`) ? null : s.active,
+      }
+    }),
+  previewPath: null,
+  pinnedTabs: [],
+  keepOpen: (path) => set((s) => (s.previewPath === path ? { previewPath: null } : s)),
+  togglePinned: (path) =>
+    set((s) => ({
+      pinnedTabs: s.pinnedTabs.includes(path)
+        ? s.pinnedTabs.filter((p) => p !== path)
+        : [...s.pinnedTabs, path],
+      // Pinning is a decision to keep the file: it can't stay a preview.
+      previewPath: s.previewPath === path ? null : s.previewPath,
+    })),
   open: (path, line) =>
     set((s) => {
       const tabs = s.tabs.includes(path) ? s.tabs : [...s.tabs, path]
@@ -861,6 +1051,44 @@ export const useProject = create<ProjectState>((set) => ({
       return {
         tabs,
         active: path,
+        // Opening a file outright is a decision to keep it — even if it was
+        // already sitting there as a preview.
+        previewPath: s.previewPath === path ? null : s.previewPath,
+        landing:
+          line !== undefined ? { path, line, nonce: (s.landing?.nonce ?? 0) + 1 } : s.landing,
+        navStack,
+        navIndex,
+      }
+    }),
+  openPreview: (path, line) =>
+    set((s) => {
+      if (!useSettings.getState().previewTabs) {
+        get().open(path, line)
+        return {}
+      }
+      // Replace the outgoing preview in place, so the strip doesn't reshuffle
+      // as you arrow through a folder. A pinned or already-open file is left
+      // exactly where it is.
+      const previous = s.previewPath
+      const already = s.tabs.includes(path)
+      const tabs = already
+        ? s.tabs
+        : previous && s.tabs.includes(previous)
+          ? s.tabs.map((t) => (t === previous ? path : t))
+          : [...s.tabs, path]
+      const cur = s.navStack[s.navIndex]
+      let navStack = s.navStack
+      let navIndex = s.navIndex
+      if (!cur || cur.path !== path) {
+        navStack = [...s.navStack.slice(0, s.navIndex + 1), { path, line }].slice(-50)
+        navIndex = navStack.length - 1
+      }
+      return {
+        tabs,
+        active: path,
+        // An already-open tab keeps whatever status it had; a new one is the
+        // preview until something promotes it.
+        previewPath: already ? s.previewPath : path,
         landing:
           line !== undefined ? { path, line, nonce: (s.landing?.nonce ?? 0) + 1 } : s.landing,
         navStack,
@@ -871,18 +1099,35 @@ export const useProject = create<ProjectState>((set) => ({
     set((s) => {
       const tabs = s.tabs.filter((t) => t !== path)
       const active = s.active === path ? (tabs[tabs.length - 1] ?? null) : s.active
-      return { tabs, active, closedTabs: [...s.closedTabs, path].slice(-25) }
+      return {
+        tabs,
+        active,
+        previewPath: s.previewPath === path ? null : s.previewPath,
+        pinnedTabs: s.pinnedTabs.filter((p) => p !== path),
+        closedTabs: [...s.closedTabs, path].slice(-25),
+      }
     }),
-  closeOthers: (path) => set((s) => (s.tabs.includes(path) ? { tabs: [path], active: path } : s)),
+  // The bulk closes spare pinned tabs: pinning is the user saying "not this
+  // one", and a bulk action that ignores that makes the pin worthless.
+  closeOthers: (path) =>
+    set((s) => {
+      if (!s.tabs.includes(path)) return s
+      const tabs = s.tabs.filter((t) => t === path || s.pinnedTabs.includes(t))
+      return { tabs, active: path, previewPath: null }
+    }),
   closeToRight: (path) =>
     set((s) => {
       const i = s.tabs.indexOf(path)
       if (i < 0) return s
-      const tabs = s.tabs.slice(0, i + 1)
+      const tabs = s.tabs.filter((t, at) => at <= i || s.pinnedTabs.includes(t))
       const active = s.active && tabs.includes(s.active) ? s.active : path
-      return { tabs, active }
+      return { tabs, active, previewPath: null }
     }),
-  closeAll: () => set({ tabs: [], active: null }),
+  closeAll: () =>
+    set((s) => {
+      const tabs = s.tabs.filter((t) => s.pinnedTabs.includes(t))
+      return { tabs, active: tabs[tabs.length - 1] ?? null, previewPath: null }
+    }),
   moveTab: (path, beforePath) =>
     set((s) => {
       if (path === beforePath) return s

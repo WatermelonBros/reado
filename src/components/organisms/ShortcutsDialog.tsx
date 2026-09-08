@@ -1,16 +1,21 @@
 /**
- * Keyboard-shortcuts reference. A read-only, grouped list of every binding —
- * opened from Settings, the command palette, or the Help menu.
+ * Keyboard-shortcuts reference: a grouped list of every binding, opened from
+ * Settings, the command palette, or the Help menu — with a way through to the
+ * text editor that changes them.
  */
 
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon } from "@/components/atoms/icons"
 import { Modal } from "@/components/atoms/Modal"
+import { KeybindingsEditor } from "@/components/organisms/KeybindingsEditor"
 import { SHORTCUT_GROUPS } from "@/lib/shortcuts"
 import { usePalette } from "@/lib/store"
 
 export function ShortcutsDialog() {
+  const [editing, setEditing] = useState(false)
   const open = usePalette((s) => s.shortcutsOpen)
   const toggle = usePalette((s) => s.toggleShortcuts)
   const { t } = useTranslation()
@@ -22,8 +27,13 @@ export function ShortcutsDialog() {
       ariaLabel={t("sc.title")}
       className="flex max-h-[80vh] w-[min(640px,92vw)] flex-col"
     >
-      <header className="flex flex-none items-center justify-between border-b border-line px-5 py-3">
-        <h2 className="m-0 text-sm font-semibold tracking-wide uppercase">{t("sc.title")}</h2>
+      <header className="flex flex-none items-center justify-between gap-3 border-b border-line px-5 py-3">
+        <h2 className="m-0 flex-1 text-sm font-semibold tracking-wide uppercase">
+          {t("sc.title")}
+        </h2>
+        <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+          {t("sc.edit")}
+        </Button>
         <IconButton
           label={t("settings.close")}
           icon={<CloseIcon className="h-4 w-4" />}
@@ -50,6 +60,7 @@ export function ShortcutsDialog() {
           </section>
         ))}
       </div>
+      <KeybindingsEditor open={editing} onClose={() => setEditing(false)} />
     </Modal>
   )
 }

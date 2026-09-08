@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use ignore::WalkBuilder;
 use serde::Serialize;
 
+use crate::encoding::Charset;
 use crate::error::{Error, Result};
 
 /// A single entry in the file tree.
@@ -22,6 +23,20 @@ pub struct DirEntry {
     pub path: String,
     /// `true` for directories, `false` for files.
     pub is_dir: bool,
+    /// Last-modified time in milliseconds since the epoch, when the platform
+    /// reports one. Only the tree's "sort by modified" reads it.
+    pub modified: Option<u64>,
+}
+
+/// Milliseconds since the epoch for a directory entry's mtime, if available.
+fn modified_ms(path: &Path) -> Option<u64> {
+    std::fs::metadata(path)
+        .ok()?
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
 }
 
 /// Reject paths that resolve outside `root` (defends against `..` traversal).
@@ -54,8 +69,27 @@ pub(crate) fn exclude_overrides(
     root: &PathBuf,
     exclude: &[String],
 ) -> Option<ignore::overrides::Override> {
+    glob_overrides(root, &[], exclude)
+}
+
+/// Overrides from a positive `include` list and a negative `exclude` list.
+///
+/// A non-empty `include` restricts the walk to files matching it (the `ignore`
+/// crate's rule: once any positive glob exists, a file must match one to be
+/// walked), which is what "files to include" in the search panel means.
+pub(crate) fn glob_overrides(
+    root: &PathBuf,
+    include: &[String],
+    exclude: &[String],
+) -> Option<ignore::overrides::Override> {
     let mut b = ignore::overrides::OverrideBuilder::new(root);
     let mut any = false;
+    for g in include {
+        let g = g.trim();
+        if !g.is_empty() && b.add(g).is_ok() {
+            any = true;
+        }
+    }
     for g in exclude {
         let g = g.trim();
         if g.is_empty() {
@@ -107,6 +141,7 @@ pub fn list_dir(
                     .unwrap_or_default(),
                 path: path.to_string_lossy().into_owned(),
                 is_dir: entry.file_type().is_some_and(|t| t.is_dir()),
+                modified: modified_ms(path),
             }
         })
         .collect();
@@ -128,6 +163,7 @@ pub fn list_dir(
                 let p = path.to_string_lossy().into_owned();
                 if !have.contains(&p) {
                     entries.push(DirEntry {
+                        modified: modified_ms(&path),
                         name,
                         is_dir: path.is_dir(),
                         path: p,
@@ -187,8 +223,12 @@ pub fn list_files(root: String, exclude: Vec<String>) -> Result<Vec<String>> {
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum FileContent {
-    /// UTF-8 text (code, markdown, JSON, …).
-    Text { text: String },
+    /// Decoded text (code, markdown, JSON, …), with the encoding it was read
+    /// as — so the editor can say so, and write it back the same way.
+    Text {
+        text: String,
+        encoding: crate::encoding::Charset,
+    },
     /// An image, returned as a `data:` URL ready to drop into `<img src>`.
     /// (`rename_all` on an enum only renames variants, not their fields, so the
     /// camelCase frontend name must be set explicitly.)
@@ -234,11 +274,29 @@ fn image_mime(path: &Path) -> Option<&'static str> {
 /// Write UTF-8 text back to a file (optional manual editing). The path is
 /// confined to the project root.
 #[tauri::command]
-pub fn write_file(root: String, path: String, content: String) -> Result<()> {
+pub fn write_file(
+    root: String,
+    path: String,
+    content: String,
+    encoding: Option<String>,
+) -> Result<()> {
     let root = PathBuf::from(&root);
     let path = ensure_within(&root, &PathBuf::from(&path))?;
-    let bytes = content.len();
-    std::fs::write(&path, content).inspect_err(|e| {
+    // Write the file back as the encoding it was read as. Refusing when the text
+    // no longer fits is the point: silently substituting "?" for a character the
+    // encoding can't hold is data loss disguised as a successful save.
+    let charset = encoding.as_deref().map(Charset::from_label);
+    let out = match charset {
+        None | Some(Charset::Utf8) => content.into_bytes(),
+        Some(cs) => crate::encoding::encode(&content, cs).ok_or_else(|| {
+            Error::Other(format!(
+                "this text can't be written as {} — save it as UTF-8 instead",
+                cs.label()
+            ))
+        })?,
+    };
+    let bytes = out.len();
+    std::fs::write(&path, out).inspect_err(|e| {
         crate::log::error(
             "fs",
             "write failed",
@@ -301,6 +359,7 @@ pub fn read_file(
     path: String,
     as_text: Option<bool>,
     guard_bytes: Option<u64>,
+    encoding: Option<String>,
 ) -> Result<FileContent> {
     let root = PathBuf::from(&root);
     let path = ensure_within(&root, &PathBuf::from(&path))?;
@@ -372,19 +431,33 @@ pub fn read_file(
     }
 
     let bytes = std::fs::read(&path)?;
-    // A NUL byte in the first 8 KiB is a reliable "this is binary" signal.
-    let probe = &bytes[..bytes.len().min(8192)];
-    let looks_binary = probe.contains(&0);
+    // An explicit choice ("Reopen with Encoding") is an instruction, not a hint:
+    // it skips detection entirely, which is the only way to open a file the
+    // heuristic gets wrong.
+    let forced = encoding.as_deref().map(Charset::from_label);
+    let Some(charset) = forced.or_else(|| Charset::detect_default(&bytes)) else {
+        // Not text in any encoding we would guess at.
+        return Ok(FileContent::Binary {
+            size: metadata.len(),
+        });
+    };
 
-    if looks_binary {
+    // A NUL byte in the first 8 KiB is a reliable "this is binary" signal — but
+    // not for UTF-16, where every ASCII character carries a NUL padding byte.
+    // Reading those as binary is one of the bugs this whole path fixes.
+    let utf16 = matches!(charset, Charset::Utf16Le | Charset::Utf16Be);
+    if !utf16 && bytes[..bytes.len().min(8192)].contains(&0) {
         return Ok(FileContent::Binary {
             size: metadata.len(),
         });
     }
 
-    match String::from_utf8(bytes) {
-        Ok(text) => Ok(FileContent::Text { text }),
-        Err(_) => Ok(FileContent::Binary {
+    match crate::encoding::decode(&bytes, charset) {
+        Some(text) => Ok(FileContent::Text {
+            text,
+            encoding: charset,
+        }),
+        None => Ok(FileContent::Binary {
             size: metadata.len(),
         }),
     }
@@ -404,7 +477,7 @@ fn ensure_dest_within(root: &Path, target: &Path) -> Result<PathBuf> {
 
 /// Append " N" before the extension until the path is free, so importing a
 /// duplicate name never clobbers an existing file.
-fn unique_dest(path: &Path) -> PathBuf {
+pub(crate) fn unique_dest(path: &Path) -> PathBuf {
     if !path.exists() {
         return path.to_path_buf();
     }
@@ -738,9 +811,49 @@ pub fn allow_project_assets(app: tauri::AppHandle, root: String) -> Result<()> {
     Ok(())
 }
 
+/// Largest settings bundle Reado will read back (a bundle is a few KB).
+const MAX_BUNDLE_BYTES: u64 = 1_048_576;
+
+/// Reject a settings-bundle path that isn't a plain `.json` file.
+///
+/// These two commands are the only ones that touch a path outside the open
+/// project, so they are kept as narrow as the feature allows: the path comes
+/// from the OS save/open dialog (which the webview cannot show without the user
+/// acting), it must end in `.json`, and reads are size-capped. That is the whole
+/// of the widening — there is deliberately no general read/write-any-file
+/// command for the frontend to reach for.
+fn check_bundle_path(path: &str) -> Result<PathBuf> {
+    let p = PathBuf::from(path);
+    if p.extension().and_then(|e| e.to_str()) != Some("json") {
+        return Err(Error::Other("settings files must end in .json".into()));
+    }
+    Ok(p)
+}
+
+/// Write a settings bundle to a path the user picked in the save dialog.
+#[tauri::command]
+pub fn write_settings_file(path: String, json: String) -> Result<()> {
+    std::fs::write(check_bundle_path(&path)?, json)?;
+    Ok(())
+}
+
+/// Read a settings bundle from a path the user picked in the open dialog.
+#[tauri::command]
+pub fn read_settings_file(path: String) -> Result<String> {
+    let p = check_bundle_path(&path)?;
+    if std::fs::metadata(&p)?.len() > MAX_BUNDLE_BYTES {
+        return Err(Error::Other(
+            "that file is too large to be a settings bundle".into(),
+        ));
+    }
+    Ok(std::fs::read_to_string(p)?)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{base64_encode, create_dir, create_file, list_dir, FileContent, MAX_TEXT_BYTES};
+    use super::{
+        base64_encode, create_dir, create_file, list_dir, Charset, FileContent, MAX_TEXT_BYTES,
+    };
 
     #[test]
     fn an_escaping_create_leaves_no_directories_outside_the_project() {
@@ -838,13 +951,19 @@ mod tests {
         fs::create_dir(root.join("src")).unwrap();
         fs::write(root.join("src/a.txt"), b"old").unwrap();
 
-        super::write_file(s(root.into()), "src/a.txt".into(), "relative".into()).unwrap();
+        super::write_file(s(root.into()), "src/a.txt".into(), "relative".into(), None).unwrap();
         assert_eq!(
             fs::read_to_string(root.join("src/a.txt")).unwrap(),
             "relative"
         );
 
-        super::write_file(s(root.into()), s(root.join("src/a.txt")), "absolute".into()).unwrap();
+        super::write_file(
+            s(root.into()),
+            s(root.join("src/a.txt")),
+            "absolute".into(),
+            None,
+        )
+        .unwrap();
         assert_eq!(
             fs::read_to_string(root.join("src/a.txt")).unwrap(),
             "absolute"
@@ -857,7 +976,7 @@ mod tests {
             "../{}/o.txt",
             outside.path().file_name().unwrap().to_string_lossy()
         );
-        assert!(super::write_file(s(root.into()), escape, "pwned".into()).is_err());
+        assert!(super::write_file(s(root.into()), escape, "pwned".into(), None).is_err());
         assert_eq!(
             fs::read_to_string(outside.path().join("o.txt")).unwrap(),
             "keep"
@@ -940,21 +1059,23 @@ mod tests {
 
         // Plain UTF-8 text → Text with the exact content.
         fs::write(root.join("hello.txt"), "hello world\n").unwrap();
-        match super::read_file(s(root.into()), s(root.join("hello.txt")), None, None).unwrap() {
-            FileContent::Text { text } => assert_eq!(text, "hello world\n"),
+        match super::read_file(s(root.into()), s(root.join("hello.txt")), None, None, None).unwrap()
+        {
+            FileContent::Text { text, .. } => assert_eq!(text, "hello world\n"),
             other => panic!("expected Text, got {other:?}"),
         }
 
         // A NUL byte in the first 8 KiB → Binary.
         fs::write(root.join("blob.dat"), b"abc\0def").unwrap();
-        match super::read_file(s(root.into()), s(root.join("blob.dat")), None, None).unwrap() {
+        match super::read_file(s(root.into()), s(root.join("blob.dat")), None, None, None).unwrap()
+        {
             FileContent::Binary { size } => assert_eq!(size, 7),
             other => panic!("expected Binary, got {other:?}"),
         }
 
         // Image extension → data URL (mime keyed off the extension, not the bytes).
         fs::write(root.join("pic.png"), b"\x89PNG\r\n\x1a\n").unwrap();
-        match super::read_file(s(root.into()), s(root.join("pic.png")), None, None).unwrap() {
+        match super::read_file(s(root.into()), s(root.join("pic.png")), None, None, None).unwrap() {
             FileContent::Image { data_url } => {
                 assert!(data_url.starts_with("data:image/png;base64,"));
             }
@@ -962,7 +1083,15 @@ mod tests {
         }
 
         // `as_text = Some(true)` decodes an image-renderable format as source text.
-        match super::read_file(s(root.into()), s(root.join("pic.png")), Some(true), None).unwrap() {
+        match super::read_file(
+            s(root.into()),
+            s(root.join("pic.png")),
+            Some(true),
+            None,
+            None,
+        )
+        .unwrap()
+        {
             // The bytes aren't valid UTF-8, so it falls through to Binary — the
             // point is that the image data-URL branch was bypassed.
             FileContent::Binary { .. } => {}
@@ -981,7 +1110,7 @@ mod tests {
         // without decoding the whole file.
         let size = MAX_TEXT_BYTES + 1;
         fs::write(root.join("big.txt"), vec![b'a'; size as usize]).unwrap();
-        match super::read_file(s(root.into()), s(root.join("big.txt")), None, None).unwrap() {
+        match super::read_file(s(root.into()), s(root.join("big.txt")), None, None, None).unwrap() {
             FileContent::Binary { size: reported } => assert_eq!(reported, size),
             other => panic!("expected Binary by size, got {other:?}"),
         }
@@ -995,7 +1124,14 @@ mod tests {
         let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
         fs::write(root.join("bundle.js"), vec![b'a'; 4096]).unwrap();
 
-        match super::read_file(s(root.into()), s(root.join("bundle.js")), None, Some(1024)).unwrap()
+        match super::read_file(
+            s(root.into()),
+            s(root.join("bundle.js")),
+            None,
+            Some(1024),
+            None,
+        )
+        .unwrap()
         {
             FileContent::Large { size } => assert_eq!(size, 4096),
             other => panic!("expected Large, got {other:?}"),
@@ -1010,9 +1146,16 @@ mod tests {
         let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
         fs::write(root.join("small.txt"), "hello").unwrap();
 
-        match super::read_file(s(root.into()), s(root.join("small.txt")), None, Some(1024)).unwrap()
+        match super::read_file(
+            s(root.into()),
+            s(root.join("small.txt")),
+            None,
+            Some(1024),
+            None,
+        )
+        .unwrap()
         {
-            FileContent::Text { text } => assert_eq!(text, "hello"),
+            FileContent::Text { text, .. } => assert_eq!(text, "hello"),
             other => panic!("expected Text, got {other:?}"),
         }
     }
@@ -1027,12 +1170,150 @@ mod tests {
         fs::write(root.join("bundle.js"), vec![b'a'; 4096]).unwrap();
 
         for guard in [None, Some(0)] {
-            match super::read_file(s(root.into()), s(root.join("bundle.js")), None, guard).unwrap()
+            match super::read_file(s(root.into()), s(root.join("bundle.js")), None, guard, None)
+                .unwrap()
             {
-                FileContent::Text { text } => assert_eq!(text.len(), 4096),
+                FileContent::Text { text, .. } => assert_eq!(text.len(), 4096),
                 other => panic!("expected Text with guard {guard:?}, got {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn a_settings_bundle_must_be_a_json_file() {
+        // These two commands are the only ones that touch a path outside the
+        // open project, so the extension check is the whole of the guard.
+        let dir = tempfile::tempdir().unwrap();
+        let bad = dir.path().join("id_rsa");
+        std::fs::write(&bad, "secret").unwrap();
+        assert!(super::read_settings_file(bad.to_string_lossy().into_owned()).is_err());
+        assert!(
+            super::write_settings_file(bad.to_string_lossy().into_owned(), "{}".into()).is_err()
+        );
+        // …and the file it refused to write is untouched.
+        assert_eq!(std::fs::read_to_string(&bad).unwrap(), "secret");
+    }
+
+    #[test]
+    fn a_settings_bundle_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("reado-settings.json");
+        let p = path.to_string_lossy().into_owned();
+        super::write_settings_file(p.clone(), "{\"a\":1}".into()).unwrap();
+        assert_eq!(super::read_settings_file(p).unwrap(), "{\"a\":1}");
+    }
+
+    #[test]
+    fn an_oversized_bundle_is_refused_rather_than_slurped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("huge.json");
+        std::fs::write(&path, vec![b'x'; (super::MAX_BUNDLE_BYTES + 1) as usize]).unwrap();
+        assert!(super::read_settings_file(path.to_string_lossy().into_owned()).is_err());
+    }
+
+    #[test]
+    fn a_latin1_file_opens_as_text_instead_of_binary() {
+        // The bug this closes: a file Reado couldn't decode as UTF-8 was
+        // reported as "binary" and had no way to be opened at all.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        std::fs::write(root.join("legacy.txt"), b"caff\xE8\n").unwrap();
+
+        match super::read_file(s(root.into()), s(root.join("legacy.txt")), None, None, None)
+            .unwrap()
+        {
+            FileContent::Text { text, encoding } => {
+                assert_eq!(text, "caffè\n");
+                assert_eq!(encoding, Charset::Other("windows-1252"));
+            }
+            other => panic!("expected decoded Text, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_explicit_encoding_overrides_detection() {
+        // "Reopen with Encoding" is an instruction: the same bytes mean
+        // different text in windows-1251 than in windows-1252, and only the
+        // reader knows which.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        std::fs::write(root.join("legacy.txt"), b"\xE8").unwrap();
+
+        let forced = super::read_file(
+            s(root.into()),
+            s(root.join("legacy.txt")),
+            None,
+            None,
+            Some("windows-1251".into()),
+        )
+        .unwrap();
+        match forced {
+            FileContent::Text { text, encoding } => {
+                assert_eq!(text, "и");
+                assert_eq!(encoding, Charset::Other("windows-1251"));
+            }
+            other => panic!("expected Text, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_utf16_file_is_not_mistaken_for_binary() {
+        // Every ASCII character in UTF-16 carries a NUL padding byte, which is
+        // exactly the signal the binary check looks for.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        let bytes = crate::encoding::encode("hello\n", Charset::Utf16Le).unwrap();
+        std::fs::write(root.join("wide.txt"), bytes).unwrap();
+
+        match super::read_file(s(root.into()), s(root.join("wide.txt")), None, None, None).unwrap()
+        {
+            FileContent::Text { text, encoding } => {
+                assert_eq!(text, "hello\n");
+                assert_eq!(encoding, Charset::Utf16Le);
+            }
+            other => panic!("expected Text, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_file_is_written_back_in_the_encoding_it_was_read_as() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        std::fs::write(root.join("legacy.txt"), b"old").unwrap();
+        super::write_file(
+            s(root.into()),
+            "legacy.txt".into(),
+            "caffè\n".into(),
+            Some("windows-1252".into()),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read(root.join("legacy.txt")).unwrap(),
+            b"caff\xE8\n"
+        );
+    }
+
+    #[test]
+    fn a_save_is_refused_rather_than_writing_question_marks() {
+        // Substituting "?" for a character the encoding can't hold is data loss
+        // dressed up as a successful save.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let s = |p: std::path::PathBuf| p.to_string_lossy().into_owned();
+        std::fs::write(root.join("legacy.txt"), b"old").unwrap();
+        assert!(super::write_file(
+            s(root.into()),
+            "legacy.txt".into(),
+            "coffee ☕".into(),
+            Some("windows-1252".into()),
+        )
+        .is_err());
+        // And the file it refused to write is untouched.
+        assert_eq!(std::fs::read(root.join("legacy.txt")).unwrap(), b"old");
     }
 
     #[test]
@@ -1051,6 +1332,7 @@ mod tests {
             s(root.join("huge.txt")),
             None,
             Some(MAX_TEXT_BYTES * 4),
+            None,
         )
         .unwrap()
         {

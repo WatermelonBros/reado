@@ -248,6 +248,36 @@
     box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--accent) 50%, transparent);
   }
 
+  /* Bracket-pair colours by nesting depth. The syntax highlighter also colours
+     these characters (as punctuation), and it wins on specificity from the
+     generated stylesheet — hence !important, the same trick the indent guides
+     below need. */
+  .cm-bracket-l0 {
+    color: var(--bracket-l0) !important;
+  }
+  .cm-bracket-l1 {
+    color: var(--bracket-l1) !important;
+  }
+  .cm-bracket-l2 {
+    color: var(--bracket-l2) !important;
+  }
+  .cm-bracket-l3 {
+    color: var(--bracket-l3) !important;
+  }
+  .cm-bracket-l4 {
+    color: var(--bracket-l4) !important;
+  }
+  .cm-bracket-l5 {
+    color: var(--bracket-l5) !important;
+  }
+  /* A closer with no opener: the one case where a bracket colour is a warning
+     rather than a wayfinding aid. */
+  .cm-bracket-unmatched {
+    color: var(--diag-error) !important;
+    text-decoration: underline wavy;
+    text-underline-offset: 3px;
+  }
+
   /* Theme the indentation guides with the quiet line tokens. The package injects
      its own colours at runtime (later in the cascade), so override with
      !important on the custom properties. */
@@ -388,6 +418,13 @@
   /* The anchored block, highlighted while its comment thread is open. */
   .cm-comment-block {
     background: color-mix(in oklch, var(--marker) 7%, transparent);
+  }
+
+  /* Dragging a file-tree row: the grabbing cursor holds over every surface the
+     pointer crosses (terminal, editor, buttons), each of which sets its own. */
+  :root[data-dragging-file],
+  :root[data-dragging-file] * {
+    cursor: grabbing !important;
   }
 
   /* CodeMirror-injected DOM (cannot be utility classes). */

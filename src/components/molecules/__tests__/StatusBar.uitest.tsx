@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
     hasUpstream: false,
     changedFiles: 0,
   })),
+  listEncodings: vi.fn(async () => ["utf-8", "utf-8-bom", "windows-1252"]),
 }))
 vi.mock("../../../lib/api", () => api)
 
@@ -38,6 +39,7 @@ vi.mock("../../../lib/docInfo", async (importOriginal) => {
 import { StatusBar } from "@/components/molecules/StatusBar"
 import { useComments } from "@/lib/comments"
 import { useDocInfo } from "@/lib/docInfo"
+import { useNotice } from "@/lib/notice"
 import { useCursor, usePalette, useProject } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
 
@@ -162,34 +164,47 @@ describe("StatusBar with an active file", () => {
   it("changes the indentation kind from the indent popover", async () => {
     render(<StatusBar />)
     await userEvent.click(screen.getByTitle("status.indent"))
-    await userEvent.click(screen.getByRole("button", { name: "status.useTabs" }))
+    await userEvent.click(screen.getByRole("menuitem", { name: "status.useTabs" }))
     expect(useDocInfo.getState().indentKind).toBe("tabs")
   })
 
   it("changes the indentation size from the indent popover", async () => {
     render(<StatusBar />)
     await userEvent.click(screen.getByTitle("status.indent"))
-    await userEvent.click(screen.getByRole("button", { name: "4" }))
+    await userEvent.click(screen.getByRole("menuitem", { name: "4" }))
     expect(useDocInfo.getState().indentSize).toBe(4)
+  })
+
+  it("offers reopening with an encoding and choosing one to save with", async () => {
+    // Two different acts, deliberately separate: re-decoding the bytes you have,
+    // and choosing what the next save writes. One menu, two lists.
+    useDocInfo.setState({ encoding: "utf-8" })
+    render(<StatusBar />)
+    // The indicator is labelled by what it shows, like the indent and EOL ones.
+    await userEvent.click(await screen.findByRole("button", { name: "utf-8" }))
+    expect(screen.getByText("status.reopenWith")).toBeInTheDocument()
+    expect(screen.getByText("status.saveWith")).toBeInTheDocument()
+    // Every offered encoding appears once per list.
+    expect(screen.getAllByText("windows-1252")).toHaveLength(2)
   })
 
   it("converts the line endings when a different option is chosen", async () => {
     render(<StatusBar />)
     await userEvent.click(screen.getByTitle("status.eol"))
     // "CRLF" only exists as a popover option (the toggle shows the current "LF").
-    expect(screen.getByRole("button", { name: "CRLF" })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "CRLF" }))
+    expect(screen.getByRole("menuitem", { name: "CRLF" })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("menuitem", { name: "CRLF" }))
     // Picking a non-current option rewrites the file with those endings...
     expect(docEdge.convertEol).toHaveBeenCalledWith("CRLF")
     // ...and the popover closes.
-    expect(screen.queryByRole("button", { name: "CRLF" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("menuitem", { name: "CRLF" })).not.toBeInTheDocument()
   })
 
   it("shows the language picker and changes the mode", async () => {
     useDocInfo.setState({ language: "TypeScript" })
     render(<StatusBar />)
     await userEvent.click(screen.getByTitle("status.language"))
-    await userEvent.click(screen.getByRole("button", { name: "Rust" }))
+    await userEvent.click(screen.getByRole("menuitem", { name: "Rust" }))
     expect(useDocInfo.getState().language).toBe("Rust")
     expect(useDocInfo.getState().languageOverride).toBe("Rust")
   })
@@ -203,9 +218,9 @@ describe("StatusBar with an active file", () => {
   it("closes an open popover on Escape", async () => {
     render(<StatusBar />)
     await userEvent.click(screen.getByTitle("status.eol"))
-    expect(screen.getByRole("button", { name: "CRLF" })).toBeInTheDocument()
+    expect(screen.getByRole("menuitem", { name: "CRLF" })).toBeInTheDocument()
     await userEvent.keyboard("{Escape}")
-    expect(screen.queryByRole("button", { name: "CRLF" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("menuitem", { name: "CRLF" })).not.toBeInTheDocument()
   })
 })
 
@@ -216,25 +231,28 @@ describe("StatusBar branch switcher", () => {
     render(<StatusBar />)
     await userEvent.click(screen.getByTitle("status.branch"))
     expect(api.gitBranches).toHaveBeenCalledWith("/repo")
-    expect(await screen.findByRole("button", { name: "dev" })).toBeInTheDocument()
+    expect(await screen.findByRole("menuitem", { name: "dev" })).toBeInTheDocument()
     expect(screen.getByText("branch.local")).toBeInTheDocument()
     expect(screen.getByText("branch.remote")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "origin/main" })).toBeInTheDocument()
+    expect(screen.getByRole("menuitem", { name: "origin/main" })).toBeInTheDocument()
   })
 
   it("checks out a chosen local branch and refreshes git info", async () => {
     render(<StatusBar />)
     await userEvent.click(screen.getByTitle("status.branch"))
-    await userEvent.click(await screen.findByRole("button", { name: "dev" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: "dev" }))
     expect(api.gitCheckout).toHaveBeenCalledWith("/repo", "dev", false)
     await vi.waitFor(() => expect(api.gitInfo).toHaveBeenCalledWith("/repo"))
   })
 
-  it("surfaces a checkout error inside the open menu", async () => {
+  it("surfaces a checkout error", async () => {
+    // Picking a branch closes the menu, so a refused checkout — a dirty working
+    // tree, usually — has to be reported where every other failure is.
     api.gitCheckout.mockRejectedValueOnce(new Error("dirty tree"))
     render(<StatusBar />)
     await userEvent.click(screen.getByTitle("status.branch"))
-    await userEvent.click(await screen.findByRole("button", { name: "dev" }))
-    expect(await screen.findByText(/dirty tree/)).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole("menuitem", { name: "dev" }))
+    await vi.waitFor(() => expect(useNotice.getState().notices[0]?.kind).toBe("error"))
+    expect(useNotice.getState().notices[0]?.text).toMatch(/dirty tree/)
   })
 })

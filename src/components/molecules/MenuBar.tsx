@@ -7,7 +7,7 @@
  * one source of truth. macOS keeps its system menu bar and never renders this.
  */
 import { useEffect, useRef, useState } from "react"
-import { APP_MENUS } from "@/lib/appMenu"
+import { APP_MENUS, acceleratorHint } from "@/lib/appMenu"
 import { menuCommandEnabled, runMenuCommand } from "@/lib/menu"
 
 export function MenuBar() {
@@ -66,9 +66,21 @@ export function MenuBar() {
                     type="button"
                     onClick={() => run(it.id)}
                     disabled={!menuCommandEnabled(it.id)}
-                    className="block w-full px-3 py-1 text-left text-xs text-ink transition-colors hover:bg-surface disabled:pointer-events-none disabled:opacity-40"
+                    // The shortcut belongs to the item, not to its name: as
+                    // text it would be read out as part of the label, so it is
+                    // announced through `aria-keyshortcuts` and drawn as decor.
+                    aria-keyshortcuts={acceleratorHint(it.id)}
+                    className="flex w-full items-baseline gap-6 px-3 py-1 text-left text-xs text-ink transition-colors hover:bg-surface disabled:pointer-events-none disabled:opacity-40"
                   >
-                    {it.label}
+                    <span className="flex-1 truncate">{it.label}</span>
+                    {acceleratorHint(it.id) && (
+                      <span
+                        aria-hidden="true"
+                        className="flex-none text-[10px] text-faint tabular-nums"
+                      >
+                        {acceleratorHint(it.id)}
+                      </span>
+                    )}
                   </button>
                 ),
               )}

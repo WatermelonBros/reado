@@ -90,6 +90,7 @@ import {
   PaperPlaneTiltIcon as PaperPlaneTilt,
   PencilSimpleIcon as PencilSimple,
   PlusIcon as Plus,
+  PushPinSimpleIcon as PushPinSimple,
   PuzzlePieceIcon as PuzzlePiece,
   RobotIcon as Robot,
   SealCheckIcon as SealCheck,
@@ -130,6 +131,8 @@ export const ExtensionsIcon = wrap(PuzzlePiece)
 export const PullIcon = wrap(ArrowLineDown)
 export const PushIcon = wrap(ArrowLineUp)
 export const FetchIcon = wrap(ArrowsClockwise)
+/** Re-read from disk (the file tree). Same glyph as fetch, different verb. */
+export const RefreshIcon = wrap(ArrowsClockwise)
 export const SyncIcon = wrap(ArrowsDownUp)
 export const StashIcon = wrap(Archive)
 export const MoreIcon = wrap(DotsThree)
@@ -288,6 +291,8 @@ export const TourIcon = wrap(Compass)
 export const TimelineIcon = wrap(ClockCounterClockwise)
 export const HierarchyIcon = wrap(TreeStructure)
 export const BookmarkIcon = wrap(BookmarkSimple)
+/** A pinned editor tab. */
+export const PinIcon = wrap(PushPinSimple)
 export const ProblemsIcon = wrap(Warning)
 export const TrashIcon = wrap(Trash)
 export const WarningIcon = wrap(Warning)

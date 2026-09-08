@@ -4,8 +4,10 @@
  * what to understand". Scope follows what the servers publish (workspace-wide for
  * servers like rust-analyzer, open-file-only for others).
  */
+import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { toRelative } from "@/lib/comments"
 import { type DiagItem, useDiagnostics } from "@/lib/diagnostics"
 import { useProject } from "@/lib/store"
@@ -24,6 +26,9 @@ export function ProblemsPanel() {
   const open = useProject((s) => s.open)
   const { t } = useTranslation()
   const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const [menu, setMenu] = useState<{ x: number; y: number; path: string; item: DiagItem } | null>(
+    null,
+  )
 
   // Files sorted by path, each with its diagnostics sorted by line; counts per
   // bucket drive the filter chips.
@@ -73,6 +78,35 @@ export function ProblemsPanel() {
     </button>
   )
 
+  // A problem you can't copy is a problem you can't paste into an issue, a
+  // search, or a message to whoever wrote the code.
+  const menuItems = (): ContextMenuItem[] => {
+    if (!menu) return []
+    const where = `${toRelative(root, menu.path)}:${menu.item.line}`
+    return [
+      {
+        label: t("problems.copyMessage"),
+        onSelect: () => void clipboardWriteText(menu.item.message).catch(() => {}),
+      },
+      {
+        label: t("problems.copyLocation"),
+        onSelect: () => void clipboardWriteText(where).catch(() => {}),
+      },
+      {
+        label: t("problems.copyAll"),
+        separatorBefore: true,
+        onSelect: () =>
+          void clipboardWriteText(
+            shown
+              .flatMap((f) =>
+                f.items.map((d) => `${toRelative(root, f.path)}:${d.line}  ${d.message}`),
+              )
+              .join("\n"),
+          ).catch(() => {}),
+      },
+    ]
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-none items-center gap-1 border-b border-line px-2 py-1.5">
@@ -91,6 +125,10 @@ export function ProblemsPanel() {
                 key={`${d.line}:${i}`}
                 type="button"
                 onClick={() => open(f.path, d.line)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setMenu({ x: e.clientX, y: e.clientY, path: f.path, item: d })
+                }}
                 title={d.message}
                 className="flex w-full items-start gap-2 py-1 pr-3 pl-3 text-left text-xs text-muted transition-colors hover:bg-surface hover:text-ink"
               >
@@ -107,6 +145,9 @@ export function ProblemsPanel() {
           </li>
         ))}
       </ul>
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menuItems()} onClose={() => setMenu(null)} />
+      )}
     </div>
   )
 }

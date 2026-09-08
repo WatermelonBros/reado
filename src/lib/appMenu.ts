@@ -8,7 +8,99 @@
  * the native menu (English) for parity with macOS. Native-only items (undo/copy/
  * paste, quit) are omitted: the webview/keyboard already handle them.
  */
+import { DEFAULT_BINDINGS } from "./keybindings"
+
 export type MenuItem = { id: string; label: string } | { sep: true } | { header: string }
+
+/**
+ * Keyboard accelerators for the native menu, derived from the bindings table.
+ *
+ * `DEFAULT_BINDINGS` is the one place a keystroke is written down; this is the
+ * same set in Tauri's notation, restricted to the commands whose menu item may
+ * safely carry an accelerator. Deriving rather than restating is what stopped
+ * the two disagreeing — `view:split` here used to claim `⌘\` while the bindings
+ * table gave that key to `view:splitToggle`.
+ *
+ * A native accelerator claims the keystroke before the webview sees it, so a
+ * combo that means one thing in the editor and another elsewhere (⌘Z is undo in
+ * a file and undo-a-file-operation outside it; ⌘D adds a cursor in the editor
+ * and duplicates in the tree) must stay out of `MENU_SAFE` or one of the two
+ * meanings dies.
+ */
+const MENU_SAFE = new Set([
+  "settings",
+  "window:new",
+  "newFile",
+  "openFile",
+  "save",
+  "saveAll",
+  "saveAs",
+  "format",
+  "reopenClosed",
+  "closeEditor",
+  "find",
+  "edit:replace",
+  "edit:toggleComment",
+  "edit:quickFix",
+  "gotoLine",
+  "sel:lineEnds",
+  "palette:files",
+  "palette:commands",
+  "palette:symbols",
+  "palette:wsymbols",
+  "palette:search",
+  "gotodef",
+  "go:peek",
+  "go:references",
+  "go:nextProblem",
+  "go:prevProblem",
+  "view:sidebar",
+  "terminal",
+  "view:splitToggle",
+  "view:wrap",
+  // Deliberately not `terminal:new`: `⌃⇧\`` is Ctrl on *every* platform, which
+  // is the one shape the `Mod` alias cannot express — derived, it would come out
+  // as `CmdOrCtrl` off macOS and disagree with the native menu. The binding
+  // still works; only the menu hint is absent.
+])
+
+/**
+ * Accelerators for commands whose key is bound *inside the editor*, by
+ * CodeMirror's own keymaps, rather than in `DEFAULT_BINDINGS`.
+ *
+ * These cannot be derived, because the window-level table genuinely does not
+ * contain them — they are the editor's bindings, and the menu item merely
+ * displays and mirrors them. Listed here so the menu still shows a shortcut for
+ * Find, Go to Line and the rest instead of leaving them blank.
+ */
+const EDITOR_ACCELERATORS: Record<string, string> = {
+  // Handled natively by the window, not by either binding layer.
+  "window:new": "CmdOrCtrl+Shift+N",
+  find: "CmdOrCtrl+F",
+  "edit:replace": "CmdOrCtrl+Alt+F",
+  "edit:toggleComment": "CmdOrCtrl+/",
+  gotoLine: "Ctrl+G",
+  "sel:lineEnds": "Shift+Alt+I",
+  gotodef: "F12",
+  "go:peek": "Alt+F12",
+  "go:references": "Shift+F12",
+}
+
+/** A binding combo in Tauri's accelerator notation. */
+const toAccelerator = (combo: string) => combo.replace("Mod", "CmdOrCtrl")
+
+export const ACCELERATORS: Record<string, string> = {
+  ...EDITOR_ACCELERATORS,
+  ...Object.fromEntries(
+    Object.entries(DEFAULT_BINDINGS)
+      .filter(([, command]) => MENU_SAFE.has(command))
+      .map(([combo, command]) => [command, toAccelerator(combo)]),
+  ),
+}
+
+/** An accelerator as Windows/Linux write it: "CmdOrCtrl+Shift+N" → "Ctrl+Shift+N". */
+export const acceleratorHint = (id: string): string | undefined =>
+  ACCELERATORS[id]?.replace("CmdOrCtrl", "Ctrl")
 
 export interface Menu {
   label: string
@@ -24,8 +116,10 @@ export const APP_MENUS: Menu[] = [
       { id: "openFile", label: "Open File…" },
       { id: "openFolder", label: "Open Folder…" },
       { id: "openRecent", label: "Open Recent…" },
+      { id: "workspace:addFolder", label: "Add Folder to Workspace…" },
       { sep: true },
       { id: "save", label: "Save" },
+      { id: "saveAll", label: "Save All" },
       { id: "saveAs", label: "Save As…" },
       { header: "Auto Save" },
       { id: "autosave:off", label: "Off" },
@@ -34,6 +128,7 @@ export const APP_MENUS: Menu[] = [
       { id: "revert", label: "Revert File" },
       { id: "compareSaved", label: "Compare with Saved" },
       { id: "format", label: "Format Document" },
+      { id: "formatSelection", label: "Format Selection" },
       { sep: true },
       { id: "reopenClosed", label: "Reopen Closed Editor" },
       { id: "closeEditor", label: "Close Editor" },
@@ -58,6 +153,25 @@ export const APP_MENUS: Menu[] = [
       { id: "edit:toggleComment", label: "Toggle Line Comment" },
       { id: "edit:toggleBlockComment", label: "Toggle Block Comment" },
       { id: "gotoLine", label: "Go to Line…" },
+      { sep: true },
+      { id: "edit:quickFix", label: "Quick Fix…" },
+      { id: "edit:organizeImports", label: "Organize Imports" },
+      { sep: true },
+      { id: "edit:cursorUndo", label: "Cursor Undo" },
+      { id: "edit:cursorRedo", label: "Cursor Redo" },
+      { header: "Transform" },
+      { id: "edit:upperCase", label: "Transform to Uppercase" },
+      { id: "edit:lowerCase", label: "Transform to Lowercase" },
+      { id: "edit:titleCase", label: "Transform to Title Case" },
+      { id: "edit:sortAsc", label: "Sort Lines Ascending" },
+      { id: "edit:sortDesc", label: "Sort Lines Descending" },
+      { id: "edit:dedupe", label: "Delete Duplicate Lines" },
+      { id: "edit:joinLines", label: "Join Lines" },
+      { header: "Whitespace" },
+      { id: "edit:trimWhitespace", label: "Trim Trailing Whitespace" },
+      { id: "edit:reindent", label: "Reindent Lines" },
+      { id: "edit:convertSpaces", label: "Convert Indentation to Spaces" },
+      { id: "edit:convertTabs", label: "Convert Indentation to Tabs" },
     ],
   },
   {
@@ -125,7 +239,10 @@ export const APP_MENUS: Menu[] = [
       { id: "view:statusBar", label: "Toggle Status Bar" },
       { id: "view:breadcrumbs", label: "Toggle Breadcrumbs" },
       { id: "terminal", label: "Toggle Terminal" },
-      { id: "view:split", label: "Split Editor" },
+      { id: "view:splitToggle", label: "Split Editor" },
+      { sep: true },
+      { id: "view:foldAll", label: "Fold All" },
+      { id: "view:unfoldAll", label: "Unfold All" },
       { sep: true },
       { id: "view:wrap", label: "Toggle Word Wrap" },
       { id: "view:whitespace", label: "Render Whitespace" },

@@ -6,9 +6,10 @@
  * sits at the bottom. New tools (Git, Orphans, Graph, History) slot in here as
  * their capabilities land.
  */
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
+import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import {
   BookmarkIcon,
@@ -58,6 +59,10 @@ export function ActivityBar() {
   const tool = useWorkspace((s) => s.tool)
   const selectTool = useWorkspace((s) => s.selectTool)
   const toolOrder = useWorkspace((s) => s.toolOrder)
+  const hiddenTools = useWorkspace((s) => s.hiddenTools)
+  const hideTool = useWorkspace((s) => s.hideTool)
+  const showAllTools = useWorkspace((s) => s.showAllTools)
+  const [menu, setMenu] = useState<{ x: number; y: number; tool?: ToolDef } | null>(null)
   const setToolOrder = useWorkspace((s) => s.setToolOrder)
   const toggleGraph = useWorkspace((s) => s.toggleGraph)
   const toggleDocs = useWorkspace((s) => s.toggleDocs)
@@ -138,9 +143,9 @@ export function ActivityBar() {
   // Apply the user's custom order: listed tools first (in that order), the rest
   // keep their natural order after (sort is stable). Drag reorders the list.
   const rank = new Map(toolOrder.map((id, i) => [id, i]))
-  const orderedTools = [...tools].sort(
-    (a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity),
-  )
+  const orderedTools = [...tools]
+    .filter((x) => !hiddenTools.includes(x.id))
+    .sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity))
 
   const reorder = (from: Tool, to: Tool, after: boolean) => {
     if (from === to) return
@@ -163,8 +168,35 @@ export function ActivityBar() {
   // h-10 (40px) + gap-1 (4px)).
   const activeIndex = orderedTools.findIndex((x) => x.id === tool)
 
+  // Right-click the rail: hide the view you clicked, or bring back everything
+  // you have hidden. A hidden view is still in View ▸ Open View and the palette.
+  const menuItems: ContextMenuItem[] = menu
+    ? [
+        ...(menu.tool
+          ? [
+              {
+                label: t("activity.hide", { name: t(menu.tool.labelKey) }),
+                onSelect: () => menu.tool && hideTool(menu.tool.id),
+              },
+            ]
+          : []),
+        {
+          label: t("activity.reset"),
+          separatorBefore: !!menu.tool,
+          disabled: hiddenTools.length === 0,
+          onSelect: showAllTools,
+        },
+      ]
+    : []
+
   return (
-    <nav className="flex h-full w-12 flex-none flex-col items-center border-r border-line bg-surface py-2">
+    <nav
+      className="flex h-full w-12 flex-none flex-col items-center border-r border-line bg-surface py-2"
+      onContextMenu={(e) => {
+        e.preventDefault()
+        setMenu({ x: e.clientX, y: e.clientY })
+      }}
+    >
       <div
         ref={railRef}
         className="relative flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -188,6 +220,11 @@ export function ActivityBar() {
               data-reorder-id={id}
               onPointerDown={onPointerDown(id)}
               onClick={() => selectTool(id)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setMenu({ x: e.clientX, y: e.clientY, tool: { id, labelKey, Icon } })
+              }}
               label={t(labelKey)}
               active={active}
               tooltipPlacement="right"
@@ -245,6 +282,9 @@ export function ActivityBar() {
           tooltipPlacement="right"
         />
       </div>
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
+      )}
     </nav>
   )
 }

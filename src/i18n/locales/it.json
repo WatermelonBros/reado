@@ -87,10 +87,26 @@
     "markFolderUnread": "Segna cartella come non letta",
     "delete": "Elimina",
     "deleted": "Spostato nel cestino — premi Ctrl/Cmd+Z per annullare",
-    "deleteFailed": "Impossibile spostare l'elemento nel cestino."
+    "deleteFailed": "Impossibile spostare l'elemento nel cestino.",
+    "refresh": "Aggiorna",
+    "filter": "Filtra questa cartella",
+    "filterPlaceholder": "Filtra i file elencati",
+    "filterHint": "Filtra le righe a schermo — {key} cerca in tutto il progetto.",
+    "sort": "Ordina per",
+    "sortName": "Nome",
+    "sortType": "Tipo",
+    "sortModified": "Ultima modifica",
+    "unsaved": "Modifiche non salvate",
+    "noFilterMatch": "Nessuna corrispondenza qui.",
+    "selectForCompare": "Seleziona per confronto",
+    "compareWithSelected": "Confronta con «{name}»",
+    "clearCompare": "Azzera la selezione di confronto",
+    "expandNest": "Mostra i file annidati sotto questo",
+    "collapseNest": "Nascondi i file annidati sotto questo"
   },
   "undo": {
-    "failed": "Impossibile annullare l'ultima modifica ai file."
+    "failed": "Impossibile annullare l'ultima modifica ai file.",
+    "replaced": "Ripristinati {count} file com'erano."
   },
   "editor": {
     "empty": "Seleziona un file dall'albero per iniziare a leggere.",
@@ -128,7 +144,27 @@
     "unsaved": "Modifiche non salvate",
     "large": "Questo file è {size} — oltre la soglia file grandi.",
     "openAnyway": "Apri comunque",
-    "formatDisabled": "La formattazione è disattivata per questo tipo di file in questo progetto."
+    "formatDisabled": "La formattazione è disattivata per questo tipo di file in questo progetto.",
+    "formatSelection": "Formatta selezione",
+    "formatNoRange": "Nessun language server qui sa formattare una selezione — usa Formatta documento.",
+    "upperCase": "Converti in maiuscolo",
+    "lowerCase": "Converti in minuscolo",
+    "titleCase": "Converti in Iniziali Maiuscole",
+    "sortAsc": "Ordina righe (A→Z)",
+    "sortDesc": "Ordina righe (Z→A)",
+    "deleteDuplicates": "Elimina righe duplicate",
+    "joinLines": "Unisci righe",
+    "trimWhitespace": "Rimuovi spazi finali",
+    "reindent": "Reindenta righe",
+    "cursorUndo": "Annulla movimento cursore",
+    "cursorRedo": "Ripristina movimento cursore",
+    "convertToSpaces": "Converti indentazione in spazi",
+    "convertToTabs": "Converti indentazione in tab",
+    "foldAll": "Comprimi tutto",
+    "unfoldAll": "Espandi tutto",
+    "foldLevel": "Comprimi al livello {level}",
+    "saveAll": "Salva tutto",
+    "saveAllDone": "Salvati {count} file."
   },
   "pdf": {
     "zoomIn": "Ingrandisci",
@@ -156,7 +192,11 @@
     "empty": "Nessun problema rilevato.",
     "error": "errori",
     "warn": "avvisi",
-    "info": "info"
+    "info": "info",
+    "copyMessage": "Copia il messaggio",
+    "copyAll": "Copia tutti i problemi",
+    "copyLocation": "Copia la posizione",
+    "createTask": "Crea un task da questo problema"
   },
   "bookmarks": {
     "panel": "Segnalibri",
@@ -179,7 +219,13 @@
     "importTitle": "Incolla un bundle di impostazioni",
     "apply": "Applica",
     "invalid": "Non sembra un bundle di impostazioni Reado valido (o è di una versione più recente).",
-    "summary": "Importare {settings} impostazioni e {disabled} estensioni disabilitate? Sostituisce le preferenze corrispondenti su questa macchina."
+    "summary": "Importare {settings} impostazioni e {disabled} estensioni disabilitate? Sostituisce le preferenze corrispondenti su questa macchina.",
+    "projectSaved": "Scritte {count} impostazioni in .reado/config.json — committalo per condividerle.",
+    "projectFailed": "Impossibile scrivere le impostazioni di progetto.",
+    "saveToProject": "Salva le impostazioni in questo progetto",
+    "exportFile": "Esporta impostazioni su file…",
+    "importFile": "Importa impostazioni da file…",
+    "exported": "Impostazioni scritte in {path}."
   },
   "timeline": {
     "panel": "Cronologia",
@@ -440,7 +486,9 @@
     "clear": "Pulisci",
     "empty": "Nessuna modifica ai file in questa sessione.",
     "comments_one": "{count} commento",
-    "comments_other": "{count} commenti"
+    "comments_other": "{count} commenti",
+    "hide": "Nascondi «{name}»",
+    "reset": "Mostra tutte le viste"
   },
   "hier": {
     "panel": "Gerarchia",
@@ -463,7 +511,16 @@
     "close": "Chiudi",
     "closeOthers": "Chiudi le altre",
     "closeRight": "Chiudi a destra",
-    "closeAll": "Chiudi tutte"
+    "closeAll": "Chiudi tutte",
+    "closeSaved": "Chiudi i salvati",
+    "splitRight": "Apri di lato",
+    "unsaved": "Modifiche non salvate",
+    "openEditors": "Editor aperti",
+    "preview": "Anteprima — il prossimo file aperto la sostituisce",
+    "keepOpen": "Mantieni aperta",
+    "pin": "Fissa",
+    "unpin": "Sblocca",
+    "pinned": "Fissata"
   },
   "sidebar": {
     "toggle": "Mostra/nascondi sidebar"
@@ -675,7 +732,17 @@
     "useTabs": "Indenta con tab",
     "language": "Seleziona linguaggio",
     "eol": "Fine riga",
-    "openComments": "Commenti aperti"
+    "openComments": "Commenti aperti",
+    "hideItem": "Nascondi questo indicatore",
+    "hideBar": "Nascondi la barra di stato",
+    "fromEditorconfig": "impostato dal .editorconfig del progetto",
+    "encoding": "Codifica del testo",
+    "reopenWith": "Riapri con…",
+    "saveWith": "Salva con…",
+    "encodingReopened": "Riaperto come {name}.",
+    "encodingSaveSet": "Verrà salvato come {name}.",
+    "encodingDirty": "Salva le modifiche prima di riaprire con un'altra codifica.",
+    "encodingFailed": "Impossibile leggere il file come {name}."
   },
   "palette": {
     "placeholder": "Digita un comando…",
@@ -705,7 +772,29 @@
     "results": "{count} risultati",
     "truncated": "Mostrati {shown} di {total} — affina la ricerca.",
     "ripgrepMissing": "La ricerca richiede ripgrep (rg), che non è installato o non è nel PATH. Installalo e riprova.",
-    "searching": "Ricerca in corso…"
+    "searching": "Ricerca in corso…",
+    "include": "file da includere",
+    "exclude": "file da escludere",
+    "globs": "Filtra per file",
+    "globsHint": "Glob separati da virgola — src/**/*.ts, !**/*.test.ts",
+    "dismiss": "Nascondi questo risultato",
+    "dismissFile": "Nascondi tutti i risultati di questo file",
+    "history": "Ricerche precedenti (↑ / ↓ nel campo)",
+    "copyMatch": "Copia la riga",
+    "copyPath": "Copia il percorso",
+    "dismissed": "{count} nascosti",
+    "restore": "Mostra di nuovo",
+    "replaceFile": "Sostituisci tutte le occorrenze in questo file",
+    "replacedOne": "Sostituita 1 occorrenza.",
+    "replaceUndo": "Sostituito in {count} file — {key} li riporta indietro.",
+    "replaceThis": "Sostituisci questa occorrenza",
+    "openInEditor": "Apri i risultati in un editor",
+    "resultsTitle": "Risultati della ricerca — modifica e applica",
+    "resultsHint": "Ogni occorrenza come riga di testo. Cambia quello che vuoi cambiare, lascia stare il resto, e Applica riscrive solo le righe che hai toccato. {key} annulla tutto.",
+    "resultsApply": "Applica {count} modifiche",
+    "resultsNone": "Non hai ancora cambiato niente.",
+    "resultsShape": "Sono state aggiunte o tolte righe — Reado può applicare le modifiche solo alle righe che ha costruito.",
+    "resultsApplied": "Riscritti {files} file."
   },
   "settings": {
     "title": "Impostazioni",
@@ -852,7 +941,48 @@
     "searchPlaceholder": "Cerca nelle impostazioni…",
     "surfaces": "Superfici",
     "themeFollowing": "Sta seguendo l'aspetto del sistema — scegliere un tema passa a Manuale.",
-    "typography": "Tipografia"
+    "typography": "Tipografia",
+    "modified": "modificata",
+    "resetOne": "Riporta questa impostazione al valore predefinito",
+    "suggestOnTyping": "Suggerisci mentre scrivi",
+    "suggestOnTypingHint": "Se disattivo, la lista si apre solo con ⌃Spazio. Include sempre le parole già presenti nel documento.",
+    "bracketPairColors": "Colora le coppie di parentesi",
+    "bracketPairColorsHint": "Tinge ogni ()[]{} in base all'annidamento e sottolinea una chiusura senza apertura.",
+    "autoSaveDelay": "Ritardo salvataggio automatico (ms)",
+    "autoSaveDelayHint": "Quanto attende «Dopo una pausa» da quando smetti di scrivere.",
+    "searchExclude": "Escludi dalla ricerca",
+    "searchExcludeHint": "Un glob per riga. Vuoto significa che la ricerca usa la lista dell'albero qui sopra.",
+    "explorerSort": "Ordina i file per",
+    "explorerSortHint": "Le cartelle vengono sempre prima.",
+    "defaultEol": "Fine riga per i nuovi file",
+    "defaultEolAuto": "Quella della piattaforma",
+    "terminal": "Terminale",
+    "terminalFontSize": "Dimensione del testo del terminale",
+    "terminalScrollback": "Scrollback (righe)",
+    "terminalCursor": "Cursore del terminale",
+    "terminalShell": "Shell",
+    "terminalShellHint": "Percorso assoluto, oppure vuoto per la shell di login.",
+    "terminalShellArgs": "Argomenti della shell",
+    "terminalShellArgsHint": "Uno per riga, passati all'avvio della shell.",
+    "cursorBar": "Barra",
+    "editorconfigNote": "Il .editorconfig di un progetto ha la precedenza su queste, per i suoi file.",
+    "fromProject": "dal progetto",
+    "fromProjectHint": "Questo progetto la imposta in .reado/config.json, quindi vale qui e ovunque venga aperto.",
+    "clearProject": "Togli l'override di progetto",
+    "json": "Impostazioni (JSON)",
+    "jsonHint": "Le stesse preferenze come testo — diffabili, incollabili e modificabili. Applicando si scrive ogni valore che Reado riconosce.",
+    "jsonApply": "Applica",
+    "jsonCopy": "Copia",
+    "jsonRevert": "Ricarica dalle impostazioni",
+    "jsonInvalid": "Non è JSON valido.",
+    "jsonApplied": "Applicate {count} impostazioni.",
+    "jsonRejected": "Saltate {count}: {names}",
+    "fileNesting": "Annida i file generati",
+    "fileNestingHint": "Mette il lock file sotto il suo manifest e il file compilato sotto il sorgente, così l'albero mostra ciò che hai scritto invece di ciò che ha prodotto un tool.",
+    "fileNestingRules": "Regole di annidamento",
+    "fileNestingRulesHint": "Una regola per riga, `genitore : figlio, figlio`. ${capture} è ciò che ha catturato l'asterisco del genitore. Vuoto usa il set di Reado.",
+    "previewTabs": "Tab in anteprima",
+    "previewTabsHint": "Un file su cui clicchi si apre in anteprima e viene sostituito dal successivo. Doppio click, modifica o pin per tenerlo."
   },
   "defaultApp": {
     "title": "App predefinita per i file di testo",
@@ -871,7 +1001,16 @@
     "navigation": "Navigazione",
     "editing": "Modifica",
     "files": "File",
-    "view": "Vista"
+    "view": "Vista",
+    "chords": "Scorciatoie a due tasti",
+    "edit": "Modifica le scorciatoie",
+    "editTitle": "Scorciatoie da tastiera (testo)",
+    "editHint": "Una per riga, `combo = comando`. Lascia il comando vuoto per liberare un tasto e restituirlo all'editor. Mod è ⌘ su macOS e Ctrl altrove.",
+    "editApply": "Applica",
+    "editReset": "Torna ai valori predefiniti",
+    "editUnknown": "Comando sconosciuto: {names}",
+    "editSaved": "{count} scorciatoie attive.",
+    "commands": "Id dei comandi"
   },
   "empty": {
     "firstComment": "Seleziona una o più righe, poi premi la scorciatoia per lasciare la tua prima nota."
@@ -948,7 +1087,10 @@
     "searchPrev": "Risultato precedente",
     "searchNext": "Risultato successivo",
     "noFile": "{path} non è in questo progetto.",
-    "pasteImageFailed": "Impossibile incollare l'immagine dagli appunti."
+    "pasteImageFailed": "Impossibile incollare l'immagine dagli appunti.",
+    "rename": "Rinomina terminale…",
+    "renameTitle": "Dai un nome a questo terminale",
+    "renamePlaceholder": "dev server, test, …"
   },
   "review": {
     "title": "Invia revisione",
@@ -1037,7 +1179,18 @@
   "lsp": {
     "createTask": "Crea task",
     "createTaskFromProblem": "Crea task dal problema",
-    "serverStopped": "Il language server {name} si è arrestato. L'analisi del codice riprenderà alla prossima apertura o modifica di un file di quel linguaggio."
+    "serverStopped": "Il language server {name} si è arrestato. L'analisi del codice riprenderà alla prossima apertura o modifica di un file di quel linguaggio.",
+    "quickFix": "Correzione rapida…",
+    "refactor": "Refactor…",
+    "sourceAction": "Azione sul sorgente…",
+    "organizeImports": "Riordina gli import",
+    "noActions": "Niente da correggere o rifattorizzare qui.",
+    "noServer": "Nessun language server attivo per questo file.",
+    "actionFailed": "L'azione non è stata applicata.",
+    "actionKindFix": "Correzione",
+    "actionKindRefactor": "Refactor",
+    "actionKindSource": "Sorgente",
+    "actionKindOther": "Altro"
   },
   "file": {
     "newFile": "Nuovo file",
@@ -1119,7 +1272,11 @@
     "enable": "Abilita",
     "disable": "Disabilita",
     "uninstallAsk": "La rimuovo?",
-    "updateTo": "Aggiorna a {version}"
+    "updateTo": "Aggiorna a {version}",
+    "recommended": "Questo progetto consiglia {count} estensioni che non hai: {names}",
+    "recommendedTitle": "Consigliate da questo progetto",
+    "recommendedHint": "Elencate in .reado/extensions.json, così chiunque apra questo repository vede la stessa lista.",
+    "recommendedDismiss": "Ignora"
   },
   "specs": {
     "panel": "Spec",
@@ -1216,7 +1373,11 @@
     "sent": "Inviato all'agente"
   },
   "breadcrumb": {
-    "label": "Percorso file"
+    "label": "Percorso file",
+    "folder": "File in {name}",
+    "symbols": "Simboli di questo file",
+    "noSymbols": "Nessun simbolo trovato qui.",
+    "root": "Radice del progetto"
   },
   "imageView": {
     "zoomIn": "Ingrandisci",
@@ -1231,6 +1392,31 @@
     "needForward": "Niente a cui andare avanti.",
     "needReopen": "Nessun editor chiuso di recente da riaprire.",
     "needTerminal": "Apri prima un terminale.",
-    "needProblems": "Nessun problema a cui saltare."
+    "needProblems": "Nessun problema a cui saltare.",
+    "needSplit": "Quel riquadro non è aperto — dividi prima l'editor."
+  },
+  "chord": {
+    "pending": "{key} — in attesa del secondo tasto",
+    "palette": "Palette dei comandi",
+    "shortcuts": "Scorciatoie da tastiera",
+    "zen": "Modalità zen",
+    "preview": "Anteprima di lato",
+    "foldAll": "Comprimi tutto",
+    "unfoldAll": "Espandi tutto",
+    "foldLevel": "Comprimi al livello 1–9",
+    "closeAll": "Chiudi tutti gli editor",
+    "copyPath": "Copia il percorso del file attivo",
+    "reveal": "Mostra il file attivo",
+    "settings": "Impostazioni",
+    "settingsJson": "Impostazioni (JSON)"
+  },
+  "workspace": {
+    "addFolder": "Aggiungi cartella allo spazio di lavoro…",
+    "removeFolder": "Togli la cartella dallo spazio di lavoro",
+    "expandFolder": "Espandi",
+    "collapseFolder": "Comprimi",
+    "added": "{name} aggiunta allo spazio di lavoro.",
+    "removed": "{name} tolta dallo spazio di lavoro.",
+    "primaryNote": "La prima cartella tiene l'elenco e i commenti; le altre vengono lette e cercate insieme a lei."
   }
 }

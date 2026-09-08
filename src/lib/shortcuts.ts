@@ -46,7 +46,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     titleKey: "sc.navigation",
     items: [
       { label: "Go to File", combo: `${mod}P` },
-      { label: "Command Palette", combo: `${mod}K` },
+      { label: "Command Palette", combo: `${mod}${shift}P` },
       { label: "Search in Project", combo: `${mod}${shift}F` },
       { label: "Go to Symbol in File", combo: `${mod}${shift}O` },
       { label: "Go to Symbol in Project", combo: `${mod}T` },
@@ -57,6 +57,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { label: "Back / Forward", combo: `${alt}← / ${alt}→` },
       { label: "Switch Tabs", combo: `${ctrl}Tab / ${ctrl}${shift}Tab` },
       { label: "Reopen Closed Tab", combo: `${mod}${shift}T` },
+      { label: "Close Editor", combo: `${mod}W` },
+      { label: "Keep a Preview Tab Open", combo: "double-click" },
+      { label: "Focus Editor Group 1 / 2", combo: `${mod}1 / ${mod}2` },
     ],
   },
   {
@@ -75,8 +78,14 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { label: "Move Line Up / Down", combo: `${alt}↑ / ${alt}↓` },
       { label: "Copy Line Up / Down", combo: `${shift}${alt}↑ / ${shift}${alt}↓` },
       { label: "Delete Line", combo: `${shift}${mod}K` },
+      { label: "Quick Fix", combo: `${mod}.` },
       { label: "Format Document", combo: `${shift}${alt}F` },
+      { label: "Join Lines", combo: `${ctrl}J` },
+      { label: "Suggestions", combo: `${ctrl}Space` },
+      { label: "New File", combo: `${mod}N` },
+      { label: "Open File", combo: `${mod}O` },
       { label: "Save", combo: `${mod}S` },
+      { label: "Save All", combo: `${alt}${mod}S` },
       { label: "Compare with Saved", combo: "—" },
     ],
   },
@@ -93,6 +102,22 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    // `⌘K` waits for a second key rather than firing on its own; the status bar
+    // says so while it is armed.
+    titleKey: "sc.chords",
+    items: [
+      { label: "Command Palette (again)", combo: `${mod}K ${mod}K` },
+      { label: "Keyboard Shortcuts", combo: `${mod}K ${mod}S` },
+      { label: "Settings / Settings (JSON)", combo: `${mod}K , / ${mod}K J` },
+      { label: "Zen Mode", combo: `${mod}K Z` },
+      { label: "Preview to the Side", combo: `${mod}K V` },
+      { label: "Fold All / Unfold All", combo: `${mod}K ${mod}0 / ${mod}K ${mod}J` },
+      { label: "Fold to Level 1–9", combo: `${mod}K ${mod}1 … ${mod}9` },
+      { label: "Close All Editors", combo: `${mod}K W` },
+      { label: "Copy Path / Reveal File", combo: `${mod}K P / ${mod}K R` },
+    ],
+  },
+  {
     titleKey: "sc.view",
     items: [
       { label: "Toggle Sidebar", combo: `${mod}B` },
@@ -102,6 +127,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { label: "Zen Mode", combo: ZEN_COMBO },
       { label: "Full Screen", combo: FULLSCREEN_COMBO },
       { label: "Split Editor", combo: `${mod}\\` },
+      { label: "Fold / Unfold", combo: `${mod}${alt}[ / ${mod}${alt}]` },
+      { label: "Markdown Preview", combo: `${mod}${shift}V` },
+      { label: "New Terminal", combo: `${ctrl}${shift}\`` },
       { label: "Zoom In / Out / Reset", combo: `${mod}+ / ${mod}- / ${mod}0` },
       { label: "Settings", combo: `${mod},` },
     ],

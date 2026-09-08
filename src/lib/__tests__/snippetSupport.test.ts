@@ -1,14 +1,20 @@
 /**
- * The editor-side gates.
+ * The editor-side completion and language gates.
  *
- * Reado is a read-first editor: a completion popup appearing where none used to
- * would be a behaviour change nobody asked for. Both of these return nothing at
- * all unless an installed extension actually covers the file's language, which
- * is the property worth pinning.
+ * Reado is a read-first editor: a completion popup appearing while you type
+ * would be a behaviour change nobody asked for, so the quiet default is pinned
+ * here — but completion itself is available in every file, because a document's
+ * own words are the only suggestions a file with no language server can get.
+ *
+ * The other property pinned here is that sources are registered through
+ * `languageData` rather than `override`: `override` replaces every source, and
+ * the language server registers its completions the same way, so an `override`
+ * silently drops server completions in any file that also has snippets.
  */
+import { EditorState } from "@codemirror/state"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@/lib/api", () => ({ extRead: vi.fn() }))
+vi.mock("@/lib/api", () => ({ extRead: vi.fn(), readReadoFile: vi.fn(async () => null) }))
 vi.mock("@/lib/logger", () => ({
   createLogger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
 }))
@@ -18,6 +24,7 @@ import { extRead } from "@/lib/api"
 import { preloadLanguageConfigs } from "@/lib/extLanguages"
 import { useMarketplace } from "@/lib/marketplace"
 import { contributedLanguage, contributedSnippets } from "@/lib/snippetSupport"
+import { useSettings } from "@/lib/store"
 
 let n = 0
 const ext = (contributes: unknown): InstalledExt => ({
@@ -36,19 +43,48 @@ beforeEach(() => {
   install()
 })
 
+/** The completion sources an editor built from `contributedSnippets` exposes. */
+const sourcesFor = (path: string) =>
+  EditorState.create({ extensions: contributedSnippets(path) }).languageDataAt<unknown>(
+    "autocomplete",
+    0,
+  )
+
 describe("contributedSnippets", () => {
-  it("adds nothing when no extension covers the language", () => {
-    expect(contributedSnippets("src/a.ts")).toEqual([])
+  // Always present: the project's own `.reado/snippets.json` source (which
+  // returns nothing when the project has no such file) and the word source.
+  const BASE_SOURCES = 2
+
+  it("offers the document's own words even where nothing covers the language", () => {
+    expect(sourcesFor("src/a.ts")).toHaveLength(BASE_SOURCES)
   })
 
-  it("adds completion once one does", () => {
+  it("adds the extension's snippets alongside them, not instead of them", () => {
     install(ext({ snippets: [{ language: "typescript", path: "./s.json" }] }))
-    expect(contributedSnippets("src/a.ts")).not.toEqual([])
+    expect(sourcesFor("src/a.ts")).toHaveLength(BASE_SOURCES + 1)
   })
 
-  it("stays out of a language nothing covers", () => {
+  it("leaves a language nothing covers with just the standing sources", () => {
     install(ext({ snippets: [{ language: "python", path: "./s.json" }] }))
-    expect(contributedSnippets("src/a.ts")).toEqual([])
+    expect(sourcesFor("src/a.ts")).toHaveLength(BASE_SOURCES)
+  })
+
+  it("registers through languageData, so a language server's sources survive", () => {
+    // The regression this guards: `autocompletion({ override })` wins globally,
+    // and `serverCompletion()` publishes via languageData — so an override here
+    // left LSP completion dead in every file with snippets.
+    install(ext({ snippets: [{ language: "typescript", path: "./s.json" }] }))
+    const state = EditorState.create({
+      extensions: [
+        contributedSnippets("src/a.ts"),
+        EditorState.languageData.of(() => [{ autocomplete: () => null }]),
+      ],
+    })
+    expect(state.languageDataAt<unknown>("autocomplete", 0)).toHaveLength(BASE_SOURCES + 2)
+  })
+
+  it("stays quiet while typing unless the reader asks for suggestions", () => {
+    expect(useSettings.getState().suggestOnTyping).toBe(false)
   })
 })
 

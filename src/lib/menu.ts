@@ -4,10 +4,13 @@
  * action, reusing the same stores/helpers the keyboard shortcuts and palette use.
  */
 import { listen } from "@tauri-apps/api/event"
+import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener"
 import { type MessageKey, t } from "@/i18n"
 import { clearTerminal, dispatchToAgent, launchAgent, restartTerminal } from "./agents"
-import { openCount, useComments } from "./comments"
+import { APP_MENUS } from "./appMenu"
+import { organizeImports } from "./codeActions"
+import { openCount, toRelative, useComments } from "./comments"
 import { useDiagnostics } from "./diagnostics"
 import {
   addCursorAbove,
@@ -16,17 +19,27 @@ import {
   addNextOccurrence,
   askAboutSelection,
   compareWithSaved,
+  convertIndentationTo,
   copyLineDownCmd,
   copyLineUpCmd,
+  cursorRedo,
+  cursorUndo,
+  deleteDuplicateLinesCmd,
   duplicateSelection,
   expandSelectionCmd,
   findReferencesAtCursor,
+  focusPane,
+  foldAllCmd,
+  foldLevel,
   formatDocument,
+  formatSelection,
   goToBracket,
   goToDefinitionAtCursor,
   goToImplementationAtCursor,
   goToTypeDefinitionAtCursor,
   gotoLastEdit,
+  joinLinesCmd,
+  lowerCaseCmd,
   moveLineDownCmd,
   moveLineUpCmd,
   newFile,
@@ -36,24 +49,38 @@ import {
   openReplace,
   prevProblem,
   redoEdit,
+  reindentLines,
   revertFile,
+  saveAll,
   saveAs,
   saveDocument,
   selectAllOccurrences,
   showCallHierarchy,
   showTypeHierarchy,
   shrinkSelectionCmd,
+  sortLinesAsc,
+  sortLinesDesc,
+  titleCaseCmd,
   toggleBlockCommentCmd,
   toggleLineComment,
+  trimWhitespaceCmd,
   undoEdit,
+  unfoldAllCmd,
+  upperCaseCmd,
   useDocInfo,
 } from "./docInfo"
+import { useFileUndo } from "./fileUndo"
 import { logPath } from "./logger"
 import { notify } from "./notice"
+import { toggleDockArea } from "./panels"
+import { usePreview } from "./preview"
+import { useReadProgress } from "./readProgress"
 import { composeReviewPrompt } from "./review"
 import {
   type SettingsState,
+  THEMES,
   type ThemeName,
+  toggleZenMode,
   useEditorActions,
   usePalette,
   useProject,
@@ -62,7 +89,24 @@ import {
 } from "./store"
 import { useTerminals } from "./terminals"
 import { checkForUpdates } from "./updater"
-import { closeProject, openFileDialog, openInNewWindow, pickFolderAndOpen } from "./window"
+import {
+  closeProject,
+  openFileDialog,
+  openInNewWindow,
+  pickFolderAndOpen,
+  toggleFullscreen,
+} from "./window"
+import { addWorkspaceFolder, rootFor } from "./workspace"
+
+/** Toggle the read/unread state of the active file. Read progress is keyed by
+ *  project-relative path, so the absolute active path is converted first. */
+function toggleActiveRead(): void {
+  const { root, active } = useProject.getState()
+  if (!active) return
+  const rel = toRelative(root, active)
+  const isRead = useReadProgress.getState().read.has(rel)
+  useReadProgress.getState().mark(root, rel, !isRead)
+}
 
 const WEBSITE = "https://reado.watermelon-studio.it"
 const DISCORD = "https://discord.gg/HHqT9ucXn4"
@@ -91,10 +135,26 @@ type MenuCond =
 const MENU_PRECOND: Record<string, MenuCond> = {
   // Need an open editor.
   save: "file",
+  saveAll: "file",
   saveAs: "file",
   revert: "file",
   compareSaved: "file",
   format: "file",
+  "edit:upperCase": "file",
+  "edit:lowerCase": "file",
+  "edit:titleCase": "file",
+  "edit:sortAsc": "file",
+  "edit:sortDesc": "file",
+  "edit:dedupe": "file",
+  "edit:joinLines": "file",
+  "edit:trimWhitespace": "file",
+  "edit:reindent": "file",
+  "edit:convertSpaces": "file",
+  "edit:convertTabs": "file",
+  "edit:cursorUndo": "file",
+  "edit:cursorRedo": "file",
+  "view:foldAll": "file",
+  "view:unfoldAll": "file",
   closeEditor: "file",
   gotoLine: "file",
   find: "file",
@@ -102,6 +162,8 @@ const MENU_PRECOND: Record<string, MenuCond> = {
   "edit:redo": "file",
   "edit:replace": "file",
   "edit:toggleComment": "file",
+  "edit:quickFix": "file",
+  "edit:organizeImports": "file",
   "edit:toggleBlockComment": "file",
   "palette:symbols": "file",
   gotodef: "file",
@@ -129,12 +191,20 @@ const MENU_PRECOND: Record<string, MenuCond> = {
   "sel:moveDown": "file",
   // Need a text selection specifically.
   "sel:explain": "selection",
+  formatSelection: "selection",
+  "comment:new": "selection",
   "sel:ask": "selection",
   // Navigation / history / layout.
   "go:back": "back",
   "go:forward": "forward",
   reopenClosed: "reopen",
   "view:split": "split",
+  "view:splitToggle": "split",
+  "view:focusPane1": "file",
+  "view:focusPane2": "split",
+  "read:toggle": "file",
+  "file:copyPath": "file",
+  "file:reveal": "file",
   // Need a terminal / a diagnostic to jump to.
   "terminal:clear": "terminal",
   "terminal:restart": "terminal",
@@ -208,6 +278,11 @@ export function runMenuCommand(id: string): void {
     return
   }
   // Auto Save submenu: ids like "autosave:afterDelay".
+  // Fold to a numbered level: `view:foldLevel:3`.
+  if (id.startsWith("view:foldLevel:")) {
+    foldLevel(Number(id.slice("view:foldLevel:".length)))
+    return
+  }
   if (id.startsWith("autosave:")) {
     settings.set({ autoSave: id.slice(9) as SettingsState["autoSave"] })
     return
@@ -217,6 +292,9 @@ export function runMenuCommand(id: string): void {
     // App
     case "settings":
       palette.toggleSettings(true)
+      break
+    case "settings:json":
+      palette.toggleSettingsJson(true)
       break
     case "checkUpdates":
       void checkForUpdates(true)
@@ -231,6 +309,9 @@ export function runMenuCommand(id: string): void {
       break
     case "openFolder":
       void pickFolderAndOpen()
+      break
+    case "workspace:addFolder":
+      void addWorkspaceFolder()
       break
     case "openRecent":
       palette.open("recents")
@@ -247,8 +328,14 @@ export function runMenuCommand(id: string): void {
     case "save":
       saveDocument()
       break
+    case "saveAll":
+      void saveAll()
+      break
     case "format":
       void formatDocument()
+      break
+    case "formatSelection":
+      void formatSelection()
       break
     case "closeEditor":
       if (project.active) project.close(project.active)
@@ -283,11 +370,56 @@ export function runMenuCommand(id: string): void {
     case "edit:toggleComment":
       toggleLineComment()
       break
+    case "edit:quickFix":
+      useEditorActions.getState().requestQuickFix()
+      break
+    case "edit:organizeImports":
+      void organizeImports()
+      break
     case "edit:toggleBlockComment":
       toggleBlockCommentCmd()
       break
     case "gotoLine":
       openGotoLine()
+      break
+    case "edit:cursorUndo":
+      cursorUndo()
+      break
+    case "edit:cursorRedo":
+      cursorRedo()
+      break
+    case "edit:upperCase":
+      upperCaseCmd()
+      break
+    case "edit:lowerCase":
+      lowerCaseCmd()
+      break
+    case "edit:titleCase":
+      titleCaseCmd()
+      break
+    case "edit:sortAsc":
+      sortLinesAsc()
+      break
+    case "edit:sortDesc":
+      sortLinesDesc()
+      break
+    case "edit:dedupe":
+      deleteDuplicateLinesCmd()
+      break
+    case "edit:joinLines":
+      joinLinesCmd()
+      break
+    case "edit:trimWhitespace":
+      trimWhitespaceCmd()
+      break
+    case "edit:reindent":
+      reindentLines()
+      break
+    case "edit:convertSpaces":
+      convertIndentationTo("spaces")
+      break
+    case "edit:convertTabs":
+      convertIndentationTo("tabs")
       break
 
     // Selection
@@ -402,6 +534,59 @@ export function runMenuCommand(id: string): void {
       break
     case "view:split":
       project.openSplit()
+      break
+    case "view:splitToggle":
+      if (project.splitPath) project.closeSplit()
+      else project.openSplit()
+      break
+    case "view:focusPane1":
+      if (!focusPane(1)) notify("info", t("menu.needSplit"))
+      break
+    case "view:focusPane2":
+      if (!focusPane(2)) notify("info", t("menu.needSplit"))
+      break
+    case "view:fullscreen":
+      toggleFullscreen()
+      break
+    case "view:zen":
+      toggleZenMode()
+      break
+    case "view:secondarySidebar":
+      toggleDockArea("right")
+      break
+    case "preview:toggle": {
+      const preview = usePreview.getState()
+      if (preview.open) preview.close()
+      else preview.openPane()
+      break
+    }
+    case "comment:new":
+      useEditorActions.getState().requestCompose()
+      break
+    case "read:toggle":
+      toggleActiveRead()
+      break
+    case "tabs:closeAll":
+      project.closeAll()
+      break
+    case "file:copyPath": {
+      const active = useProject.getState().active
+      if (active) void clipboardWriteText(toRelative(rootFor(active), active)).catch(() => {})
+      break
+    }
+    case "file:reveal": {
+      const active = useProject.getState().active
+      if (active) void revealItemInDir(active).catch(() => {})
+      break
+    }
+    case "edit:undoFile":
+      void useFileUndo.getState().undo()
+      break
+    case "view:foldAll":
+      foldAllCmd()
+      break
+    case "view:unfoldAll":
+      unfoldAllCmd()
       break
     case "view:wrap":
       settings.set({ wrap: !settings.wrap })
@@ -532,6 +717,47 @@ export function runMenuCommand(id: string): void {
         .catch(() => {})
       break
   }
+}
+
+/**
+ * Every command id `runMenuCommand` answers to.
+ *
+ * Derived from the rendered menu model plus the ids that only ever had a
+ * keyboard binding, so the keybinding editor can tell a typo from a command —
+ * a line pointing at nothing would otherwise just silently do nothing.
+ */
+export function knownCommands(): Set<string> {
+  const ids = new Set<string>(Object.keys(MENU_PRECOND))
+  for (const menu of APP_MENUS) {
+    for (const item of menu.items) if ("id" in item) ids.add(item.id)
+  }
+  for (const id of [
+    "view:fullscreen",
+    "view:zen",
+    "view:secondarySidebar",
+    "preview:toggle",
+    "edit:undoFile",
+    "settings",
+    "checkUpdates",
+    "graph",
+    "docs",
+    "terminal",
+    "zoom:in",
+    "zoom:out",
+    "zoom:reset",
+    "view:ribbon",
+    "view:focus",
+    // Reachable only as a ⌘K chord or a palette row, so no menu item names
+    // them — but they are as rebindable as anything else.
+    "settings:json",
+    "tabs:closeAll",
+    ...Array.from({ length: 9 }, (_, i) => `view:foldLevel:${i + 1}`),
+    ...THEMES.map((t) => `theme:${t}`),
+    ...(["off", "afterDelay", "onFocusChange"] as const).map((v) => `autosave:${v}`),
+  ]) {
+    ids.add(id)
+  }
+  return ids
 }
 
 /** Start handling native-menu events; returns an unlisten function. */

@@ -94,10 +94,12 @@ import {
   openGotoLine,
   openReplace,
   prevProblem,
+  registerView,
   revertFile,
   saveAs,
   saveDocument,
   selectAllOccurrences,
+  setEditorConfig,
   setHierarchyDirection,
   setLastEdit,
   showCallHierarchy,
@@ -127,8 +129,13 @@ function mount(doc: string, extra: Extension[] = []) {
     extensions: [EditorState.allowMultipleSelections.of(true), ...extra],
   })
   useDocInfo.setState({ view })
+  // Saving resolves the path through the registry, not through the active tab:
+  // with the editor split, the focused view is often the *other* file.
+  unregister?.()
+  unregister = registerView(view, "src/a.ts", "/root", true, detectEol(doc))
   return view
 }
+let unregister: (() => void) | undefined
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -138,7 +145,11 @@ beforeEach(() => {
   project.active = "/root/src/a.ts"
   useDocInfo.setState({ view: null, eol: "LF" })
 })
-afterEach(() => view?.destroy())
+afterEach(() => {
+  unregister?.()
+  unregister = undefined
+  view?.destroy()
+})
 
 /** Let a whole promise chain settle — one microtask leaves it mid-flight, and
  *  an assertion on the pre-change value would pass for the wrong reason. */
@@ -208,7 +219,44 @@ describe("saveDocument", () => {
   it("writes the buffer to the active file's project-relative path", async () => {
     mount("hello")
     await saveDocument()
-    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "hello")
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "hello", undefined)
+  })
+
+  it("lets .editorconfig outrank the reader's own hygiene settings", async () => {
+    // The project's file is the answer about the project's files: committing an
+    // `.editorconfig` is worth nothing if each editor still does its own thing.
+    settings.trimTrailingWhitespace = false
+    settings.insertFinalNewline = false
+    setEditorConfig("src/a.ts", {
+      applies: true,
+      trimTrailingWhitespace: true,
+      insertFinalNewline: true,
+    })
+    mount("a   \nb")
+    await saveDocument()
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\nb\n", undefined)
+    setEditorConfig("src/a.ts", null)
+  })
+
+  it("falls back to the reader's settings for what .editorconfig doesn't say", async () => {
+    settings.trimTrailingWhitespace = true
+    settings.insertFinalNewline = false
+    // Says something, but nothing about trimming.
+    setEditorConfig("src/a.ts", { applies: true, insertFinalNewline: true })
+    mount("a   \nb")
+    await saveDocument()
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\nb\n", undefined)
+    settings.trimTrailingWhitespace = false
+    setEditorConfig("src/a.ts", null)
+  })
+
+  it("writes back the line endings the file arrived with", async () => {
+    // CodeMirror normalises every document to \n, so without re-applying the
+    // detected endings a CRLF file came back out of Reado as LF — a whole-file
+    // diff produced by opening it and pressing ⌘S.
+    mount("a\r\nb")
+    await saveDocument()
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\r\nb", undefined)
   })
 
   it("applies the on-save hygiene the editor applies (menu save used to skip it)", async () => {
@@ -216,7 +264,7 @@ describe("saveDocument", () => {
     settings.insertFinalNewline = true
     mount("a   \nb")
     await saveDocument()
-    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\nb\n")
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\nb\n", undefined)
     settings.trimTrailingWhitespace = false
     settings.insertFinalNewline = false
   })
@@ -226,7 +274,7 @@ describe("saveDocument", () => {
     vi.mocked(formatFile).mockResolvedValue({ formatter: "biome", text: "fixed\n", changed: true })
     mount("broken\n")
     await saveDocument()
-    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "fixed\n")
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "fixed\n", undefined)
     settings.formatOnSave = false
   })
 
@@ -236,7 +284,7 @@ describe("saveDocument", () => {
     vi.mocked(formatFile).mockRejectedValue(new Error("syntax error"))
     mount("broken\n")
     await saveDocument()
-    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "broken\n")
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "broken\n", undefined)
     settings.formatOnSave = false
   })
 
@@ -252,7 +300,7 @@ describe("convertEol", () => {
   it("rewrites the file with CRLF endings and records the new mode", async () => {
     mount("a\nb\n")
     convertEol("CRLF")
-    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\r\nb\r\n")
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\r\nb\r\n", undefined)
     await vi.waitFor(() => expect(useDocInfo.getState().eol).toBe("CRLF"))
     expect(setDirty).toHaveBeenCalledWith("src/a.ts", false)
   })
@@ -260,7 +308,7 @@ describe("convertEol", () => {
   it("normalises back to LF without doubling anything", () => {
     mount("a\r\nb")
     convertEol("LF")
-    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\nb")
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/a.ts", "a\nb", undefined)
   })
 
   it("leaves the recorded mode alone when the write fails", async () => {
@@ -386,7 +434,7 @@ describe("saveAs", () => {
     vi.mocked(prompt).mockResolvedValue("src/copy.ts")
     mount("body")
     await saveAs()
-    expect(writeFile).toHaveBeenCalledWith("/root", "src/copy.ts", "body")
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/copy.ts", "body", undefined)
     expect(project.open).toHaveBeenCalledWith("/root/src/copy.ts")
   })
 

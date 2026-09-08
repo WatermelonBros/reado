@@ -11,6 +11,214 @@ commit.
 
 ## [Unreleased]
 
+### Added
+- **Quick Fix and code actions (`⌘.`).** The language server's fixes, refactors
+  and source actions, grouped so "add the missing import" and "move this to a new
+  file" don't read as the same kind of decision. Edits that span several files
+  reach all of them, including the ones you don't have open.
+- **Organize Imports**, as a command of its own — it asks for that one source
+  action and runs it rather than making you pick from a menu of one.
+- **Keyboard shortcuts you can change.** The bindings were a hand-written chain;
+  they are a table now, editable as `combo = command` text from the shortcuts
+  dialog. Rebind a key, add one, or leave the command empty to hand a key back to
+  the editor. Every binding names a command the menu also dispatches, so a
+  rebound key and a menu click can't diverge — and the command palette shows
+  whatever is bound *now*, including a key you rebound, rather than a shortcut
+  typed out beside each row.
+- **Search results as an editable document.** "Open Results in an Editor" lays
+  every match out as text; edit the ones that should change, leave the rest, and
+  Apply rewrites only the lines you touched — the careful alternative to Replace
+  All. One undo takes the whole thing back.
+- **Workspaces: more than one folder in a window.** Add Folder to Workspace puts
+  a second checkout in the same tree; the file tree lists each folder, and search,
+  Go to File and Go to Symbol span all of them. Every read and write is scoped to
+  the folder that owns the file, so each keeps its own `.reado/`, its own trash
+  and its own undo. The folder list lives in the first folder's
+  `.reado/workspace.json`.
+- **`.editorconfig`.** A project's own file now decides indentation, line
+  endings, trailing-whitespace trimming, the final newline and the ruler for its
+  files — outranking both Reado's detection and the reader's own settings, which
+  is the entire reason to commit one. Resolution follows the spec: nearest file
+  wins, `root = true` stops the walk.
+- **Replace one match, or one file.** The search panel's right-click menu can now
+  rewrite the occurrence you clicked or every occurrence in that file, instead of
+  offering only all-or-nothing.
+- **Text encodings.** A latin-1, Shift-JIS or UTF-16 file opens as the text it
+  is rather than as "binary" or mojibake, is written back in the same encoding,
+  and can be reopened in another one from the status bar. A save that would need
+  characters the encoding can't hold is refused instead of writing `?` over them.
+- **The settings, as JSON.** A text view of every preference — diffable,
+  pasteable, editable — that reports the keys it couldn't use instead of applying
+  them silently.
+- **A setting the project pins now says so**, with a one-click way to stop it
+  overriding, next to the existing "you changed this" mark.
+- **Two-key shortcuts.** `⌘K` is a prefix now that `⇧⌘P` also opens the palette:
+  `⌘K ⌘K` palette, `⌘K ⌘S` shortcuts, `⌘K Z` zen, `⌘K V` preview, `⌘K W` close
+  all, `⌘K P`/`⌘K R` copy path / reveal, `⌘K ⌘0`/`⌘K ⌘J` fold and unfold all, and
+  **`⌘K ⌘1…⌘9` to fold to a level**. The status bar shows the prefix while it is
+  armed; Escape or an unrecognised key cancels it.
+- **A navigable breadcrumb.** Each folder segment lists what is beside the file
+  you are reading; the file segment lists its own symbols and jumps to one.
+- **File nesting.** A lock file tucks under its manifest and a compiled file
+  under its source, so the tree shows what you wrote rather than what a tool
+  produced. Off by default; the rules are editable and travel in the project
+  config.
+- **Preview tabs.** A file you click into in the tree or a search result opens
+  as a preview that the next one replaces — a session of reading leaves one tab
+  behind instead of forty. Double-click, edit, or pin it to keep it.
+- **Pinned tabs**, which sort to the front and survive Close Others / Close to
+  the Right / Close All.
+- **Emmet.** `div.card>ul>li*3` expands on Tab in HTML, CSS/SCSS/Less, Vue,
+  Svelte, Astro and inside JSX. Deliberately quiet: it declines outside markup,
+  inside comments and strings, on a bare word, and with a selection — so Tab
+  keeps indenting everywhere else.
+- **Shortcuts the muscle memory expects**: ⌘W closes the editor, ⌘S saves from
+  anywhere (not just with the editor focused), ⌥⌘S saves every pane, ⌘N / ⌘O
+  create and open, ⌘1 / ⌘2 focus the editor panes, ⇧⌘P opens the command palette
+  (and ⌘K became a chord prefix — see below), ⇧⌘V toggles the preview, ⌃⇧` opens a terminal, and ⌃J joins lines.
+- **The menu now shows its shortcuts** on all three platforms — as real
+  accelerators in the macOS menu bar, as hints in the Windows/Linux one. The list
+  is written once (`lib/appMenu.ts`) and a test fails the build if the native menu
+  drifts from it. Only combos whose menu command matches their in-app binding are
+  listed, so ⌘Z still reaches the editor and ⌘D still duplicates in the tree.
+- **Text and line transforms**: Transform to Upper/Lower/Title Case, Sort Lines
+  Ascending/Descending, Delete Duplicate Lines, Join Lines, Trim Trailing
+  Whitespace, Reindent Lines, Convert Indentation to Spaces/Tabs, and Cursor
+  Undo/Redo. Each acts on the selection, or on the caret's line when there is
+  none.
+- **Fold All / Unfold All** (⌘⌥⇧[ / ⌘⌥⇧]) and fold/unfold the innermost scope
+  (⌘⌥[ / ⌘⌥]).
+- **Format Selection**, through the language server's range formatter.
+- **Completion in every file.** The words already in the document are now a
+  suggestion source everywhere, so a markdown file or a language with no server
+  isn't left with nothing. Quiet by default — ⌃Space asks for it — with a
+  *Suggest while typing* setting for the VS Code behaviour.
+- **Bracket-pair colouring**, tinting each `()[]{}` by nesting depth and
+  underlining a closer with no opener.
+- **The tab strip carries its information**: a file icon, a dot for unsaved
+  edits, and the parent folder on the tabs whose names collide. Its right-click
+  menu gained Close Saved, Reopen Closed Editor, Open to the Side, Copy Path,
+  Copy Relative Path, Reveal in Finder and Open in Integrated Terminal.
+- **Open Editors** above the file tree — what is open, what is unsaved, and a way
+  to close it, which the tab strip can't provide when it is set to a single tab
+  or hidden.
+- **File-tree filter, refresh and sort.** A filter field narrows the listed rows,
+  Refresh re-reads from disk, and folders can be ordered by name, type or last
+  modified. A file with unsaved edits is marked in the tree, as on its tab.
+- **Compare two files**: Select for Compare, then Compare with "…", on any two
+  files in the project.
+- **Search gained files-to-include and files-to-exclude**, per-search glob fields
+  next to the case/word/regex toggles, plus query history (↑/↓ in the field), a
+  per-result dismiss, and a right-click menu to copy a match, its location, or
+  every result.
+- **Project settings that a team can share.** `.reado/config.json` now covers
+  format-on-save, the whitespace toggles, line endings, the exclude lists, the
+  ruler, indentation guides, the large-file guard, suggestions and auto-save —
+  not just four reading preferences. *Save Settings to This Project* writes the
+  file; after that only the keys it lists are tracked.
+- **Project snippets** in `.reado/snippets.json`, in VS Code's `.code-snippets`
+  format, so one file serves both editors and the snippets travel with the code.
+- **Recommended extensions** from `.reado/extensions.json`, surfaced once per
+  project as a notice and a section in the Extensions panel. Advisory only.
+- **Settings export/import to a file**, alongside the existing clipboard bundle,
+  so it can live in a dotfiles repository.
+- **A changed setting says so**, with a one-click way back to Reado's default —
+  previously the only way to find what you had moved was to reset everything.
+- **Terminal settings and a shell of your choosing**: text size, scrollback,
+  cursor shape, and an explicit shell with its own arguments. Terminals can be
+  renamed, so four of them stop being "Terminal 1..4".
+- **Context menus where there were none**: the Problems panel (copy a message, a
+  location, or every problem), the search results, the activity bar (hide a view,
+  show them all) and the status bar (switch individual indicators off, or hide
+  the bar).
+- **New settings**: auto-save delay, suggest-while-typing, bracket-pair colours,
+  a search-only exclude list, file-tree sort order, and the line endings new
+  files get.
+
+### Changed
+
+These are the behaviour changes worth knowing about when you update.
+
+- **`⌘K` no longer opens the palette on its own** — it is a chord prefix now.
+  The palette is `⇧⌘P`, and `⌘K ⌘K` still gets there in one hand. The status bar
+  shows the prefix while it is armed.
+- **The status-bar pickers and breadcrumb menus are real menus.** Indentation,
+  line endings, encoding, language, branch, and the breadcrumb's folder and
+  symbol lists now take arrow keys and type-ahead, return focus to the control
+  they opened from, and flip to the other side of the screen rather than being
+  clipped by the window edge.
+- **A refused branch checkout is reported as a notice.** Picking a branch closes
+  the menu, so a dirty working tree now says so where every other failure does
+  instead of inside a menu that is no longer on screen.
+- **Preview tabs are on by default.** A file you click into in the tree opens as
+  a preview that the next one replaces; double-click, edit, or pin it to keep it.
+  Settings ▸ Interface turns it off.
+- **Completion now exists in every file** (the words already in the document).
+  It stays quiet — ⌃Space asks for it — unless *Suggest while typing* is on.
+- **The macOS menu carries real accelerators** on about thirty items. Only
+  commands whose menu action matches their in-app binding are listed, so ⌘Z still
+  reaches the editor and ⌘D still duplicates in the tree; a test enforces it.
+- **`.reado/config.json` is no longer written on its own.** It is created by
+  *Save Settings to This Project*, and from then on tracks only the keys it lists.
+
+Known boundaries, deliberately drawn:
+
+- **Source Control stays on the workspace's first folder.** Multi-root covers
+  reading, searching and writing, but not per-folder git: the tree's git
+  decorations are keyed by relative path, so two folders holding the same path
+  can collide.
+- **Text-editing keys inside the editor** (⌘Z, Tab, the arrows) are not
+  rebindable — they are CodeMirror's contract with the document, not app commands.
+- **`.editorconfig`** does not support `{num1..num2}` numeric ranges in globs.
+- **Encoding detection** falls back to windows-1252 for non-UTF-8 files; there is
+  no statistical guessing, so a Shift-JIS file without a BOM needs one explicit
+  "Reopen with Encoding".
+
+### Fixed
+- **Saving with two folders open** now writes to the folder the file came from.
+  The editor paired a buffer's text with "the project's" root, which with a
+  second folder open is the wrong one.
+- **Replace All is undoable.** Every file it rewrites is backed up first, so a
+  project-wide replace is one ⌘Z rather than forty irreversible writes. It was
+  the only destructive operation in the app with no way back.
+- **Undo backups don't accumulate forever.** A parked copy is dropped a week
+  after it was made — long past anything the 50-deep undo stack can reach, and
+  the difference between a `.reado/` that settles and one that grows with every
+  Replace All for the life of the project.
+- **Cross-file code actions are undoable too.** A rename that rewrites five
+  files, only one of them open, now backs up all five and lands on the undo
+  stack as one action, like every other bulk rewrite.
+- **A versioned `.reado/` no longer commits your undo history.** With
+  `versionReado` on, only the index was gitignored — the trash and the new
+  pre-replace backups would have been committed along with the annotations.
+- **A UTF-16 file is no longer read as binary.** Every ASCII character in UTF-16
+  carries a NUL padding byte, which is exactly the signal the binary check looks
+  for.
+- **Save As keeps the file's line endings and encoding** instead of writing a
+  UTF-8, LF copy.
+- **Clicking the control that opened a status-bar dropdown closes it.** It was
+  closing and immediately reopening, so the toggle never appeared to work.
+- **A CRLF file no longer comes back as LF.** CodeMirror normalises every
+  document to `\n`, and nothing put the endings back on save — so opening a CRLF
+  file and pressing ⌘S produced a whole-file diff.
+- **Saving the wrong file with the editor split.** ⌘S paired the focused pane's
+  text with the *primary* tab's path, writing one buffer over another file.
+- **Language-server completions were dropped in any file with snippets.** The
+  snippet source was registered as an `override`, which replaces every other
+  source — including the server's.
+- **Changing a global preference no longer dirties every open repository.** The
+  per-project config used to be rewritten on any settings change, so touching
+  your own font left a modified `.reado/config.json` in each project.
+- **Cut and Copy with no selection** now take the caret's line, as they do
+  elsewhere, instead of doing nothing.
+- **Drag feedback in the file tree.** Dragging a row now shows the grabbing
+  cursor over the whole window and a label with the dragged file's icon and name
+  (plus `+N` for a multi-selection) under the pointer, so dropping onto a terminal or
+  another folder is no longer a blind gesture.
+- **Clicking a path outside the project in the terminal** now reveals the file
+  in the system file manager instead of reporting "isn't in this project" — the
+  editor is scoped to the project root, the file manager isn't.
+
 ## [1.14.0] — 2026-09-08
 
 ### Added

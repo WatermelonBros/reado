@@ -71,9 +71,15 @@ pub fn pty_default_shell() -> String {
     default_shell().0
 }
 
-/// Spawn a PTY for tab `id`, running a login shell in `cwd`. Output is streamed
-/// via the `pty-output-{id}` event (base64); termination fires `pty-exit-{id}`.
+/// Spawn a PTY for tab `id`, running a shell in `cwd`. Output is streamed via
+/// the `pty-output-{id}` event (base64); termination fires `pty-exit-{id}`.
+///
+/// `shell` and `shell_args` override the platform's login shell when the user
+/// has configured one. An override brings its own arguments: the default `-il`
+/// is right for zsh/bash and wrong for, say, `nu` or a wrapper script, so it is
+/// not silently carried over.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn pty_spawn(
     app: AppHandle,
     window: tauri::Window,
@@ -82,13 +88,20 @@ pub fn pty_spawn(
     cwd: String,
     rows: u16,
     cols: u16,
+    shell: Option<String>,
+    shell_args: Option<Vec<String>>,
 ) -> Result<(), String> {
     let pair = native_pty_system()
         .openpty(size(rows, cols))
         .map_err(|e| e.to_string())?;
 
-    let (shell, args) = default_shell();
-    let mut cmd = CommandBuilder::new(shell);
+    let (default_exe, default_args) = default_shell();
+    let chosen = shell.filter(|s| !s.trim().is_empty());
+    let args: Vec<String> = match &chosen {
+        Some(_) => shell_args.unwrap_or_default(),
+        None => default_args.iter().map(|a| (*a).to_string()).collect(),
+    };
+    let mut cmd = CommandBuilder::new(chosen.unwrap_or(default_exe));
     for arg in args {
         cmd.arg(arg);
     }

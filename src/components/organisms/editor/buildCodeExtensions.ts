@@ -8,10 +8,14 @@ import {
 } from "@codemirror/commands"
 import {
   bracketMatching,
+  foldAll,
+  foldCode,
   foldGutter,
   foldKeymap,
   indentOnInput,
   indentUnit,
+  unfoldAll,
+  unfoldCode,
 } from "@codemirror/language"
 import { lintKeymap } from "@codemirror/lint"
 import { gotoLine, highlightSelectionMatches, search, searchKeymap } from "@codemirror/search"
@@ -29,11 +33,18 @@ import {
 import type { MutableRefObject } from "react"
 import type { CommentType } from "@/lib/api"
 import { bookmarkGutter } from "@/lib/bookmarkGutter"
+import { bracketColors } from "@/lib/bracketColors"
 import { changedLinesHighlight } from "@/lib/changedLines"
 import { readoAppearance } from "@/lib/codemirror"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
 import { setLastEdit, useDocInfo } from "@/lib/docInfo"
-import { cursorsToLineEnds, insertLineAbove, insertLineBelow } from "@/lib/editorCommands"
+import {
+  cursorsToLineEnds,
+  insertLineAbove,
+  insertLineBelow,
+  joinLines,
+} from "@/lib/editorCommands"
+import { emmetTab } from "@/lib/emmet"
 import { explainSymbolAt, taskFromDiagnostic } from "@/lib/lspActions"
 import { occurrenceHighlight } from "@/lib/occurrenceHighlight"
 import { diagnosticsRuler } from "@/lib/overviewRuler"
@@ -84,6 +95,8 @@ export interface CodeExtensionsCtx {
   wrapComp: Compartment
   /** Swatches beside colour literals; empty when the setting is off. */
   colorComp: Compartment
+  /** Bracket tinting by nesting depth; empty when the setting is off. */
+  bracketColorComp: Compartment
   whitespaceComp: Compartment
   focusComp: Compartment
   langComp: Compartment
@@ -91,6 +104,7 @@ export interface CodeExtensionsCtx {
   lineNumbersMode: "off" | "on" | "relative"
   activeLineMode: "off" | "gutter" | "line" | "both"
   bracketMatchingOn: boolean
+  bracketColorsOn: boolean
   rulerColumn: number
   indentGuidesMode: "off" | "all" | "active"
   wrap: boolean
@@ -186,11 +200,16 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
       }
       if (u.docChanged && !u.transactions.some((tr) => tr.annotation(ExternalReload))) {
         useEditorActions.getState().setDirty(ctx.relPath, true)
+        // Typing in a file is the strongest possible "I meant to open this":
+        // a preview tab that the next click could throw away is not where
+        // anyone wants their edits.
+        useProject.getState().keepOpen(ctx.path)
         setLastEdit(u.state.selection.main.head)
         // Auto Save (after-delay): debounce a write while the user types.
-        if (useSettings.getState().autoSave === "afterDelay") {
+        const { autoSave, autoSaveDelay } = useSettings.getState()
+        if (autoSave === "afterDelay") {
           clearTimeout(ctx.autoSaveTimer.current)
-          ctx.autoSaveTimer.current = window.setTimeout(ctx.autoSave, 1000)
+          ctx.autoSaveTimer.current = window.setTimeout(ctx.autoSave, autoSaveDelay)
         }
       }
     }),
@@ -245,6 +264,16 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     keymap.of([{ key: "Mod-g", mac: "Ctrl-g", run: gotoLine }]),
     // Shift+F12 — find references (project-wide search for the symbol).
     keymap.of([{ key: "Shift-F12", run: findReferencesAt }]),
+    // ⌘. — the code-action menu, on the key every editor puts it on.
+    keymap.of([
+      {
+        key: "Mod-.",
+        run: () => {
+          useEditorActions.getState().requestQuickFix()
+          return true
+        },
+      },
+    ]),
     // Alt+F12 — peek the definition inline.
     keymap.of([{ key: "Alt-F12", run: () => ctx.peekDefinition() }]),
     ctx.gutterComp.of(commentGutter(ctx.lineComments, ctx.openThreadAtLine)),
@@ -265,6 +294,21 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
       { key: "Mod-Enter", run: insertLineBelow },
       { key: "Mod-Shift-Enter", run: insertLineAbove },
       { key: "Shift-Alt-i", run: cursorsToLineEnds },
+      // ⌃J joins lines on every platform, as in VS Code. The case, sort and
+      // dedupe transforms are deliberately unbound — VS Code leaves them to the
+      // palette too, and every free ⌘⌥ letter here already means something
+      // else at the window level (⌘⌥T is Go to Symbol in Project, ⌘⌥B the
+      // secondary sidebar, ⌘⌥R read/unread, ⌘⌥Z zen).
+      { key: "Ctrl-j", run: joinLines },
+    ]),
+    // Folding beyond the gutter: fold/unfold the innermost scope, and the whole
+    // document. `foldKeymap` binds only the first pair, and on a chord
+    // (Ctrl-Shift-[) that several keyboard layouts cannot produce at all.
+    keymap.of([
+      { key: "Mod-Alt-[", run: foldCode },
+      { key: "Mod-Alt-]", run: unfoldCode },
+      { key: "Mod-Alt-Shift-[", run: foldAll },
+      { key: "Mod-Alt-Shift-]", run: unfoldAll },
     ]),
     // Save when editing.
     keymap.of([
@@ -279,6 +323,10 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // Undo/redo: the history field plus its keymap (Mod-z / Mod-Shift-z).
     // These bindings live in historyKeymap, not defaultKeymap.
     history(),
+    // Emmet sits directly in front of `indentWithTab`: it declines unless an
+    // abbreviation really is under the cursor in a markup context, and Tab goes
+    // on to indent whenever it does.
+    keymap.of([{ key: "Tab", run: (v) => emmetTab(ctx.path)(v) }]),
     // `indentWithTab` last of the four: Tab is a real key with real fallbacks
     // (accepting a completion, leaving the editor for the next control), so it
     // must not outrank them.
@@ -300,6 +348,7 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     diagnosticsRuler,
     ctx.wrapComp.of(ctx.wrap ? EditorView.lineWrapping : []),
     ctx.colorComp.of(ctx.colorSwatchesExt),
+    ctx.bracketColorComp.of(ctx.bracketColorsOn ? bracketColors : []),
     ctx.whitespaceComp.of(ctx.renderWhitespace ? highlightWhitespace() : []),
     ctx.focusComp.of(focusExtension(ctx.focusMode)),
     ctx.langComp.of([]),

@@ -1,16 +1,22 @@
-// The active-file breadcrumb: path segments, nav back/forward (with disabled
-// edges), the dirty dot, and the synopsis / blame / diff toggles gated on git
-// and diff state. Stores are real; the Tauri edge and synopsis side effect are
-// stubbed.
+// The active-file breadcrumb: path segments (each one a way *into* the folder
+// or the file, not just a label), nav back/forward with disabled edges, the
+// dirty dot, and the synopsis / blame / diff toggles gated on git and diff
+// state. Stores are real; the Tauri edge and synopsis side effect are stubbed.
 
 import { act, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { gitRefs } = vi.hoisted(() => ({
+const { gitRefs, listDir } = vi.hoisted(() => ({
   gitRefs: vi.fn(async () => ({ branches: ["main"], commits: [] })),
+  listDir: vi.fn(async () => [
+    { name: "app", path: "/repo/src/app", isDir: true },
+    { name: "index.ts", path: "/repo/src/index.ts", isDir: false },
+  ]),
 }))
-vi.mock("../../../lib/api", () => ({ gitRefs }))
+vi.mock("../../../lib/api", () => ({ gitRefs, listDir }))
+// No live editor here, so the symbol list comes from the heuristic outline.
+vi.mock("../../../lib/lsp", () => ({ lspDocumentSymbols: () => null }))
 
 import { Breadcrumb } from "@/components/molecules/Breadcrumb"
 import { useEditorActions, useProject } from "@/lib/store"
@@ -37,6 +43,7 @@ function setProject(over: Partial<ReturnType<typeof useProject.getState>> = {}) 
 
 beforeEach(() => {
   gitRefs.mockClear()
+  listDir.mockClear()
   useEditorActions.setState({
     diffing: false,
     diffBase: "HEAD",
@@ -134,5 +141,56 @@ describe("Breadcrumb", () => {
     expect(screen.queryByRole("button", { name: "synopsis.open" })).not.toBeInTheDocument()
     expect(screen.getByLabelText("diff.base")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "diff.toggle" })).toBeInTheDocument()
+  })
+})
+
+describe("Breadcrumb navigation", () => {
+  it("lists a folder's contents when its segment is clicked", async () => {
+    setProject()
+    render(<Breadcrumb />)
+    await userEvent.click(screen.getByRole("button", { name: "src" }))
+    expect(listDir).toHaveBeenCalledWith("/repo", "/repo/src", false)
+    expect(await screen.findByRole("menuitem", { name: /index\.ts/ })).toBeInTheDocument()
+  })
+
+  it("opens a file picked from a folder segment", async () => {
+    const open = vi.fn()
+    setProject({ open })
+    render(<Breadcrumb />)
+    await userEvent.click(screen.getByRole("button", { name: "src" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: /index\.ts/ }))
+    expect(open).toHaveBeenCalledWith("/repo/src/index.ts")
+  })
+
+  it("reveals a folder in the tree rather than trying to open it", async () => {
+    // A folder isn't a document; opening one in the editor would be nonsense.
+    const open = vi.fn()
+    setProject({ open })
+    render(<Breadcrumb />)
+    await userEvent.click(screen.getByRole("button", { name: "src" }))
+    // "app /" is the menu row; the bare "app" is the path segment behind it.
+    await userEvent.click(await screen.findByRole("menuitem", { name: "app /" }))
+    expect(open).not.toHaveBeenCalled()
+    expect(useProject.getState().expandedDirs).toContain("src/app")
+  })
+
+  it("closes the dropdown when its own segment is clicked again", async () => {
+    setProject()
+    render(<Breadcrumb />)
+    const segment = screen.getByRole("button", { name: "src" })
+    await userEvent.click(segment)
+    expect(await screen.findByRole("menuitem", { name: /index\.ts/ })).toBeInTheDocument()
+    await userEvent.click(segment)
+    expect(screen.queryByRole("menuitem", { name: /index\.ts/ })).not.toBeInTheDocument()
+  })
+
+  it("offers the file's symbols from the last segment", async () => {
+    // No editor is mounted in this test, so there is nothing to list — what is
+    // pinned is that the file segment asks for symbols rather than a folder.
+    setProject()
+    render(<Breadcrumb />)
+    await userEvent.click(screen.getByRole("button", { name: "main.ts" }))
+    expect(await screen.findByText("breadcrumb.noSymbols")).toBeInTheDocument()
+    expect(listDir).not.toHaveBeenCalled()
   })
 })

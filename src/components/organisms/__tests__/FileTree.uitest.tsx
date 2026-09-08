@@ -88,6 +88,8 @@ function tree(children: Record<string, DirEntry[]>) {
 }
 
 const open = vi.fn()
+/** A single click browses, so it previews; a double-click opens for keeps. */
+const openPreview = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -101,6 +103,7 @@ beforeEach(() => {
     treeNonce: 0,
     expandedDirs: [],
     open,
+    openPreview,
   })
   useReadProgress.setState({ read: new Set(), changed: new Set() })
   useDiagnostics.setState({ byFile: {}, errors: {} })
@@ -155,10 +158,16 @@ describe("listing", () => {
 })
 
 describe("opening and expanding", () => {
-  it("opens a file on click", async () => {
+  it("previews a file on a single click, and opens it for keeps on a double", async () => {
+    // Clicking through a folder is browsing: the tab is a preview the next
+    // click replaces. Saying it twice is how you say you meant it.
     tree({ [ROOT]: [file("a.ts")] })
     render(<FileTree />)
     await userEvent.click(await screen.findByText("a.ts"))
+    expect(openPreview).toHaveBeenCalledWith(`${ROOT}/a.ts`)
+    expect(open).not.toHaveBeenCalled()
+
+    await userEvent.dblClick(screen.getByText("a.ts"))
     expect(open).toHaveBeenCalledWith(`${ROOT}/a.ts`)
   })
 
@@ -171,7 +180,7 @@ describe("opening and expanding", () => {
     fireEvent.pointerMove(window, { clientX: 1, clientY: 1 })
     fireEvent.pointerUp(window, { clientX: 1, clientY: 1 })
     await userEvent.click(row)
-    expect(open).toHaveBeenCalledWith(`${ROOT}/a.ts`)
+    expect(openPreview).toHaveBeenCalledWith(`${ROOT}/a.ts`)
   })
 
   it("loads a folder's children only when it is expanded", async () => {
@@ -251,6 +260,7 @@ describe("the reading cues", () => {
     render(<FileTree />)
     const review = await screen.findByLabelText("delta.review")
     await userEvent.click(review)
+    // Reviewing a delta is a decision about that file, not browsing past it.
     expect(open).toHaveBeenCalledWith(`${ROOT}/a.ts`)
   })
 
@@ -464,7 +474,7 @@ describe("dragging a row onto a folder", () => {
     fireEvent.pointerDown(row, { button: 0, clientX: 0, clientY: 0 })
     fireEvent.pointerUp(window, { clientX: 0, clientY: 0 })
     await userEvent.click(row)
-    expect(open).toHaveBeenCalledWith(`${ROOT}/a.ts`)
+    expect(openPreview).toHaveBeenCalledWith(`${ROOT}/a.ts`)
   })
 
   it("moves the file into it, and records the move for undo", async () => {
@@ -479,6 +489,9 @@ describe("dragging a row onto a folder", () => {
     await waitFor(() =>
       expect(useFileUndo.getState().stack[useFileUndo.getState().stack.length - 1]).toEqual({
         kind: "move",
+        // The op carries the folder it happened in, so undo reaches that folder
+        // and not the workspace's first one.
+        root: ROOT,
         from: `${ROOT}/a.ts`,
         to: `${ROOT}/src/a.ts`,
       }),
@@ -515,6 +528,23 @@ describe("dragging a row onto a folder", () => {
     await screen.findByText("a.ts")
     drag("a.ts", null)
     expect(dropPathsIntoTerminal).toHaveBeenCalledWith(40, 40, [`${ROOT}/a.ts`])
+    vi.restoreAllMocks()
+  })
+
+  it("shows what is being dragged under the cursor, and the grabbing cursor", async () => {
+    tree({ [ROOT]: [dir("src"), file("a.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    const row = screen.getByText("a.ts").closest("button") as HTMLElement
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(null)
+    fireEvent.pointerDown(row, { button: 0, clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(window, { clientX: 40, clientY: 40 })
+    // Two "a.ts" now: the row, and the label following the pointer.
+    await waitFor(() => expect(screen.getAllByText("a.ts")).toHaveLength(2))
+    expect(document.documentElement.hasAttribute("data-dragging-file")).toBe(true)
+    fireEvent.pointerUp(window, { clientX: 40, clientY: 40 })
+    await waitFor(() => expect(screen.getAllByText("a.ts")).toHaveLength(1))
+    expect(document.documentElement.hasAttribute("data-dragging-file")).toBe(false)
     vi.restoreAllMocks()
   })
 
@@ -714,10 +744,10 @@ describe("selecting more than one row", () => {
   it("⌘-click adds rows without opening them", async () => {
     await three()
     await userEvent.click(row("a.ts"))
-    expect(open).toHaveBeenCalledTimes(1)
+    expect(openPreview).toHaveBeenCalledTimes(1)
     fireEvent.click(row("c.ts"), { ctrlKey: true })
     // The second click extended the selection; it must not have opened a file.
-    expect(open).toHaveBeenCalledTimes(1)
+    expect(openPreview).toHaveBeenCalledTimes(1)
     expect(row("a.ts")).toHaveAttribute("aria-selected", "true")
     expect(row("c.ts")).toHaveAttribute("aria-selected", "true")
     expect(row("b.ts")).toHaveAttribute("aria-selected", "false")

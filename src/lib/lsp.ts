@@ -9,7 +9,7 @@
  */
 
 import { getIndentUnit, indentUnit } from "@codemirror/language"
-import { type Diagnostic, setDiagnostics } from "@codemirror/lint"
+import { type Diagnostic, forEachDiagnostic, setDiagnostics } from "@codemirror/lint"
 import type { Transport } from "@codemirror/lsp-client"
 import {
   LSPClient,
@@ -31,12 +31,16 @@ import {
   WidgetType,
 } from "@codemirror/view"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
-import { lspSend, lspStart, lspStop, resolvePath } from "./api"
+import { type Backup, lspSend, lspStart, lspStop, readFile, resolvePath, writeBacked } from "./api"
+import { toRelative } from "./comments"
 import { useDiagnostics } from "./diagnostics"
 import { useExtensions } from "./extensions"
+import { useFileUndo } from "./fileUndo"
 import { createLogger } from "./logger"
 import { notify } from "./notice"
 import type { OutlineSymbol } from "./outline"
+import { noteSelfWrite } from "./readProgress"
+import { rootFor } from "./workspace"
 
 const log = createLogger("lsp")
 
@@ -617,7 +621,246 @@ export async function lspFormat(view: EditorView): Promise<"formatted" | "unchan
   }
 }
 
-/** Ask the server for the active file's document symbols, mapped to the outline
+/**
+ * Format just the selection through the language server
+ * (`textDocument/rangeFormatting`).
+ *
+ * Selection formatting is a server capability only: the project's own
+ * formatters run over whole files, so there is nothing to fall back to.
+ * `null` means "no server, or it can't format ranges" and the caller says so.
+ */
+export async function lspFormatRange(view: EditorView): Promise<"formatted" | "unchanged" | null> {
+  const plugin = LSPPlugin.get(view)
+  if (!plugin?.client.serverCapabilities?.documentRangeFormattingProvider) return null
+  const range = view.state.selection.main
+  if (range.empty) return null
+  const before = view.state.doc
+  try {
+    plugin.client.sync()
+    const edits = await plugin.client.request<object, LspTextEdit[] | null>(
+      "textDocument/rangeFormatting",
+      {
+        textDocument: { uri: plugin.uri },
+        range: {
+          start: plugin.toPosition(range.from, before),
+          end: plugin.toPosition(range.to, before),
+        },
+        options: {
+          tabSize: getIndentUnit(view.state),
+          insertSpaces: !view.state.facet(indentUnit).includes("\t"),
+        },
+      },
+    )
+    // Same guard as whole-document formatting: offsets computed against a
+    // document the user has since changed would corrupt it.
+    if (view.state.doc !== before) return "unchanged"
+    if (!edits?.length) return "unchanged"
+    view.dispatch({
+      changes: edits.map((e) => ({
+        from: plugin.fromPosition(e.range.start, before),
+        to: plugin.fromPosition(e.range.end, before),
+        insert: e.newText,
+      })),
+    })
+    return "formatted"
+  } catch (e) {
+    log.warn("server range formatting failed", { error: String(e) })
+    return null
+  }
+}
+
+/** An LSP `WorkspaceEdit`: text edits keyed by file URI. */
+interface LspWorkspaceEdit {
+  changes?: Record<string, LspTextEdit[]>
+  /** The newer, versioned form. Reado reads both; servers send one or the other. */
+  documentChanges?: Array<{ textDocument: { uri: string }; edits: LspTextEdit[] }>
+}
+
+/** One thing a server offers to do about the code at the cursor. */
+export interface CodeAction {
+  title: string
+  /** LSP `kind` ("quickfix", "refactor.extract", "source.organizeImports", …).
+   *  Used to tell a fix from a refactor from a source action in the menu. */
+  kind?: string
+  /** True for the action a server marks as the obvious one. */
+  isPreferred?: boolean
+  /** The edit to apply, when the action carries one outright. */
+  edit?: LspWorkspaceEdit
+  /** A command to run instead — for servers that compute the edit lazily. */
+  command?: { command: string; arguments?: unknown[]; title?: string }
+  /** An unresolved action: `codeAction/resolve` fills in its `edit`. */
+  data?: unknown
+}
+
+/** Everything the code-action menu needs about one entry. */
+export interface ResolvedAction extends CodeAction {
+  /** Run it: applies the edit, or asks the server to execute the command. */
+  apply: () => Promise<void>
+}
+
+/**
+ * Ask the server what it can do about `range`.
+ *
+ * Returns null when no server is attached or it has no code-action support, so
+ * the caller can say "nothing here" rather than showing an empty menu.
+ */
+export async function lspCodeActions(
+  view: EditorView,
+  from: number,
+  to: number,
+  only?: string[],
+): Promise<ResolvedAction[] | null> {
+  const plugin = LSPPlugin.get(view)
+  if (!plugin?.client.serverCapabilities?.codeActionProvider) return null
+  plugin.client.sync()
+  const doc = view.state.doc
+
+  // The diagnostics overlapping the range: a server needs them to offer the fix
+  // *for* a problem rather than a generic refactor.
+  const diagnostics: LspDiag[] = []
+  forEachDiagnostic(view.state, (d, dFrom, dTo) => {
+    if (dTo < from || dFrom > to) return
+    diagnostics.push({
+      range: { start: plugin.toPosition(dFrom, doc), end: plugin.toPosition(dTo, doc) },
+      severity: d.severity === "error" ? 1 : d.severity === "warning" ? 2 : 3,
+      message: d.message,
+    })
+  })
+
+  try {
+    const actions = await plugin.client.request<object, Array<CodeAction | null> | null>(
+      "textDocument/codeAction",
+      {
+        textDocument: { uri: plugin.uri },
+        range: { start: plugin.toPosition(from, doc), end: plugin.toPosition(to, doc) },
+        context: { diagnostics, ...(only ? { only } : {}) },
+      },
+    )
+    if (!actions) return []
+    // A server may answer with bare `Command`s instead of `CodeAction`s; those
+    // have a `command` string where an action has a title and a kind.
+    return actions.filter((a): a is CodeAction => !!a?.title).map((a) => resolveAction(plugin, a))
+  } catch (e) {
+    log.warn("code actions failed", { error: String(e) })
+    return null
+  }
+}
+
+/** Wrap a raw action with the work of actually performing it. */
+function resolveAction(plugin: LSPPlugin, action: CodeAction): ResolvedAction {
+  return {
+    ...action,
+    apply: async () => {
+      let edit = action.edit
+      // Lazily-computed actions come back without an edit; the server fills it
+      // in on request. Skipping this leaves half the fixes doing nothing.
+      if (!edit && action.data !== undefined) {
+        try {
+          const full = await plugin.client.request<CodeAction, CodeAction>(
+            "codeAction/resolve",
+            action,
+          )
+          edit = full?.edit
+        } catch (e) {
+          log.warn("code action resolve failed", { error: String(e) })
+        }
+      }
+      if (edit) await applyWorkspaceEdit(plugin, edit)
+      if (action.command) {
+        try {
+          await plugin.client.request<object, unknown>("workspace/executeCommand", {
+            command: action.command.command,
+            arguments: action.command.arguments,
+          })
+        } catch (e) {
+          log.warn("code action command failed", { error: String(e) })
+        }
+      }
+    },
+  }
+}
+
+/**
+ * Apply a `WorkspaceEdit`.
+ *
+ * The open document is edited through its own view, so the change lands in the
+ * undo history with everything else. Other files are rewritten on disk through
+ * the backend — a fix that renames a symbol in five files has to reach all five,
+ * and only one of them is on screen.
+ */
+async function applyWorkspaceEdit(plugin: LSPPlugin, edit: LspWorkspaceEdit): Promise<void> {
+  const byUri: Record<string, LspTextEdit[]> = { ...(edit.changes ?? {}) }
+  for (const change of edit.documentChanges ?? []) {
+    byUri[change.textDocument.uri] = [
+      ...(byUri[change.textDocument.uri] ?? []),
+      ...(change.edits ?? []),
+    ]
+  }
+  const backups: Backup[] = []
+  for (const [uri, edits] of Object.entries(byUri)) {
+    if (!edits.length) continue
+    if (uri === plugin.uri) {
+      const view = plugin.view
+      const before = view.state.doc
+      view.dispatch({
+        changes: edits.map((e) => ({
+          from: plugin.fromPosition(e.range.start, before),
+          to: plugin.fromPosition(e.range.end, before),
+          insert: e.newText,
+        })),
+      })
+    } else {
+      backups.push(...(await applyEditsOnDisk(fromUri(uri), edits)))
+    }
+  }
+  // One decision, one undo — the guarantee every other bulk write in the app
+  // gives. The open document's own edit is already in its editor history.
+  if (backups.length > 0) useFileUndo.getState().record({ kind: "replace", backups })
+}
+
+/**
+ * Rewrite a file Reado does not have open, applying LSP edits to its bytes.
+ *
+ * Edits are applied back-to-front so earlier offsets stay valid, which is what
+ * the LSP spec requires of a client.
+ */
+export function applyTextEdits(text: string, edits: LspTextEdit[]): string {
+  const lines = text.split("\n")
+  /** A line/character position as an offset into the joined text. */
+  const offsetOf = (p: { line: number; character: number }) => {
+    let at = 0
+    for (let i = 0; i < Math.min(p.line, lines.length); i++) at += lines[i].length + 1
+    return at + p.character
+  }
+  // Back to front, so the offsets computed above stay valid as text is spliced
+  // in — which is what the LSP spec requires of a client.
+  const ordered = [...edits].sort((a, b) => offsetOf(b.range.start) - offsetOf(a.range.start))
+  let out = text
+  for (const e of ordered) {
+    out = out.slice(0, offsetOf(e.range.start)) + e.newText + out.slice(offsetOf(e.range.end))
+  }
+  return out
+}
+
+async function applyEditsOnDisk(path: string, edits: LspTextEdit[]): Promise<Backup[]> {
+  const root = rootFor(path)
+  try {
+    const content = await readFile(root, path)
+    if (content.kind !== "text") return []
+    const rel = toRelative(root, path)
+    noteSelfWrite(rel)
+    // Through the same backed-up write every other bulk rewrite uses. A rename
+    // that touches five files is the most destructive thing a code action does,
+    // and it was the one write in the app ⌘Z could not take back.
+    const res = await writeBacked(root, rel, applyTextEdits(content.text, edits), content.encoding)
+    return res.backups
+  } catch (e) {
+    log.warn("workspace edit on disk failed", { path, error: String(e) })
+    return []
+  }
+}
+
+/** Ask the server for the active file's document symbols, mapped to the outline/** Ask the server for the active file's document symbols, mapped to the outline
  *  shape. Returns null synchronously when no server is attached (caller falls
  *  back to the heuristic extractor); otherwise a promise of symbols (or null). */
 export function lspDocumentSymbols(view: EditorView): Promise<OutlineSymbol[] | null> | null {

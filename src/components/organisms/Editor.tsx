@@ -27,12 +27,16 @@ import { commentsForFile, toRelative, useComments } from "@/lib/comments"
 import { prRefsFor, useGuidedReview } from "@/lib/guidedReview"
 import { SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTextView } from "@/lib/textView"
+import { rootFor } from "@/lib/workspace"
 import { CodeView } from "./editor/CodeView"
 import { human, isMarkdown, PLACEHOLDER } from "./editor/extensions"
 import { RenderedMarkdown } from "./editor/RenderedMarkdown"
 
 export function Editor({ paneFile }: { paneFile?: string } = {}) {
-  const root = useProject((s) => s.root)
+  // The folder that owns the open file, not "the project's folder": with more
+  // than one open, every read and every write has to be scoped to the right one
+  // or a file from the second folder gets written into the first.
+  const root = useProject((s) => (s.active ? rootFor(s.active, s.roots) : s.root))
   const globalActive = useProject((s) => s.active)
   // The split (secondary) pane is driven by a prop; the primary pane follows the
   // global active file and owns the shared editor state (status bar, cursor…).
@@ -270,6 +274,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             primary={primary}
             pinned={prRef != null}
             changedLines={changedLines}
+            encoding={content.encoding}
           />
         ) : (
           <RenderedMarkdown
@@ -314,6 +319,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
       primary={primary}
       pinned={prRef != null}
       changedLines={changedLines}
+      encoding={content.encoding}
     />
   )
 }

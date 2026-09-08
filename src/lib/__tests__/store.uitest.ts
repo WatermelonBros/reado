@@ -810,3 +810,68 @@ describe("resetting the settings", () => {
     expect(s.fontSize).toBe(12)
   })
 })
+
+describe("preview and pinned tabs", () => {
+  const P = () => useProject.getState()
+
+  beforeEach(() => {
+    useProject.setState({ tabs: [], active: null, previewPath: null, pinnedTabs: [] })
+    useSettings.setState({ previewTabs: true })
+  })
+
+  it("replaces the outgoing preview in place, instead of adding a tab", () => {
+    // The whole point: a session of reading leaves one tab behind, not forty.
+    P().openPreview("/a.ts")
+    P().openPreview("/b.ts")
+    expect(P().tabs).toEqual(["/b.ts"])
+    expect(P().previewPath).toBe("/b.ts")
+  })
+
+  it("leaves an already-open tab exactly where it is", () => {
+    P().open("/kept.ts")
+    P().openPreview("/a.ts")
+    P().openPreview("/kept.ts")
+    // `kept.ts` was already open and stays open; the preview is untouched.
+    expect(P().tabs).toEqual(["/kept.ts", "/a.ts"])
+    expect(P().previewPath).toBe("/a.ts")
+  })
+
+  it("opening a file outright promotes it out of preview", () => {
+    P().openPreview("/a.ts")
+    P().open("/a.ts")
+    expect(P().previewPath).toBeNull()
+    expect(P().tabs).toEqual(["/a.ts"])
+  })
+
+  it("falls back to an ordinary open when previews are switched off", () => {
+    useSettings.setState({ previewTabs: false })
+    P().openPreview("/a.ts")
+    P().openPreview("/b.ts")
+    expect(P().tabs).toEqual(["/a.ts", "/b.ts"])
+    expect(P().previewPath).toBeNull()
+  })
+
+  it("keeps pinned tabs through every bulk close", () => {
+    P().open("/pin.ts")
+    P().open("/a.ts")
+    P().open("/b.ts")
+    P().togglePinned("/pin.ts")
+    P().closeOthers("/a.ts")
+    expect(P().tabs.sort()).toEqual(["/a.ts", "/pin.ts"])
+    P().closeAll()
+    expect(P().tabs).toEqual(["/pin.ts"])
+  })
+
+  it("forgets a pin when its tab is closed for real", () => {
+    P().open("/pin.ts")
+    P().togglePinned("/pin.ts")
+    P().close("/pin.ts")
+    expect(P().pinnedTabs).toEqual([])
+  })
+
+  it("pinning a preview keeps it", () => {
+    P().openPreview("/a.ts")
+    P().togglePinned("/a.ts")
+    expect(P().previewPath).toBeNull()
+  })
+})

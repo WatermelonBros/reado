@@ -90,6 +90,8 @@ export function ExtensionsPanel() {
   )
 
   const [query, setQuery] = useState("")
+  const recommended = useWorkspace((s) => s.recommended)
+  const setRecommended = useWorkspace((s) => s.setRecommended)
   const [filter, setFilter] = useState<Filter>("all")
   const [results, setResults] = useState<ExtListing[]>([])
   const [total, setTotal] = useState(0)
@@ -304,6 +306,43 @@ export function ExtensionsPanel() {
       <ReloadNotice />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* What the repository itself says a reader of this codebase needs.
+            Advisory, dismissable, and above the rest because it is the one list
+            here that knows something about *this* project. */}
+        {recommended.length > 0 && (
+          <Section
+            id="recommended"
+            title={t("ext.recommendedTitle")}
+            count={recommended.length}
+            forceOpen={searchMode}
+            action={
+              <IconButton
+                size="sm"
+                label={t("ext.recommendedDismiss")}
+                icon={<CloseIcon className="h-3.5 w-3.5" />}
+                onClick={() => setRecommended([])}
+              />
+            }
+          >
+            <ul className="m-0 list-none p-0">
+              {recommended.map((id) => (
+                <li key={id}>
+                  <button
+                    type="button"
+                    onClick={() => setQuery(id)}
+                    className="w-full px-3 py-1.5 text-left font-mono text-xs text-ink hover:bg-surface"
+                  >
+                    {id}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="px-3 pt-1 pb-2 text-[10px] leading-relaxed text-faint">
+              {t("ext.recommendedHint")}
+            </p>
+          </Section>
+        )}
+
         <Section
           id="installed"
           title={t("ext.installedSection")}

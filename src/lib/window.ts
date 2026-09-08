@@ -13,6 +13,7 @@ import { ask, open as openDialog } from "@tauri-apps/plugin-dialog"
 import { useEffect, useState } from "react"
 import { t } from "@/i18n"
 import { currentOS } from "./extensions"
+import { isMacUA } from "./shortcuts"
 import { useProject, useRecents } from "./store"
 
 // A per-window salt keeps new-window labels unique even if two windows spawn a
@@ -23,6 +24,13 @@ let windowSeq = 0
 /** Open a fresh OS window — empty (launcher), pointed at a project, or pointed at
  * a project with a specific file to open. The label matches the `project_*`
  * capability glob so it inherits the app permissions. */
+/** What this platform calls its file manager, for "Reveal in …". */
+export function revealAppName(): string {
+  if (/win/i.test(navigator.userAgent)) return "Explorer"
+  if (isMacUA) return "Finder"
+  return t("tree.fileManager")
+}
+
 export function openInNewWindow(projectPath?: string, file?: string): void {
   const label = `project_${WIN_SALT}_${Date.now().toString(36)}_${windowSeq++}`
   const params: string[] = []

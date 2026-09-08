@@ -11,13 +11,17 @@ import {
   copyLineDown,
   copyLineUp,
   cursorMatchingBracket,
+  indentSelection,
   moveLineDown,
   moveLineUp,
   redo,
+  redoSelection,
   toggleBlockComment,
   toggleComment,
   undo,
+  undoSelection,
 } from "@codemirror/commands"
+import { foldAll, unfoldAll } from "@codemirror/language"
 import { forEachDiagnostic } from "@codemirror/lint"
 import {
   gotoLine,
@@ -32,6 +36,7 @@ import { t } from "@/i18n"
 import {
   createDir,
   createFile,
+  type EditorConfig,
   findDefinition,
   formatFile,
   formatterStatus,
@@ -40,19 +45,32 @@ import {
 } from "./api"
 import { useBookmarks } from "./bookmarks"
 import { toRelative } from "./comments"
-import { cursorsToLineEnds, duplicateSelectionCmd } from "./editorCommands"
+import {
+  convertIndentation,
+  cursorsToLineEnds,
+  deleteDuplicateLines,
+  duplicateSelectionCmd,
+  joinLines,
+  lowerCase,
+  sortLines,
+  titleCase,
+  trimTrailingWhitespace,
+  upperCase,
+} from "./editorCommands"
 import { FORMATTERS, useExtensions } from "./extensions"
+import { foldToLevel } from "./foldLevels"
 import { choiceFor, extOf } from "./formatters"
 import { type HierDir, useHierarchy } from "./hierarchy"
 import {
   lspCalls,
   lspFormat,
+  lspFormatRange,
   lspLocate,
   lspPrepareCallHierarchy,
   lspPrepareTypeHierarchy,
   lspTypes,
 } from "./lsp"
-import { notify } from "./notice"
+import { notify, notifyError } from "./notice"
 import { prompt } from "./prompt"
 import { useQa } from "./qa"
 import { noteSelfWrite } from "./readProgress"
@@ -63,6 +81,9 @@ export type Eol = "LF" | "CRLF"
 
 interface DocInfoState {
   eol: Eol
+  /** The charset the focused file was decoded with (and will be written back
+   *  as). Mirrored here from the view registry so the status bar can show it. */
+  encoding: string
   indentKind: "spaces" | "tabs"
   indentSize: number
   language: string
@@ -75,6 +96,7 @@ interface DocInfoState {
 
 export const useDocInfo = create<DocInfoState>((set) => ({
   eol: "LF",
+  encoding: "utf-8",
   indentKind: "spaces",
   indentSize: 2,
   language: "",
@@ -270,29 +292,206 @@ export async function textToSave(view: EditorView): Promise<string> {
     const outcome = await formatBuffer()
     if (outcome.kind === "error") notify("error", outcome.message)
   }
-  return applyHygiene(view.state.doc.toString())
+  return applyEol(applyHygiene(view.state.doc.toString(), liveViews.get(view)?.rel), eolFor(view))
 }
 
-/** The on-write hygiene toggles (trim trailing whitespace, final newline),
- *  without the formatter. Shared with the close-flush, which cannot format: by
- *  then the formatter's idea of "the active document" is the next file. */
-export function applyHygiene(text: string): string {
+/**
+ * The on-write hygiene toggles (trim trailing whitespace, final newline),
+ * without the formatter. Shared with the close-flush, which cannot format: by
+ * then the formatter's idea of "the active document" is the next file.
+ *
+ * `.editorconfig` outranks the reader's own settings when it speaks: the file is
+ * the project's answer about its own files, and the whole point of committing it
+ * is that everyone's editor obeys it.
+ */
+export function applyHygiene(text: string, rel?: string): string {
   const s = useSettings.getState()
-  if (s.trimTrailingWhitespace) text = text.replace(/[ \t]+$/gm, "")
-  if (s.insertFinalNewline && text.length > 0 && !text.endsWith("\n")) text += "\n"
+  const ec = rel ? fileConfigs.get(rel) : undefined
+  const trim = ec?.trimTrailingWhitespace ?? s.trimTrailingWhitespace
+  const finalNewline = ec?.insertFinalNewline ?? s.insertFinalNewline
+  if (trim) text = text.replace(/[ \t]+$/gm, "")
+  if (finalNewline && text.length > 0 && !text.endsWith("\n")) text += "\n"
   return text
 }
 
-/** Save the active document to disk (used by the native menu's File ▸ Save). */
+/**
+ * Save the focused pane to disk — ⌘S, File ▸ Save, and the native menu.
+ *
+ * The path comes from the registry, not from `useProject.active`: with the
+ * editor split, the focused view is often the *other* file, and pairing its
+ * text with the primary tab's path wrote one buffer over another file.
+ */
 export async function saveDocument(): Promise<void> {
   const { view } = useDocInfo.getState()
-  const { root, active } = useProject.getState()
-  if (!view || !active) return
+  const entry = view && liveViews.get(view)
+  if (!view || !entry) return
+  const { rel, root } = entry
   const text = await textToSave(view)
-  noteSelfWrite(toRelative(root, active))
-  writeFile(root, toRelative(root, active), text)
-    .then(() => useEditorActions.getState().setDirty(toRelative(root, active), false))
-    .catch(() => {})
+  noteSelfWrite(rel)
+  writeFile(root, rel, text, encodingFor(view))
+    .then(() => useEditorActions.getState().setDirty(rel, false))
+    .catch((e) => notifyError("docInfo", t("editor.saveError"), e))
+}
+
+/**
+ * Every mounted editor view, with the project-relative path it is editing.
+ *
+ * `useDocInfo.view` is the *focused* pane; Save All has to reach the split pane
+ * too. Only the mounted panes can hold unsaved text at all — switching a tab
+ * away unmounts its view and flushes it — so this set is the whole of it.
+ */
+const liveViews = new Map<
+  EditorView,
+  { rel: string; root: string; primary: boolean; eol: Eol; encoding?: string }
+>()
+
+/**
+ * Register a mounted view.
+ *
+ * The folder is recorded with the view, not read from the store at save time:
+ * with more than one folder open, "the project's root" is not the root this
+ * buffer belongs to, and pairing one file's text with another folder's path is
+ * how you overwrite the wrong file.
+ */
+export function registerView(
+  view: EditorView,
+  rel: string,
+  root: string,
+  primary: boolean,
+  eol: Eol,
+  encoding?: string,
+): () => void {
+  liveViews.set(view, { rel, root, primary, eol, encoding })
+  return () => {
+    liveViews.delete(view)
+  }
+}
+
+/**
+ * The charset a buffer should be written with: the one it was read as.
+ *
+ * A latin-1 file saved as UTF-8 is a whole-file diff and, for whoever else
+ * reads it with the old tooling, mojibake.
+ */
+export const encodingFor = (view: EditorView): string | undefined => liveViews.get(view)?.encoding
+
+/** Change the charset a file will be written with (the status-bar picker). */
+export function setEncoding(view: EditorView, encoding: string): void {
+  const entry = liveViews.get(view)
+  if (entry) liveViews.set(view, { ...entry, encoding })
+  // The registry is per view (the split pane can hold a file with a different
+  // charset); the store field is what the status bar shows for the focused one.
+  if (useDocInfo.getState().view === view) useDocInfo.getState().set({ encoding })
+}
+
+/**
+ * Re-read the active file with a different encoding.
+ *
+ * Refused while there are unsaved edits: re-decoding replaces the buffer, and
+ * doing that over pending work would throw it away without asking.
+ */
+export async function reopenWithEncoding(encoding: string): Promise<void> {
+  const { view } = useDocInfo.getState()
+  const rel = view && liveViews.get(view)?.rel
+  const { root, active } = useProject.getState()
+  if (!view || !rel || !active) return
+  if (useEditorActions.getState().isDirty(rel)) {
+    notify("info", t("status.encodingDirty"))
+    return
+  }
+  try {
+    const content = await readFile(root, active, true, 0, encoding)
+    if (content.kind !== "text") {
+      notify("error", t("status.encodingFailed", { name: encoding }))
+      return
+    }
+    setEncoding(view, encoding)
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content.text } })
+    // Not a user edit: the buffer now matches the bytes on disk again.
+    useEditorActions.getState().setDirty(rel, false)
+    notify("info", t("status.encodingReopened", { name: encoding }))
+  } catch (e) {
+    notifyError("docInfo", t("status.encodingFailed", { name: encoding }), e)
+  }
+}
+
+/**
+ * The line endings a buffer should be written with.
+ *
+ * CodeMirror normalises every document to `\n` internally, so without this a
+ * CRLF file came back out of Reado as LF — a whole-file diff on the next commit,
+ * from opening it and pressing ⌘S. Registered per view (the split pane can hold
+ * a file with different endings), and per *file*: the setting only decides what
+ * a brand-new, empty document gets.
+ */
+export function eolFor(view: EditorView): Eol {
+  const known = liveViews.get(view)?.eol
+  if (known) return known
+  const preferred = useSettings.getState().defaultEol
+  if (preferred !== "auto") return preferred
+  return /win/i.test(navigator.userAgent) ? "CRLF" : "LF"
+}
+
+/**
+ * What `.editorconfig` says about each open file, by project-relative path.
+ *
+ * Kept next to the view registry because the save paths need it: a project that
+ * says `trim_trailing_whitespace = true` means it for *its* files, whatever the
+ * reader's own global preference is.
+ */
+const fileConfigs = new Map<string, EditorConfig>()
+
+export function setEditorConfig(rel: string, config: EditorConfig | null): void {
+  if (config?.applies) fileConfigs.set(rel, config)
+  else fileConfigs.delete(rel)
+}
+
+export const editorConfigOf = (rel: string): EditorConfig | undefined => fileConfigs.get(rel)
+
+/** Re-apply `eol` to a normalised (`\n`) document. */
+export const applyEol = (text: string, eol: Eol): string =>
+  eol === "CRLF" ? text.replace(/\n/g, "\r\n") : text
+
+/** Move focus to the first (primary) or second (split) editor pane — ⌘1 / ⌘2.
+ *  Returns false when that pane isn't open, so the caller can say so. */
+export function focusPane(which: 1 | 2): boolean {
+  for (const [view, { primary }] of liveViews) {
+    if (primary === (which === 1)) {
+      view.focus()
+      useDocInfo.getState().set({ view })
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Save every pane with unsaved edits (⌥⌘S / File ▸ Save All).
+ *
+ * Only the focused pane goes through `textToSave`: format-on-save formats "the
+ * active document", so running it for the other pane would format the wrong
+ * buffer. The others get the hygiene toggles, exactly like the close-flush.
+ */
+export async function saveAll(): Promise<void> {
+  const actions = useEditorActions.getState()
+  const focused = useDocInfo.getState().view
+  let count = 0
+  for (const [view, { rel, root }] of liveViews) {
+    if (!actions.isDirty(rel)) continue
+    const text =
+      view === focused
+        ? await textToSave(view)
+        : applyEol(applyHygiene(view.state.doc.toString(), rel), eolFor(view))
+    noteSelfWrite(rel)
+    try {
+      await writeFile(root, rel, text, encodingFor(view))
+      actions.setDirty(rel, false)
+      count++
+    } catch (e) {
+      notifyError("docInfo", t("editor.saveError"), e)
+    }
+  }
+  notify("info", t("editor.saveAllDone", { count }))
 }
 
 /**
@@ -573,7 +772,11 @@ export async function saveAs(): Promise<void> {
   if (!dest) return
   await createFile(root, dest).catch(() => {}) // ensure it exists (no-op if so)
   noteSelfWrite(dest)
-  await writeFile(root, dest, view.state.doc.toString()).catch(() => {})
+  // A copy of this buffer, not a re-encoding of it: the new file keeps the
+  // endings and the charset the old one had.
+  const rel = liveViews.get(view)?.rel
+  const out = applyEol(applyHygiene(view.state.doc.toString(), rel), eolFor(view))
+  await writeFile(root, dest, out, encodingFor(view)).catch(() => {})
   useProject.getState().open(`${root}/${dest}`)
   useProject.getState().bumpTree()
 }
@@ -611,15 +814,61 @@ export function findReferencesAtCursor(): void {
   if (name) useWorkspace.getState().searchFor(name)
 }
 
+/** Text transforms (Selection menu / palette). Each acts on the selection, or
+ *  on the caret's line when there is none. */
+export const upperCaseCmd = () => runOnView(upperCase)
+export const lowerCaseCmd = () => runOnView(lowerCase)
+export const titleCaseCmd = () => runOnView(titleCase)
+export const sortLinesAsc = () => runOnView(sortLines(1))
+export const sortLinesDesc = () => runOnView(sortLines(-1))
+export const deleteDuplicateLinesCmd = () => runOnView(deleteDuplicateLines)
+export const joinLinesCmd = () => runOnView(joinLines)
+export const trimWhitespaceCmd = () => runOnView(trimTrailingWhitespace)
+export const reindentLines = () => runOnView(indentSelection)
+export const foldAllCmd = () => runOnView(foldAll)
+export const unfoldAllCmd = () => runOnView(unfoldAll)
+/** Fold the active document down to `level` (⌘K ⌘1…⌘9). */
+export const foldLevel = (level: number) => runOnView(foldToLevel(level))
+
+/** Undo/redo the *cursor*, not the edit — the way back from one ⌘D too many. */
+export const cursorUndo = () => runOnView(undoSelection)
+export const cursorRedo = () => runOnView(redoSelection)
+
+/** Rewrite the whole document's leading whitespace as tabs or spaces, and make
+ *  the status bar agree — the picker there sets what gets *inserted*, this
+ *  converts what is already on the page. */
+export function convertIndentationTo(to: "spaces" | "tabs"): void {
+  const { view, indentSize } = useDocInfo.getState()
+  if (!view) return
+  convertIndentation(view, to, indentSize)
+  useDocInfo.getState().set({ indentKind: to })
+}
+
+/** Format Selection: the language server's range formatter. The project's own
+ *  formatters run over whole files, so when no server can do it we say that
+ *  rather than silently formatting the whole document. */
+export async function formatSelection(): Promise<void> {
+  const { view } = useDocInfo.getState()
+  if (!view) return
+  if (view.state.selection.main.empty) {
+    notify("info", t("menu.needSelection"))
+    return
+  }
+  const res = await lspFormatRange(view)
+  if (res === null) notify("info", t("editor.formatNoRange"))
+  else if (res === "unchanged")
+    notify("info", t("editor.formatUnchanged", { name: t("editor.formatViaServer") }))
+}
+
 /** Rewrite the active file with the chosen line endings (applies + saves). */
 export function convertEol(eol: Eol): void {
   const { view, set } = useDocInfo.getState()
   const { root, active } = useProject.getState()
   if (!view || !active) return
-  const normalised = view.state.doc.toString().replace(/\r\n/g, "\n")
-  const out = eol === "CRLF" ? normalised.replace(/\n/g, "\r\n") : normalised
+  const out = applyEol(view.state.doc.toString().replace(/\r\n/g, "\n"), eol)
   noteSelfWrite(toRelative(root, active))
-  writeFile(root, toRelative(root, active), out)
+  // Converting the endings must not also convert the charset.
+  writeFile(root, toRelative(root, active), out, encodingFor(view))
     .then(() => {
       set({ eol })
       useEditorActions.getState().setDirty(toRelative(root, active), false)
