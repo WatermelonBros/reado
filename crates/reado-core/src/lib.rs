@@ -1291,7 +1291,10 @@ mod tests {
 
         for name in ["../secret.txt", "sub/x.json", "..\\secret.txt", ""] {
             assert!(read_reado_file(&root, name).is_none(), "read {name}");
-            assert!(write_reado_file(&root, name, "pwned").is_err(), "write {name}");
+            assert!(
+                write_reado_file(&root, name, "pwned").is_err(),
+                "write {name}"
+            );
         }
         assert_eq!(
             std::fs::read_to_string(dir.path().join("secret.txt")).unwrap(),
@@ -1305,7 +1308,10 @@ mod tests {
         let root = dir.path().to_string_lossy().into_owned();
         assert!(read_reado_file(&root, "workspace.json").is_none());
         write_reado_file(&root, "workspace.json", "{}").unwrap();
-        assert_eq!(read_reado_file(&root, "workspace.json").as_deref(), Some("{}"));
+        assert_eq!(
+            read_reado_file(&root, "workspace.json").as_deref(),
+            Some("{}")
+        );
         assert!(dir.path().join(".reado/workspace.json").exists());
     }
 
