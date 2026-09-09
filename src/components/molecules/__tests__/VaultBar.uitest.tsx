@@ -48,7 +48,7 @@ beforeEach(() => {
   api.vaultLookup.mockResolvedValue([
     { id: "i1", title: "Example", username: "me@example.com", hasOtp: true },
   ])
-  usePreview.setState({ secrets: [] })
+  usePreview.setState({ secrets: [], vaultPick: null })
   useWorkspace.setState({ tool: "files" })
 })
 afterEach(() => vi.restoreAllMocks())
@@ -74,6 +74,60 @@ describe("the credential strip", () => {
     const script = last(evalInPage) as string
     expect(script).toContain("me@example.com")
     expect(script).toContain("s3cr3t!")
+  })
+
+  it("stays open after filling, so the one-time code is still reachable", async () => {
+    // It used to close itself the instant the password landed — which took the
+    // second half of the login with it: the site asks for the code next.
+    const onClose = vi.fn()
+    render(<VaultBar url={URL_} evalInPage={page()} onClose={onClose} />)
+    await userEvent.click(await screen.findByText("Example"))
+    await waitFor(() => expect(api.vaultSecret).toHaveBeenCalled())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByText("vault.otp")).toBeTruthy()
+    // And it says what it did, rather than leaving the user guessing.
+    expect(await screen.findByText("vault.filledThenOtp")).toBeTruthy()
+  })
+
+  describe("the in-page chip", () => {
+    /** A page whose bridge is there: the chip draws, everything else fills. */
+    const withBridge = () =>
+      vi.fn<(js: string) => Promise<string>>(async (js) =>
+        js.includes("__readoBridge.vault(") ? "true" : JSON.stringify({ ok: true }),
+      )
+
+    it("draws over the page and drops the strip, which is what it replaces", async () => {
+      const evalInPage = withBridge()
+      const { container } = render(
+        <VaultBar url={URL_} evalInPage={evalInPage} onClose={() => {}} />,
+      )
+      await waitFor(() => expect(container).toBeEmptyDOMElement())
+      const drawn = evalInPage.mock.calls.map((c) => c[0]).find((js) => js.includes(".vault("))
+      expect(drawn).toContain("Example")
+      // Titles and usernames go into the page; a secret never does.
+      expect(drawn).not.toContain("s3cr3t!")
+    })
+
+    it("fills from a pick made in the page", async () => {
+      const evalInPage = withBridge()
+      render(<VaultBar url={URL_} evalInPage={evalInPage} onClose={() => {}} />)
+      await waitFor(() => expect(api.vaultLookup).toHaveBeenCalled())
+      usePreview.getState().setVaultPick({ kind: "login", id: "i1" })
+      await waitFor(() => expect(api.vaultSecret).toHaveBeenCalledWith("i1"))
+      // Consumed, so a re-render can't fetch the credential a second time.
+      expect(usePreview.getState().vaultPick).toBeNull()
+      await waitFor(() =>
+        expect(evalInPage.mock.calls.some((c) => c[0].includes("s3cr3t!"))).toBe(true),
+      )
+    })
+
+    it("closes the whole strip when the page's chip is dismissed", async () => {
+      const onClose = vi.fn()
+      render(<VaultBar url={URL_} evalInPage={withBridge()} onClose={onClose} />)
+      await waitFor(() => expect(api.vaultLookup).toHaveBeenCalled())
+      usePreview.getState().setVaultPick({ kind: "close" })
+      await waitFor(() => expect(onClose).toHaveBeenCalled())
+    })
   })
 
   it("registers what it filled so it can be redacted from the agent's view", async () => {

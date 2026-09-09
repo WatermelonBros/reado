@@ -6,13 +6,18 @@
  * the panel needs from here is their standing on this machine and in this
  * project, so it can put them in the same list as everything else.
  */
+import { listen } from "@tauri-apps/api/event"
 import { useCallback, useEffect, useState } from "react"
+import { t } from "@/i18n"
 import {
   agentInstalled,
   type FormatterStatus,
   formatterStatus,
   linuxPackageManager,
+  lspInstalled,
   lspInstalledAll,
+  ptyKill,
+  ptySpawn,
   submitToTerminal,
 } from "@/lib/api"
 import {
@@ -25,26 +30,113 @@ import {
   type LinuxPm,
   VAULTS,
 } from "@/lib/extensions"
+import { createLogger } from "@/lib/logger"
+import { refreshLspServers } from "@/lib/lsp"
+import { notify } from "@/lib/notice"
 import { useProject } from "@/lib/store"
-import { useTerminals } from "@/lib/terminals"
 
-/** Run an install command in the integrated terminal, so the user sees exactly
- *  what happens and their own package manager does it. */
-export function runInstall(cmd: string) {
-  const term = useTerminals.getState()
-  const id = term.activeId ?? term.add()
-  // Reveal it. `add()` opens the panel, but reusing an existing pane didn't, so
-  // clicking Install with the terminal closed ran the command out of sight and
-  // looked like the button had done nothing at all.
-  term.toggle(true)
-  term.setActive(id)
-  submitToTerminal(id, cmd, id === term.activeId ? 0 : 400)
-  // The command runs in a shell that reports to nobody, so there is no
-  // completion to await. Re-probe on a short bounded schedule instead: a small
-  // install lands in seconds, a large one within the last window, and either way
-  // the row stops saying "Install" on its own rather than waiting for a manual
-  // re-check.
-  for (const after of REPROBE_MS) setTimeout(forgetServerProbe, after)
+const log = createLogger("extensions")
+
+/** What an install is meant to produce, so Reado can check that it did. */
+export interface InstallTarget {
+  kind: "server" | "formatter" | "vault"
+  id: string
+  /** Shown in the toasts. */
+  name: string
+}
+
+/** Numbers the hidden install shells (no `Date.now`/`Math.random`). */
+let installSeq = 0
+
+/** Give up on an install that has produced no exit after this long, rather than
+ *  leaving a PTY running forever behind a toast that never resolves. */
+const INSTALL_TIMEOUT_MS = 15 * 60_000
+
+/**
+ * Install a curated tool in a PTY the user never sees.
+ *
+ * This used to type the command into the integrated terminal and reveal the
+ * pane, which made installing an extension the user's errand: their terminal
+ * hijacked, a command they have to watch scroll. Reado already has a shell — it
+ * can run its own installs. What the user gets is a toast when it starts and one
+ * when it lands; the output goes to the log, which is where a failed install is
+ * worth reading.
+ *
+ * Success is decided by looking for the tool afterwards, not by parsing shell
+ * output: `pty-exit` carries no status, and every shell reports one differently.
+ */
+export function runInstall(cmd: string, target?: InstallTarget): void {
+  const id = `install-${++installSeq}`
+  const name = target?.name ?? cmd
+  notify("info", t("ext.curatedInstalling", { name }))
+
+  // The tail of what the install printed — the only diagnostic left once the
+  // terminal is hidden, so it goes to the log when the tool doesn't appear.
+  let tail = ""
+  const unOut = listen<string>(`pty-output-${id}`, (e) => {
+    tail = (tail + decodeOutput(e.payload)).slice(-4000)
+  })
+  let done = false
+  const finish = async () => {
+    if (done) return
+    done = true
+    void unOut.then((f) => f())
+    void unExit.then((f) => f())
+    clearTimeout(timer)
+    void ptyKill(id).catch(() => {})
+    // The machine changed under every cached probe, whatever the outcome.
+    forgetServerProbe()
+    // Including the editor's own: a freshly installed server attaches to the file
+    // that is already open, rather than to the next window.
+    refreshLspServers()
+    if (!target) return
+    const ok = await verifyInstalled(target)
+    if (ok) {
+      notify("success", t("ext.curatedInstalled", { name }))
+      return
+    }
+    log.error("install failed", { id: target.id, cmd, output: tail })
+    notify("error", t("ext.curatedInstallFailed", { name }))
+  }
+  const unExit = listen(`pty-exit-${id}`, () => void finish())
+  const timer = setTimeout(() => void finish(), INSTALL_TIMEOUT_MS)
+
+  ptySpawn(id, useProject.getState().root || ".", 24, 200)
+    .then(() => {
+      // `exit` closes the shell when the install returns, which is what fires
+      // `pty-exit`; it is spelled the same in every shell Reado can be pointed at.
+      submitToTerminal(id, cmd, 200)
+      submitToTerminal(id, "exit", 400)
+    })
+    .catch((e) => {
+      log.error("install shell failed to start", { cmd, error: String(e) })
+      void finish()
+    })
+  // The row stops saying "Install" as the tool appears, without waiting for the
+  // shell to close (a package manager can linger after the binary is in place).
+  for (const after of REPROBE_MS) {
+    setTimeout(() => {
+      forgetServerProbe()
+      refreshLspServers()
+    }, after)
+  }
+}
+
+/** PTY output arrives base64-encoded (it is bytes, not text, on the wire). */
+const decodeOutput = (b64: string) =>
+  new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))
+
+/** Is the thing the install was for actually here now? */
+async function verifyInstalled(target: InstallTarget): Promise<boolean> {
+  try {
+    if (target.kind === "server") return await lspInstalled(target.id, useProject.getState().root)
+    // A vault's id is its CLI's name; formatters are looked up by rule id.
+    if (target.kind === "vault") return await agentInstalled(target.id)
+    const status = await formatterStatus(useProject.getState().root)
+    return Boolean(status.find((f) => f.id === target.id)?.installed)
+  } catch {
+    return false
+  }
 }
 
 /** When to look again after an install command was submitted. */
@@ -94,7 +186,7 @@ export function useServerStatus() {
 
   const recheck = useCallback(() => {
     setChecking(true)
-    lspInstalledAll()
+    lspInstalledAll(useProject.getState().root)
       .then((pairs) => {
         probed = Object.fromEntries(pairs)
         setInstalled(probed)

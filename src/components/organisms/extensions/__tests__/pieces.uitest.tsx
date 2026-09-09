@@ -7,12 +7,16 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }))
 vi.mock("../../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../../lib/api")>()),
+  agentInstalled: vi.fn(async () => false),
   formatterStatus: vi.fn(async () => []),
   linuxPackageManager: vi.fn(async () => null),
   lspInstalled: vi.fn(async () => false),
   lspInstalledAll: vi.fn(async () => []),
+  ptyKill: vi.fn(async () => {}),
+  ptySpawn: vi.fn(async () => {}),
   ptyWrite: vi.fn(async () => {}),
   submitToTerminal: vi.fn(),
 }))
@@ -152,16 +156,29 @@ describe("FormatterOverride", () => {
 })
 
 describe("running a curated install", () => {
-  it("reveals the terminal it runs in", () => {
-    // Reusing an existing pane didn't open the panel, so clicking Install with
-    // the terminal closed ran the command out of sight and read as a dead button.
-    // A pane already exists — the reuse path, which is the one that was broken.
+  it("runs in a shell of its own, leaving the user's terminal alone", async () => {
+    // Installing is Reado's job, not an errand handed to the user's terminal:
+    // it used to open the panel and type the command into whichever pane was
+    // active, hijacking a session someone was working in.
+    const { ptySpawn, submitToTerminal } = await import("@/lib/api")
+    vi.mocked(ptySpawn).mockClear()
+    vi.mocked(submitToTerminal).mockClear()
     const id = useTerminals.getState().add()
     useTerminals.setState({ open: false, activeId: id })
-    runInstall("brew install shfmt")
-    const term = useTerminals.getState()
-    expect(term.open).toBe(true)
-    expect(term.activeId).toBeTruthy()
+
+    runInstall("brew install shfmt", { kind: "formatter", id: "shfmt", name: "shfmt" })
+    await vi.waitFor(() =>
+      expect(submitToTerminal).toHaveBeenCalledWith(
+        expect.stringMatching(/^install-/),
+        "brew install shfmt",
+        expect.anything(),
+      ),
+    )
+
+    expect(ptySpawn).toHaveBeenCalled()
+    // Not the pane the user had open, and the panel stays shut.
+    expect(vi.mocked(submitToTerminal).mock.calls.every((c) => c[0] !== id)).toBe(true)
+    expect(useTerminals.getState().open).toBe(false)
   })
 })
 

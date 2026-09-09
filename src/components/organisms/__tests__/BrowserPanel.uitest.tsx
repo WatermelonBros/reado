@@ -479,6 +479,45 @@ describe("running the agent's commands", () => {
   })
 })
 
+describe("following the page", () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it("puts the page's own URL in the address bar", async () => {
+    // A link, a redirect, or a router pushing a route moves the page without
+    // telling Reado. The bar showed whatever was last typed, so it lied about
+    // where you were — and Back, Reload and "open externally" all lied with it.
+    render(<BrowserPanel />)
+    bridgeReturns({ href: "http://localhost:5173/roadmap" })
+    await vi.advanceTimersByTimeAsync(1200)
+    expect(usePreview.getState().url).toBe("http://localhost:5173/roadmap")
+  })
+
+  it("does not retype the address while the user is editing it", async () => {
+    render(<BrowserPanel />)
+    const bar = screen.getByLabelText("preview.url")
+    fireEvent.focus(bar)
+    bridgeReturns({ href: "http://localhost:5173/elsewhere" })
+    await vi.advanceTimersByTimeAsync(1200)
+    expect(usePreview.getState().url).toBe("http://localhost:5173")
+  })
+
+  it("leaves a loaded page where it is, whatever the dev-server scan says", async () => {
+    // The bug behind "the URL never changes and Back does nothing": every two
+    // seconds this scan re-navigated the webview to the address Reado had
+    // written down — so a page you had navigated to snapped back, and the
+    // history it would have gone back through was thrown away with it.
+    render(<BrowserPanel />)
+    bridgeReturns({ href: "http://localhost:5173/roadmap" })
+    await vi.advanceTimersByTimeAsync(1200)
+    api.previewOpen.mockClear()
+    api.previewDetectUrls.mockResolvedValue(["http://localhost:3000"])
+    await vi.advanceTimersByTimeAsync(4200)
+    expect(api.previewOpen).not.toHaveBeenCalled()
+    expect(usePreview.getState().url).toBe("http://localhost:5173/roadmap")
+  })
+})
+
 describe("finding the dev server", () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())

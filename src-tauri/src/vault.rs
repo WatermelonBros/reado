@@ -22,6 +22,20 @@ use std::sync::Mutex;
 /// disk, to project files, or to settings, so quitting Reado re-locks the vault.
 static SESSION: Mutex<Option<String>> = Mutex::new(None);
 
+/// The 1Password session: the environment variable `op signin` names, and its
+/// token. In memory only, exactly like the Bitwarden one.
+///
+/// Without it, `op` asks the 1Password app to authorize *every single
+/// invocation* — and one fill is several invocations (list the logins, read each
+/// one's username, fetch the password, fetch the code). That is the wall of
+/// approval prompts; a session makes it one.
+static OP_SESSION: Mutex<Option<(String, String)>> = Mutex::new(None);
+
+/// Set once `op signin` has failed, so a vault that cannot hand out a session
+/// (no account configured, sign-in declined) doesn't get asked again on every
+/// call — which would *add* a prompt per command instead of removing them.
+static OP_SIGNIN_FAILED: Mutex<bool> = Mutex::new(false);
+
 /// The CLI we drive, preferring 1Password when both are installed (it brokers its
 /// own biometric unlock, so it needs no session handling from us).
 ///
@@ -58,10 +72,16 @@ pub struct VaultItem {
 fn run(program: &str, args: &[&str], stdin: Option<&str>) -> Result<String, String> {
     let mut cmd = crate::proc::command(program);
     cmd.args(args);
-    // The Bitwarden session goes in the environment, never on argv.
+    // Both sessions go in the environment, never on argv (which `ps` shows to
+    // every process on the machine).
     if program == "bw" {
         if let Some(s) = SESSION.lock().ok().and_then(|g| g.clone()) {
             cmd.env("BW_SESSION", s);
+        }
+    }
+    if program == "op" {
+        if let Some((name, token)) = OP_SESSION.lock().ok().and_then(|g| g.clone()) {
+            cmd.env(name, token);
         }
     }
     cmd.stdin(if stdin.is_some() {
@@ -92,6 +112,87 @@ fn run(program: &str, args: &[&str], stdin: Option<&str>) -> Result<String, Stri
         } else {
             err
         })
+    }
+}
+
+/// Parse the `export OP_SESSION_xyz="token"` line `op signin` prints.
+///
+/// The variable is read out of the output rather than assembled from an account
+/// id: `op` names it after the account itself, and the shape of that name has
+/// changed between CLI versions. Letting `op` say it means never guessing wrong —
+/// and a line we can't parse simply leaves the session unset, which is exactly
+/// how this behaved before there was one.
+fn parse_op_session(out: &str) -> Option<(String, String)> {
+    let line = out.lines().find(|l| l.contains("OP_SESSION"))?;
+    let start = line.find("OP_SESSION")?;
+    let rest = &line[start..];
+    let eq = rest.find('=')?;
+    let name = rest[..eq].trim().to_string();
+    let value = rest[eq + 1..]
+        .trim()
+        .trim_matches(['"', '\'', ';'])
+        .to_string();
+    if name.len() <= "OP_SESSION_".len() || value.is_empty() {
+        return None;
+    }
+    Some((name, value))
+}
+
+/// Whether an `op` failure means "your session is no longer good" — the one case
+/// worth re-signing in and retrying for.
+fn is_op_auth_error(err: &str) -> bool {
+    let e = err.to_ascii_lowercase();
+    e.contains("session")
+        || e.contains("sign in")
+        || e.contains("signed in")
+        || e.contains("authoriz")
+}
+
+/// Run an `op` command with a session in place, so the 1Password app authorizes
+/// Reado once instead of once per command.
+///
+/// The first call signs in (one approval prompt); later ones ride the token. When
+/// it expires, `op` says so and this signs in again and retries — once, so a
+/// genuinely failing command can't loop the user through prompts.
+fn op_run(args: &[&str]) -> Result<String, String> {
+    ensure_op_session();
+    match run("op", args, None) {
+        Err(e) if is_op_auth_error(&e) => {
+            *OP_SESSION.lock().map_err(|e| e.to_string())? = None;
+            *OP_SIGNIN_FAILED.lock().map_err(|e| e.to_string())? = false;
+            ensure_op_session();
+            run("op", args, None)
+        }
+        other => other,
+    }
+}
+
+/// Get a session token if we don't have one. Best-effort: when `op` won't give
+/// one (no account configured, the user declined), commands still run — they just
+/// authorize one at a time, as they did before.
+fn ensure_op_session() {
+    if OP_SESSION.lock().is_ok_and(|g| g.is_some()) {
+        return;
+    }
+    if OP_SIGNIN_FAILED.lock().is_ok_and(|f| *f) {
+        return;
+    }
+    // `op signin` (not `--raw`) prints the assignment, naming its own variable.
+    match run("op", &["signin"], None)
+        .ok()
+        .as_deref()
+        .and_then(parse_op_session)
+    {
+        Some(session) => {
+            if let Ok(mut g) = OP_SESSION.lock() {
+                *g = Some(session);
+            }
+        }
+        None => {
+            if let Ok(mut f) = OP_SIGNIN_FAILED.lock() {
+                *f = true;
+            }
+        }
     }
 }
 
@@ -330,15 +431,11 @@ pub async fn vault_lookup(url: String) -> Result<Vec<VaultItem>, String> {
         let host = host_of(&url).ok_or("not a URL")?;
         match backend().ok_or("no password manager CLI found")? {
             "op" => {
-                let list = run(
-                    "op",
-                    &["item", "list", "--categories", "Login", "--format", "json"],
-                    None,
-                )?;
+                let list = op_run(&["item", "list", "--categories", "Login", "--format", "json"])?;
                 op_matches(&list, &host)
                     .into_iter()
                     .map(|(_, id, title)| {
-                        let detail = run("op", &["item", "get", &id, "--format", "json"], None)?;
+                        let detail = op_run(&["item", "get", &id, "--format", "json"])?;
                         let (username, has_otp) = op_detail(&detail);
                         Ok(VaultItem {
                             id,
@@ -364,14 +461,7 @@ pub async fn vault_lookup(url: String) -> Result<Vec<VaultItem>, String> {
 pub async fn vault_secret(id: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         match backend().ok_or("no password manager CLI found")? {
-            "op" => {
-                let out = run(
-                    "op",
-                    &["item", "get", &id, "--fields", "label=password", "--reveal"],
-                    None,
-                )?;
-                Ok(out)
-            }
+            "op" => op_run(&["item", "get", &id, "--fields", "label=password", "--reveal"]),
             _ => run("bw", &["get", "password", &id], None),
         }
     })
@@ -384,7 +474,7 @@ pub async fn vault_secret(id: String) -> Result<String, String> {
 pub async fn vault_otp(id: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         match backend().ok_or("no password manager CLI found")? {
-            "op" => run("op", &["item", "get", &id, "--otp"], None),
+            "op" => op_run(&["item", "get", &id, "--otp"]),
             _ => run("bw", &["get", "totp", &id], None),
         }
     })
@@ -401,19 +491,15 @@ pub async fn vault_create(url: String, title: String, username: String) -> Resul
         let password = generate_password();
         match backend().ok_or("no password manager CLI found")? {
             "op" => {
-                run(
-                    "op",
-                    &[
-                        "item",
-                        "create",
-                        "--category=login",
-                        &format!("--title={title}"),
-                        &format!("--url={url}"),
-                        &format!("username={username}"),
-                        &format!("password={password}"),
-                    ],
-                    None,
-                )?;
+                op_run(&[
+                    "item",
+                    "create",
+                    "--category=login",
+                    &format!("--title={title}"),
+                    &format!("--url={url}"),
+                    &format!("username={username}"),
+                    &format!("password={password}"),
+                ])?;
             }
             _ => {
                 let doc = bw_new_item(&url, &title, &username, &password);
@@ -430,6 +516,30 @@ pub async fn vault_create(url: String, title: String, username: String) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_session_variable_op_names_for_itself() {
+        let out = "export OP_SESSION_my_account=\"abc123\"\n";
+        assert_eq!(
+            parse_op_session(out),
+            Some(("OP_SESSION_my_account".into(), "abc123".into()))
+        );
+        // Shell-flavoured variants: a trailing semicolon, no quotes, no `export`.
+        assert_eq!(
+            parse_op_session("OP_SESSION_x=tok;"),
+            Some(("OP_SESSION_x".into(), "tok".into()))
+        );
+        // Nothing to parse leaves the session unset rather than inventing one.
+        assert_eq!(parse_op_session("please sign in"), None);
+        assert_eq!(parse_op_session("export OP_SESSION_x=\"\""), None);
+    }
+
+    #[test]
+    fn retries_only_on_a_session_failure() {
+        assert!(is_op_auth_error("session expired"));
+        assert!(is_op_auth_error("You are not currently signed in"));
+        assert!(!is_op_auth_error("item not found"));
+    }
 
     #[test]
     fn ranks_exact_host_above_a_subdomain_relation() {

@@ -24,7 +24,7 @@ const BRIDGE: &str = r#"(function(){
   var B = window.__readoBridge = { logs: [], net: [], _id: 0 };
   // Console is drained (cleared each poll); network is a persistent snapshot so
   // request/response bodies (which resolve async) can fill in and be inspected.
-  B.drain = function(){ var l=B.logs, ip=B.inspectPath, ca=B.commentAt, oc=B.openComment, cr=B.commentReply, cs=B.commentResolve, ct=B.commentType, ck=B.commentKind, ce=B.commentEdit; B.logs=[]; B.inspectPath=null; B.commentAt=null; B.openComment=null; B.commentReply=null; B.commentResolve=null; B.commentType=null; B.commentKind=null; B.commentEdit=null; return {logs:l, net:B.net.slice(-300), inspect:ip, commentAt:ca||null, openComment:oc||null, commentReply:cr||null, commentResolve:cs||null, commentType:ct||null, commentKind:ck||null, commentEdit:ce||null, hasMarks:!!document.getElementById('__readoMarks')}; };
+  B.drain = function(){ var l=B.logs, ip=B.inspectPath, ca=B.commentAt, oc=B.openComment, cr=B.commentReply, cs=B.commentResolve, ct=B.commentType, ck=B.commentKind, ce=B.commentEdit, vp=B.vaultPick; B.logs=[]; B.inspectPath=null; B.commentAt=null; B.openComment=null; B.commentReply=null; B.commentResolve=null; B.commentType=null; B.commentKind=null; B.commentEdit=null; B.vaultPick=null; return {logs:l, net:B.net.slice(-300), inspect:ip, commentAt:ca||null, openComment:oc||null, commentReply:cr||null, commentResolve:cs||null, commentType:ct||null, commentKind:ck||null, commentEdit:ce||null, vaultPick:vp||null, hasMarks:!!document.getElementById('__readoMarks'), hasVault:!!document.getElementById('__readoVault'), href:location.href, canBack:history.length>1}; };
   B.clear = function(){ B.logs=[]; B.net=[]; };
   // Elements highlight: draw an overlay over the element at the given child-index
   // path (from documentElement), like Chrome's hover highlight.
@@ -45,6 +45,48 @@ const BRIDGE: &str = r#"(function(){
   // A transparent full-page backdrop closes it; reply/resolve report back via drain.
   B.showComment = function(c){ B.closeComment(); var TC={bug:'#ff5c5c',refactor:'#c084fc',performance:'#f59e0b',question:'#38bdf8',note:'#94a3b8'}; var TYPES=['bug','refactor','performance','question','note']; var back=document.createElement('div'); back.id='__readoCommentBack'; back.style.cssText='position:fixed;inset:0;z-index:2147483644;background:transparent'; back.onmousedown=function(e){ if(e.target===back) B.closeComment(); }; var card=document.createElement('div'); card.style.cssText='position:absolute;left:'+(c.x+14-(window.scrollX||0))+'px;top:'+(c.y-(window.scrollY||0))+'px;width:330px;box-sizing:border-box;background:#1b1f27;color:#e6e9ef;border:1px solid #3a4150;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);font:13px -apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden'; var chips=''; TYPES.forEach(function(tp){ var on=tp===c.type; chips+='<button data-type="'+tp+'" style="border:1px solid '+(on?TC[tp]:'#333a47')+';background:'+(on?TC[tp]+'22':'transparent')+';color:'+(on?TC[tp]:'#9aa3b2')+';border-radius:999px;padding:2px 8px;font-size:11px;cursor:pointer;text-transform:capitalize">'+tp+'</button>'; }); var kindRow='<button id="__rcTask" style="border:0;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;background:'+(c.kind==='task'?'#3b82f6':'#2b313c')+';color:#fff">Task</button><button id="__rcNote" style="border:0;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;background:'+(c.kind==='note'?'#3b82f6':'#2b313c')+';color:#fff">Note</button>'; var head='<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid #2b313c">'+chips+'<span style="flex:1"></span>'+kindRow+'<span id="__rcClose" style="cursor:pointer;color:#9aa3b2;padding:0 4px">x</span></div>'; var msgs='<div style="max-height:200px;overflow:auto;padding:10px 12px">'; (c.messages||[]).forEach(function(m,i){ var eb=(i===0)?'<span class="__rcEdit" style="cursor:pointer;color:#6b7280;font-size:11px;margin-left:6px">edit</span>':''; msgs+='<div style="margin-bottom:10px"><div style="font-size:11px;color:#9aa3b2;margin-bottom:2px"><b style="color:#cbd3e1">'+B.esc(m.who)+'</b> &middot; '+B.esc(m.when)+eb+'</div><div class="__rcBody" style="white-space:pre-wrap;word-break:break-word;line-height:1.4">'+B.esc(m.body)+'</div></div>'; }); msgs+='</div>'; var foot='<div style="padding:8px 12px;border-top:1px solid #2b313c;display:flex;gap:6px"><input id="__rcReply" placeholder="Reply..." style="flex:1;min-width:0;background:#12151b;color:#e6e9ef;border:1px solid #3a4150;border-radius:6px;padding:6px 8px;font:13px -apple-system;outline:none"><button id="__rcSend" style="border:0;border-radius:6px;background:#3b82f6;color:#fff;padding:0 12px;cursor:pointer">Send</button>'+(c.resolved?'':'<button id="__rcResolve" style="border:0;border-radius:6px;background:#22331f;color:#4ade80;padding:0 10px;cursor:pointer">Resolve</button>')+'</div>'; card.innerHTML=head+msgs+foot; back.appendChild(card); (document.body||document.documentElement).appendChild(back); card.querySelectorAll('button[data-type]').forEach(function(btn){ btn.onmousedown=function(e){ e.preventDefault(); B.commentType={id:c.id, type:btn.getAttribute('data-type')}; }; }); document.getElementById('__rcTask').onmousedown=function(e){ e.preventDefault(); B.commentKind={id:c.id, kind:'task'}; }; document.getElementById('__rcNote').onmousedown=function(e){ e.preventDefault(); B.commentKind={id:c.id, kind:'note'}; }; document.getElementById('__rcClose').onmousedown=function(e){ e.preventDefault(); B.closeComment(); }; var inp=document.getElementById('__rcReply'); function doSend(){ var v=inp.value.trim(); if(v){ B.commentReply={id:c.id, text:v}; inp.value=''; } } document.getElementById('__rcSend').onmousedown=function(e){ e.preventDefault(); doSend(); }; inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); doSend(); } if(e.key==='Escape'){ B.closeComment(); } }); var rz=document.getElementById('__rcResolve'); if(rz) rz.onmousedown=function(e){ e.preventDefault(); B.commentResolve=c.id; }; var ed=card.querySelector('.__rcEdit'); if(ed){ ed.onmousedown=function(e){ e.preventDefault(); var bodyEl=card.querySelector('.__rcBody'); var ta=document.createElement('textarea'); ta.value=(c.messages[0]&&c.messages[0].body)||''; ta.style.cssText='width:100%;box-sizing:border-box;min-height:54px;background:#12151b;color:#e6e9ef;border:1px solid #3a4150;border-radius:6px;padding:6px;font:13px -apple-system;outline:none'; bodyEl.replaceWith(ta); ta.focus(); ta.addEventListener('keydown',function(ev){ if(ev.key==='Enter'&&(ev.metaKey||ev.ctrlKey)){ ev.preventDefault(); var v=ta.value.trim(); if(v) B.commentEdit={id:c.id, text:v}; } if(ev.key==='Escape'){ B.showComment(c); } }); }; } setTimeout(function(){ inp.focus(); },0); };
   B.closeComment = function(){ var b=document.getElementById('__readoCommentBack'); if(b) b.remove(); };
+  // The credential chip, drawn *in* the page — the pane is a native child window,
+  // so Reado's own DOM can never be on top of it. This is the same place a browser
+  // extension puts its prompt, and the only place one can be. It carries titles and
+  // usernames, never a secret: a pick is buffered here, and Reado does the fetch
+  // and the fill. Clicks must be `isTrusted` — the page can synthesise a click on
+  // its own DOM, and that must not be able to make Reado type a password into it.
+  B.vault = function(items, label){
+    B.vaultClose();
+    var box=document.createElement('div'); box.id='__readoVault';
+    box.style.cssText='position:fixed;z-index:2147483645;top:14px;right:14px;width:320px;box-sizing:border-box;background:#1b1f27;color:#e6e9ef;border:1px solid #3a4150;border-radius:16px;box-shadow:0 18px 48px rgba(0,0,0,.55);font:14px -apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden';
+    var head=document.createElement('div');
+    head.style.cssText='display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #2b313c;font-size:12px;color:#9aa3b2';
+    head.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:#4ade80"></span><span style="flex:1">'+B.esc(label||'Reado')+'</span>';
+    var x=document.createElement('button'); x.textContent='×';
+    x.style.cssText='border:0;background:transparent;color:#9aa3b2;font-size:20px;line-height:1;cursor:pointer;padding:0 2px';
+    x.onclick=function(ev){ if(!ev.isTrusted) return; ev.preventDefault(); B.vaultPick={kind:'close'}; B.vaultClose(); };
+    head.appendChild(x); box.appendChild(head);
+    var list=document.createElement('div'); list.style.cssText='padding:8px';
+    (items||[]).forEach(function(it){
+      var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:6px';
+      var pick=document.createElement('button');
+      pick.style.cssText='flex:1;min-width:0;text-align:left;border:0;border-radius:12px;padding:10px 12px;background:#2a63d8;color:#fff;cursor:pointer;font:600 14px -apple-system,BlinkMacSystemFont,sans-serif';
+      pick.innerHTML='<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+B.esc(it.title)+'</div>'+(it.username?'<div style="font-weight:400;font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+B.esc(it.username)+'</div>':'');
+      pick.onclick=function(ev){ if(!ev.isTrusted) return; ev.preventDefault(); B.vaultPick={kind:'login', id:it.id}; };
+      row.appendChild(pick);
+      if(it.hasOtp){
+        var otp=document.createElement('button'); otp.textContent=(it.otpLabel||'Code');
+        otp.style.cssText='flex:none;border:1px solid #3a4150;border-radius:12px;padding:10px 12px;background:#232833;color:#e6e9ef;cursor:pointer;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif';
+        otp.onclick=function(ev){ if(!ev.isTrusted) return; ev.preventDefault(); B.vaultPick={kind:'otp', id:it.id}; };
+        row.appendChild(otp);
+      }
+      list.appendChild(row);
+    });
+    box.appendChild(list);
+    var note=document.createElement('div'); note.id='__readoVaultNote';
+    note.style.cssText='display:none;padding:0 14px 12px;font-size:12px;color:#9aa3b2';
+    box.appendChild(note);
+    (document.body||document.documentElement).appendChild(box);
+  };
+  // What Reado did with the pick, said where the user is looking.
+  B.vaultNote = function(text){ var n=document.getElementById('__readoVaultNote'); if(!n) return; n.textContent=text||''; n.style.display=text?'block':'none'; };
+  B.vaultClose = function(){ var b=document.getElementById('__readoVault'); if(b) b.remove(); };
   function pathOf(el){ var path=[]; while(el && el!==document.documentElement){ var p=el.parentNode; if(!p||!p.children) break; path.unshift([].indexOf.call(p.children, el)); el=p; } return path; }
   // Pick mode: hover the page to highlight, click to select the node in Reado's tree.
   B.setPick = function(on){ B.pick=!!on; if(!on) B.unhi(); };

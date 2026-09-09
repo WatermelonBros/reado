@@ -11,6 +11,79 @@ commit.
 
 ## [Unreleased]
 
+## [1.16.0] — 2026-09-09
+
+### Changed
+- **The credential prompt is a chip in the page**, where the login form is and on
+  top of it — the pane is a native child window, so the strip in the chrome was
+  the only thing Reado's own DOM could put anywhere near it, and it was a thin,
+  dim thing you had to go looking for. It carries titles and usernames only; the
+  password is still fetched after you pick and goes nowhere but the field.
+- **Extensions install themselves.** An install used to be handed to your
+  terminal: the panel opened, the command was typed into whichever session you
+  had going, and you watched a package manager scroll. Reado runs it in a shell
+  of its own now — a toast when it starts, a toast when it lands, and the
+  installer's output in the log if it doesn't.
+- **The credential strip offers itself on a login page**, the way a browser
+  extension does, instead of waiting behind a toolbar icon to be found.
+
+### Fixed
+- **The editor has completion of its own.** The popup only ever existed as part
+  of the language-server extension, so a file with no server — every language
+  Reado has no server for, and every file in the seconds before one attaches —
+  had no completion at all, not even the words already on screen. It is the
+  editor's now: the language's own completions, the server's when there is one,
+  and the document's words underneath. Tab accepts, as it does everywhere else.
+- **The browser pane is a browser.** Navigating — a link, a redirect, a router
+  pushing a route — left the address bar showing whatever was last typed, so it
+  lied about where you were. Worse, a scan running every two seconds re-navigated
+  the pane to that stale address (or to any dev server it had found), which
+  snapped a page you had just opened back to the start and threw away the history
+  Back would have walked. Back, Forward and Reload appeared broken because there
+  was nothing left for them to work on. The pane now follows the page: the address
+  is the page's own, and a loaded page is left alone.
+- **Suggestions appear as you type.** They defaulted to off — read-first taken to
+  mean the editor should offer nothing until asked — which reads as a broken
+  editor: you type a name that needs an import and *nothing at all* happens, with
+  no way to tell a quiet editor from a dead one. Existing installs are switched on
+  once; turning it back off sticks.
+- **The language server's suggestions reach the popup at all.** The source was
+  rebuilt every time the editor asked for it, and CodeMirror matches a finished
+  query to the source that started it by identity — so every answer arrived
+  belonging to a source that no longer existed and was thrown away. The server
+  replied in milliseconds and the popup showed everything except what it said.
+- **Imports are suggested again — and actually inserted.** Completing a symbol the
+  file never imported typed the name and left the file broken: a server sends an
+  auto-import item as a bare name plus an opaque handle, and the edit that adds
+  the `import` line exists only once the client asks for it. Nothing ever asked.
+  Reado makes that request now, and applies what comes back.
+- **TypeScript 7 projects get a language server that works.** TS 7 is the native
+  compiler — there is no `tsserver.js` left for `typescript-language-server` to
+  drive, so it loaded a stub, reported itself as version 1.0.0 and advertised no
+  completions at all: installed, running, and useless. Such a project now talks to
+  the LSP server in its own compiler, and needs nothing installed to do it.
+- **Backspace no longer throws the session away.** Outside a text field a webview
+  reads it as "go back", and back from Reado's only page unloaded everything —
+  project, editors, terminals — with no undo. It, and Alt+←/→, are cancelled now.
+- **Installing a language server takes effect on the file you're looking at.** It
+  used to change nothing until the window was rebuilt: the file whose missing
+  diagnostics sent you to install it stayed exactly as dead as before.
+- **A search match no longer lands under the sticky scope headers.** They float
+  over the top of the editor, so anything scrolled to the top edge — a find
+  result, a go-to-line, a definition jump — sat behind them, and the click meant
+  for that line hit a header and jumped to the top of the enclosing scope.
+- **The credential strip stays open after it fills a login**, so the one-time
+  code is still there when the site asks for it. It used to close on the fill and
+  take the second half of the sign-in with it.
+- **One 1Password approval instead of one per command.** `op` asks the 1Password
+  app to authorize every invocation it makes, and a single fill is several
+  (list the logins, read each one, fetch the password, fetch the code). Reado
+  signs in once now and reuses the session, re-signing in only when it expires.
+- **A missing language server says so.** No server meant no diagnostics, no
+  import completions and go-to-definition down to whatever the symbol index had
+  seen — silently, which read as a broken editor rather than a missing tool.
+  ⌘-click that resolves nothing says that too.
+
 ## [1.15.0] — 2026-09-08
 
 ### Added
@@ -1531,6 +1604,7 @@ Initial public releases (0.1.0 – 0.1.19).
 - Persist terminal dock position and size across restarts.
 
 [Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.15.0...HEAD
+[1.16.0]: https://github.com/WatermelonBros/reado/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/WatermelonBros/reado/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/WatermelonBros/reado/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/WatermelonBros/reado/compare/v1.12.0...v1.13.0

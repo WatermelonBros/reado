@@ -13,6 +13,7 @@
 // app's CSP `connect-src 'self'` permits it.
 const RELAY = `${location.origin}/__uidriver`
 
+import { completionStatus, currentCompletions, startCompletion } from "@codemirror/autocomplete"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import * as api from "./api"
 import { useBookmarks } from "./bookmarks"
@@ -23,8 +24,11 @@ import { useExtensions } from "./extensions"
 import { useForge } from "./forge"
 import { useGuidedReview } from "./guidedReview"
 import { useHierarchy } from "./hierarchy"
+import { useLayout } from "./layout"
+import { lspAttached, lspSupport } from "./lsp"
 import { useOnboarding } from "./onboarding"
 import { usePreReview } from "./preReview"
+import { usePreview } from "./preview"
 import { useQa } from "./qa"
 import { useReadProgress } from "./readProgress"
 import { useSemanticSearch } from "./semanticSearch"
@@ -57,9 +61,39 @@ import { useUpdate } from "./update"
   useTours,
   usePreReview,
   useHierarchy,
+  useLayout,
   useOnboarding,
+  usePreview,
   useUpdate,
   useExtensions,
+  /** Why the focused editor does or doesn't have code intelligence: whether a
+   *  server is attached to the view, and what would be attached if it isn't. */
+  async lspState() {
+    const view = useDocInfo.getState().view
+    const { root, active } = store.useProject.getState()
+    return {
+      view: !!view,
+      attached: view ? lspAttached(view) : false,
+      enabled: useExtensions.getState().isEnabled("typescript"),
+      supports: active ? !!(await lspSupport(root, active)) : null,
+      active,
+    }
+  },
+  /** Ask the focused editor for completions, and report what the popup makes of
+   *  it — the difference between "no source answered" and "no popup exists". */
+  completionProbe(start = true) {
+    const v = useDocInfo.getState().view
+    if (!v) return { view: false }
+    if (start) startCompletion(v)
+    return {
+      view: true,
+      status: completionStatus(v.state),
+      n: currentCompletions(v.state).length,
+      first: currentCompletions(v.state)
+        .slice(0, 4)
+        .map((c) => c.displayLabel || c.label),
+    }
+  },
   /** Insert text at the current selection in the focused editor. */
   editInsert(text: string) {
     const v = useDocInfo.getState().view

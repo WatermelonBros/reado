@@ -1,3 +1,4 @@
+import { autocompletion } from "@codemirror/autocomplete"
 import { historyField } from "@codemirror/commands"
 import { bracketMatching, indentUnit, LanguageDescription } from "@codemirror/language"
 import { forEachDiagnostic } from "@codemirror/lint"
@@ -64,7 +65,14 @@ import { grammarSupport } from "@/lib/extGrammars"
 import { resolvedLanguageId } from "@/lib/extLanguages"
 import { languages } from "@/lib/languages"
 import { createLogger, safeError } from "@/lib/logger"
-import { hasServer, lspDefinition, lspHover, lspSupport, type ResolvedAction } from "@/lib/lsp"
+import {
+  hasServer,
+  lspDefinition,
+  lspHover,
+  lspSupport,
+  type ResolvedAction,
+  useLspServers,
+} from "@/lib/lsp"
 import { enabledExtensions, useMarketplace } from "@/lib/marketplace"
 import { notify } from "@/lib/notice"
 import { extractSymbols } from "@/lib/outline"
@@ -192,6 +200,9 @@ export function CodeView({
   const tabSizeComp = useMemo(() => new Compartment(), [])
   const indentUnitComp = useMemo(() => new Compartment(), [])
   const lspComp = useMemo(() => new Compartment(), [])
+  const completionComp = useMemo(() => new Compartment(), [])
+  // Changes when a language server is installed, so the open file can pick it up.
+  const serversNonce = useLspServers((s) => s.nonce)
   const changedComp = useMemo(() => new Compartment(), [])
   const diffComp = useMemo(() => new Compartment(), [])
   const blame = useEditorActions((s) => s.blame)
@@ -219,6 +230,7 @@ export function CodeView({
   const cursorStyle = useSettings((s) => s.cursorStyle)
   const cursorBlink = useSettings((s) => s.cursorBlink)
   const scrollbar = useSettings((s) => s.scrollbar)
+  const suggestOnTyping = useSettings((s) => s.suggestOnTyping)
   const inlineDiagnostics = useSettings((s) => s.inlineDiagnostics)
   const lineNumbersComp = useMemo(() => new Compartment(), [])
   const activeLineComp = useMemo(() => new Compartment(), [])
@@ -591,6 +603,7 @@ export function CodeView({
         blameComp,
         diffComp,
         lspComp,
+        completionComp,
         tabSizeComp,
         indentUnitComp,
         wrapComp,
@@ -607,6 +620,7 @@ export function CodeView({
         rulerColumn: effectiveRuler,
         indentGuidesMode,
         wrap,
+        suggestOnTyping,
         renderWhitespace,
         focusMode,
         primary,
@@ -717,6 +731,13 @@ export function CodeView({
     })
   }, [text])
 
+  // Turning suggestions on reaches the file you are looking at, not just the
+  // next one you open.
+  useReconfigure(viewRef, completionComp, autocompletion({ activateOnTyping: suggestOnTyping }), [
+    suggestOnTyping,
+    completionComp,
+  ])
+
   // Reconfigure line wrapping live.
   useReconfigure(viewRef, wrapComp, wrap ? EditorView.lineWrapping : [], [wrap, wrapComp])
 
@@ -788,7 +809,9 @@ export function CodeView({
     return () => {
       cancelled = true
     }
-  }, [path, primary, pinned, lspComp])
+    // `serversNonce`: a server installed while this file is open attaches to it,
+    // instead of waiting for the window to be rebuilt.
+  }, [path, primary, pinned, lspComp, serversNonce])
 
   // Apply the (possibly status-bar-overridden) tab display width, and the unit
   // that auto-indent and Tab actually insert.
@@ -1313,6 +1336,7 @@ export function CodeView({
     <div
       ref={wrapRef}
       className="relative mx-auto h-full w-full"
+      data-code-wrap=""
       data-cursor-style={cursorStyle}
       data-cursor-blink={cursorBlink}
       data-scrollbar={scrollbar}

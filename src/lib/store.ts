@@ -289,7 +289,7 @@ export const DEFAULTS = {
   completionSound: false,
   autoSave: "afterDelay",
   autoSaveDelay: 1000,
-  suggestOnTyping: false,
+  suggestOnTyping: true,
   bracketPairColors: true,
   defaultEol: "auto",
   sidebarSide: "left",
@@ -329,6 +329,32 @@ export function isDefaultSetting(key: keyof typeof DEFAULTS, s: SettingsState): 
   return now === def
 }
 
+/**
+ * Bring a persisted settings blob up to the current shape.
+ *
+ * Exported so the migrations can be tested: each one silently rewrites a value
+ * someone is living with, and getting one wrong is invisible until a user says
+ * a setting "reset itself".
+ */
+export function migrateSettings(state: unknown, version: number): SettingsState {
+  const s = state as Partial<SettingsState>
+  // v0 stored fileIcons as "plain" | "colored"; "plain" → per-type mono.
+  if (version < 1 && (s.fileIcons as string) === "plain") s.fileIcons = "mono"
+  // v2 added the editor reading controls; normalise the numeric ones so a
+  // stale/corrupted persisted value can't reach the editor.
+  if (version < 2) {
+    s.fontSize = clampRange(Number(s.fontSize), FONT_SIZE_RANGE)
+    s.lineHeight = clampRange(Number(s.lineHeight), LINE_HEIGHT_RANGE)
+  }
+  // v3 turns suggestions-as-you-type on. It shipped off, so every existing
+  // install carries a stored `false` that would outlive the new default —
+  // and that stored value was never a choice anyone made, it was just what
+  // the editor came as. Someone who wants it quiet turns it off again, and
+  // that choice survives (this runs once, on the way to v3).
+  if (version < 3) s.suggestOnTyping = true
+  return s as SettingsState
+}
+
 export const useSettings = create<SettingsState>()(
   persist(
     (set, get) => ({
@@ -342,19 +368,8 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: "reado.settings",
-      version: 2,
-      migrate: (state, version) => {
-        const s = state as Partial<SettingsState>
-        // v0 stored fileIcons as "plain" | "colored"; "plain" → per-type mono.
-        if (version < 1 && (s.fileIcons as string) === "plain") s.fileIcons = "mono"
-        // v2 added the editor reading controls; normalise the numeric ones so a
-        // stale/corrupted persisted value can't reach the editor.
-        if (version < 2) {
-          s.fontSize = clampRange(Number(s.fontSize), FONT_SIZE_RANGE)
-          s.lineHeight = clampRange(Number(s.lineHeight), LINE_HEIGHT_RANGE)
-        }
-        return s as SettingsState
-      },
+      version: 3,
+      migrate: migrateSettings,
     },
   ),
 )

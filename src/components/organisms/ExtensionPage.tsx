@@ -255,7 +255,17 @@ function CuratedPage({ id }: { id: string }) {
                 <EnableToggle id={id} />
               </>
             ) : cmd ? (
-              <Button variant="primary" size="sm" onClick={() => runInstall(cmd)}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() =>
+                  runInstall(cmd, {
+                    kind: formatter ? "formatter" : "server",
+                    id: def.id,
+                    name: def.name,
+                  })
+                }
+              >
                 {t("ext.install")}
               </Button>
             ) : (
@@ -339,7 +349,11 @@ function VaultPage({ def }: { def: VaultExt }) {
                 {t("ext.installed")}
               </span>
             ) : cmd ? (
-              <Button variant="primary" size="sm" onClick={() => runInstall(cmd)}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => runInstall(cmd, { kind: "vault", id: def.id, name: def.name })}
+              >
                 {t("ext.install")}
               </Button>
             ) : (

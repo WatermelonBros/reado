@@ -14,10 +14,24 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::proc::on_path;
 
-/// Whether a known language server's binary is installed (on the resolved PATH).
+/// Whether a language server is available for `root`.
+///
+/// "Available" is not always "on PATH": a project on TypeScript 7 answers with
+/// its own compiler, out of its own `node_modules`, and that is an absolute path.
+fn server_available(server: &str, root: &str) -> bool {
+    match server_command(server, root) {
+        Some((bin, _)) if bin.contains(std::path::MAIN_SEPARATOR) => {
+            std::path::Path::new(&bin).is_file()
+        }
+        Some((bin, _)) => on_path(&bin),
+        None => false,
+    }
+}
+
+/// Whether a known language server is installed for this project.
 #[tauri::command]
-pub fn lsp_installed(server: String) -> bool {
-    server_command(&server).is_some_and(|(bin, _)| on_path(bin))
+pub fn lsp_installed(server: String, root: String) -> bool {
+    server_available(&server, &root)
 }
 
 /// The same answer for every server Reado knows, in one call.
@@ -27,13 +41,10 @@ pub fn lsp_installed(server: String) -> bool {
 /// that was two dozen IPC round trips and a few hundred stats every time the
 /// panel mounted.
 #[tauri::command]
-pub fn lsp_installed_all() -> Vec<(String, bool)> {
+pub fn lsp_installed_all(root: String) -> Vec<(String, bool)> {
     SERVER_IDS
         .iter()
-        .map(|id| {
-            let found = server_command(id).is_some_and(|(bin, _)| on_path(bin));
-            ((*id).to_string(), found)
-        })
+        .map(|id| ((*id).to_string(), server_available(id, &root)))
         .collect()
 }
 
@@ -116,44 +127,88 @@ fn truncate_stderr(line: &str) -> String {
 #[derive(Default)]
 pub struct LspState(Mutex<HashMap<String, Server>>);
 
+/// TypeScript's own language server, for a project on TypeScript 7.
+///
+/// TypeScript 7 is the native compiler: `node_modules/typescript/lib` no longer
+/// contains a `tsserver.js` at all, so `typescript-language-server` — which
+/// drives that file — loads a stub, reports itself as version 1.0.0 and
+/// advertises no completion provider. Installed, running, and useless: no
+/// diagnostics, no completions, no imports.
+///
+/// What TypeScript 7 ships instead is an LSP server in the compiler itself
+/// (`tsc --lsp -stdio`). It is the project's own binary, resolved from the
+/// project's own `node_modules` — the same trust as the `tsc` the project builds
+/// with, and the same thing every other editor does with a workspace TypeScript.
+fn project_tsgo(cwd: &str) -> Option<String> {
+    let root = std::path::Path::new(cwd);
+    // TS ≤ 6 keeps a tsserver here; that is typescript-language-server's job.
+    if root
+        .join("node_modules/typescript/lib/tsserver.js")
+        .is_file()
+    {
+        return None;
+    }
+    let bin = root.join("node_modules/.bin/tsc");
+    bin.is_file().then(|| bin.to_string_lossy().into_owned())
+}
+
 /// The command + args for a known language server. The frontend may only ask
 /// for a server by name — the actual binary is chosen here, so a compromised
 /// webview can't turn `lsp_start` into an arbitrary-command primitive.
-fn server_command(server: &str) -> Option<(&'static str, Vec<&'static str>)> {
+///
+/// `cwd` is the project root: a couple of servers are chosen by what the project
+/// itself has (see `project_tsgo`), never by anything the webview says.
+fn server_command(server: &str, cwd: &str) -> Option<(String, Vec<String>)> {
+    let pair = |bin: &str, args: &[&str]| {
+        Some((
+            bin.to_string(),
+            args.iter().map(|a| (*a).to_string()).collect::<Vec<_>>(),
+        ))
+    };
     match server {
-        "typescript" => Some(("typescript-language-server", vec!["--stdio"])),
-        "angular" => Some(("ngserver", vec!["--stdio"])),
-        "rust" => Some(("rust-analyzer", vec![])),
-        "python" => Some(("pyright-langserver", vec!["--stdio"])),
-        "go" => Some(("gopls", vec![])),
-        "cpp" => Some(("clangd", vec![])),
-        "bash" => Some(("bash-language-server", vec!["start"])),
-        "csharp" => Some(("csharp-ls", vec![])),
-        "java" => Some(("jdtls", vec![])),
+        // TypeScript 7 answers LSP itself; older projects go through
+        // typescript-language-server, and so does a project with no node_modules
+        // at all (where there is nothing of the project's to prefer).
+        "typescript" => match project_tsgo(cwd) {
+            Some(tsc) => Some((tsc, vec!["--lsp".into(), "-stdio".into()])),
+            // `tsgo`, the standalone preview of the same server, if it is on PATH.
+            None if on_path("tsgo") => pair("tsgo", &["--lsp", "-stdio"]),
+            None => pair("typescript-language-server", &["--stdio"]),
+        },
+        "angular" => pair("ngserver", &["--stdio"]),
+        "rust" => pair("rust-analyzer", &[]),
+        "python" => pair("pyright-langserver", &["--stdio"]),
+        "go" => pair("gopls", &[]),
+        "cpp" => pair("clangd", &[]),
+        "bash" => pair("bash-language-server", &["start"]),
+        "csharp" => pair("csharp-ls", &[]),
+        "java" => pair("jdtls", &[]),
         // Prefer JetBrains' official kotlin-lsp (far stronger analysis and
         // go-to-definition) when it's on PATH; fall back to the older, weaker
         // fwcd kotlin-language-server otherwise. Expose the official launcher as
         // `kotlin-lsp` on PATH to opt in.
-        "kotlin" => Some(if on_path("kotlin-lsp") {
-            ("kotlin-lsp", vec!["--stdio"])
-        } else {
-            ("kotlin-language-server", vec![])
-        }),
-        "scala" => Some(("metals", vec![])),
-        "ruby" => Some(("ruby-lsp", vec![])),
-        "php" => Some(("intelephense", vec!["--stdio"])),
-        "lua" => Some(("lua-language-server", vec![])),
-        "swift" => Some(("sourcekit-lsp", vec![])),
-        "zig" => Some(("zls", vec![])),
-        "html" => Some(("vscode-html-language-server", vec!["--stdio"])),
-        "css" => Some(("vscode-css-language-server", vec!["--stdio"])),
-        "json" => Some(("vscode-json-language-server", vec!["--stdio"])),
-        "yaml" => Some(("yaml-language-server", vec!["--stdio"])),
-        "vue" => Some(("vue-language-server", vec!["--stdio"])),
-        "svelte" => Some(("svelteserver", vec!["--stdio"])),
-        "solidity" => Some(("solidity-ls", vec!["--stdio"])),
-        "terraform" => Some(("terraform-ls", vec!["serve"])),
-        "toml" => Some(("taplo", vec!["lsp", "stdio"])),
+        "kotlin" => {
+            if on_path("kotlin-lsp") {
+                pair("kotlin-lsp", &["--stdio"])
+            } else {
+                pair("kotlin-language-server", &[])
+            }
+        }
+        "scala" => pair("metals", &[]),
+        "ruby" => pair("ruby-lsp", &[]),
+        "php" => pair("intelephense", &["--stdio"]),
+        "lua" => pair("lua-language-server", &[]),
+        "swift" => pair("sourcekit-lsp", &[]),
+        "zig" => pair("zls", &[]),
+        "html" => pair("vscode-html-language-server", &["--stdio"]),
+        "css" => pair("vscode-css-language-server", &["--stdio"]),
+        "json" => pair("vscode-json-language-server", &["--stdio"]),
+        "yaml" => pair("yaml-language-server", &["--stdio"]),
+        "vue" => pair("vue-language-server", &["--stdio"]),
+        "svelte" => pair("svelteserver", &["--stdio"]),
+        "solidity" => pair("solidity-ls", &["--stdio"]),
+        "terraform" => pair("terraform-ls", &["serve"]),
+        "toml" => pair("taplo", &["lsp", "stdio"]),
         _ => None,
     }
 }
@@ -180,7 +235,7 @@ pub fn lsp_start(
     if map.contains_key(&id) {
         return Ok(());
     }
-    let (command, base_args) = server_command(&server).ok_or_else(|| {
+    let (command, base_args) = server_command(&server, &cwd).ok_or_else(|| {
         crate::log::warn(
             "lsp",
             "unknown server requested",
@@ -188,14 +243,14 @@ pub fn lsp_start(
         );
         format!("unknown server: {server}")
     })?;
-    if !on_path(command) {
+    if !server_available(&server, &cwd) {
         crate::log::warn(
             "lsp",
             "server binary not installed",
             serde_json::json!({ "server": server, "binary": command }),
         );
     }
-    let mut args: Vec<String> = base_args.iter().map(|s| (*s).to_string()).collect();
+    let mut args: Vec<String> = base_args;
     // The Angular server needs to be told where to find typescript and
     // @angular/language-service — the project's own node_modules (the cwd).
     if server == "angular" {
@@ -206,7 +261,7 @@ pub fn lsp_start(
     }
     // crate::proc::command already runs with the login-shell PATH, so nvm/cargo/
     // brew-installed servers resolve here.
-    let mut child = crate::proc::command(command)
+    let mut child = crate::proc::command(&command)
         .args(&args)
         .current_dir(&cwd)
         .stdin(Stdio::piped())
@@ -373,7 +428,10 @@ mod tests {
         // `lsp_installed_all` iterates the id list; an id the allowlist doesn't
         // know would silently report "not installed" forever.
         for id in SERVER_IDS {
-            assert!(server_command(id).is_some(), "{id} has no command");
+            assert!(
+                server_command(id, "/nowhere").is_some(),
+                "{id} has no command"
+            );
         }
     }
     use super::*;
@@ -392,8 +450,37 @@ mod tests {
     }
 
     #[test]
+    fn a_typescript_7_project_answers_with_its_own_compiler() {
+        // TS 7 dropped `tsserver.js`, which is the only thing
+        // typescript-language-server can drive: on such a project it runs but
+        // offers nothing at all, so the project's own LSP-speaking compiler wins.
+        let dir = std::env::temp_dir().join(format!("reado-ts7-{}", std::process::id()));
+        let bin = dir.join("node_modules/.bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("tsc"), "#!/bin/sh\n").unwrap();
+        let root = dir.to_string_lossy().into_owned();
+
+        let (cmd, args) = server_command("typescript", &root).unwrap();
+        assert!(cmd.ends_with("node_modules/.bin/tsc"), "{cmd}");
+        assert_eq!(args, vec!["--lsp", "-stdio"]);
+        // …and it counts as installed, though it is nowhere near PATH.
+        assert!(server_available("typescript", &root));
+
+        // A project still on TS ≤ 6 keeps the server that can drive its tsserver.
+        let lib = dir.join("node_modules/typescript/lib");
+        std::fs::create_dir_all(&lib).unwrap();
+        std::fs::write(lib.join("tsserver.js"), "").unwrap();
+        let (cmd, _) = server_command("typescript", &root).unwrap();
+        assert!(
+            cmd == "typescript-language-server" || cmd == "tsgo",
+            "{cmd}"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn unknown_server_has_no_command() {
-        assert!(server_command("cobol").is_none());
-        assert!(server_command("rust").is_some());
+        assert!(server_command("cobol", "/nowhere").is_none());
+        assert!(server_command("rust", "/nowhere").is_some());
     }
 }

@@ -1,22 +1,29 @@
 /**
  * The editor-side completion and language gates.
  *
- * Reado is a read-first editor: a completion popup appearing while you type
- * would be a behaviour change nobody asked for, so the quiet default is pinned
- * here — but completion itself is available in every file, because a document's
- * own words are the only suggestions a file with no language server can get.
+ * Completion is available in every file — a document's own words are the only
+ * suggestions a file with no language server can get — and it now offers itself
+ * as you type, which is the setting pinned here.
  *
  * The other property pinned here is that sources are registered through
  * `languageData` rather than `override`: `override` replaces every source, and
  * the language server registers its completions the same way, so an `override`
  * silently drops server completions in any file that also has snippets.
  */
+import type { CompletionSource } from "@codemirror/autocomplete"
 import { EditorState } from "@codemirror/state"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/api", () => ({ extRead: vi.fn(), readReadoFile: vi.fn(async () => null) }))
 vi.mock("@/lib/logger", () => ({
   createLogger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+}))
+const lspAttached = vi.fn(() => false)
+// Only the attach check is faked; the rest of the module is real, and other
+// code under test reaches for `langIdFor`.
+vi.mock("@/lib/lsp", async (orig) => ({
+  ...(await orig<typeof import("@/lib/lsp")>()),
+  lspAttached: () => lspAttached(),
 }))
 
 import type { InstalledExt } from "@/lib/api"
@@ -40,6 +47,7 @@ const install = (...exts: InstalledExt[]) => useMarketplace.setState({ installed
 
 beforeEach(() => {
   vi.mocked(extRead).mockReset()
+  lspAttached.mockReturnValue(false)
   install()
 })
 
@@ -83,8 +91,51 @@ describe("contributedSnippets", () => {
     expect(state.languageDataAt<unknown>("autocomplete", 0)).toHaveLength(BASE_SOURCES + 2)
   })
 
-  it("stays quiet while typing unless the reader asks for suggestions", () => {
-    expect(useSettings.getState().suggestOnTyping).toBe(false)
+  it("suggests as you type, which the reader can switch off", () => {
+    // This used to default to off — read-first taken to mean the editor should
+    // not offer anything until asked. It reads as a broken editor instead: you
+    // type a name that needs an import and nothing at all happens, with no way
+    // to tell a quiet editor from a dead one. Read-first is about the default
+    // *view*; while you are typing, an editor that suggests nothing is empty.
+    expect(useSettings.getState().suggestOnTyping).toBe(true)
+  })
+})
+
+describe("the document's own words", () => {
+  /** Ask the word source at the end of `doc`, as CodeMirror would. */
+  const ask = (doc: string) => {
+    const state = EditorState.create({ doc, extensions: contributedSnippets("src/a.ts") })
+    const pos = state.doc.length
+    const [, word] = state.languageDataAt<CompletionSource>("autocomplete", pos)
+    return word(fakeContext(state, pos))
+  }
+
+  /** Enough of a CompletionContext for `completeAnyWord`. */
+  const fakeContext = (state: EditorState, pos: number) =>
+    ({
+      state,
+      pos,
+      explicit: true,
+      view: {} as never,
+      matchBefore(re: RegExp) {
+        const line = state.doc.lineAt(pos)
+        const text = state.sliceDoc(line.from, pos)
+        const found = text.search(new RegExp(`${re.source}$`))
+        return found < 0 ? null : { from: line.from + found, to: pos, text: text.slice(found) }
+      },
+    }) as unknown as Parameters<CompletionSource>[0]
+
+  it("is what a file with no language server completes from", async () => {
+    // Most languages have no server, and every file has seconds before one
+    // attaches. Neither should mean the editor suggests nothing at all.
+    const result = await ask("interestingName = 1\nconst x = intere")
+    expect(result?.options.map((o) => o.label)).toContain("interestingName")
+  })
+
+  it("stands down once a language server is attached", async () => {
+    // The server's list is the better answer; both at once names everything twice.
+    lspAttached.mockReturnValue(true)
+    expect(await ask("interestingName = 1\nconst x = intere")).toBeNull()
   })
 })
 

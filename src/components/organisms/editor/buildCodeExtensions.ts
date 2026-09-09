@@ -1,4 +1,9 @@
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete"
+import {
+  acceptCompletion,
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+} from "@codemirror/autocomplete"
 import {
   defaultKeymap,
   history,
@@ -68,6 +73,7 @@ import {
   lineNumbersExt,
   linkField,
   rulerExt,
+  stickyScrollMargin,
 } from "./extensions"
 
 /** Everything the CodeMirror extensions array references that is not a
@@ -93,6 +99,7 @@ export interface CodeExtensionsCtx {
   /** The indentation unit auto-indent and Tab insert (tabs, or N spaces). */
   indentUnitComp: Compartment
   wrapComp: Compartment
+  completionComp: Compartment
   /** Swatches beside colour literals; empty when the setting is off. */
   colorComp: Compartment
   /** Bracket tinting by nesting depth; empty when the setting is off. */
@@ -108,6 +115,8 @@ export interface CodeExtensionsCtx {
   rulerColumn: number
   indentGuidesMode: "off" | "all" | "active"
   wrap: boolean
+  /** Whether the popup opens as you type, or waits for ⌃Space. */
+  suggestOnTyping: boolean
   /** Built by CodeView, which owns the click handler. */
   colorSwatchesExt: Extension
   renderWhitespace: boolean
@@ -177,6 +186,10 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
       { key: "Shift-Alt-ArrowRight", run: expandSelection },
       { key: "Shift-Alt-ArrowLeft", run: shrinkSelection },
     ]),
+    // The completion popup. Its sources come from elsewhere (the language, the
+    // snippets, the server); this is the popup itself, in a compartment so
+    // "suggest as you type" applies to a file that is already open.
+    ctx.completionComp.of(autocompletion({ activateOnTyping: ctx.suggestOnTyping })),
     // Find & replace panel (Mod-F to find, Mod-Alt-F to replace).
     search({ top: true, createPanel: readoSearchPanel }),
     // Mirror the cursor position into the status bar; track unsaved edits.
@@ -242,6 +255,7 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     contributedSnippets(ctx.relPath),
     contributedLanguage(ctx.path),
     gotoDefinitionHandlers,
+    stickyScrollMargin,
     // F12 jumps to the definition of the symbol at the cursor.
     keymap.of([
       {
@@ -323,6 +337,11 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // Undo/redo: the history field plus its keymap (Mod-z / Mod-Shift-z).
     // These bindings live in historyKeymap, not defaultKeymap.
     history(),
+    // Tab accepts the selected completion, as it does in VS Code — ahead of
+    // Emmet and indent, both of which would otherwise eat the key while the
+    // list is open. `acceptCompletion` declines when no list is open, so Tab
+    // still indents everywhere else.
+    keymap.of([{ key: "Tab", run: acceptCompletion }]),
     // Emmet sits directly in front of `indentWithTab`: it declines unless an
     // abbreviation really is under the cursor in a markup context, and Tab goes
     // on to indent whenever it does.

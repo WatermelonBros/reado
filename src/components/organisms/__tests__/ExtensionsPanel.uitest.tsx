@@ -18,8 +18,11 @@ const ovsxSearch = vi.fn()
 const ovsxInstall = vi.fn()
 const ovsxInstalled = vi.fn(async () => [])
 const ovsxUninstall = vi.fn(async () => {})
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }))
 vi.mock("../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../lib/api")>()),
+  ptySpawn: vi.fn(async () => {}),
+  ptyKill: vi.fn(async () => {}),
   lspInstalled: (server: string) => lspInstalled(server),
   lspInstalledAll: () => lspInstalledAll(),
   linuxPackageManager: vi.fn(async () => null),
@@ -155,13 +158,15 @@ describe("ExtensionsPanel", () => {
     expect(ovsxSearch).toHaveBeenCalledWith("", expect.any(String), 0, 20, "downloads")
   })
 
-  it("installs a curated tool through the terminal", async () => {
+  it("installs a curated tool without touching the user's terminal", async () => {
     render(<ExtensionsPanel />)
     await showLanguages()
     await waitFor(() => expect(lspInstalled).toHaveBeenCalled())
     await userEvent.click(tsRow().getByRole("button", { name: "ext.install" }))
-    expect(submitToTerminal).toHaveBeenCalledTimes(1)
+    // The install runs in a shell of Reado's own — the panel never opens.
+    await waitFor(() => expect(submitToTerminal).toHaveBeenCalled())
     expect(submitToTerminal.mock.calls[0][1]).toContain("typescript-language-server")
+    expect(useTerminals.getState().open).toBe(false)
   })
 
   it("installs a registry extension in place", async () => {

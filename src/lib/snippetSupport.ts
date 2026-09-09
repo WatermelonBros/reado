@@ -2,18 +2,18 @@
  * Completion sources wired into the editor: the project's own snippets,
  * snippets contributed by extensions, and the words already in the document.
  *
- * Reado is a read-first editor, so completion is *available* everywhere but
- * quiet by default: nothing pops up while you type unless `suggestOnTyping` is
- * on, and ⌃Space always asks for it.
+ * Completion is available in every file and offers itself as you type
+ * (`suggestOnTyping`, which can be switched off); ⌃Space always asks for it.
  */
-import { autocompletion, type CompletionSource, completeAnyWord } from "@codemirror/autocomplete"
+import { type CompletionSource, completeAnyWord } from "@codemirror/autocomplete"
 import { LanguageDescription } from "@codemirror/language"
 import { EditorState, type Extension } from "@codemirror/state"
 import { contributedLanguageData, resolvedLanguageId } from "./extLanguages"
 import { hasSnippets, snippetsFor } from "./extSnippets"
 import { languages } from "./languages"
+import { lspAttached } from "./lsp"
 import { enabledExtensions, useMarketplace } from "./marketplace"
-import { useProject, useSettings } from "./store"
+import { useProject } from "./store"
 import { invalidateSnippets, projectSnippets } from "./userSnippets"
 
 // Anything that changes files on disk bumps `treeNonce` — including a save of
@@ -78,16 +78,22 @@ const projectSource =
  * completions (registered the same way by `serverCompletion()`) would be
  * silently dropped in any file that also had snippets.
  */
+/** The document's own words — the floor under every file, and the only source at
+ *  all in a language with no server and no snippets. It stands down once a
+ *  language server is attached: that list is the better answer, and both at once
+ *  names everything twice. */
+const wordSource: CompletionSource = (context) =>
+  context.view && lspAttached(context.view) ? null : completeAnyWord(context)
+
 export function contributedSnippets(path: string): Extension {
   const installed = enabledExtensions(useMarketplace.getState().installed)
-  const sources: CompletionSource[] = [completeAnyWord]
+  const sources: CompletionSource[] = [wordSource]
   if (hasSnippets(installed, resolvedLanguageId(installed, path))) sources.unshift(source(path))
   sources.unshift(projectSource(path))
   const data = sources.map((autocomplete) => ({ autocomplete }))
-  return [
-    autocompletion({ activateOnTyping: useSettings.getState().suggestOnTyping }),
-    EditorState.languageData.of(() => data),
-  ]
+  // Sources only. The popup itself is configured by the editor, in a compartment,
+  // so "suggest as you type" can be switched on for a file already open.
+  return EditorState.languageData.of(() => data)
 }
 
 /**

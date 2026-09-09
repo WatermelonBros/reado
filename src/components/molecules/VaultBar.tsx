@@ -25,6 +25,9 @@ import {
   fillOtpScript,
   pageString,
   USERNAME_JS,
+  VAULT_CHIP_CLOSE_JS,
+  vaultChipScript,
+  vaultNoteScript,
 } from "@/lib/vault"
 
 const ROW = "flex items-center gap-2 px-2 py-1 text-xs"
@@ -56,6 +59,15 @@ export function VaultBar({
   const [password, setPassword] = useState("")
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
+  // The login we just filled. The strip used to close itself the moment a fill
+  // landed, which took the one-time code with it — the second half of the login
+  // it had just started. It stays; this is what it points at.
+  const [filled, setFilled] = useState<string | null>(null)
+  // The chip is drawn in the page itself — over it, where the login form is. The
+  // strip is what's left for what the chip can't do (no CLI, a locked vault,
+  // saving a new login) and for a page the bridge couldn't reach.
+  const [chip, setChip] = useState(false)
+  const pick = usePreview((s) => s.vaultPick)
 
   // Ask the backend what it is and what it has for this page. Re-runs when the
   // page changes, so the list is never about the previous origin.
@@ -90,10 +102,64 @@ export function VaultBar({
     }
   }
 
-  const report = (res: FillResult) => {
-    if (!res.ok) setNote(t(`vault.missing.${res.missing ?? "password"}`))
-    else onClose()
+  const report = (res: FillResult, item?: VaultItem) => {
+    const text = res.ok
+      ? t(item?.hasOtp ? "vault.filledThenOtp" : "vault.filled")
+      : t(`vault.missing.${res.missing ?? "password"}`)
+    if (res.ok) setFilled(item?.id ?? null)
+    setNote(text)
+    // Say it where the user is looking, which is the page, not the strip.
+    if (chip) void evalInPage(vaultNoteScript(text)).catch(() => {})
   }
+
+  /** Fetch this login's password and put it in the form. */
+  const fillLogin = (it: VaultItem) =>
+    guard(async () => {
+      const secret = await vaultSecret(it.id)
+      report(await fill(fillLoginScript(it.username, secret), secret, evalInPage), it)
+    })
+
+  /** Fetch this login's current one-time code and put it in the form. */
+  const fillCode = (it: VaultItem) =>
+    guard(async () => {
+      const code = await vaultOtp(it.id)
+      report(await fill(fillOtpScript(code), code, evalInPage))
+    })
+
+  // Draw the chip in the page whenever there is something to offer, and take it
+  // down when this strip goes away — a credential prompt must not outlive the
+  // pane that owns it. `vault()` answers false on a page the bridge never
+  // reached (it hasn't loaded yet, or it's a blank tab); the strip stays then.
+  // Plain strings, not `t` itself: the translator is a fresh function on every
+  // render, and a chip redrawn on every render is one that flickers and fights
+  // whatever the user is doing in it.
+  const chipTitle = t("vault.chipTitle")
+  const otpLabel = t("vault.otp")
+  useEffect(() => {
+    if (!items?.length) return setChip(false)
+    let alive = true
+    void evalInPage(vaultChipScript(items, chipTitle, otpLabel))
+      .then((raw) => alive && setChip(raw === "true"))
+      .catch(() => alive && setChip(false))
+    return () => {
+      alive = false
+      void evalInPage(VAULT_CHIP_CLOSE_JS).catch(() => {})
+    }
+  }, [items, evalInPage, chipTitle, otpLabel])
+
+  // A click in the chip. It comes back through the capture bridge, so this is
+  // where it turns into the same fill the strip's own buttons do.
+  useEffect(() => {
+    if (!pick) return
+    usePreview.getState().setVaultPick(null)
+    if (pick.kind === "close") return onClose()
+    const it = items?.find((i) => i.id === pick.id)
+    if (!it) return
+    void (pick.kind === "otp" ? fillCode(it) : fillLogin(it))
+    // `fillLogin`/`fillCode` are rebuilt each render; the pick identity is what
+    // gates this, and acting on it twice would fetch the credential twice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pick])
 
   const body = () => {
     if (!status) return <span className="text-faint">{t("vault.checking")}</span>
@@ -148,12 +214,7 @@ export function VaultBar({
                   size="sm"
                   variant="secondary"
                   disabled={busy}
-                  onClick={() =>
-                    void guard(async () => {
-                      const secret = await vaultSecret(it.id)
-                      report(await fill(fillLoginScript(it.username, secret), secret, evalInPage))
-                    })
-                  }
+                  onClick={() => void fillLogin(it)}
                 >
                   <span className="truncate">{it.title}</span>
                   {it.username && <span className="text-faint">{it.username}</span>}
@@ -161,14 +222,9 @@ export function VaultBar({
                 {it.hasOtp && (
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant={filled === it.id ? "primary" : "ghost"}
                     disabled={busy}
-                    onClick={() =>
-                      void guard(async () => {
-                        const code = await vaultOtp(it.id)
-                        report(await fill(fillOtpScript(code), code, evalInPage))
-                      })
-                    }
+                    onClick={() => void fillCode(it)}
                   >
                     {t("vault.otp")}
                   </Button>
@@ -197,6 +253,10 @@ export function VaultBar({
       </>
     )
   }
+
+  // The chip is up and carries the whole offer: a second copy in the chrome is
+  // just the small, dim thing it was meant to replace.
+  if (chip) return null
 
   return (
     <div className={`${ROW} flex-none border-b border-line bg-surface`}>

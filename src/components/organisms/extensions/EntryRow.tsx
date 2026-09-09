@@ -107,7 +107,11 @@ export function EntryRow({
             <span className="flex-none text-xs text-faint">{t("ext.manual")}</span>
           )
         }
-        onInstall={cmd ? () => runInstall(cmd) : undefined}
+        onInstall={
+          cmd
+            ? () => runInstall(cmd, { kind: "vault", id: entry.def.id, name: entry.def.name })
+            : undefined
+        }
         note={entry.def.requires ? t("ext.requires", { name: entry.def.requires }) : undefined}
       />
     )
@@ -138,7 +142,16 @@ export function EntryRow({
           <span className="flex-none text-xs text-faint">{t("ext.manual")}</span>
         )
       }
-      onInstall={cmd ? () => runInstall(cmd) : undefined}
+      onInstall={
+        cmd
+          ? () =>
+              runInstall(cmd, {
+                kind: entry.kind === "server" ? "server" : "formatter",
+                id: def.id,
+                name: def.name,
+              })
+          : undefined
+      }
       note={
         entry.kind === "formatter" ? (
           entry.status?.declared ? (

@@ -44,6 +44,7 @@ import {
   setBlock,
   setLanding,
   setLink,
+  stickyScrollMargin,
   useReconfigure,
 } from "@/components/organisms/editor/extensions"
 import { useProject, useWorkspace } from "@/lib/store"
@@ -209,6 +210,38 @@ describe("stringLiteralAt (via goToDefinitionAt)", () => {
       )
       v.destroy()
     }
+  })
+})
+
+describe("stickyScrollMargin", () => {
+  /** Mount an editor inside a code wrap, optionally with sticky headers of
+   *  `height` floating over it (happy-dom lays nothing out, so the height is
+   *  stubbed the way a real browser would report it). */
+  function mountWithSticky(height: number | null) {
+    const wrap = document.createElement("div")
+    wrap.setAttribute("data-code-wrap", "")
+    document.body.appendChild(wrap)
+    if (height !== null) {
+      const sticky = document.createElement("div")
+      sticky.setAttribute("data-sticky-headers", "")
+      Object.defineProperty(sticky, "offsetHeight", { value: height })
+      wrap.appendChild(sticky)
+    }
+    view = new EditorView({
+      state: EditorState.create({ doc: "a\nb\nc", extensions: stickyScrollMargin }),
+      parent: wrap,
+    })
+    return view.state.facet(EditorView.scrollMargins)[0](view)
+  }
+
+  it("reserves the height of the sticky headers at the top", () => {
+    expect(mountWithSticky(48)).toEqual({ top: 48 })
+  })
+
+  it("reserves nothing when no headers are showing", () => {
+    expect(mountWithSticky(null)).toBe(null)
+    view?.destroy()
+    expect(mountWithSticky(0)).toBe(null)
   })
 })
 

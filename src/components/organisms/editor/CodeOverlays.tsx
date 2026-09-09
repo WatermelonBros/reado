@@ -55,7 +55,10 @@ export function StickyHeaders({
 }) {
   const { t } = useTranslation()
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 border-b border-line bg-canvas">
+    <div
+      data-sticky-headers=""
+      className="pointer-events-none absolute inset-x-0 top-0 z-10 border-b border-line bg-canvas"
+    >
       {headers.map((h) => (
         <button
           key={h.line}

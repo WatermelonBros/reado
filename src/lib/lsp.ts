@@ -8,17 +8,24 @@
  * fails and we silently fall back to the index-based features.
  */
 
+import {
+  type Completion,
+  type CompletionContext,
+  type CompletionSource,
+  insertCompletionText,
+  snippet,
+} from "@codemirror/autocomplete"
 import { getIndentUnit, indentUnit } from "@codemirror/language"
 import { type Diagnostic, forEachDiagnostic, setDiagnostics } from "@codemirror/lint"
 import type { Transport } from "@codemirror/lsp-client"
+import { LSPClient, LSPPlugin, renameKeymap, signatureHelp } from "@codemirror/lsp-client"
 import {
-  LSPClient,
-  LSPPlugin,
-  renameKeymap,
-  serverCompletion,
-  signatureHelp,
-} from "@codemirror/lsp-client"
-import { type Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state"
+  EditorState,
+  type Extension,
+  RangeSetBuilder,
+  StateEffect,
+  StateField,
+} from "@codemirror/state"
 import {
   Decoration,
   type DecorationSet,
@@ -31,10 +38,20 @@ import {
   WidgetType,
 } from "@codemirror/view"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
-import { type Backup, lspSend, lspStart, lspStop, readFile, resolvePath, writeBacked } from "./api"
+import { create } from "zustand"
+import {
+  type Backup,
+  lspInstalled,
+  lspSend,
+  lspStart,
+  lspStop,
+  readFile,
+  resolvePath,
+  writeBacked,
+} from "./api"
 import { toRelative } from "./comments"
 import { useDiagnostics } from "./diagnostics"
-import { useExtensions } from "./extensions"
+import { LANG_SERVERS, useExtensions } from "./extensions"
 import { useFileUndo } from "./fileUndo"
 import { createLogger } from "./logger"
 import { notify } from "./notice"
@@ -478,13 +495,220 @@ function lspHoverTooltip() {
  * pipeline (which tries the server first, then a configured formatter). Two
  * bindings on one key meant the document was formatted twice. */
 const clientExtensions = () => [
-  serverCompletion(),
+  completionWithImports(),
   lspHoverTooltip(),
   keymap.of([...renameKeymap]),
   signatureHelp(),
   serverDiagnostics(),
   inlayHints(),
 ]
+
+// ---- Completion, with the import it needs -------------------------------
+
+/** A completion item, in the parts we use. */
+export interface LspCompletionItem {
+  label: string
+  labelDetails?: { detail?: string; description?: string }
+  kind?: number
+  detail?: string
+  documentation?: string | { value: string }
+  sortText?: string
+  filterText?: string
+  insertText?: string
+  insertTextFormat?: number
+  textEdit?: { newText: string; range?: LspRange; insert?: LspRange; replace?: LspRange }
+  textEditText?: string
+  additionalTextEdits?: LspTextEdit[]
+  /** Opaque: handed back verbatim in `completionItem/resolve`. */
+  data?: unknown
+}
+interface LspRange {
+  start: LspPos
+  end: LspPos
+}
+interface LspCompletionList {
+  isIncomplete?: boolean
+  items: LspCompletionItem[]
+}
+
+// LSP CompletionItemKind → CodeMirror's completion types (which drive the icon).
+const COMPLETION_TYPE: Record<number, string> = {
+  2: "method",
+  3: "function",
+  4: "class",
+  5: "property",
+  6: "variable",
+  7: "class",
+  8: "interface",
+  9: "namespace",
+  10: "property",
+  11: "keyword",
+  12: "constant",
+  13: "enum",
+  14: "keyword",
+  21: "constant",
+  22: "type",
+  23: "variable",
+  25: "type",
+}
+
+/** LSP snippet syntax (`$1`, `${1:name}`) in CodeMirror's (`${name}`). */
+const toCmSnippet = (text: string) =>
+  text.replace(/\\([$}\\])|\$(\d+)|\$\{\d+:([^}]*)\}/g, (_m, esc, field, named) =>
+    esc ? esc : named !== undefined ? `\${${named}}` : `\${${field}}`,
+  )
+
+/**
+ * Completion from the language server — including the import the completed
+ * symbol needs.
+ *
+ * `serverCompletion()` from `@codemirror/lsp-client` applies an item's
+ * `additionalTextEdits` (the import line) only when the server sent them with the
+ * item. No TypeScript server does: an auto-import item arrives as a bare name
+ * plus an opaque `data`, and the edit that adds `import { useState } from "react"`
+ * exists only once the client asks for it with `completionItem/resolve`. Nothing
+ * in the library ever asks, so accepting `useState` in a file that never imported
+ * it typed the name and left the file broken — the import was never suggested,
+ * because the only thing that knew about it was never consulted.
+ *
+ * So the request is ours: the list comes back as it does anywhere else, and
+ * accepting an item resolves it first and applies whatever edits come with it.
+ */
+function lspCompletionSource(): CompletionSource {
+  return async (ctx: CompletionContext) => {
+    const plugin = ctx.view && LSPPlugin.get(ctx.view)
+    const provider = plugin?.client.serverCapabilities?.completionProvider as
+      | { triggerCharacters?: string[] }
+      | undefined
+    // `serverCapabilities` is null until `initialize` comes back; a server that
+    // answered and offers no completion is a different thing, and stays quiet.
+    if (!plugin || (plugin.client.serverCapabilities && !provider)) return null
+    const before = ctx.state.sliceDoc(ctx.pos - 1, ctx.pos)
+    const triggers = provider?.triggerCharacters
+    const isTrigger = !!triggers?.includes(before)
+    if (!ctx.explicit && !isTrigger && !/[\w$]/.test(before)) return null
+
+    plugin.client.sync()
+    const res = await plugin.client
+      .request<object, LspCompletionList | LspCompletionItem[] | null>("textDocument/completion", {
+        textDocument: { uri: plugin.uri },
+        position: plugin.toPosition(ctx.pos),
+        context: isTrigger
+          ? { triggerKind: 2, triggerCharacter: before }
+          : { triggerKind: ctx.explicit ? 1 : 1 },
+      })
+      .catch(() => null)
+    if (!res) return null
+    const list = Array.isArray(res) ? { items: res } : res
+    if (!list.items.length) return null
+
+    const word = ctx.state.wordAt(ctx.pos)
+    const from = word ? word.from : ctx.pos
+    return {
+      from,
+      // An incomplete list must be re-requested as the user keeps typing —
+      // TypeScript sends one for member access, and reusing it shows stale names.
+      validFor: list.isIncomplete ? undefined : /^[\w$]*$/,
+      options: list.items.map((item) => ({
+        label: item.filterText || item.label,
+        displayLabel: item.label,
+        type: item.kind ? COMPLETION_TYPE[item.kind] : undefined,
+        // What the item is, or where it would be imported from — the "react"
+        // beside `useState` that says this one carries an import.
+        detail: item.labelDetails?.description ?? item.detail,
+        sortText: item.sortText,
+        info: item.documentation
+          ? () =>
+              renderHoverDoc(
+                typeof item.documentation === "string"
+                  ? item.documentation
+                  : (item.documentation?.value ?? ""),
+              )
+          : undefined,
+        apply: (view: EditorView, _c: Completion, aFrom: number, aTo: number) =>
+          applyCompletion(plugin, view, item, aFrom, aTo),
+      })),
+    }
+  }
+}
+
+/**
+ * Put an accepted item in the document, then the edits it depends on. Exported
+ * for the test that pins the import actually arriving.
+ *
+ * The insert happens now — typing must not wait on a round trip — and the import
+ * lands when the server answers, as a second transaction. `changeFilter`-safe:
+ * the edit's positions are computed against the document as it is when it
+ * arrives, not as it was when the request went out.
+ */
+export function applyCompletion(
+  plugin: LSPPlugin,
+  view: EditorView,
+  item: LspCompletionItem,
+  from: number,
+  to: number,
+): void {
+  const text = item.textEdit?.newText ?? item.textEditText ?? item.insertText ?? item.label
+  if (item.insertTextFormat === 2) snippet(toCmSnippet(text))(view, null, from, to)
+  else view.dispatch(insertCompletionText(view.state, text, from, to))
+
+  const edits = item.additionalTextEdits
+  if (edits?.length) {
+    applyExtraEdits(plugin, view, edits)
+    return
+  }
+  // Nothing to resolve: an item with no `data` has already told us everything.
+  if (item.data === undefined) return
+  plugin.client
+    .request<LspCompletionItem, LspCompletionItem | null>("completionItem/resolve", item)
+    .then((full) => {
+      if (full?.additionalTextEdits?.length) {
+        applyExtraEdits(plugin, view, full.additionalTextEdits)
+      }
+    })
+    .catch((e) => log.warn("completion resolve failed", { error: String(e) }))
+}
+
+/** Apply an item's extra edits (the import line) to the live document. */
+function applyExtraEdits(plugin: LSPPlugin, view: EditorView, edits: LspTextEdit[]): void {
+  const doc = view.state.doc
+  const changes = edits
+    // An edit that no longer fits the document (the user kept typing, or deleted
+    // past it) is dropped rather than throwing in the middle of a completion.
+    .map((e) => {
+      try {
+        const from = plugin.fromPosition(e.range.start, doc)
+        const to = plugin.fromPosition(e.range.end, doc)
+        return from >= 0 && to <= doc.length && from <= to ? { from, to, insert: e.newText } : null
+      } catch {
+        return null
+      }
+    })
+    .filter((c) => c !== null)
+  if (changes.length) view.dispatch({ changes })
+}
+
+/**
+ * The server's completions, as a source on the editor's existing popup.
+ *
+ * The array is not decoration: `LSPClient` keeps an extension only when it is an
+ * array or carries an `extension` property, and a bare facet provider is neither
+ * — handed one directly, it drops it without a word, and the server's
+ * completions never reach the editor at all.
+ */
+// Built once, deliberately. CodeMirror matches a finished query back to the
+// source that started it *by identity*, so a provider that mints a new function
+// each time it is asked can never have its results accepted: every answer
+// arrives belonging to a source that no longer exists, and the completion sits
+// in "pending" forever — the server replies, and nothing is ever shown.
+const LSP_COMPLETION = [{ autocomplete: lspCompletionSource() }]
+
+export const completionWithImports = () => [EditorState.languageData.of(() => LSP_COMPLETION)]
+
+/** Is a language server attached to this view? The editor's own word completion
+ *  steps aside when one is: a server's list is the better answer, and both at
+ *  once is the same name twice. */
+export const lspAttached = (view: EditorView) => !!LSPPlugin.get(view)
 
 interface LspLocation {
   uri: string
@@ -1113,6 +1337,62 @@ function isAngularProject(root: string): Promise<boolean> {
   return p
 }
 
+// Whether each server's binary is on PATH, probed once per session, and which
+// absences we've already reported.
+const installProbe = new Map<string, Promise<boolean>>()
+const missingNotified = new Set<string>()
+
+/**
+ * Bumped whenever the set of installed servers may have changed — an install
+ * finishing, mainly.
+ *
+ * Open editors watch it and try to attach again. Installing a language server
+ * used to change nothing at all until the window was rebuilt: the file you were
+ * looking at, the one whose missing diagnostics sent you to install it, stayed
+ * exactly as dead as before.
+ */
+export const useLspServers = create<{ nonce: number; refresh: () => void }>((set) => ({
+  nonce: 0,
+  refresh: () => {
+    installProbe.clear()
+    missingNotified.clear()
+    set((s) => ({ nonce: s.nonce + 1 }))
+  },
+}))
+
+/** Re-probe for servers and let open editors attach to a new one. */
+export const refreshLspServers = () => useLspServers.getState().refresh()
+
+/**
+ * Is this server's binary actually installed?
+ *
+ * A missing server is the difference between an editor that knows the code and
+ * one that guesses at it: no diagnostics, no import completions, and
+ * go-to-definition down to whatever the symbol index happens to have seen. That
+ * used to fail completely silently — `lsp_start` threw, we returned null, and
+ * the editor just looked broken. Now it says so once per server, with the name
+ * to install.
+ *
+ * A probe that itself fails answers "installed" so a broken check never blocks
+ * a server that would have started.
+ */
+function checkInstalled(id: string, root: string): Promise<boolean> {
+  const key = `${id}:${root}`
+  let p = installProbe.get(key)
+  if (!p) {
+    p = lspInstalled(id, root).catch(() => true)
+    installProbe.set(key, p)
+  }
+  return p.then((ok) => {
+    if (!ok && !missingNotified.has(id)) {
+      missingNotified.add(id)
+      const ext = LANG_SERVERS.find((e) => e.id === id)
+      notify("info", t("lsp.serverMissing", { name: ext?.name ?? id }))
+    }
+    return ok
+  })
+}
+
 /**
  * The LSP editor extension for `path` in `root`, or null when no server is
  * configured/installed for the file's language.
@@ -1129,6 +1409,7 @@ export async function lspSupport(root: string, path: string): Promise<Extension 
     server = { id: "angular", exts: server?.exts ?? [ext] }
   }
   if (!server) return null
+  if (!(await checkInstalled(server.id, root))) return null
   try {
     const { client } = await connect(server, root)
     return LSPPlugin.create(client, toUri(path), langIdFor(path))

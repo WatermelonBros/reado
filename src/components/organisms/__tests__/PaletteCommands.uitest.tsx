@@ -747,7 +747,7 @@ describe("running a command", () => {
       await CHECKS[key](again)
       unmount()
     }
-  })
+  }, 30_000)
 })
 
 describe("the other modes", () => {

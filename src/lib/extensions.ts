@@ -66,7 +66,7 @@ export const LANG_SERVERS: LangServerExt[] = [
     id: "typescript",
     name: "TypeScript / JavaScript / React",
     description:
-      "typescript-language-server — types, diagnostics and navigation for TS, JS, and React (JSX/TSX).",
+      "Types, diagnostics, imports and navigation for TS, JS and React (JSX/TSX). A project on TypeScript 7 needs nothing installed — its own compiler answers; older projects use typescript-language-server.",
     install: all("npm install -g typescript-language-server typescript"),
     requires: "Node.js",
   },

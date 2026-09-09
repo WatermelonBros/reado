@@ -7,6 +7,7 @@
  */
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import type { VaultPick } from "./vault"
 
 /** A sensible default dev-server URL; the user edits it in the pane's URL bar. */
 const DEFAULT_URL = "http://localhost:5173"
@@ -100,6 +101,10 @@ interface PreviewState {
   /** A refused agent command waiting on the user: the page it asked about. The
    *  agent already got its refusal; this only drives Reado's own prompt. */
   accessRequest: string | null
+  /** The last pick from the in-page credential chip, waiting to be acted on. The
+   *  chip lives in the page (the pane is a native window), so a click there
+   *  reaches Reado through the capture bridge and lands here. */
+  vaultPick: VaultPick | null
   /** Chosen viewport size to emulate, or null for "fit the pane" (responsive). */
   device: { w: number; h: number; label: string } | null
   /** Docked pane width in px (layout space); the editor takes the rest. */
@@ -124,6 +129,7 @@ interface PreviewState {
   addAllowedOrigin: (origin: string) => void
   addSecret: (value: string) => void
   grantPage: (url: string | null) => void
+  setVaultPick: (pick: VaultPick | null) => void
   setAccessRequest: (url: string | null) => void
   setDevice: (d: { w: number; h: number; label: string } | null) => void
   setPaneWidth: (w: number) => void
@@ -151,6 +157,7 @@ export const usePreview = create<PreviewState>()(
       secrets: [],
       grantedUrl: null,
       accessRequest: null,
+      vaultPick: null,
       device: null,
       paneWidth: 640,
       browserZoom: 1,
@@ -161,7 +168,9 @@ export const usePreview = create<PreviewState>()(
       // so is any access the user granted for it.
       setUrl: (url) =>
         set((s) =>
-          s.url === url ? { url } : { url, secrets: [], grantedUrl: null, accessRequest: null },
+          s.url === url
+            ? { url }
+            : { url, secrets: [], grantedUrl: null, accessRequest: null, vaultPick: null },
         ),
       toggleInspector: () => set((s) => ({ inspector: !s.inspector })),
       setInspectorPos: (p) => set({ inspectorPos: p }),
@@ -175,6 +184,7 @@ export const usePreview = create<PreviewState>()(
       addSecret: (value) =>
         set((s) => (s.secrets.includes(value) ? s : { secrets: [...s.secrets, value] })),
       grantPage: (grantedUrl) => set({ grantedUrl, accessRequest: null }),
+      setVaultPick: (vaultPick) => set({ vaultPick }),
       setAccessRequest: (accessRequest) => set({ accessRequest }),
       setDevice: (device) => set({ device }),
       setPaneWidth: (w) => set({ paneWidth: Math.max(320, w) }),
@@ -193,6 +203,7 @@ export const usePreview = create<PreviewState>()(
           secrets: [],
           grantedUrl: null,
           accessRequest: null,
+          vaultPick: null,
         }),
     }),
     // Persist the URL and the agent opt-in across restarts.

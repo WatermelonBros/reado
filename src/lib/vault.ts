@@ -110,6 +110,48 @@ return {ok:true,filled:pw.length};
 }
 
 /**
+ * Does the page show a login form right now — a password field with a size?
+ *
+ * This is what a browser extension watches for so it can offer itself; Reado
+ * watches it for the same reason. A password manager that waits behind an icon
+ * to be discovered is one nobody uses.
+ */
+export const HAS_LOGIN_JS = `(function(){return [].slice.call(document.querySelectorAll('input[type=password]')).some(function(e){var r=e.getBoundingClientRect();return r.width>0&&r.height>0;});})()`
+
+/** What the user picked in the in-page chip, drained from the bridge. */
+export interface VaultPick {
+  kind: "login" | "otp" | "close"
+  id?: string
+}
+
+/**
+ * Draw the credential chip in the page.
+ *
+ * The pane is a native child window, so Reado's own DOM cannot be drawn over it —
+ * a strip above the page is all the chrome can offer. The chip goes where a
+ * browser extension puts its prompt: in the page, on top of it. It is handed
+ * titles and usernames only; the password is fetched after the pick, as it always
+ * was, and never crosses into the page except into the field it fills.
+ */
+export const vaultChipScript = (items: VaultItem[], label: string, otpLabel: string): string =>
+  `window.__readoBridge&&window.__readoBridge.vault(${JSON.stringify(
+    items.map((i) => ({
+      id: i.id,
+      title: i.title,
+      username: i.username,
+      hasOtp: i.hasOtp,
+      otpLabel,
+    })),
+  )},${JSON.stringify(label)})`
+
+/** Say what happened, inside the chip. */
+export const vaultNoteScript = (text: string): string =>
+  `window.__readoBridge&&window.__readoBridge.vaultNote(${JSON.stringify(text)})`
+
+/** Take the chip down. */
+export const VAULT_CHIP_CLOSE_JS = `window.__readoBridge&&window.__readoBridge.vaultClose()`
+
+/**
  * The gate probe, run immediately before each agent command: does this page hold a
  * credential right now, and what page is it? The href comes back with it so a
  * grant given for one page cannot survive the page navigating away — including an

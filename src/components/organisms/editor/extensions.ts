@@ -18,9 +18,11 @@ import {
 } from "@codemirror/view"
 import { indentationMarkers } from "@replit/codemirror-indentation-markers"
 import { type RefObject, useEffect } from "react"
+import { t } from "@/i18n"
 import { findDefinition, resolveImport } from "@/lib/api"
 import { focusBlockRange } from "@/lib/focusBlock"
 import { lspLocate } from "@/lib/lsp"
+import { notify } from "@/lib/notice"
 import { useProject, useWorkspace } from "@/lib/store"
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
@@ -133,7 +135,12 @@ export function goToDefinitionAt(view: EditorView, pos: number) {
   const name = view.state.doc.sliceString(word.from, word.to)
   findDefinition(useProject.getState().root, name)
     .then((defs) => {
+      // Say so when the index has never seen the symbol. Silence here is what
+      // makes ⌘-click feel broken rather than limited — the index only knows
+      // declarations in the project, so anything from a dependency needs the
+      // language server (which says why it isn't running when it isn't).
       if (defs.length) useProject.getState().open(defs[0].path, defs[0].line)
+      else notify("info", t("lsp.noDefinition"))
     })
     .catch(() => {})
 }
@@ -155,6 +162,23 @@ export function findReferencesAt(view: EditorView): boolean {
   if (name) useWorkspace.getState().searchFor(name)
   return true
 }
+
+/**
+ * Keep everything the editor scrolls into view — search matches, go to line,
+ * a definition jump — clear of the sticky scope headers.
+ *
+ * Those headers float *over* the top of the editor (they are React overlay, not
+ * a CodeMirror panel), so without a margin CodeMirror happily parks a search
+ * match underneath them: the line is invisible and the click meant for it lands
+ * on a header button, which jumps to the top of the enclosing scope.
+ */
+export const stickyScrollMargin = EditorView.scrollMargins.of((view) => {
+  const el = view.dom
+    .closest("[data-code-wrap]")
+    ?.querySelector<HTMLElement>("[data-sticky-headers]")
+  const top = el?.offsetHeight ?? 0
+  return top ? { top } : null
+})
 
 /** Editor DOM handlers for go-to-definition: modifier+click navigates, and
  *  modifier+hover underlines the symbol it would resolve. */

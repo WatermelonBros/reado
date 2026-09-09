@@ -5,6 +5,7 @@ import {
   clampRange,
   FONT_SIZE_RANGE,
   LINE_HEIGHT_RANGE,
+  migrateSettings,
   toggleZenMode,
   useCursor,
   useEditorActions,
@@ -873,5 +874,27 @@ describe("preview and pinned tabs", () => {
     P().openPreview("/a.ts")
     P().togglePinned("/a.ts")
     expect(P().previewPath).toBeNull()
+  })
+})
+
+describe("migrating persisted settings", () => {
+  it("turns on suggestions-as-you-type for an install that predates the default", () => {
+    // The stored `false` was never a choice: it was what the editor shipped as,
+    // and it would have outlived the new default forever — an editor that
+    // suggests nothing while you type, with a setting that says it should.
+    const s = migrateSettings({ suggestOnTyping: false }, 2)
+    expect(s.suggestOnTyping).toBe(true)
+  })
+
+  it("leaves a v3 blob alone, so switching it back off sticks", () => {
+    const s = migrateSettings({ suggestOnTyping: false }, 3)
+    expect(s.suggestOnTyping).toBe(false)
+  })
+
+  it("still repairs the older shapes on the way through", () => {
+    const s = migrateSettings({ fileIcons: "plain", fontSize: 9999, lineHeight: 0 }, 0)
+    expect(s.fileIcons).toBe("mono")
+    expect(s.fontSize).toBe(FONT_SIZE_RANGE.max)
+    expect(s.lineHeight).toBe(LINE_HEIGHT_RANGE.min)
   })
 })

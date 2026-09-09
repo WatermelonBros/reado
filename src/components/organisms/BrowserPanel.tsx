@@ -66,7 +66,14 @@ import {
   usePreview,
 } from "@/lib/preview"
 import { usePalette, useProject, useSettings, useWorkspace } from "@/lib/store"
-import { GATED_REASON, PAGE_STATE_JS, type PageState, redact } from "@/lib/vault"
+import {
+  GATED_REASON,
+  HAS_LOGIN_JS,
+  PAGE_STATE_JS,
+  type PageState,
+  redact,
+  type VaultPick,
+} from "@/lib/vault"
 import { BrowserInspector } from "./BrowserInspector"
 
 /** Two URLs point at the same document (ignoring query/hash) — for matching a
@@ -148,8 +155,13 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // Design-comment dots are injected from the drain tick (it reads the store
   // fresh), so no reactive selector is needed here — just the toggle state.
   const [showMarks, setShowMarks] = useState(true)
-  // The credential strip, opened from the toolbar — never on its own.
+  // The credential strip. Opened from the toolbar, and by the page itself when it
+  // puts up a login form — a password manager hidden behind an icon nobody found
+  // is one nobody used.
   const [vaultOpen, setVaultOpen] = useState(false)
+  // The page the user closed the strip on, so dismissing it sticks until they
+  // navigate somewhere else.
+  const vaultDismissed = useRef("")
   const accessRequest = usePreview((s) => s.accessRequest)
   // Reado's overlays (palette, settings, dialogs, graph/docs) render in the DOM,
   // which a native child window would cover — hide the preview while any is open.
@@ -189,6 +201,10 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   const askedFor = useRef("")
   // Whether the current URL responded last check → reload on a dead→live transition.
   const wasLive = useRef(false)
+  // The page answered the last drain, i.e. it is loaded and running. A loaded
+  // page is the authority on where the pane is; the liveness check must not
+  // second-guess it.
+  const pageAlive = useRef(false)
   showMarksRef.current = showMarks
 
   // The single drain of the page's capture bridge: pull console/network, feed the
@@ -200,6 +216,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       try {
         raw = await previewEval("window.__readoBridge ? window.__readoBridge.drain() : null")
       } catch (e) {
+        pageAlive.current = false
         // The webview vanished while the pane is open (a close/reopen race). The URL
         // is still valid, so recreate it rather than making the user hit Enter.
         if (String(e).includes("no preview")) openAt(usePreview.getState().url)
@@ -219,9 +236,22 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               commentKind?: { id: string; kind: CommentKind } | null
               commentEdit?: { id: string; text: string } | null
               hasMarks?: boolean
+              vaultPick?: VaultPick | null
+              href?: string
             } | null)
           : null
+        // The bridge answering *is* the page being loaded and running — an empty
+        // reply is a page that hasn't got there yet.
+        pageAlive.current = data != null
         if (data) {
+          // Follow the page. A link, a redirect, or a router pushing a new route
+          // all move the page without telling Reado — the address bar showed
+          // whatever was last typed into it, which made Back, Reload and the
+          // address itself lie about where you were.
+          if (data.href) trackHref(data.href)
+          // A pick in the in-page credential chip. The strip acts on it — it is
+          // what holds the vault connection and knows how to fill.
+          if (data.vaultPick) usePreview.getState().setVaultPick(data.vaultPick)
           // Right-click "inspect" from the page → open the inspector on that node.
           if (data.inspect) {
             const s2 = usePreview.getState()
@@ -523,6 +553,32 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncBounds, openAt, computeBounds])
 
+  // Offer the credential strip when the page shows a login form, the way a
+  // browser extension does. The page is loading while this runs, so it looks a
+  // few times rather than once and gives up.
+  useEffect(() => {
+    let alive = true
+    let tries = 0
+    let timer = 0
+    const look = async () => {
+      if (!alive || tries++ > 5) return
+      try {
+        if ((await previewEval(HAS_LOGIN_JS)) === "true") {
+          if (alive && vaultDismissed.current !== url) setVaultOpen(true)
+          return
+        }
+      } catch {
+        /* page not ready — look again */
+      }
+      timer = window.setTimeout(look, 900)
+    }
+    timer = window.setTimeout(look, 700)
+    return () => {
+      alive = false
+      clearTimeout(timer)
+    }
+  }, [url])
+
   // Re-park when the device, pane width, or interface zoom changes. Zoom matters:
   // it's a CSS transform, so the ResizeObserver doesn't fire — but the pane's
   // on-screen rect (what the child window needs) does move.
@@ -648,6 +704,16 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     }
     const check = async () => {
       if (!alive) return
+      // The page is up and talking: leave it alone. This check exists for a pane
+      // pointed at a server that isn't running yet — not to drag a working page
+      // back to the address Reado last wrote down. It used to do exactly that:
+      // follow a link, and two seconds later the pane snapped back to where it
+      // started (or to some other detected server), which is why the address
+      // never changed and Back had nothing to go back to.
+      if (pageAlive.current) {
+        wasLive.current = true
+        return
+      }
       const curUrl = usePreview.getState().url
       let live: string[] = []
       try {
@@ -679,6 +745,23 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [root, openAt])
+
+  /** Take the page's own URL as the truth, unless the user is mid-edit in the
+   *  address bar — retyping under their cursor is worse than a stale address. */
+  const trackHref = (href: string) => {
+    if (urlFocused.current) return
+    const s = usePreview.getState()
+    if (s.url === href) return
+    // A page that navigates on its own is as much "where the user is" as one
+    // they typed: stop auto-switching to a detected dev server behind their back.
+    manualUrl.current = true
+    s.setUrl(href)
+    try {
+      s.addAllowedOrigin(new URL(href).origin)
+    } catch {
+      /* not a parseable origin — nothing to allow */
+    }
+  }
 
   const go = (next: string) => {
     const u = normalizeUrl(next)
@@ -805,7 +888,14 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
         />
       </header>
       {vaultOpen && (
-        <VaultBar url={url} evalInPage={previewEval} onClose={() => setVaultOpen(false)} />
+        <VaultBar
+          url={url}
+          evalInPage={previewEval}
+          onClose={() => {
+            vaultDismissed.current = url
+            setVaultOpen(false)
+          }}
+        />
       )}
       {accessRequest && <AccessRequest url={accessRequest} />}
       {/* Device-size bar: emulate a viewport, or fill the pane (Responsive). */}

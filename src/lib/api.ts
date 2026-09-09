@@ -1165,10 +1165,12 @@ export const lspStop = (id: string) => invoke<void>("lsp_stop", { id })
 
 /** Whether every known language server is installed, in one call — the panel
  *  asks about all of them at once. */
-export const lspInstalledAll = () => invoke<Array<[string, boolean]>>("lsp_installed_all")
+export const lspInstalledAll = (root: string) =>
+  invoke<Array<[string, boolean]>>("lsp_installed_all", { root })
 
 /** Whether a known language server's binary is installed (on the real PATH). */
-export const lspInstalled = (server: string) => invoke<boolean>("lsp_installed", { server })
+export const lspInstalled = (server: string, root: string) =>
+  invoke<boolean>("lsp_installed", { server, root })
 
 /** The Linux package manager available ("apt"|"dnf"|"pacman"|"zypper"|"brew"),
  * or null — so the marketplace picks the right per-distro install command. */
