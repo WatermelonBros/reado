@@ -149,8 +149,39 @@ describe("the wrappers that do more than forward", () => {
       scope: "src",
     })
     expect(lastArgs()).toMatchObject({ scope: "src" })
-    await api.replaceText("/root", "a", "b", "src")
+    await api.replaceText("/root", "a", "b", {
+      caseSensitive: false,
+      wholeWord: false,
+      regex: false,
+      scope: "src",
+    })
     expect(lastArgs()).toMatchObject({ scope: "src" })
+  })
+
+  it("a replace runs with the toggles its search ran with", async () => {
+    // The bug this guards: the panel searched with regex on and the rewrite went
+    // through literally, so Replace All rewrote the pattern text itself.
+    await api.replaceText("/root", "f(o+)", "[$1]", {
+      caseSensitive: true,
+      wholeWord: true,
+      regex: true,
+      include: "src/**",
+      exclude: "**/*.snap",
+    })
+    expect(lastArgs()).toMatchObject({
+      caseSensitive: true,
+      wholeWord: true,
+      regex: true,
+      include: ["src/**"],
+      exclude: ["**/node_modules/**", "**/*.snap"],
+    })
+
+    await api.replaceInFile("/root", "/root/a.ts", "f(o+)", "[$1]", {
+      caseSensitive: true,
+      wholeWord: false,
+      regex: true,
+    })
+    expect(lastArgs()).toMatchObject({ caseSensitive: true, wholeWord: false, regex: true })
   })
 
   it("readFile passes the guard through, and omits what wasn't asked for", async () => {

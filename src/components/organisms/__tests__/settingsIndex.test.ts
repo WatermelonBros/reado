@@ -15,16 +15,20 @@ import itLocale from "@/i18n/locales/it.json"
 type Dict = Record<string, string | undefined>
 const dict = (o: object) => o as unknown as Dict
 const it_ = itLocale
-const label = (key: string) => dict(en.settings)[key.replace("settings.", "")] ?? key
+/** Resolve a dotted i18n key against a locale — the index names controls from
+ *  more than one namespace, so "strip `settings.`" is not enough. */
+const lookup = (locale: object, key: string): string | undefined => {
+  const [ns, name] = key.split(".")
+  return dict((locale as Record<string, object>)[ns] ?? {})[name]
+}
+const label = (key: string) => lookup(en, key) ?? key
 
 describe("the settings index", () => {
   it("names a real string for every control and section", () => {
     for (const entry of SETTINGS_INDEX) {
-      const control = entry.key.replace("settings.", "")
-      const section = entry.sectionKey.replace("settings.", "")
-      expect(dict(en.settings)[control], `missing en label for ${entry.key}`).toBeTruthy()
-      expect(dict(it_.settings)[control], `missing it label for ${entry.key}`).toBeTruthy()
-      expect(dict(en.settings)[section], `missing en title for ${entry.sectionKey}`).toBeTruthy()
+      expect(lookup(en, entry.key), `missing en label for ${entry.key}`).toBeTruthy()
+      expect(lookup(it_, entry.key), `missing it label for ${entry.key}`).toBeTruthy()
+      expect(lookup(en, entry.sectionKey), `missing en title for ${entry.sectionKey}`).toBeTruthy()
     }
   })
 
@@ -75,12 +79,14 @@ describe("the index against the tabs it describes", () => {
     // The docstring on settingsIndex.ts promises this check. Without it a
     // control could move tabs, or arrive with no entry, and search would send
     // you somewhere else while every other assertion stayed green.
-    // Every `settings.*` key the file passes as a control label or a section
-    // title. Section titles are excluded — the index carries them separately.
+    // Every key the file passes as a control label. Not just `settings.*`: a
+    // control is free to borrow a label from another namespace — sticky scroll
+    // uses `editor.sticky` — and a namespace-limited pattern here is how one
+    // slipped past this very check and out of the index, unfindable by search.
     const rendered = new Set(
       // `aria-label` is deliberately excluded: the search field's own label is
       // not a setting.
-      [...settingsSource.matchAll(/(?<!aria-)label=\{t\("(settings\.\w+)"\)/g)].map((m) => m[1]),
+      [...settingsSource.matchAll(/(?<!aria-)label=\{t\("([\w]+\.\w+)"\)/g)].map((m) => m[1]),
     )
     // Chrome, not settings: the header's own controls live in the same file.
     // `settings.json` opens the text view of everything — it is a way to reach
@@ -91,5 +97,35 @@ describe("the index against the tabs it describes", () => {
     // A rendered control with no entry is unfindable by search.
     const unindexed = [...rendered].filter((k) => !indexed.has(k) && !CHROME.has(k))
     expect(unindexed, "rendered but missing from SETTINGS_INDEX").toEqual([])
+  })
+
+  it("finds a setting by the name it has in the JSON view", () => {
+    // Search matched only the translated label, so the name the user actually
+    // knows — the one in Settings (JSON) one button away, and in every doc —
+    // found nothing. In a localised UI that left no way in at all.
+    const hits = findSettings("formatOnSave", label as never)
+    expect(hits.map((h) => h.key)).toContain("settings.formatOnSave")
+  })
+
+  it("still finds a setting by its translated label", () => {
+    const t = (k: string) => (k === "settings.fontSize" ? "Dimensione del carattere" : k)
+    expect(findSettings("dimensione", t as never).map((h) => h.key)).toContain("settings.fontSize")
+  })
+
+  it("can reach the aids toggles that had no index entry at all", () => {
+    // Word wrap, sticky scroll, focus mode and the structure ribbon label
+    // themselves from `editor.*`, were absent from the index, and so could not
+    // be found by any query in any language.
+    for (const [q, key] of [
+      ["wrap", "editor.wrap"],
+      ["sticky", "editor.sticky"],
+      ["focus", "editor.focus"],
+      ["ribbon", "editor.ribbon"],
+    ] as const) {
+      expect(
+        findSettings(q, label as never).map((h) => h.key),
+        `searching "${q}"`,
+      ).toContain(key)
+    }
   })
 })

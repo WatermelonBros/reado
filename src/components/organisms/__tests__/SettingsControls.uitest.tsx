@@ -221,7 +221,11 @@ describe("the free-text fields commit on blur", () => {
 describe("the theme picker", () => {
   it("picks a theme in manual mode", async () => {
     await openTab("appearance")
-    const swatch = document.querySelector('button[data-theme="reado-dark"]') as HTMLElement
+    // The previewed palette sits on the swatch, so the tile is its parent button —
+    // see "previews each theme's palette on its swatch, not on its name".
+    const swatch = document
+      .querySelector('[data-theme="reado-dark"]')
+      ?.closest("button") as HTMLElement
     await userEvent.click(swatch)
     expect(useSettings.getState().theme).toBe("reado-dark")
   })
@@ -233,9 +237,11 @@ describe("the theme picker", () => {
     useSettings.setState({ mode: "system" })
     await openTab("appearance")
     for (const name of ["reado-light", "reado-dark", "reado-sepia", "reado-high-contrast"]) {
-      expect(document.querySelector(`button[data-theme="${name}"]`), name).toBeTruthy()
+      expect(document.querySelector(`[data-theme="${name}"]`)?.closest("button"), name).toBeTruthy()
     }
-    const sepia = document.querySelector('button[data-theme="reado-sepia"]') as HTMLElement
+    const sepia = document
+      .querySelector('[data-theme="reado-sepia"]')
+      ?.closest("button") as HTMLElement
     await userEvent.click(sepia)
     expect(useSettings.getState().theme).toBe("reado-sepia")
     // Choosing a theme is a manual choice; the mode has to follow, and the note

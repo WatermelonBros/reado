@@ -127,26 +127,30 @@ export function goToDefinitionAt(view: EditorView, pos: number) {
       return
     }
   }
-  // Prefer the language server when one is attached; it returns true so we only
-  // fall back to the symbol index for files with no server.
-  if (lspLocate(view, pos, "definition", (p, l) => useProject.getState().open(p, l))) return
-  const word = view.state.wordAt(pos)
-  if (!word) return
-  const name = view.state.doc.sliceString(word.from, word.to)
-  findDefinition(useProject.getState().root, name)
-    .then((defs) => {
-      // Say so when the index has never seen the symbol. Silence here is what
-      // makes ⌘-click feel broken rather than limited — the index only knows
-      // declarations in the project, so anything from a dependency needs the
-      // language server (which says why it isn't running when it isn't).
-      if (defs.length) useProject.getState().open(defs[0].path, defs[0].line)
-      else notify("info", t("lsp.noDefinition"))
-    })
-    .catch(() => {})
+  // Prefer the language server when one is attached and ready. It answers
+  // asynchronously, so the index fallback runs from `onMiss` — a server that
+  // knows the file but not this symbol used to end the whole thing in silence.
+  const fromIndex = () => {
+    const word = view.state.wordAt(pos)
+    if (!word) return
+    const name = view.state.doc.sliceString(word.from, word.to)
+    findDefinition(useProject.getState().root, name)
+      .then((defs) => {
+        // Say so when the index has never seen the symbol. Silence here is what
+        // makes ⌘-click feel broken rather than limited — the index only knows
+        // declarations in the project, so anything from a dependency needs the
+        // language server (which says why it isn't running when it isn't).
+        if (defs.length) useProject.getState().open(defs[0].path, defs[0].line)
+        else notify("info", t("lsp.noDefinition"))
+      })
+      .catch(() => {})
+  }
+  lspLocate(view, pos, "definition", (p, l) => useProject.getState().open(p, l), fromIndex)
 }
 
 /** Go to the type definition / implementation of the symbol at `pos` via the
- *  language server (no index equivalent; a no-op when no server is attached). */
+ *  language server. There is no index equivalent for these, so a miss falls
+ *  through to `lspLocate`'s own "nothing found" notice rather than silence. */
 export function goToTypeDefinitionAt(view: EditorView, pos: number) {
   lspLocate(view, pos, "typeDefinition", (p, l) => useProject.getState().open(p, l))
 }

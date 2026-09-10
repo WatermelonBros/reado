@@ -2,6 +2,11 @@
 // clipboard/prompt flows (mocked at the edges). Runs on all 3 OSes.
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+// Copying goes through Tauri's plugin, not `navigator.clipboard` — the webview
+// refuses the web API and the rejection used to be swallowed.
+const clipboardWrite = vi.hoisted(() => vi.fn(async (_text: string) => {}))
+vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({ writeText: clipboardWrite }))
+
 vi.mock("../../i18n", () => ({
   t: (k: string, o?: Record<string, unknown>) => (o ? `${k}:${JSON.stringify(o)}` : k),
 }))
@@ -111,12 +116,10 @@ describe("applyBundle", () => {
 
 describe("exportSettings", () => {
   it("writes the bundle JSON to the clipboard", async () => {
-    const writeText = vi.fn((_text: string) => Promise.resolve())
-    vi.stubGlobal("navigator", { clipboard: { writeText } })
+    clipboardWrite.mockClear()
     await exportSettings()
-    expect(writeText).toHaveBeenCalledOnce()
-    expect(JSON.parse(writeText.mock.calls[0][0]).version).toBe(1)
-    vi.unstubAllGlobals()
+    expect(clipboardWrite).toHaveBeenCalledOnce()
+    expect(JSON.parse(clipboardWrite.mock.calls[0][0]).version).toBe(1)
   })
 })
 

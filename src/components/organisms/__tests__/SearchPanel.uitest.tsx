@@ -129,7 +129,12 @@ describe("SearchPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "search.replaceAll" }))
     await userEvent.click(screen.getByRole("button", { name: "search.replaceConfirm" }))
 
-    expect(replaceText).toHaveBeenCalledWith(ROOT, "foo", "bar", null)
+    expect(replaceText).toHaveBeenCalledWith(
+      ROOT,
+      "foo",
+      "bar",
+      expect.objectContaining({ caseSensitive: false, wholeWord: false, regex: false }),
+    )
     // The status now says how to take it back, not just how many files moved.
     expect(await screen.findByText("search.replaceUndo")).toBeInTheDocument()
   })
@@ -169,7 +174,39 @@ describe("SearchPanel", () => {
     })
     await userEvent.click(screen.getByRole("menuitem", { name: "search.replaceThis" }))
 
-    expect(replaceInFile).toHaveBeenCalledWith(ROOT, "/repo/src/a.ts", "foo", "bar", [[12, 3]])
+    expect(replaceInFile).toHaveBeenCalledWith(
+      ROOT,
+      "/repo/src/a.ts",
+      "foo",
+      "bar",
+      expect.objectContaining({ regex: false }),
+      [[12, 3]],
+    )
+  })
+
+  it("replaces with the toggles the search ran with, not literally", async () => {
+    // The bug: the panel searched with regex on and Replace All went through
+    // literally, so it rewrote the pattern text instead of the matches. The
+    // toggles have to reach both calls or the rewrite is not the list on screen.
+    seed()
+    render(<SearchPanel />)
+    await userEvent.type(screen.getByPlaceholderText("search.placeholder"), "foo")
+    await screen.findByText("const foo = 1;")
+    await userEvent.click(screen.getByRole("button", { name: "search.regex" }))
+    await userEvent.click(screen.getByRole("button", { name: "search.caseSensitive" }))
+    await userEvent.type(screen.getByPlaceholderText("search.replacePlaceholder"), "bar")
+
+    await userEvent.click(screen.getByRole("button", { name: "search.replaceAll" }))
+    await userEvent.click(screen.getByRole("button", { name: "search.replaceConfirm" }))
+
+    await waitFor(() =>
+      expect(replaceText).toHaveBeenCalledWith(
+        ROOT,
+        "foo",
+        "bar",
+        expect.objectContaining({ regex: true, caseSensitive: true }),
+      ),
+    )
   })
 
   it("offers no replace action until there is something to replace with", async () => {
@@ -200,7 +237,14 @@ describe("SearchPanel", () => {
     // The rewrite must be scoped the same way the results are.
     await userEvent.click(await screen.findByTitle("search.replaceAll"))
     await userEvent.click(await screen.findByTitle("search.replaceConfirm"))
-    await waitFor(() => expect(replaceText).toHaveBeenCalledWith(ROOT, "foo", "", "src/lib"))
+    await waitFor(() =>
+      expect(replaceText).toHaveBeenCalledWith(
+        ROOT,
+        "foo",
+        "",
+        expect.objectContaining({ scope: "src/lib" }),
+      ),
+    )
 
     await userEvent.click(screen.getByRole("button", { name: "search.clearScope" }))
     expect(useWorkspace.getState().searchScope).toBeNull()

@@ -11,6 +11,168 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+- **⌘-click goes to the definition, or says why it can't.** Three ways it could
+  come up empty and tell you nothing: the language server had started but never
+  finished initializing, so the click was handed to a request that could never
+  arrive; the server answered with no location and the reply was dropped; or the
+  request failed and the error was swallowed. In every case the code had already
+  claimed the jump, so the symbol index — the fallback that knows the project's
+  own declarations — was never consulted. A server is only trusted once it has
+  answered, and anything it cannot resolve now falls through to the index, which
+  says so when it has nothing either.
+- **Copying actually copies.** "Copy log path" (from the Help menu and from
+  Settings), the Reado Anywhere pairing URL and "Export settings to the
+  clipboard" all went through the web Clipboard API, which the webview refuses
+  without a secure context and a user gesture. The rejection was caught and
+  dropped, so the clipboard simply kept whatever it had and nothing said
+  otherwise — verified against the running app. They use Tauri's clipboard
+  plugin now, as the rest of the app already did, and a failed copy is reported.
+- **Go to Line opens one panel, in your language.** Asking for it again while it
+  was already open stacked a second identical "Go to line" panel — and a third,
+  and a fourth — each needing its own dismissal. It now takes you to the one
+  already there. CodeMirror's own strings are also translated now: the Go-to-line
+  dialog, the fold placeholder, the diagnostics panel and the search counters
+  stayed in English inside an otherwise translated app.
+- **The selected file's name stays readable.** A file you have read is dimmed to
+  say so, but the selection tint lightens the row underneath it, and muted ink on
+  that measured 3.9:1 — under the 4.5 Reado holds its own themes to, on the one
+  row you are actually reading. The row you are on is no longer dimmed. With this
+  and the theme-picker fix, every piece of interface text in all four built-in
+  themes now clears WCAG AA, measured in the running app.
+- **The theme picker's names are readable again.** Each tile applied the theme it
+  previews to the whole tile, so a light theme's *name* was drawn in that theme's
+  ink on the dark settings surface: a measured contrast ratio of 1.6, against the
+  4.5 the same picker holds contributed themes to. "Reado Chiaro" and "Reado
+  Seppia" were all but invisible in dark mode, and the dark ones would have been
+  in light mode. Only the swatch carries the previewed palette now.
+- **The status bar names the file's encoding once.** A hardcoded "UTF-8" label sat
+  beside the encoding picker, so the bar read "UTF-8 … utf-8" — and on a file that
+  is not UTF-8 it would have gone on claiming otherwise next to the true value. It
+  was also the one item there you could not hide.
+- **"Compare with…" in the file tree actually compares.** Picking one file, then
+  choosing it on a second, opened the second file and showed no comparison at
+  all: it opened the file and switched the diff on in the same breath, and
+  opening a file resets the pane to its default view a moment later, wiping it.
+  It goes through the same request the Source Control panel uses.
+- **Marking a conflict resolved takes you back to the file.** It staged the file,
+  as it should, and then left you sitting in the resolver for a file with no
+  conflicts left — its only button offering to mark it resolved again, and no
+  obvious way out.
+- **Source Control opens the file you clicked, even when it is already open.**
+  Clicking a conflicted file opens it in the resolver and a modified one as its
+  diff — unless that file was already on screen, in which case the click did
+  nothing: the request was only read when the active file changed. Worse, it
+  stayed queued, so the next unrelated file you opened inherited it and arrived
+  inside someone else's merge. Opening a file plainly also now leaves any
+  conflict resolution behind, as it already did for diffs.
+- **Jumping to a problem puts the cursor there.** Clicking an error in the
+  Problems panel scrolled to the line and lit it up, but left the caret wherever
+  it had been — line 1 of a file that had just been opened — so the first arrow
+  key or keystroke threw you back to the top of the file. The same was true of
+  every other jump that lands on a line. It also left the app disagreeing with
+  itself: clicking a symbol in the outline, and F12, both move the caret. Focus
+  still stays where you clicked from.
+- **"Open results in an editor" opened an empty box.** The careful alternative to
+  Replace All — every hit as text, edited by hand — showed a title, a hint and
+  "Apply 0 changes" over nothing at all. Its CodeMirror view is created into a
+  host that lives inside the modal, and the modal mounts its content a commit
+  after it opens; the effect that creates the view ran while the ref was still
+  null, bailed, and with unchanged dependencies never ran again. A callback ref
+  creates it exactly when the host appears.
+- **Four settings were unreachable by search.** Word wrap, sticky scroll, focus
+  mode and the structure ribbon had no entry in the settings index at all, so no
+  query in any language could find them — you had to know which of the five tabs
+  they lived on. They label themselves from `editor.*` rather than `settings.*`,
+  and the test that exists precisely to catch a control with no entry only looked
+  for `settings.*` labels, so it waved them through. The test now reads any
+  namespace. Search also matches a setting by its own name — the one shown in
+  Settings (JSON) one button away — so `formatOnSave` finds it even in a UI where
+  the label reads "Formatta al salvataggio".
+- **The terminal starts even when the window isn't painting.** The PTY was
+  spawned from a `requestAnimationFrame` callback and from nowhere else. A window
+  that isn't rendering — occluded, minimised, off-screen — is given no frames, so
+  no shell was ever started: the pane opened black and stayed that way, with no
+  error and nothing to click. The frame is still what sizes it; it is no longer
+  what starts it.
+- **TypeScript errors show up again.** On a TypeScript 7 project — which is any
+  project whose `node_modules/typescript` no longer ships `tsserver.js`, Reado's
+  own included — the Problems panel was empty and no squiggle ever appeared, for
+  every file, forever. TS 7 answers `textDocument/diagnostic` when asked and never
+  volunteers `publishDiagnostics`; Reado only listened for the volunteering, while
+  the client library told the server we handled the asking. So the server waited
+  politely and Reado waited too. Diagnostics are now pulled on open, after an edit
+  settles and after a save, and the problems a server reports about *other* files
+  while checking this one land in the panel with them.
+- **F2 renames.** The binding sat in the language-client extension list, where a
+  bare keymap is not reliably installed into the editor, so the key did nothing
+  while the same command worked from the context menu. It now lives with F12 and
+  the rest of the editor's LSP keys.
+- **The semantic index stopped losing writes.** `database is locked` appeared
+  9,773 times in a single session's log: the index is written by a full rebuild
+  and by a per-file reindex, both on worker threads, and in SQLite's default
+  journal mode the loser fails instantly — a five-second `busy_timeout` never got
+  a chance, because a deferred transaction that already holds a read lock is
+  refused outright rather than made to wait. The index is WAL now and every writer
+  takes its lock up front. Two rebuilds that met also raced on `DROP`/`CREATE`
+  ("table docs already exists"); the schema swap moved inside the transaction, so
+  a rebuild is atomic and a reader never sees half an index.
+- **The comment index is atomic too.** Same class of bug, in the other index: the
+  rebuild dropped the table, recreated it and inserted one comment at a time, all
+  outside a transaction. Anything reading `.reado/index.sqlite` while a rebuild
+  ran saw an empty or half-filled table — no error, just a wrong answer — and two
+  rebuilds meeting collided on the `DROP`. The whole rebuild is now one
+  transaction that takes its write lock up front, and the index is WAL, so a
+  reader keeps reading the previous index until the new one is complete. Filling
+  it also no longer re-parses the same statement once per comment.
+- **Versioning `.reado/` no longer commits your machine's scratch.** The ignore
+  rule for the shared-annotations mode listed the comment index, the trash and the
+  undo copies, but not `semantic.sqlite`, `read.json` or `read-snapshots.json` —
+  so turning versioning on published a rebuildable index and how far you personally
+  had read. The list lives in one place now, and the test asserts it covers
+  everything Reado actually writes rather than repeating three names by hand.
+- **Language servers can register file watchers.** Every session opened with
+  `failed to register configuration change watcher: Method not implemented`: the
+  client library refuses *every* request a server makes of it. `client/registerCapability`,
+  `workspace/configuration` and `window/workDoneProgress/create` are answered now,
+  and — the other half of saying yes — a file changed outside the editor is
+  reported to the servers that asked, so a `git checkout` no longer leaves them
+  reasoning about a tree that is gone.
+- **A language server that fails to start says so.** One that starts and then
+  refuses to initialize (`typescript-language-server` in a project with no
+  TypeScript) rejected a promise nobody was holding: an unhandled rejection in the
+  console, no notice, and the editor still reporting code intelligence for a
+  process that had exited. It now reports the failure once and drops the
+  connection so the next interaction starts fresh. Relatedly, "is a server
+  attached" meant "does a plugin object exist" — which also switched *off*
+  word-based completion, so a dead server left you with no completions at all
+  rather than the fallback.
+- **Rename a symbol and every call site follows.** F2 renamed the symbol in the
+  files you happened to have open and left every other use of it on the old name
+  — no error, no count, nothing to notice until a build failed. The editor
+  library applies a rename only to files its workspace already holds, and that
+  workspace only knows files with an editor attached. Rename now goes through the
+  same path code actions use: closed files are rewritten on disk, the whole
+  rename is one ⌘Z, and a toast says how many files it touched — so a rename the
+  server could only partly resolve is visible instead of silent.
+- **Replace now rewrites what the search found.** Search and replace had drifted
+  apart: the panel matched with the Aa / whole-word / `.*` toggles and the
+  rewrite went through literally and case-sensitively, so Replace All on a regex
+  search rewrote the pattern text itself, a case-insensitive search replaced only
+  the exact-case occurrences, and the "files to include" field went unread — the
+  rewrite could reach files the results list never showed. Both replaces now take
+  the search's own toggles and globs, `$1` expands against the capture groups on
+  a regex search (and stays literal text on a literal one), and an unparseable
+  pattern is reported instead of rewritten.
+- **"Replace this result" replaces that result.** The position identifying a
+  match was 0-based bytes coming out of search and read as 1-based characters
+  going into replace, so replacing one row off a list quietly hit the neighbouring
+  occurrence, or nothing at all. Both ends now speak the search's convention.
+- **Search without ripgrep honours every toggle.** The in-process fallback used
+  when `rg` isn't installed matched literally on a lower-cased copy of each line,
+  so whole-word and regex searches came back wrong and the reported column could
+  be off on non-ASCII text. It runs the same matcher the rest of search does.
+
 ## [1.16.0] — 2026-09-09
 
 ### Changed

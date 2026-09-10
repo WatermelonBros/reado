@@ -19,3 +19,5 @@ fs2 = "0.4"
 
 [dev-dependencies]
 tempfile = "3"
+# Matching the ignore patterns the way git does, rather than restating them.
+globset = "0.4"

@@ -85,6 +85,7 @@ import {
   goToLine,
   goToTypeDefinitionAtCursor,
   gotoLastEdit,
+  gotoLineOnce,
   LANGUAGE_OPTIONS,
   moveLineDownCmd,
   moveLineUpCmd,
@@ -911,5 +912,25 @@ describe("the remaining edges", () => {
     expect(outcome.kind).toBe("error")
     expect(outcome.kind === "error" && outcome.message).toContain("prettier not found")
     expect(view.state.doc.toString()).toBe("unformatted\n")
+  })
+})
+
+describe("Go to Line", () => {
+  it("focuses the panel already open instead of stacking another", () => {
+    // CodeMirror's own `gotoLine` opens a fresh dialog on every call and never
+    // looks for one already on screen, so pressing the key twice left two
+    // identical panels, each needing its own dismissal.
+    const input = document.createElement("input")
+    input.name = "line"
+    const panel = document.createElement("div")
+    panel.className = "cm-panel"
+    panel.appendChild(input)
+    const dom = document.createElement("div")
+    dom.appendChild(panel)
+    const focus = vi.spyOn(input, "focus")
+    const view = { dom } as unknown as Parameters<typeof gotoLineOnce>[0]
+    expect(gotoLineOnce(view)).toBe(true)
+    expect(focus, "the open panel should be focused, not replaced").toHaveBeenCalled()
+    expect(dom.querySelectorAll(".cm-panel")).toHaveLength(1)
   })
 })

@@ -116,8 +116,10 @@ export function SearchPanel() {
   const runSearch = () => acrossRoots(workspaceRoots(), (r) => searchText(r, query, opts))
   const refresh = async () => setMatches(await runSearch())
 
-  // Literal project-wide replace, behind a confirm step and recorded as one
-  // undoable action: it rewrites files, and ⌘Z has to be able to take it back.
+  // Project-wide replace, behind a confirm step and recorded as one undoable
+  // action: it rewrites files, and ⌘Z has to be able to take it back. It runs
+  // with `opts` — the same toggles and globs the results above were found with,
+  // so Replace All can only ever rewrite the list you are looking at.
   const doReplace = async () => {
     setConfirming(false)
     try {
@@ -125,7 +127,7 @@ export function SearchPanel() {
       // folder's matches would be a trap.
       // One call per workspace folder: search spans them, so the rewrite has to.
       const results = await Promise.all(
-        workspaceRoots().map((r) => replaceText(r, query, replacement, scope)),
+        workspaceRoots().map((r) => replaceText(r, query, replacement, opts)),
       )
       const res = {
         changed: results.reduce((n, r) => n + r.changed, 0),
@@ -154,6 +156,7 @@ export function SearchPanel() {
         m.path,
         query,
         replacement,
+        opts,
         wholeFile ? [] : [[m.line, m.column]],
       )
       if (res.backups.length > 0) useFileUndo.getState().record({ kind: "replace", ...res })

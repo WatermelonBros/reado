@@ -1195,7 +1195,14 @@
     "actionKindFix": "Fix",
     "actionKindRefactor": "Refactor",
     "actionKindSource": "Source",
-    "actionKindOther": "Other"
+    "actionKindOther": "Other",
+    "renameTitle": "Rename “{name}” everywhere",
+    "renameConfirm": "Rename",
+    "renamed": "Renamed to “{name}” in {count} file.",
+    "renamed_other": "Renamed to “{name}” in {count} files.",
+    "renameRefused": "That symbol can't be renamed here.",
+    "renameFailed": "The rename didn't apply.",
+    "serverFailed": "The {name} language server started but couldn't initialize, so there is no code intelligence for these files. The log has the server's reason."
   },
   "file": {
     "newFile": "New file",
@@ -1426,5 +1433,22 @@
     "added": "Added {name} to the workspace.",
     "removed": "Removed {name} from the workspace.",
     "primaryNote": "The first folder holds the workspace list and the comments; the others are read and searched alongside it."
+  },
+  "cm": {
+    "close": "close",
+    "controlChar": "Control character",
+    "currentMatch": "current match",
+    "diagnostics": "Diagnostics",
+    "foldedCode": "folded code",
+    "go": "go",
+    "goToLine": "Go to line",
+    "noDiagnostics": "No diagnostics",
+    "onLine": "on line",
+    "to": "to",
+    "unfold": "unfold"
+  },
+  "help": {
+    "logPathCopied": "Log path copied to the clipboard.",
+    "logPathCopyFailed": "Couldn't copy the log path."
   }
 }

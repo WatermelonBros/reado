@@ -74,6 +74,25 @@ describe("Settings", () => {
     expect(screen.queryByText("settings.fontSize")).not.toBeInTheDocument()
   })
 
+  it("previews each theme's palette on its swatch, not on its name", async () => {
+    // The bug: `data-theme` sat on the whole tile, so a light theme's tile drew
+    // its *name* in that theme's ink on the dark settings surface — a contrast
+    // ratio of 1.6, measured in the running app, against the 4.5 this very
+    // picker holds contributed themes to. Only the swatch wants those colours.
+    render(<Settings />)
+    await screen.findByText("theme.reado-light")
+    const tile = screen.getByText("theme.reado-light").closest("button")
+    expect(tile, "no tile for the light theme").toBeTruthy()
+    expect(
+      tile?.getAttribute("data-theme"),
+      "the tile must not adopt the previewed palette",
+    ).toBeNull()
+    expect(
+      tile?.querySelector("[data-theme='reado-light']"),
+      "the swatch should carry it instead",
+    ).toBeTruthy()
+  })
+
   it("switches tabs — clicking Editor reveals Editor-only controls", async () => {
     render(<Settings />)
 

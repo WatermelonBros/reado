@@ -14,7 +14,11 @@ vi.mock("../../../../lib/api", async (orig) => ({
   findDefinition: (root: string, name: string) => findDefinition(root, name),
   resolveImport: (...a: unknown[]) => resolveImport(...a),
 }))
-const lspLocate = vi.fn((..._a: unknown[]) => false)
+// `lspLocate` resolves asynchronously and has no return value: a hit calls its
+// `onHit` argument, a miss calls `onMiss`. The default stands in for a server
+// that finds nothing, which is what makes the index fallback run.
+const miss = (...a: unknown[]) => (a[4] as (() => void) | undefined)?.()
+const lspLocate = vi.fn(miss)
 vi.mock("../../../../lib/lsp", async (orig) => ({
   ...(await orig<typeof import("../../../../lib/lsp")>()),
   lspLocate: (...a: unknown[]) => lspLocate(...a),
@@ -65,7 +69,7 @@ const decoCount = (v: EditorView, field: typeof landingField) => v.state.field(f
 
 beforeEach(() => {
   vi.clearAllMocks()
-  lspLocate.mockReturnValue(false)
+  lspLocate.mockImplementation(miss)
   useProject.setState({ root: "/repo", active: "/repo/src/a.ts", open: vi.fn() })
   useWorkspace.setState({ searchFor: vi.fn() })
 })
@@ -168,7 +172,7 @@ describe("goToDefinitionAt", () => {
   })
 
   it("prefers the language server when one is attached", () => {
-    lspLocate.mockReturnValue(true)
+    lspLocate.mockImplementation(() => {}) // a hit: it never reports a miss
     const v = mount("const value = 1", [])
     goToDefinitionAt(v, 8)
     expect(findDefinition).not.toHaveBeenCalled()
@@ -368,7 +372,6 @@ describe("goToTypeDefinitionAt / goToImplementationAt", () => {
   it("ask the server, and open what it resolves", () => {
     lspLocate.mockImplementation((...args: unknown[]) => {
       ;(args[3] as (p: string, l: number) => void)("/repo/src/b.ts", 7)
-      return true
     })
     const v = mount("const value = 1", [])
     goToTypeDefinitionAt(v, 8)

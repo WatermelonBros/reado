@@ -58,6 +58,7 @@ import { newFile, newFolder } from "@/lib/docInfo"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { type DockArea, findPanel, useLayout } from "@/lib/layout"
 import { createLogger, safeError } from "@/lib/logger"
+import { notifyWatchedFileChanged } from "@/lib/lsp"
 import { ensureMcp } from "@/lib/mcp"
 import { notifyError } from "@/lib/notice"
 import { notifyAgentDone, notifyResolved } from "@/lib/notify"
@@ -300,6 +301,9 @@ export function ProjectView({ root }: { root: string }) {
         reanchorFile(root, file)
           .then((list) => useComments.getState().replaceForFile(file, list))
           .catch(() => {})
+        // A language server that registered for watched files is entitled to
+        // hear about this one — otherwise its picture of the project ages.
+        notifyWatchedFileChanged(root, file)
         // Keep the semantic index current, one file at a time — a full rebuild
         // per keystroke-triggered save would be the wrong shape entirely.
         semanticReindexFile(root, file).catch((e) =>

@@ -198,7 +198,10 @@ describe("a comment the agent may have touched", () => {
       .getAllByRole("button")
       .find((b) => /delta|review/i.test(b.textContent ?? "")) as HTMLElement
     await userEvent.click(review)
-    expect(useEditorActions.getState().diffing).toBe(true)
+    // The panel *requests* the diff rather than flipping `diffing` itself: the
+    // editor grants it once the file is open, which is what makes the request
+    // survive a file that is still loading.
+    expect(useEditorActions.getState().pendingView).toBe("diff")
   })
 
   it("doesn't flag one whose file is unchanged", () => {

@@ -2,7 +2,7 @@
 // the large-file guard, the markdown source/prose toggle, and the PR-review path
 // that reads bytes from a git ref instead of the working tree. Every viewer is
 // stubbed; what's asserted is which one the editor chooses, and with what.
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { FileContent } from "@/lib/api"
@@ -196,6 +196,27 @@ describe("the other whole-pane views", () => {
     useEditorActions.setState({ pendingView: "diff" })
     render(<Editor />)
     expect(await screen.findByTestId("diff")).toHaveTextContent("HEAD")
+  })
+
+  it("honours a request for the file already on screen", async () => {
+    // The bug: the request was only read when `active` changed. Clicking a row
+    // in Source Control for the file you were already looking at therefore did
+    // nothing at all — and the request stayed queued.
+    render(<Editor />)
+    expect(await screen.findByTestId("code-view")).toBeInTheDocument()
+    act(() => useEditorActions.getState().requestView("conflict"))
+    expect(await screen.findByTestId("conflict")).toBeInTheDocument()
+  })
+
+  it("does not hand an unconsumed request to the next file", async () => {
+    // The other half of the same bug: the queued request survived, so the next,
+    // unrelated file you opened arrived inside someone else's merge.
+    render(<Editor />)
+    expect(await screen.findByTestId("code-view")).toBeInTheDocument()
+    act(() => useEditorActions.getState().requestView("conflict"))
+    expect(await screen.findByTestId("conflict")).toBeInTheDocument()
+    act(() => useProject.setState({ active: "/repo/src/b.ts" }))
+    await waitFor(() => expect(screen.queryByTestId("conflict")).not.toBeInTheDocument())
   })
 })
 

@@ -5,6 +5,12 @@
 // mocked to keys.
 
 import { render, screen } from "@testing-library/react"
+
+// Copying goes through Tauri's plugin; the web Clipboard API is refused by the
+// webview and its rejection used to be swallowed.
+const clipboardWrite = vi.hoisted(() => vi.fn(async (_t: string) => {}))
+vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({ writeText: clipboardWrite }))
+
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -59,8 +65,6 @@ const device = (over: Partial<{ id: string; name: string }> = {}) => ({
 
 const config = { idleDays: 30, maxDays: 90, bind: null, mdns: false }
 
-const writeText = vi.fn().mockResolvedValue(undefined)
-
 beforeEach(() => {
   vi.clearAllMocks()
   usePalette.setState({ anywhereOpen: false })
@@ -76,11 +80,7 @@ beforeEach(() => {
   anywhereSetBind.mockResolvedValue(undefined)
   anywhereSetLifetimes.mockResolvedValue(undefined)
   anywhereSetMdns.mockResolvedValue(undefined)
-  vi.stubGlobal("navigator", {
-    clipboard: { writeText },
-    userAgent: "test",
-    language: "en",
-  })
+  vi.stubGlobal("navigator", { userAgent: "test", language: "en" })
 })
 
 afterEach(() => {
@@ -117,7 +117,7 @@ describe("AnywhereDialog", () => {
     // The URL button (its label is the URL) appears once status resolves.
     const urlBtn = await screen.findByRole("button", { name: info.url })
     await userEvent.click(urlBtn)
-    expect(writeText).toHaveBeenCalledWith(info.url)
+    expect(clipboardWrite).toHaveBeenCalledWith(info.url)
 
     await userEvent.click(screen.getByRole("button", { name: "anywhere.stop" }))
     expect(anywhereDisable).toHaveBeenCalledOnce()

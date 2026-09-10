@@ -36,7 +36,12 @@ interface Props {
 
 export function SearchResultsEditor({ matches, open, onClose, onApplied }: Props) {
   const { t } = useTranslation()
-  const hostRef = useRef<HTMLDivElement>(null)
+  // A callback ref, not a `useRef`: `Modal` is an Ark dialog with `lazyMount`,
+  // so this host is mounted a commit *after* `open` flips. An effect keyed on
+  // `open` therefore ran while the ref was still null, bailed, and — its deps
+  // unchanged — never ran again. The dialog opened empty: no results, no
+  // editor, just "Apply 0 changes".
+  const [host, setHost] = useState<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const [edited, setEdited] = useState("")
   const doc = useMemo(() => buildResultsDoc(matches), [matches])
@@ -44,10 +49,10 @@ export function SearchResultsEditor({ matches, open, onClose, onApplied }: Props
   // One editor per opening: the document is built from the results as they were
   // when you opened it, and re-seeding a live one mid-edit would drop the edits.
   useEffect(() => {
-    if (!open || !hostRef.current) return
+    if (!open || !host) return
     const view = new EditorView({
       doc: doc.text,
-      parent: hostRef.current,
+      parent: host,
       extensions: [
         lineNumbers(),
         history(),
@@ -64,7 +69,7 @@ export function SearchResultsEditor({ matches, open, onClose, onApplied }: Props
       view.destroy()
       viewRef.current = null
     }
-  }, [open, doc])
+  }, [open, host, doc])
 
   const edits = pendingEdits(doc, edited)
   const shapeOk = sameShape(doc, edited)
@@ -102,7 +107,7 @@ export function SearchResultsEditor({ matches, open, onClose, onApplied }: Props
       <p className="flex-none px-4 pt-3 text-xs leading-relaxed text-faint">
         {t("search.resultsHint", { key: `${mod}Z` })}
       </p>
-      <div ref={hostRef} className="min-h-0 flex-1 overflow-auto p-2" />
+      <div ref={setHost} className="min-h-0 flex-1 overflow-auto p-2" />
       <footer className="flex flex-none items-center justify-end gap-3 border-t border-line px-4 py-3">
         <span className="flex-1 text-xs text-muted">
           {!shapeOk

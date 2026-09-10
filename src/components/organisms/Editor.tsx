@@ -12,7 +12,7 @@
  */
 
 import { listen } from "@tauri-apps/api/event"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
 import { Button } from "@/components/atoms/Button"
@@ -173,19 +173,38 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   // asked for a specific one. Source Control opens a file *as its diff*, and
   // that request arrives with the open, so it is honoured here rather than
   // being wiped by the reset a moment later.
+  //
+  // Keyed on the request as well as the file: clicking a row in Source Control
+  // for the file already on screen leaves `active` unchanged, and this used to
+  // not re-run — so the click did nothing, and the request sat in the queue
+  // until the *next*, unrelated file inherited it and opened as a diff or a
+  // conflict it had nothing to do with.
   // Only the primary pane owns this shared state.
+  const pendingView = useEditorActions((s) => s.pendingView)
+  const viewAppliedFor = useRef<string | null>(null)
   useEffect(() => {
     if (!primary) return
     const actions = useEditorActions.getState()
+    const requested = actions.takePendingView()
+    const fileChanged = viewAppliedFor.current !== active
+    // Taking the request empties the queue, which re-runs this effect. That pass
+    // has nothing to do: acting on it would reset the very view just asked for.
+    if (!fileChanged && !requested) return
+    viewAppliedFor.current = active
     // A captured buffer belongs to one compare of one file; opening another file
     // must not diff the new one against the old one's text.
     actions.setCompareBuffer(null)
     if (actions.diffBase === SAVED_BASE) actions.setDiffBase("HEAD")
-    const requested = actions.takePendingView()
     if (requested === "diff") actions.setDiffing(true)
     else if (requested === "conflict") actions.setResolvingConflict(true)
-    else actions.setDiffing(false)
-  }, [active, primary])
+    else {
+      // A plain open is a clean slate. Conflict resolution belongs to the file
+      // that was conflicted; leaving it on meant the next file you opened
+      // arrived inside someone else's merge.
+      actions.setDiffing(false)
+      actions.setResolvingConflict(false)
+    }
+  }, [active, primary, pendingView])
 
   if (!active) {
     return <Welcome />

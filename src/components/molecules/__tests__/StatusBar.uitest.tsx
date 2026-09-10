@@ -255,4 +255,15 @@ describe("StatusBar branch switcher", () => {
     await vi.waitFor(() => expect(useNotice.getState().notices[0]?.kind).toBe("error"))
     expect(useNotice.getState().notices[0]?.text).toMatch(/dirty tree/)
   })
+
+  it("shows the file's encoding once, and truthfully", () => {
+    // The bug: a hardcoded "UTF-8" span sat next to the real encoding picker, so
+    // the bar read "UTF-8 … utf-8" — and on a latin-1 file it would have gone on
+    // claiming UTF-8 beside the true value. It was not stylable like the other
+    // items, and not hideable through the status-bar settings either.
+    useDocInfo.setState({ encoding: "windows-1252" })
+    render(<StatusBar />)
+    expect(screen.queryByText("UTF-8")).not.toBeInTheDocument()
+    expect(screen.getByText("windows-1252")).toBeInTheDocument()
+  })
 })

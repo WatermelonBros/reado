@@ -9,10 +9,20 @@ const h = vi.hoisted(() => ({
   /** The plugin `LSPPlugin.get(view)` resolves to, or null for "no server". */
   plugin: null as null | {
     uri: string
-    client: { sync: () => void; request: ReturnType<typeof vi.fn> }
+    client: {
+      sync: () => void
+      request: ReturnType<typeof vi.fn>
+      serverCapabilities?: Record<string, unknown>
+    }
     toPosition: (pos: number) => { line: number; character: number }
+    // Only the rename/code-action path (which edits the open document through
+    // its own view) reaches these.
+    view?: unknown
+    fromPosition?: (p: { character: number }) => number
   },
   create: vi.fn(() => "lsp-extension"),
+  /** The initialize round trip; overridden per test to make it fail. */
+  initializing: () => Promise.resolve(null),
   connect: vi.fn(function (this: unknown) {
     return this
   }),
@@ -22,6 +32,10 @@ vi.mock("@codemirror/lsp-client", () => ({
   LSPPlugin: { get: () => h.plugin, create: h.create },
   LSPClient: class {
     connect = h.connect
+    // The real client exposes the `initialize` round trip; lsp.ts listens to it
+    // so a server that starts and then refuses to initialize is reported instead
+    // of surfacing as an unhandled rejection.
+    initializing = h.initializing()
   },
   formatKeymap: [],
   renameKeymap: [],
@@ -29,6 +43,8 @@ vi.mock("@codemirror/lsp-client", () => ({
   signatureHelp: () => [],
 }))
 
+const readFile = vi.fn(async () => ({ kind: "text", text: "old old\n", encoding: "utf-8" }))
+const writeBacked = vi.fn(async () => ({ changed: 1, backups: [] }))
 const lspStart = vi.fn(async () => {})
 const lspSend = vi.fn(async () => {})
 const lspStop = vi.fn(async () => {})
@@ -39,6 +55,8 @@ vi.mock("../api", async (orig) => ({
   lspSend: (...a: unknown[]) => lspSend(...(a as [])),
   lspStop: (...a: unknown[]) => lspStop(...(a as [])),
   resolvePath: (...a: unknown[]) => resolvePath(...(a as [])),
+  readFile: (...a: unknown[]) => readFile(...(a as [])),
+  writeBacked: (...a: unknown[]) => writeBacked(...(a as [])),
 }))
 
 type Listener = (e: { payload: string }) => void
@@ -52,6 +70,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const notify = vi.fn()
 vi.mock("../notice", () => ({ notify: (k: string, m: string) => notify(k, m) }))
+const prompt = vi.fn(async (_opts: unknown) => null as string | null)
+vi.mock("../prompt", () => ({ prompt: (o: unknown) => prompt(o as never) }))
 vi.mock("@/i18n", () => ({ t: (k: string) => k }))
 
 import { useDiagnostics } from "@/lib/diagnostics"
@@ -67,7 +87,9 @@ import {
   lspPrepareTypeHierarchy,
   lspSupport,
   lspTypes,
+  renameSymbolAt,
 } from "@/lib/lsp"
+import { useProject } from "@/lib/store"
 
 /** A stand-in view; every function reaches the server through LSPPlugin.get. */
 const view = {} as EditorView
@@ -77,7 +99,9 @@ function attach(res: unknown = null) {
   const request = vi.fn(async () => res)
   h.plugin = {
     uri: "file:///repo/src/a.ts",
-    client: { sync: vi.fn(), request },
+    // A server that answered `initialize`. Callers that check whether one is
+    // ready (rather than merely present) rely on this being set.
+    client: { sync: vi.fn(), request, serverCapabilities: {} },
     toPosition: (pos: number) => ({ line: pos, character: 0 }),
   }
   return request
@@ -98,6 +122,8 @@ beforeEach(() => {
   resolvePath.mockResolvedValue(null)
   useExtensions.setState({ disabled: [] })
   useDiagnostics.setState({ byFile: {}, errors: {} })
+  readFile.mockResolvedValue({ kind: "text", text: "old old\n", encoding: "utf-8" })
+  writeBacked.mockResolvedValue({ changed: 1, backups: [] })
 })
 
 describe("hasServer", () => {
@@ -121,7 +147,11 @@ describe("hasServer", () => {
 
 describe("with no server attached", () => {
   it("every wrapper reports 'not mine' instead of throwing", async () => {
-    expect(lspLocate(view, 0, "definition", vi.fn())).toBe(false)
+    // `lspLocate` answers through its callbacks now, not a return value, so
+    // "not mine" here means it reaches the miss handler rather than throwing.
+    const miss = vi.fn()
+    lspLocate(view, 0, "definition", vi.fn(), miss)
+    await vi.waitFor(() => expect(miss).toHaveBeenCalled())
     expect(lspDefinition(view, 0)).toBeNull()
     expect(lspDocumentSymbols(view)).toBeNull()
     expect(lspPrepareCallHierarchy(view, 0)).toBeNull()
@@ -161,7 +191,7 @@ describe("lspLocate", () => {
   it("opens the located file at a 1-based line", async () => {
     attach({ uri: "file:///repo/src/b.ts", range: { start: { line: 41, character: 0 } } })
     const open = vi.fn()
-    expect(lspLocate(view, 3, "definition", open)).toBe(true)
+    lspLocate(view, 3, "definition", open)
     await vi.waitFor(() => expect(open).toHaveBeenCalledWith("/repo/src/b.ts", 42))
   })
 
@@ -185,10 +215,12 @@ describe("lspLocate", () => {
   it("opens nothing when the server found nothing", async () => {
     const request = attach(null)
     const open = vi.fn()
-    expect(lspLocate(view, 3, "definition", open)).toBe(true)
+    const miss = vi.fn()
+    lspLocate(view, 3, "definition", open, miss)
     // Wait for the request chain to actually settle — one microtask leaves it
     // in flight and the absence below would hold for a working `open`.
     await vi.waitFor(() => expect(request).toHaveBeenCalled())
+    await vi.waitFor(() => expect(miss).toHaveBeenCalled())
     expect(open).not.toHaveBeenCalled()
   })
 })
@@ -395,5 +427,131 @@ describe("the connection's side channels", () => {
     lspStart.mockClear()
     await lspSupport("/crash", "/crash/a.rb")
     expect(lspStart).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("lspLocate", () => {
+  it("declines when the server has not finished initializing", async () => {
+    // The bug behind "⌘-click does nothing": a server that started and never
+    // initialized still leaves a plugin behind. Claiming it here told the caller
+    // a request was on its way that could never arrive, and the caller — having
+    // been told the server had it — never tried the symbol index.
+    const request = attach(null)
+    const plugin = h.plugin as NonNullable<typeof h.plugin>
+    plugin.client.serverCapabilities = undefined
+    const miss = vi.fn()
+    lspLocate(view, 0, "definition", () => {}, miss)
+    await vi.waitFor(() => expect(miss).toHaveBeenCalled())
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it("falls back when the server answers with no location", async () => {
+    // The other half: a server that knows the file but not this symbol replied
+    // with nothing, the result was dropped, and the click did nothing at all —
+    // no jump, no message, and the index never consulted.
+    attach(null)
+    const plugin = h.plugin as NonNullable<typeof h.plugin>
+    plugin.client.serverCapabilities = { definitionProvider: true }
+    const open = vi.fn()
+    const miss = vi.fn()
+    lspLocate(view, 0, "definition", open, miss)
+    await vi.waitFor(() => expect(miss).toHaveBeenCalled())
+    expect(open).not.toHaveBeenCalled()
+  })
+})
+
+describe("a server that refuses to initialize", () => {
+  it("tells the user instead of surfacing as an unhandled rejection", async () => {
+    // The bug: `typescript-language-server` in a project with no TypeScript
+    // starts, says so, and exits. Nobody listened to the rejected `initialize`,
+    // so the console got an unhandled promise, the user got nothing, and the
+    // editor went on believing it had code intelligence.
+    h.initializing = () =>
+      Promise.reject(new Error("Could not find a valid TypeScript installation"))
+    useExtensions.setState({ disabled: [] })
+
+    await lspSupport("/ts-root", "/ts-root/a.ts")
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledWith("error", "lsp.serverFailed"))
+    // And the dead connection is dropped, so the next open starts a fresh server
+    // rather than talking to a process that has exited.
+    expect(lspStop).toHaveBeenCalled()
+
+    h.initializing = () => Promise.resolve(null)
+  })
+})
+
+describe("renameSymbolAt", () => {
+  /** A view holding `word` at the cursor, plus a server that can rename. */
+  function renamable(changes: unknown) {
+    const request = attach({ changes })
+    const plugin = h.plugin as NonNullable<typeof h.plugin>
+    plugin.client.serverCapabilities = { renameProvider: true }
+    // The open document is edited through its own view — the half of the rename
+    // that always worked. It is here so the other half can be asserted.
+    const dispatch = vi.fn()
+    plugin.view = { state: { doc: "old old\n" }, dispatch }
+    plugin.fromPosition = (p: { character: number }) => p.character
+    useProject.setState({ root: "/repo", roots: ["/repo"] })
+    return {
+      request,
+      dispatch,
+      plugin,
+      view: {
+        state: {
+          selection: { main: { head: 4 } },
+          wordAt: () => ({ from: 0, to: 3 }),
+          sliceDoc: () => "old",
+        },
+      } as unknown as EditorView,
+    }
+  }
+
+  it("renames the call sites in files that are not open", async () => {
+    // The bug: the library's rename applies edits through `workspace.getFile`,
+    // which only knows files with an editor attached — so every other call site
+    // silently kept the old name. Two files come back; both must be written.
+    const edit = { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } } }
+    const { request, view, dispatch } = renamable({
+      "file:///repo/src/a.ts": [{ ...edit, newText: "next" }],
+      "file:///repo/src/elsewhere.ts": [{ ...edit, newText: "next" }],
+    })
+    prompt.mockResolvedValue("next")
+
+    expect(renameSymbolAt(view)).toBe(true)
+    await vi.waitFor(() => expect(writeBacked).toHaveBeenCalled())
+
+    expect(request).toHaveBeenCalledWith(
+      "textDocument/rename",
+      expect.objectContaining({ newName: "next" }),
+    )
+    // The open file goes through its own view; the closed one through the disk.
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(writeBacked).toHaveBeenCalledTimes(1)
+    expect(writeBacked.mock.calls[0]).toEqual(["/repo", "src/elsewhere.ts", "next old\n", "utf-8"])
+    // And the count is reported, so a partial rename is visible instead of silent.
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledWith("success", "lsp.renamed"))
+  })
+
+  it("asks before renaming, and does nothing when the name is unchanged", async () => {
+    const { request, view } = renamable({})
+    prompt.mockResolvedValue("old")
+    expect(renameSymbolAt(view)).toBe(true)
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalled())
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it("declines when the server says it cannot rename", () => {
+    const { view, plugin } = renamable({})
+    plugin.client.serverCapabilities = { renameProvider: false }
+    expect(renameSymbolAt(view)).toBe(false)
+  })
+
+  it("says so when the server refuses this particular symbol", async () => {
+    const { view, plugin } = renamable({})
+    plugin.client.request = vi.fn(async () => null)
+    prompt.mockResolvedValue("next")
+    renameSymbolAt(view)
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledWith("info", "lsp.renameRefused"))
+    expect(writeBacked).not.toHaveBeenCalled()
   })
 })

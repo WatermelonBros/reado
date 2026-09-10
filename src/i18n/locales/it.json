@@ -1195,7 +1195,14 @@
     "actionKindFix": "Correzione",
     "actionKindRefactor": "Refactor",
     "actionKindSource": "Sorgente",
-    "actionKindOther": "Altro"
+    "actionKindOther": "Altro",
+    "renameTitle": "Rinomina “{name}” ovunque",
+    "renameConfirm": "Rinomina",
+    "renamed": "Rinominato in “{name}” in {count} file.",
+    "renamed_other": "Rinominato in “{name}” in {count} file.",
+    "renameRefused": "Questo simbolo non si può rinominare qui.",
+    "renameFailed": "La rinomina non è stata applicata.",
+    "serverFailed": "Il language server {name} è partito ma non si è inizializzato: per questi file non c'è code intelligence. Il motivo è nel log."
   },
   "file": {
     "newFile": "Nuovo file",
@@ -1426,5 +1433,22 @@
     "added": "{name} aggiunta allo spazio di lavoro.",
     "removed": "{name} tolta dallo spazio di lavoro.",
     "primaryNote": "La prima cartella tiene l'elenco e i commenti; le altre vengono lette e cercate insieme a lei."
+  },
+  "cm": {
+    "close": "chiudi",
+    "controlChar": "Carattere di controllo",
+    "currentMatch": "corrispondenza corrente",
+    "diagnostics": "Diagnostica",
+    "foldedCode": "codice ripiegato",
+    "go": "vai",
+    "goToLine": "Vai alla riga",
+    "noDiagnostics": "Nessun problema",
+    "onLine": "alla riga",
+    "to": "a",
+    "unfold": "espandi"
+  },
+  "help": {
+    "logPathCopied": "Percorso del log copiato negli appunti.",
+    "logPathCopyFailed": "Non sono riuscito a copiare il percorso del log."
   }
 }

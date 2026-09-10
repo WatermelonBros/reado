@@ -9,6 +9,7 @@
  * then lists and can revoke one at a time.
  */
 import { listen } from "@tauri-apps/api/event"
+import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
@@ -186,7 +187,7 @@ export function AnywhereDialog() {
 
   const copyUrl = () => {
     if (!info) return
-    void navigator.clipboard.writeText(info.url).then(() => {
+    void clipboardWriteText(info.url).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
     })

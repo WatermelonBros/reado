@@ -2,7 +2,6 @@ import { autocompletion } from "@codemirror/autocomplete"
 import { historyField } from "@codemirror/commands"
 import { bracketMatching, indentUnit, LanguageDescription } from "@codemirror/language"
 import { forEachDiagnostic } from "@codemirror/lint"
-import { renameSymbol } from "@codemirror/lsp-client"
 import { selectSelectionMatches } from "@codemirror/search"
 import { Compartment, EditorState } from "@codemirror/state"
 import { EditorView, highlightWhitespace } from "@codemirror/view"
@@ -66,11 +65,13 @@ import { resolvedLanguageId } from "@/lib/extLanguages"
 import { languages } from "@/lib/languages"
 import { createLogger, safeError } from "@/lib/logger"
 import {
+  fileSaved,
   hasServer,
   lspDefinition,
   lspHover,
   lspSupport,
   type ResolvedAction,
+  renameSymbolAt,
   useLspServers,
 } from "@/lib/lsp"
 import { enabledExtensions, useMarketplace } from "@/lib/marketplace"
@@ -407,6 +408,7 @@ export function CodeView({
       .then(() => {
         useEditorActions.getState().setDirty(relPath, false)
         setSaveError(false) // clear any prior failure on a successful save
+        fileSaved(view) // the formatter may have rewritten it; re-ask the server
       })
       .catch((e) => {
         // The inline banner is the contextual surface; also log the raw error so
@@ -1021,13 +1023,21 @@ export function CodeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stickyScroll])
 
-  // Scroll to and softly highlight the landing line after a jump.
+  // Scroll to, put the caret on, and softly highlight the landing line.
+  //
+  // The caret matters as much as the scroll: without it you land on the line
+  // visually while the cursor is still wherever it was — line 1 of a file just
+  // opened — so the first arrow key or keystroke throws you back to the top. It
+  // also left the app disagreeing with itself, since clicking a symbol in the
+  // outline and F12 both move the caret. Focus is deliberately not taken: the
+  // panel you clicked from keeps it, exactly as before.
   useEffect(() => {
     const view = viewRef.current
     if (!view || !landingLine) return
     const lineNo = Math.min(landingLine.line, view.state.doc.lines)
     const pos = view.state.doc.line(lineNo).from
     view.dispatch({
+      selection: { anchor: pos },
       effects: [EditorView.scrollIntoView(pos, { y: "center" }), setLanding.of(lineNo)],
     })
     const timer = setTimeout(() => {
@@ -1269,7 +1279,7 @@ export function CodeView({
           run: () => {
             view.dispatch({ selection: { anchor: pos } })
             view.focus()
-            renameSymbol(view)
+            renameSymbolAt(view)
           },
         },
       hasSelection && {

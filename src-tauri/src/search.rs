@@ -45,6 +45,36 @@ fn scope_dir(root: &str, scope: Option<String>) -> Result<Option<PathBuf>> {
     Ok(Some(dir))
 }
 
+/// The matcher a search and its replace share, built from the panel's toggles.
+///
+/// Search and replace must agree on what a match *is*, or "Replace All" rewrites
+/// something other than the list the user is looking at. Both sides build the
+/// pattern here: literal queries are escaped, whole-word wraps the whole thing in
+/// word boundaries (so an alternation can't leak past them), and case follows the
+/// Aa toggle rather than ripgrep's smart-case guess — the same rule `search_text`
+/// passes to `rg`.
+fn matcher(
+    query: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    regex: bool,
+) -> Result<regex::Regex> {
+    let mut pattern = if regex {
+        query.to_string()
+    } else {
+        regex::escape(query)
+    };
+    if whole_word {
+        pattern = format!(r"\b(?:{pattern})\b");
+    }
+    regex::RegexBuilder::new(&pattern)
+        .case_insensitive(!case_sensitive)
+        // `^`/`$` anchor per line, as they do in ripgrep's line-oriented search.
+        .multi_line(true)
+        .build()
+        .map_err(|e| Error::Other(format!("invalid search pattern: {e}")))
+}
+
 /// Search `query` across `root` using ripgrep (smart-case, gitignore-aware).
 ///
 /// `query` is interpreted as a ripgrep regex; ripgrep's smart-case rule makes it
@@ -117,14 +147,8 @@ pub fn search_text(
             let start = scope
                 .as_ref()
                 .map_or_else(|| root.clone(), |d| d.to_string_lossy().into_owned());
-            return Ok(search_fallback(
-                &root,
-                &start,
-                &query,
-                &include,
-                &exclude,
-                case_sensitive,
-            ));
+            let re = matcher(&query, case_sensitive, whole_word, regex)?;
+            return Ok(search_fallback(&root, &start, &re, &include, &exclude));
         }
         Err(e) => return Err(Error::Io(e)),
     };
@@ -181,22 +205,17 @@ fn parse_rg_json(stdout: &str) -> Vec<SearchMatch> {
 
 /// In-process search used when `rg` is unavailable. Walks `root` honouring
 /// `.gitignore` and skipping hidden/VCS dirs (via the `ignore` crate), and finds
-/// literal, smart-case matches line by line. Binary files (invalid UTF-8) are
-/// skipped. Not a regex engine — just enough to keep search working everywhere.
+/// matches line by line with the same `matcher` the replace side uses — so every
+/// toggle keeps working, and the reported column is a real byte offset into the
+/// line rather than into a lower-cased copy of it. Binary files (invalid UTF-8)
+/// are skipped.
 fn search_fallback(
     root: &str,
     start: &str,
-    query: &str,
+    re: &regex::Regex,
     include: &[String],
     exclude: &[String],
-    case_sensitive: bool,
 ) -> Vec<SearchMatch> {
-    let needle = if case_sensitive {
-        query.to_string()
-    } else {
-        query.to_lowercase()
-    };
-
     // Walk from `start` (the scope, or the root) but build the overrides against
     // the root, so the user's exclude globs keep meaning the same thing.
     let mut walk = ignore::WalkBuilder::new(start);
@@ -219,16 +238,11 @@ fn search_fallback(
             if per_file >= 100 || matches.len() >= MAX_MATCHES {
                 break;
             }
-            let hay = if case_sensitive {
-                line.to_string()
-            } else {
-                line.to_lowercase()
-            };
-            if let Some(col) = hay.find(&needle) {
+            if let Some(m) = re.find(line) {
                 matches.push(SearchMatch {
                     path: entry.path().to_string_lossy().into_owned(),
                     line: (i + 1) as u64,
-                    column: col as u64,
+                    column: m.start() as u64,
                     text: line.trim_end().to_string(),
                 });
                 per_file += 1;
@@ -369,64 +383,108 @@ fn park_backup(root: &Path, path: &Path) -> Result<Backup> {
     })
 }
 
-/// Rewrite `content`, replacing `query` with `replacement`.
+/// Rewrite `content`, replacing what `re` matches with `replacement`.
 ///
-/// With `positions` empty, every occurrence goes. Otherwise only the occurrences
-/// that start at one of the given 1-based (line, column) pairs — which is what
-/// "replace this one result" means, and why the search panel sends the position
-/// of the row you clicked rather than an occurrence index.
+/// With `positions` empty, every match goes. Otherwise only the matches that
+/// start at one of the given positions — which is what "replace this one result"
+/// means, and why the search panel sends the position of the row you clicked
+/// rather than an occurrence index.
+///
+/// A position is `(1-based line, 0-based byte column)`: ripgrep's own convention,
+/// which is what `SearchMatch` carries and therefore what the panel sends back.
+///
+/// `literal` says how to read `replacement`: a literal search replaces with the
+/// text as typed (so `$5.00` stays `$5.00`), a regex search expands `$1` and
+/// friends against the capture groups, as VS Code does.
 fn replace_in_text(
     content: &str,
-    query: &str,
+    re: &regex::Regex,
     replacement: &str,
+    literal: bool,
     positions: &[(u64, u64)],
 ) -> Option<String> {
-    if positions.is_empty() {
-        let updated = content.replace(query, replacement);
-        return (updated != *content).then_some(updated);
+    // The project-wide replace takes this path: every match, replaced with plain
+    // text. It wants neither the capture groups nor the line/column of each hit,
+    // and `find_iter` on the lazy DFA is markedly cheaper than `captures_iter`,
+    // which allocates a `Captures` per match.
+    if positions.is_empty() && literal {
+        let mut out = String::with_capacity(content.len());
+        let mut last = 0usize;
+        let mut changed = false;
+        for m in re.find_iter(content) {
+            if m.is_empty() {
+                continue;
+            }
+            out.push_str(&content[last..m.start()]);
+            out.push_str(replacement);
+            changed = true;
+            last = m.end();
+        }
+        out.push_str(&content[last..]);
+        return changed.then_some(out);
     }
+
     let wanted: std::collections::HashSet<(u64, u64)> = positions.iter().copied().collect();
     let mut out = String::with_capacity(content.len());
     let mut changed = false;
-    // Line endings are preserved by splitting on '\n' and re-joining: a CRLF file
-    // keeps its '\r' as the last character of each line's content.
-    for (i, line) in content.split('\n').enumerate() {
-        if i > 0 {
-            out.push('\n');
+    // Where the previous match ended, and the line it left us on. Both only ever
+    // move forward, so the line/column of each match costs one scan of the gap
+    // since the last one rather than a scan from the top of the file.
+    let mut last = 0usize;
+    let mut line = 1u64;
+    let mut line_start = 0usize;
+    for caps in re.captures_iter(content) {
+        let Some(m) = caps.get(0) else { continue };
+        // An empty match (`a*` against "b") has nothing to replace, and matches
+        // at every position; skipping it keeps a stray quantifier from shredding
+        // the file.
+        if m.is_empty() {
+            continue;
         }
-        let line_no = (i + 1) as u64;
-        let mut col = 1u64;
-        let mut rest = line;
-        while let Some(at) = rest.find(query) {
-            let before = &rest[..at];
-            out.push_str(before);
-            let start_col = col + before.chars().count() as u64;
-            if wanted.contains(&(line_no, start_col)) {
+        for (offset, _) in content[last..m.start()].match_indices('\n') {
+            line += 1;
+            line_start = last + offset + 1;
+        }
+        let column = (m.start() - line_start) as u64;
+        out.push_str(&content[last..m.start()]);
+        if positions.is_empty() || wanted.contains(&(line, column)) {
+            if literal {
                 out.push_str(replacement);
-                changed = true;
             } else {
-                out.push_str(query);
+                caps.expand(replacement, &mut out);
             }
-            col = start_col + query.chars().count() as u64;
-            rest = &rest[at + query.len()..];
+            changed = true;
+        } else {
+            out.push_str(m.as_str());
         }
-        out.push_str(rest);
+        last = m.end();
     }
+    out.push_str(&content[last..]);
     changed.then_some(out)
 }
 
-/// Replace every literal occurrence of `query` with `replacement` across the
-/// project (gitignore-aware, text files only). Case-sensitive and literal — not
-/// a regex — so a project-wide replace can't misfire on regex metacharacters.
+/// Replace every match of `query` with `replacement` across the project
+/// (gitignore-aware, text files only).
+///
+/// The toggles are the search panel's own — a rewrite has to find exactly what
+/// the results list showed, so it takes the same case/whole-word/regex flags and
+/// the same include/exclude globs `search_text` was given. With `regex` on,
+/// `replacement` expands `$1`; with it off, both sides are literal text.
 ///
 /// Every file it rewrites is backed up first, so the whole batch is one
 /// undoable action rather than forty irreversible writes.
+// One argument per panel control, as in `search_text` — see the note there.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn replace_text(
     root: String,
     query: String,
     replacement: String,
     exclude: Vec<String>,
+    include: Vec<String>,
+    case_sensitive: bool,
+    whole_word: bool,
+    regex: bool,
     scope: Option<String>,
 ) -> Result<ReplaceResult> {
     let mut result = ReplaceResult::default();
@@ -441,13 +499,16 @@ pub fn replace_text(
         .as_ref()
         .map_or_else(|| root.clone(), |d| d.to_string_lossy().into_owned());
     let root_path = std::path::PathBuf::from(&root);
+    let re = matcher(&query, case_sensitive, whole_word, regex)?;
+    let literal = !regex;
     // Once for the whole walk: this parks a copy per matching file, and sweeping
     // the directory again for each of them would be quadratic.
     prune_undo(&root_path.join(".reado").join(".undo"));
     let mut walk = ignore::WalkBuilder::new(&start);
-    // Honor the user's exclude-from-tree/search globs, matching `search_text` — a
-    // project-wide rewrite must not touch files the user has hidden from search.
-    if let Some(ov) = crate::fs::exclude_overrides(&root_path, &exclude) {
+    // Honor the same globs the search did — the "files to include" field and the
+    // user's exclude-from-search list. A project-wide rewrite must not touch
+    // files the results list never showed.
+    if let Some(ov) = crate::fs::glob_overrides(&root_path, &include, &exclude) {
         walk.overrides(ov);
     }
     for entry in walk.build().flatten() {
@@ -458,10 +519,14 @@ pub fn replace_text(
         let Ok(content) = std::fs::read_to_string(path) else {
             continue; // unreadable or binary
         };
-        if !content.contains(&query) {
+        // Ask the cheap question first. `is_match` short-circuits on the lazy
+        // DFA and allocates nothing, while `replace_in_text` reserves a buffer
+        // the size of the file before it can tell you there was nothing to do —
+        // and in a project almost every file is nothing to do.
+        if !re.is_match(&content) {
             continue;
         }
-        let Some(updated) = replace_in_text(&content, &query, &replacement, &[]) else {
+        let Some(updated) = replace_in_text(&content, &re, &replacement, literal, &[]) else {
             continue;
         };
         result.backups.push(park_backup(&root_path, path)?);
@@ -476,24 +541,33 @@ pub fn replace_text(
     Ok(result)
 }
 
-/// Replace occurrences inside a single file: all of them, or only the ones at
-/// the given 1-based (line, column) positions.
+/// Replace matches inside a single file: all of them, or only the ones at the
+/// given positions (1-based line, 0-based byte column — what `SearchMatch`
+/// carries).
 ///
-/// This is what "Replace" on one search result runs. Backed up like the
+/// This is what "Replace" on one search result runs, so it takes the panel's
+/// toggles for the same reason `replace_text` does. Backed up like the
 /// project-wide replace, so a single-match rewrite is just as undoable.
+// One argument per panel control, as in `search_text` — see the note there.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn replace_in_file(
     root: String,
     path: String,
     query: String,
     replacement: String,
+    case_sensitive: bool,
+    whole_word: bool,
+    regex: bool,
     positions: Vec<(u64, u64)>,
 ) -> Result<ReplaceResult> {
     if query.is_empty() {
         return Ok(ReplaceResult::default());
     }
+    let re = matcher(&query, case_sensitive, whole_word, regex)?;
+    let literal = !regex;
     rewrite_backed_up(&root, &path, |content| {
-        replace_in_text(content, &query, &replacement, &positions)
+        replace_in_text(content, &re, &replacement, literal, &positions)
     })
 }
 
@@ -629,6 +703,9 @@ mod tests {
             dir.path().join("a.txt").to_string_lossy().into_owned(),
             "one".into(),
             "two".into(),
+            true,
+            false,
+            false,
             vec![],
         )
         .unwrap();
@@ -677,9 +754,19 @@ mod tests {
         std::fs::write(dir.path().join("b.txt"), "nothing\n").unwrap();
         let root = dir.path().to_str().unwrap();
 
-        let n = super::replace_text(root.into(), "foo".into(), "baz".into(), vec![], None)
-            .unwrap()
-            .changed;
+        let n = super::replace_text(
+            root.into(),
+            "foo".into(),
+            "baz".into(),
+            vec![],
+            vec![],
+            true,
+            false,
+            false,
+            None,
+        )
+        .unwrap()
+        .changed;
         assert_eq!(n, 1);
         assert_eq!(
             std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
@@ -703,6 +790,10 @@ mod tests {
             "foo".into(),
             "baz".into(),
             vec!["*.log".into()],
+            vec![],
+            true,
+            false,
+            false,
             None,
         )
         .unwrap()
@@ -784,41 +875,112 @@ mod tests {
         assert_eq!(matches.len(), MAX_MATCHES);
     }
 
+    /// A literal, case-sensitive matcher — what a replace used to hard-code.
+    fn lit(query: &str) -> regex::Regex {
+        super::matcher(query, true, false, false).unwrap()
+    }
+
+    /// The same, case-insensitive — what the Aa toggle off means.
+    fn lit_i(query: &str) -> regex::Regex {
+        super::matcher(query, false, false, false).unwrap()
+    }
+
     #[test]
     fn replace_in_text_takes_only_the_positions_it_is_given() {
         // "Replace this one result" means the occurrence the row points at, not
         // the nth one — two matches on the same line must be distinguishable.
         let doc = "a foo b foo\nfoo\n";
-        let one = super::replace_in_text(doc, "foo", "X", &[(1, 9)]).unwrap();
+        let one = super::replace_in_text(doc, &lit("foo"), "X", true, &[(1, 8)]).unwrap();
         assert_eq!(one, "a foo b X\nfoo\n");
-        let other = super::replace_in_text(doc, "foo", "X", &[(1, 3)]).unwrap();
+        let other = super::replace_in_text(doc, &lit("foo"), "X", true, &[(1, 2)]).unwrap();
         assert_eq!(other, "a X b foo\nfoo\n");
-        let second_line = super::replace_in_text(doc, "foo", "X", &[(2, 1)]).unwrap();
+        let second_line = super::replace_in_text(doc, &lit("foo"), "X", true, &[(2, 0)]).unwrap();
         assert_eq!(second_line, "a foo b foo\nX\n");
+    }
+
+    #[test]
+    fn replace_positions_are_the_ones_a_search_reports() {
+        // The bug this guards: `SearchMatch.column` is ripgrep's 0-based byte
+        // offset, and the panel hands it straight back for "replace this result".
+        // If the two conventions drift by one, the click rewrites the wrong
+        // occurrence — or silently nothing at all.
+        let doc = "a foo b foo\n";
+        let found = super::parse_rg_json(concat!(
+            r#"{"type":"match","data":{"path":{"text":"a.txt"},"line_number":1,"#,
+            r#""lines":{"text":"a foo b foo\n"},"submatches":[{"start":2}]}}"#,
+            "\n",
+        ));
+        let hit = &found[0];
+        let out =
+            super::replace_in_text(doc, &lit("foo"), "X", true, &[(hit.line, hit.column)]).unwrap();
+        assert_eq!(out, "a X b foo\n");
     }
 
     #[test]
     fn replace_in_text_takes_every_occurrence_when_given_no_positions() {
         assert_eq!(
-            super::replace_in_text("foo foo", "foo", "X", &[]).unwrap(),
+            super::replace_in_text("foo foo", &lit("foo"), "X", true, &[]).unwrap(),
             "X X"
         );
     }
 
     #[test]
     fn replace_in_text_reports_nothing_to_do() {
-        assert!(super::replace_in_text("bar", "foo", "X", &[]).is_none());
+        assert!(super::replace_in_text("bar", &lit("foo"), "X", true, &[]).is_none());
         // A position that doesn't land on an occurrence changes nothing.
-        assert!(super::replace_in_text("a foo", "foo", "X", &[(1, 1)]).is_none());
+        assert!(super::replace_in_text("a foo", &lit("foo"), "X", true, &[(1, 0)]).is_none());
     }
 
     #[test]
     fn replace_in_text_keeps_crlf_endings() {
-        // Lines are split on '\n', so the '\r' rides along as part of the line.
+        // Only the match is rewritten, so a '\r' outside it rides along untouched.
         assert_eq!(
-            super::replace_in_text("foo\r\nfoo\r\n", "foo", "X", &[(2, 1)]).unwrap(),
+            super::replace_in_text("foo\r\nfoo\r\n", &lit("foo"), "X", true, &[(2, 0)]).unwrap(),
             "foo\r\nX\r\n"
         );
+    }
+
+    #[test]
+    fn replace_honours_the_search_toggles() {
+        // The bug: the panel searched with these toggles and the rewrite ignored
+        // them, so "Replace All" on a regex search rewrote the pattern text.
+        let re = super::matcher(r"f(o+)", true, false, true).unwrap();
+        assert_eq!(
+            super::replace_in_text("foo and fooo", &re, "[$1]", false, &[]).unwrap(),
+            "[oo] and [ooo]"
+        );
+
+        // Literal mode leaves `$` alone: a price is not a capture group.
+        assert_eq!(
+            super::replace_in_text("cost", &lit("cost"), "$5.00", true, &[]).unwrap(),
+            "$5.00"
+        );
+
+        // Case-insensitive finds what the search found.
+        let any_case = super::matcher("foo", false, false, false).unwrap();
+        assert_eq!(
+            super::replace_in_text("Foo foo", &any_case, "X", true, &[]).unwrap(),
+            "X X"
+        );
+
+        // Whole-word does not rewrite the middle of a longer word.
+        let word = super::matcher("foo", true, true, false).unwrap();
+        assert_eq!(
+            super::replace_in_text("foo foobar", &word, "X", true, &[]).unwrap(),
+            "X foobar"
+        );
+    }
+
+    #[test]
+    fn an_empty_match_is_left_alone() {
+        // `a*` matches at every position; replacing those would shred the file.
+        let re = super::matcher("x*", true, false, true).unwrap();
+        assert!(super::replace_in_text("abc", &re, "!", false, &[]).is_none());
+    }
+
+    #[test]
+    fn an_invalid_pattern_is_an_error_not_a_rewrite() {
+        assert!(super::matcher("f(oo", true, false, true).is_err());
     }
 
     #[test]
@@ -830,8 +992,18 @@ mod tests {
         std::fs::write(dir.path().join("b.txt"), "foo\n").unwrap();
         let root = dir.path().to_str().unwrap();
 
-        let res =
-            super::replace_text(root.into(), "foo".into(), "baz".into(), vec![], None).unwrap();
+        let res = super::replace_text(
+            root.into(),
+            "foo".into(),
+            "baz".into(),
+            vec![],
+            vec![],
+            true,
+            false,
+            false,
+            None,
+        )
+        .unwrap();
         assert_eq!(res.changed, 2);
         assert_eq!(res.backups.len(), 2);
 
@@ -859,7 +1031,10 @@ mod tests {
             file.to_string_lossy().into_owned(),
             "foo".into(),
             "X".into(),
-            vec![(1, 1)],
+            true,
+            false,
+            false,
+            vec![(1, 0)],
         )
         .unwrap();
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "X foo\n");
@@ -880,6 +1055,9 @@ mod tests {
             outside.to_string_lossy().into_owned(),
             "foo".into(),
             "X".into(),
+            true,
+            false,
+            false,
             vec![],
         )
         .is_err());
@@ -1038,6 +1216,10 @@ mod tests {
             "foo".into(),
             "baz".into(),
             vec![],
+            vec![],
+            true,
+            false,
+            false,
             Some("src".into()),
         )
         .unwrap()
@@ -1077,9 +1259,9 @@ mod tests {
         let root = dir.path().to_str().unwrap();
         let scoped = dir.path().join("src");
 
-        let all = search_fallback(root, root, "hello", &[], &[], false);
+        let all = search_fallback(root, root, &lit_i("hello"), &[], &[]);
         assert_eq!(all.len(), 2);
-        let only_src = search_fallback(root, scoped.to_str().unwrap(), "hello", &[], &[], false);
+        let only_src = search_fallback(root, scoped.to_str().unwrap(), &lit_i("hello"), &[], &[]);
         assert_eq!(only_src.len(), 1);
     }
 
@@ -1091,11 +1273,11 @@ mod tests {
         let root = dir.path().to_str().unwrap();
 
         // Case-insensitive: matches both "Hello" and "hello".
-        let lower = search_fallback(root, root, "hello", &[], &[], false);
+        let lower = search_fallback(root, root, &lit_i("hello"), &[], &[]);
         assert_eq!(lower.len(), 2);
 
         // Case-sensitive: only "Hello world".
-        let upper = search_fallback(root, root, "Hello", &[], &[], true);
+        let upper = search_fallback(root, root, &lit("Hello"), &[], &[]);
         assert_eq!(upper.len(), 1);
         assert_eq!(upper[0].line, 1);
     }

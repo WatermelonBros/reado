@@ -23,7 +23,7 @@ import {
   gitStage,
 } from "@/lib/api"
 import { notifyError } from "@/lib/notice"
-import { useProject } from "@/lib/store"
+import { useEditorActions, useProject } from "@/lib/store"
 
 /** One side of a region: its label, and the lines it wants. */
 function Side({
@@ -80,7 +80,9 @@ export function ConflictView({ relPath }: { relPath: string }) {
       // Staging is what tells git the conflict is settled — the same thing
       // `git add` does after you edit the markers out by hand.
       await gitStage(root, relPath)
-      load()
+      // And then leave: the file has no conflict left to resolve, and staying
+      // here left you on a resolver whose only button marked it resolved again.
+      useEditorActions.getState().setResolvingConflict(false)
     } catch (e) {
       notifyError("conflict", t("conflict.markFailed"), e)
     }

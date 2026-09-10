@@ -403,20 +403,30 @@ const globList = (s?: string): string[] =>
     .map((g) => g.trim())
     .filter(Boolean)
 
-export const searchText = (root: string, query: string, opts: SearchOpts = DEFAULT_SEARCH_OPTS) =>
-  invoke<SearchMatch[]>("search_text", {
-    root,
-    query,
-    exclude: [...searchExcludeGlobs(), ...globList(opts.exclude)],
-    include: globList(opts.include),
-    caseSensitive: opts.caseSensitive,
-    wholeWord: opts.wholeWord,
-    regex: opts.regex,
-    scope: opts.scope ?? null,
-  })
+/** The filters and toggles a search runs with, as the backend takes them.
+ *
+ *  Search and replace must agree on what a match *is* — a rewrite that finds
+ *  something different from the list on screen is the bug this exists to
+ *  prevent — so they build their arguments from one place rather than two
+ *  hand-copied object literals that the next option can be added to only once. */
+const searchToggles = (opts: SearchOpts) => ({
+  caseSensitive: opts.caseSensitive,
+  wholeWord: opts.wholeWord,
+  regex: opts.regex,
+})
 
-/** Replace every literal occurrence of `query` across the project. Returns the
- * number of files changed. */
+const searchArgs = (opts: SearchOpts) => ({
+  // The search list is what the user is looking at, so a rewrite must obey the
+  // same exclusions it does — not the tree's.
+  exclude: [...searchExcludeGlobs(), ...globList(opts.exclude)],
+  include: globList(opts.include),
+  scope: opts.scope ?? null,
+  ...searchToggles(opts),
+})
+
+export const searchText = (root: string, query: string, opts: SearchOpts = DEFAULT_SEARCH_OPTS) =>
+  invoke<SearchMatch[]>("search_text", { root, query, ...searchArgs(opts) })
+
 /** One file's pre-replace content, parked so the rewrite can be undone. */
 export interface Backup {
   path: string
@@ -429,31 +439,37 @@ export interface ReplaceResult {
   backups: Backup[]
 }
 
+/** Replace every match of `query` across the project. Returns the number of
+ * files changed. */
 export const replaceText = (
   root: string,
   query: string,
   replacement: string,
-  scope?: string | null,
-) =>
-  invoke<ReplaceResult>("replace_text", {
-    root,
-    query,
-    replacement,
-    // The search list is what the user is looking at, so a rewrite must obey the
-    // same exclusions it does — not the tree's.
-    exclude: searchExcludeGlobs(),
-    scope: scope ?? null,
-  })
+  opts: SearchOpts = DEFAULT_SEARCH_OPTS,
+) => invoke<ReplaceResult>("replace_text", { root, query, replacement, ...searchArgs(opts) })
 
-/** Replace inside one file: every occurrence, or only the ones at the given
- *  1-based `[line, column]` positions ("replace this result"). */
+/** Replace inside one file: every match, or only the ones at the given
+ *  `[line, column]` positions ("replace this result") — the positions a
+ *  `SearchMatch` carries, so pass them through unchanged. Takes the same toggles
+ *  the search ran with, for the same reason `replaceText` does. */
 export const replaceInFile = (
   root: string,
   path: string,
   query: string,
   replacement: string,
+  opts: SearchOpts = DEFAULT_SEARCH_OPTS,
   positions: Array<[number, number]> = [],
-) => invoke<ReplaceResult>("replace_in_file", { root, path, query, replacement, positions })
+) =>
+  // One file, so the project-wide globs and scope do not apply — but the toggles
+  // must, and they come from the same place the search took them.
+  invoke<ReplaceResult>("replace_in_file", {
+    root,
+    path,
+    query,
+    replacement,
+    ...searchToggles(opts),
+    positions,
+  })
 
 /** Replace whole lines of one file, by 1-based line number — how the editable
  *  search results are written back. Backed up like any other bulk write. */

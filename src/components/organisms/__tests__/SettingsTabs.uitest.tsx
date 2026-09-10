@@ -3,6 +3,10 @@
 // replay the tour). The Appearance/Editor tabs and the shell are covered in
 // Settings.uitest.tsx. Every Tauri edge is mocked; the settings store is real.
 import { render, screen, waitFor } from "@testing-library/react"
+
+const clipboardWrite = vi.hoisted(() => vi.fn(async (_t: string) => {}))
+vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({ writeText: clipboardWrite }))
+
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -168,13 +172,12 @@ describe("the System tab", () => {
   })
 
   it("reveals and copies the log path", async () => {
-    const writeText = vi.fn(async () => {})
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } })
+    clipboardWrite.mockClear()
     await openTab("system")
     await userEvent.click(await screen.findByRole("button", { name: "settings.logReveal" }))
     expect(revealItemInDir).toHaveBeenCalledWith("/tmp/reado.log")
     await userEvent.click(screen.getByRole("button", { name: "settings.logCopyPath" }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("/tmp/reado.log"))
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("/tmp/reado.log"))
     vi.unstubAllGlobals()
   })
 

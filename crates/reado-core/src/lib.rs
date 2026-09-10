@@ -989,16 +989,42 @@ pub fn write_config(root: &str, json: &str) -> Result<()> {
     Ok(())
 }
 
+/// Everything under `.reado/` that belongs to one machine or one person rather
+/// than to the project: the rebuildable indexes, the deleted files waiting for an
+/// undo, the pre-replace copies behind ⌘Z, and how far you have read.
+///
+/// The single list, so the ignore rule and the test that guards it cannot drift
+/// apart — `semantic.sqlite`, `read.json` and `read-snapshots.json` were all
+/// missing from the rule *and* from the test, which is exactly how a rule with a
+/// hand-copied test goes stale.
+///
+/// The databases are matched by glob rather than by name: they run in WAL mode,
+/// so SQLite keeps a `-wal` and a `-shm` beside each one while it is open and
+/// leaves them behind after a crash. Naming the files one at a time is how this
+/// list went stale the first time.
+pub const MACHINE_LOCAL: &[&str] = &[
+    ".reado/*.sqlite*",
+    ".reado/read.json",
+    ".reado/read-snapshots.json",
+    ".reado/.trash/",
+    ".reado/.undo/",
+];
+
 /// Add `.reado/` (or just the index when versioning) to the project `.gitignore`.
 /// Idempotent.
 pub fn add_reado_gitignore(root: &str, versioned: bool) -> Result<()> {
     let gitignore = Path::new(root).join(".gitignore");
     // Versioning `.reado/` means versioning the *annotations*. The rest of what
-    // lives there is machine-local scratch — a rebuildable index, deleted files
-    // waiting for an undo, the pre-replace copies behind ⌘Z — and committing any
-    // of it would push one person's undo history to everyone else.
+    // lives there is machine-local scratch — two rebuildable indexes, deleted
+    // files waiting for an undo, the pre-replace copies behind ⌘Z, and how far
+    // *you* have read — and committing any of it would push one person's undo
+    // history, or their reading, to everyone else.
+    //
+    // Keep this list level with what actually lands in `.reado/`: every entry
+    // here was once missing, and a missing one is committed the day someone
+    // turns versioning on.
     let entries: &[&str] = if versioned {
-        &[".reado/index.sqlite", ".reado/.trash/", ".reado/.undo/"]
+        MACHINE_LOCAL
     } else {
         &[".reado/"]
     };
@@ -1333,8 +1359,32 @@ mod tests {
         let root = dir.path().to_string_lossy().into_owned();
         add_reado_gitignore(&root, true).unwrap();
         let ignored = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
-        for entry in [".reado/index.sqlite", ".reado/.trash/", ".reado/.undo/"] {
-            assert!(ignored.lines().any(|l| l == entry), "missing {entry}");
+        for entry in MACHINE_LOCAL {
+            assert!(ignored.lines().any(|l| l == *entry), "missing {entry}");
+        }
+    }
+
+    #[test]
+    fn the_machine_local_rules_match_what_reado_writes() {
+        // Restating the list would only prove it equals itself. Match real names
+        // — including the sidecars WAL leaves beside an open database — against
+        // the patterns, the way git will.
+        let globs: Vec<globset::GlobMatcher> = MACHINE_LOCAL
+            .iter()
+            .map(|p| globset::Glob::new(p).unwrap().compile_matcher())
+            .collect();
+        for written in [
+            ".reado/index.sqlite",
+            ".reado/semantic.sqlite",
+            ".reado/semantic.sqlite-wal",
+            ".reado/semantic.sqlite-shm",
+            ".reado/read.json",
+            ".reado/read-snapshots.json",
+        ] {
+            assert!(
+                globs.iter().any(|g| g.is_match(written)),
+                "{written} is written by Reado but no rule ignores it"
+            );
         }
     }
 

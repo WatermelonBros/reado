@@ -226,6 +226,18 @@ describe("the reading cues", () => {
     expect(screen.getByText("unread.ts").className).not.toContain("text-muted")
   })
 
+  it("stops dimming the row you are on", async () => {
+    // Measured in the running app: a read file's muted ink over the selection
+    // tint came out at 3.9:1, under the 4.5 Reado holds its own themes to — and
+    // it is the one row you most need to read.
+    tree({ [ROOT]: [file("read.ts"), file("other.ts")] })
+    useReadProgress.setState({ read: new Set(["read.ts", "other.ts"]) })
+    useProject.setState({ active: `${ROOT}/read.ts` })
+    render(<FileTree />)
+    expect((await screen.findByText("read.ts")).className).not.toContain("text-muted")
+    expect(screen.getByText("other.ts").className).toContain("text-muted")
+  })
+
   it("shows a partially-read folder's progress, and drops it once done", async () => {
     tree({ [ROOT]: [dir("src")] })
     listFiles.mockResolvedValue(["src/a.ts", "src/b.ts"])
@@ -852,6 +864,19 @@ describe("finding, and opening another way", () => {
     await userEvent.click(within(await screen.findByRole("menu")).getByText("tree.viewerText"))
     expect(useTextView.getState().force.has(`${ROOT}/readme.md`)).toBe(true)
     expect(open).toHaveBeenCalledWith(`${ROOT}/readme.md`)
+  })
+
+  it("asks for the diff view rather than switching it on itself", async () => {
+    // The bug: comparing two files called `open()` and then set `diffing`
+    // directly. Opening resets the pane to its default view a moment later,
+    // which wiped the flag — you got the second file, and no comparison.
+    tree({ [ROOT]: [file("a.ts"), file("b.ts")] })
+    render(<FileTree />)
+    await screen.findByText("a.ts")
+    await userEvent.click(within(await openMenu("a.ts")).getByText("tree.selectForCompare"))
+    await userEvent.click(within(await openMenu("b.ts")).getByText("tree.compareWithSelected"))
+    expect(useEditorActions.getState().pendingView).toBe("diff")
+    expect(useEditorActions.getState().diffBase).toContain("a.ts")
   })
 
   it("offers Compare with Saved only for a file with unsaved edits", async () => {

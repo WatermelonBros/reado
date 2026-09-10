@@ -18,7 +18,7 @@
 use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
-use rusqlite::Connection;
+use rusqlite::{Connection, TransactionBehavior};
 use serde::Serialize;
 use tauri::State;
 
@@ -98,25 +98,50 @@ fn worth_indexing(line: &str) -> bool {
     trimmed.len() > 2 && trimmed.chars().any(|c| c.is_alphanumeric())
 }
 
+/// Open the index with the settings that let a rebuild, an incremental reindex
+/// and a query coexist.
+///
+/// Two of those run on worker threads and the third on demand, so they *will*
+/// meet. In SQLite's default rollback-journal mode a writer excludes every
+/// reader, and `busy_timeout` does not help a deferred transaction that is
+/// already holding a read lock and tries to upgrade — SQLite fails that one
+/// immediately rather than risk a deadlock. That is why the log filled with
+/// `database is locked` after ~50ms despite a five-second timeout.
+///
+/// WAL lets one writer run alongside readers, and every writer here takes its
+/// lock up front (`TransactionBehavior::Immediate`), so the timeout is actually
+/// the thing that decides.
+fn open_index(path: impl AsRef<Path>) -> Result<Connection> {
+    let conn = Connection::open(path).map_err(|e| Error::Other(e.to_string()))?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|e| Error::Other(e.to_string()))?;
+    // A rebuildable cache: durability past a crash is worth less than not
+    // blocking the editor, and WAL is the whole point of the pair.
+    let _ = conn.pragma_update(None, "journal_mode", "WAL");
+    let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+    Ok(conn)
+}
+
 /// Build the index from the tree. Drops and recreates, so a rebuild is always a
 /// faithful mirror rather than an accumulation.
 fn rebuild(cache: &SymbolCache, root: &str) -> Result<usize> {
     let reado = Path::new(root).join(".reado");
     std::fs::create_dir_all(&reado)?;
-    let mut conn = Connection::open(index_path(root)).map_err(|e| Error::Other(e.to_string()))?;
-    // Off the main thread this can race an incremental reindex; wait it out.
-    conn.busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|e| Error::Other(e.to_string()))?;
+    let mut conn = open_index(index_path(root))?;
     let fts = has_fts5(&conn);
-    schema(&conn, fts)?;
 
     // Symbols first: a map from (file, line) to the declared name there, so a
     // hit on a declaration can be told from a hit on a mention.
     let symbols = crate::symbols::symbols_by_line(cache, root);
 
     let tx = conn
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|e| Error::Other(e.to_string()))?;
+    // Inside the transaction, not before it: `schema` drops and recreates the
+    // table, and two rebuilds that meet outside a write lock both drop and then
+    // both create — the loser used to fail with "table docs already exists".
+    // It also means a reader never sees a half-rebuilt index.
+    schema(&tx, fts)?;
     let mut count = 0usize;
     let mut files = 0usize;
     {
@@ -214,7 +239,7 @@ fn query(root: &str, q: &str) -> Result<Vec<Hit>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let conn = Connection::open(path).map_err(|e| Error::Other(e.to_string()))?;
+    let conn = open_index(path)?;
     let terms = fts_query(q);
     if terms.is_empty() {
         return Ok(Vec::new());
@@ -333,11 +358,7 @@ pub fn semantic_reindex_file(
     if !path.exists() {
         return Ok(0);
     }
-    let mut conn = Connection::open(&path).map_err(|e| Error::Other(e.to_string()))?;
-    // Now that this runs on a worker thread it can meet a concurrent rebuild;
-    // wait for it rather than failing the reindex outright.
-    conn.busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|e| Error::Other(e.to_string()))?;
+    let mut conn = open_index(&path)?;
 
     let abs = Path::new(&root).join(&file);
     // A file the rebuild would skip (binary, generated, huge) must not sneak into
@@ -352,7 +373,7 @@ pub fn semantic_reindex_file(
     let symbols = crate::symbols::symbols_in_file(&cache, &abs);
 
     let tx = conn
-        .transaction()
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|e| Error::Other(e.to_string()))?;
     tx.execute("DELETE FROM docs WHERE file = ?1", [&file])
         .map_err(|e| Error::Other(e.to_string()))?;
@@ -464,6 +485,45 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let hits = query(&dir.path().to_string_lossy(), "anything").unwrap();
         assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn a_rebuild_and_a_reindex_can_run_at_once() {
+        // The bug: both run on worker threads and meet constantly. In SQLite's
+        // default journal mode the loser failed instantly with "database is
+        // locked" — 9,773 times in one session's log — and the reindex was
+        // dropped on the floor, so the index quietly went stale.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap().to_string();
+        for i in 0..40 {
+            std::fs::write(
+                dir.path().join(format!("f{i}.rs")),
+                format!("fn f{i}() {{}}\n"),
+            )
+            .unwrap();
+        }
+        let cache = SymbolCache::default();
+        rebuild(&cache, &root).unwrap();
+
+        let mut handles = Vec::new();
+        for i in 0..8 {
+            let root = root.clone();
+            handles.push(std::thread::spawn(move || {
+                if i % 2 == 0 {
+                    let cache = SymbolCache::default();
+                    rebuild(&cache, &root).map(|_| ())
+                } else {
+                    // The reader side: a query must not be locked out either.
+                    query(&root, "f1").map(|_| ())
+                }
+            }));
+        }
+        for h in handles {
+            // Not "it did not deadlock" — it must actually have succeeded.
+            h.join()
+                .unwrap()
+                .expect("concurrent index access must not fail");
+        }
     }
 
     #[test]

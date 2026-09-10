@@ -741,7 +741,11 @@ export function FileTree() {
                             open(path)
                             actions.setCompareBuffer(null)
                             actions.setDiffBase(`${FILE_BASE}${compareLeft}`)
-                            actions.setDiffing(true)
+                            // Through the request queue, not by setting the flag:
+                            // opening the file resets the pane to its default
+                            // view a moment later, which wiped a flag set here
+                            // and left you looking at the file with no diff.
+                            actions.requestView("diff")
                           },
                         },
                       ]
@@ -1262,7 +1266,9 @@ function TreeNode({
   const reviewDelta = () => {
     open(entry.path)
     useEditorActions.getState().setDiffBase(LAST_READ_BASE)
-    useEditorActions.getState().setDiffing(true)
+    // Through the request queue, not by setting the flag: opening the file
+    // resets the pane to its default view a moment later, which would wipe it.
+    useEditorActions.getState().requestView("diff")
   }
 
   return (
@@ -1324,7 +1330,12 @@ function TreeNode({
           <FileIcon isDir={entry.isDir} expanded={expanded} name={entry.name} mode={iconMode} />
           <span
             className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${
-              dimmed && !gitStatus ? "text-muted" : ""
+              // Never dim the row you are on. A read file is dimmed to say "you
+              // have been here", but the selection tint lightens the background
+              // under it, and muted ink on that came out at 3.9:1 — under the
+              // 4.5 Reado holds its own themes to. The row you selected is also
+              // the one you most need to read.
+              dimmed && !gitStatus && !(isSelected || isActive) ? "text-muted" : ""
             }`}
             style={gitStatus ? { color: STATUS[gitStatus].color } : undefined}
           >

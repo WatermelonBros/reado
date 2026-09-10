@@ -7,9 +7,21 @@
 
 use std::path::{Path, PathBuf};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::{Error, Result};
+
+/// A connection to the index, tuned the way a rebuildable cache wants to be:
+/// durability past a crash is worth less than not blocking the editor, and WAL
+/// is what lets a reader keep reading while a rebuild writes.
+fn open_index(root: &str) -> Result<Connection> {
+    let conn = Connection::open(index_path(root)).map_err(|e| Error::Other(e.to_string()))?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|e| Error::Other(e.to_string()))?;
+    let _ = conn.pragma_update(None, "journal_mode", "WAL");
+    let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+    Ok(conn)
+}
 
 fn index_path(root: &str) -> PathBuf {
     Path::new(root).join(".reado").join("index.sqlite")
@@ -23,8 +35,19 @@ fn rebuild(root: &str) -> Result<usize> {
         return Ok(0);
     }
     std::fs::create_dir_all(&reado)?;
-    let conn = Connection::open(index_path(root)).map_err(|e| Error::Other(e.to_string()))?;
-    conn.execute_batch(
+    let mut conn = open_index(root)?;
+    let active = reado_core::list_comments(root);
+    let archived = reado_core::list_archived(root);
+
+    // Drop, create and fill in one transaction. Outside one, a reader arriving
+    // mid-rebuild saw the table empty or half-filled — not an error it could
+    // notice, just wrong answers. `Immediate` also takes the write lock up
+    // front, so a second rebuild queues on `busy_timeout` instead of dying at
+    // its first write.
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|e| Error::Other(e.to_string()))?;
+    tx.execute_batch(
         "DROP TABLE IF EXISTS comments;
          CREATE TABLE comments (
              id TEXT PRIMARY KEY,
@@ -38,15 +61,17 @@ fn rebuild(root: &str) -> Result<usize> {
     )
     .map_err(|e| Error::Other(e.to_string()))?;
 
-    let active = reado_core::list_comments(root);
-    let archived = reado_core::list_archived(root);
     let mut count = 0;
-    for c in active.iter().chain(archived.iter()) {
-        conn.execute(
-            "INSERT OR REPLACE INTO comments
+    {
+        let mut stmt = tx
+            .prepare(
+                "INSERT OR REPLACE INTO comments
              (id, type, state, kind, file, start_line, end_line, orphan, archived, body, created_at, updated_at)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
-            rusqlite::params![
+            )
+            .map_err(|e| Error::Other(e.to_string()))?;
+        for c in active.iter().chain(archived.iter()) {
+            stmt.execute(rusqlite::params![
                 c.meta.id,
                 format!("{:?}", c.meta.comment_type).to_lowercase(),
                 format!("{:?}", c.meta.state).to_lowercase(),
@@ -59,11 +84,12 @@ fn rebuild(root: &str) -> Result<usize> {
                 c.messages.first().map(|m| m.body.as_str()).unwrap_or(""),
                 c.meta.created_at as i64,
                 c.meta.updated_at as i64,
-            ],
-        )
-        .map_err(|e| Error::Other(e.to_string()))?;
-        count += 1;
+            ])
+            .map_err(|e| Error::Other(e.to_string()))?;
+            count += 1;
+        }
     }
+    tx.commit().map_err(|e| Error::Other(e.to_string()))?;
     Ok(count)
 }
 
@@ -255,5 +281,71 @@ mod tests {
         let root = dir.path().to_str().unwrap();
         assert_eq!(rebuild(root).unwrap(), 0);
         assert!(!index_path(root).exists());
+    }
+    #[test]
+    fn a_reader_never_sees_a_half_built_index() {
+        // The bug: `DROP TABLE` … `CREATE` … one INSERT per row, all outside a
+        // transaction. Anything reading the index while a rebuild ran got an
+        // empty or partial table — not an error it could detect, just a wrong
+        // answer — and two rebuilds meeting failed with "database is locked".
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        const ROWS: i64 = 40;
+        for i in 0..ROWS {
+            seed(
+                root,
+                &format!("src/f{i}.rs"),
+                CommentType::Note,
+                CommentKind::Note,
+                1,
+                1,
+                "body",
+            );
+        }
+        assert_eq!(rebuild(root).unwrap() as i64, ROWS);
+
+        let writing = Arc::new(AtomicBool::new(true));
+        let mut handles: Vec<std::thread::JoinHandle<Result<()>>> = Vec::new();
+        for _ in 0..3 {
+            let root = root.to_string();
+            handles.push(std::thread::spawn(move || {
+                for _ in 0..15 {
+                    rebuild(&root)?;
+                }
+                Ok(())
+            }));
+        }
+        for _ in 0..3 {
+            let (root, writing) = (root.to_string(), Arc::clone(&writing));
+            handles.push(std::thread::spawn(move || {
+                // Every rebuild writes the same rows, so any count other than
+                // ROWS is a rebuild in flight made visible. Read until the
+                // writers stop rather than a fixed number of times: the window
+                // is short, and a fixed count can miss it and prove nothing.
+                let conn =
+                    Connection::open(index_path(&root)).map_err(|e| Error::Other(e.to_string()))?;
+                conn.busy_timeout(std::time::Duration::from_secs(5))
+                    .map_err(|e| Error::Other(e.to_string()))?;
+                while writing.load(Ordering::Relaxed) {
+                    let n: i64 = conn
+                        .query_row("SELECT COUNT(*) FROM comments", [], |r| r.get(0))
+                        .map_err(|e| Error::Other(e.to_string()))?;
+                    assert_eq!(n, ROWS, "a rebuild in flight must not be visible");
+                }
+                Ok(())
+            }));
+        }
+        let writers: Vec<_> = handles.drain(..3).collect();
+        for h in writers {
+            // Not "it did not deadlock" — it must actually have succeeded.
+            h.join().unwrap().expect("a rebuild must not be locked out");
+        }
+        writing.store(false, Ordering::Relaxed);
+        for h in handles {
+            h.join().unwrap().expect("a read must not be locked out");
+        }
     }
 }

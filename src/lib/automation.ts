@@ -25,6 +25,7 @@ import { useForge } from "./forge"
 import { useGuidedReview } from "./guidedReview"
 import { useHierarchy } from "./hierarchy"
 import { useLayout } from "./layout"
+import { log } from "./logger"
 import { lspAttached, lspSupport } from "./lsp"
 import { useOnboarding } from "./onboarding"
 import { usePreReview } from "./preReview"
@@ -338,11 +339,16 @@ async function handle(cmd: any): Promise<{ ok: boolean; value?: unknown; error?:
 }
 
 async function loop() {
+  // A relay that is simply not up yet is normal at boot, so the first failures
+  // are silent. One that never comes up is not: the bridge would retry forever
+  // and the only symptom would be an agent timing out with nothing to read.
+  let failures = 0
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const r = await fetch(`${RELAY}/poll`)
       const { id, cmd } = await r.json()
+      failures = 0
       if (!cmd || cmd.action === "noop") continue
       const out = await handle(cmd)
       await fetch(`${RELAY}/result`, {
@@ -350,7 +356,15 @@ async function loop() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id, ...out }),
       })
-    } catch {
+    } catch (e) {
+      failures++
+      if (failures === 10 || failures % 100 === 0) {
+        log.warn("uidriver bridge cannot reach the relay", {
+          relay: RELAY,
+          failures,
+          error: String((e as Error)?.message ?? e),
+        })
+      }
       await new Promise((r) => setTimeout(r, 800)) // relay not up yet
     }
   }

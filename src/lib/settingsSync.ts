@@ -11,6 +11,8 @@
  * layout, `.reado/` — that is `lib/projectConfig.ts`, which is shared through
  * the repository instead).
  */
+
+import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
 import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog"
 import { t } from "@/i18n"
 import { readSettingsFile, writeSettingsFile } from "./api"
@@ -113,7 +115,7 @@ export function applyBundle(b: Bundle): void {
 /** Copy the current settings bundle to the clipboard. */
 export async function exportSettings(): Promise<void> {
   try {
-    await navigator.clipboard.writeText(JSON.stringify(buildBundle(), null, 2))
+    await clipboardWriteText(JSON.stringify(buildBundle(), null, 2))
     log.info("settings exported")
   } catch (e) {
     log.error("settings export failed", { error: safeError(e) })

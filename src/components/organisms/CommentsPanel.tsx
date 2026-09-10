@@ -51,7 +51,9 @@ export function CommentsPanel() {
   const reviewChange = (c: Comment) => {
     open(`${root}/${c.anchor.file}`, c.anchor.scope === "range" ? c.anchor.startLine : 1)
     useEditorActions.getState().setDiffBase(LAST_READ_BASE)
-    useEditorActions.getState().setDiffing(true)
+    // Through the request queue, not by setting the flag: opening the file
+    // resets the pane to its default view a moment later, which would wipe it.
+    useEditorActions.getState().requestView("diff")
   }
 
   // Panel filters live in the workspace store so switching tools (which unmounts

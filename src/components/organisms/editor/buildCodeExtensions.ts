@@ -23,7 +23,7 @@ import {
   unfoldCode,
 } from "@codemirror/language"
 import { lintKeymap } from "@codemirror/lint"
-import { gotoLine, highlightSelectionMatches, search, searchKeymap } from "@codemirror/search"
+import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search"
 import { type Compartment, EditorState, type Extension } from "@codemirror/state"
 import {
   crosshairCursor,
@@ -40,9 +40,9 @@ import type { CommentType } from "@/lib/api"
 import { bookmarkGutter } from "@/lib/bookmarkGutter"
 import { bracketColors } from "@/lib/bracketColors"
 import { changedLinesHighlight } from "@/lib/changedLines"
-import { readoAppearance } from "@/lib/codemirror"
+import { readoAppearance, readoPhrases } from "@/lib/codemirror"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
-import { setLastEdit, useDocInfo } from "@/lib/docInfo"
+import { gotoLineOnce, setLastEdit, useDocInfo } from "@/lib/docInfo"
 import {
   cursorsToLineEnds,
   insertLineAbove,
@@ -50,6 +50,7 @@ import {
   joinLines,
 } from "@/lib/editorCommands"
 import { emmetTab } from "@/lib/emmet"
+import { renameSymbolAt } from "@/lib/lsp"
 import { explainSymbolAt, taskFromDiagnostic } from "@/lib/lspActions"
 import { occurrenceHighlight } from "@/lib/occurrenceHighlight"
 import { diagnosticsRuler } from "@/lib/overviewRuler"
@@ -275,9 +276,11 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     ]),
     // Go to line — Ctrl+G, like VS Code on every platform. Not Cmd+G on macOS:
     // there that combo is Find Next, which searchKeymap still provides.
-    keymap.of([{ key: "Mod-g", mac: "Ctrl-g", run: gotoLine }]),
+    keymap.of([{ key: "Mod-g", mac: "Ctrl-g", run: gotoLineOnce }]),
     // Shift+F12 — find references (project-wide search for the symbol).
     keymap.of([{ key: "Shift-F12", run: findReferencesAt }]),
+    // F2 — rename the symbol everywhere, on the key every editor puts it on.
+    keymap.of([{ key: "F2", run: renameSymbolAt, preventDefault: true }]),
     // ⌘. — the code-action menu, on the key every editor puts it on.
     keymap.of([
       {
@@ -363,6 +366,7 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // git ref's content and must not be edited into the working tree.
     editableExtension(!ctx.pinned),
     readoAppearance,
+    readoPhrases(),
     // Mark diagnostics along the scrollbar so problems are easy to find.
     diagnosticsRuler,
     ctx.wrapComp.of(ctx.wrap ? EditorView.lineWrapping : []),

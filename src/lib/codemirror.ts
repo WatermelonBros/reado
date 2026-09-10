@@ -10,8 +10,10 @@
  * by eye-tracking salience) per the project's reading research.
  */
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language"
+import { EditorState } from "@codemirror/state"
 import { EditorView } from "@codemirror/view"
 import { tags as t } from "@lezer/highlight"
+import { t as tr } from "@/i18n"
 
 /** Maps Lezer highlight tags to Reado's semantic syntax colours. */
 const highlightStyle = HighlightStyle.define([
@@ -176,6 +178,31 @@ const editorTheme = EditorView.theme({
   },
   ".cm-panel.cm-search [name=close]:hover": { color: "var(--text)" },
 })
+
+/**
+ * CodeMirror's own user-visible strings, in the reader's language.
+ *
+ * A handful of built-in surfaces phrase themselves — the Go-to-line dialog, the
+ * fold placeholder, the diagnostics panel — and without this facet they stayed
+ * in English inside an otherwise translated app.
+ *
+ * A function, not a constant: it is built when an editor is, so switching the
+ * app's language and reopening a file picks the new strings up.
+ */
+export const readoPhrases = () =>
+  EditorState.phrases.of({
+    "Go to line": tr("cm.goToLine"),
+    go: tr("cm.go"),
+    "folded code": tr("cm.foldedCode"),
+    unfold: tr("cm.unfold"),
+    Diagnostics: tr("cm.diagnostics"),
+    "No diagnostics": tr("cm.noDiagnostics"),
+    close: tr("cm.close"),
+    "current match": tr("cm.currentMatch"),
+    "on line": tr("cm.onLine"),
+    to: tr("cm.to"),
+    "Control character": tr("cm.controlChar"),
+  })
 
 /** All extensions implementing Reado's reading-focused appearance. */
 export const readoAppearance = [syntaxHighlighting(highlightStyle), editorTheme]

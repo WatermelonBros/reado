@@ -108,6 +108,22 @@ describe("the PTY lifecycle", () => {
     expect(ptySpawn).toHaveBeenCalledWith("t1", "/repo", expect.any(Number), expect.any(Number))
   })
 
+  it("spawns even when the window never paints a frame", async () => {
+    // The bug: the spawn hung off `requestAnimationFrame` alone. A window that
+    // isn't rendering — occluded, minimised, off-screen — gets no frames, so no
+    // PTY was ever started and the pane sat there black: no shell, no error,
+    // nothing to click. Observed twice against the real app.
+    const real = globalThis.requestAnimationFrame
+    globalThis.requestAnimationFrame = (() => 0) as typeof globalThis.requestAnimationFrame
+    try {
+      ptySpawn.mockClear()
+      render(<Terminal id="t-noframe" cwd="/repo" active />)
+      await waitFor(() => expect(ptySpawn).toHaveBeenCalled(), { timeout: 3000 })
+    } finally {
+      globalThis.requestAnimationFrame = real
+    }
+  })
+
   it("kills it when the pane closes", async () => {
     const { unmount } = await mount("t1")
     unmount()

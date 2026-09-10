@@ -71,7 +71,7 @@ import {
 } from "./docInfo"
 import { useFileUndo } from "./fileUndo"
 import { logPath } from "./logger"
-import { notify } from "./notice"
+import { notify, notifyError } from "./notice"
 import { toggleDockArea } from "./panels"
 import { usePreview } from "./preview"
 import { useReadProgress } from "./readProgress"
@@ -710,11 +710,14 @@ export function runMenuCommand(id: string): void {
         .catch(() => {})
       break
     case "help:copyLogPath":
+      // Through the Tauri plugin, like every other copy in this file. The web
+      // Clipboard API needs a secure context and a user gesture the webview does
+      // not always grant, and the failure came back as a rejected promise that
+      // was then thrown away — the menu item did nothing and said nothing.
       void logPath()
-        .then((p) => {
-          if (p) return navigator.clipboard.writeText(p)
-        })
-        .catch(() => {})
+        .then((p) => (p ? clipboardWriteText(p) : undefined))
+        .then(() => notify("info", t("help.logPathCopied")))
+        .catch((e) => notifyError("menu", t("help.logPathCopyFailed"), e))
       break
   }
 }

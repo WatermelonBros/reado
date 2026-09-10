@@ -10,6 +10,8 @@ const h = vi.hoisted(() => {
   const fns = (...names: string[]) =>
     Object.fromEntries(names.map((n) => [n, vi.fn()])) as Record<string, ReturnType<typeof vi.fn>>
   return {
+    clipboardWrite: vi.fn(async () => {}),
+    notifyError: vi.fn(),
     fns,
     docInfo: fns(
       "addCursorAbove",
@@ -107,13 +109,14 @@ vi.mock("../docInfo", () => ({ ...h.docInfo, useDocInfo: { getState: () => ({ vi
 vi.mock("../agents", () => h.agents)
 vi.mock("../window", () => h.window)
 vi.mock("@tauri-apps/plugin-opener", () => h.opener)
+vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({ writeText: h.clipboardWrite }))
 const listen = vi.hoisted(() =>
   vi.fn<(event: string, cb: (e: { payload: string }) => void) => Promise<() => void>>(
     async () => () => {},
   ),
 )
 vi.mock("@tauri-apps/api/event", () => ({ listen }))
-vi.mock("../notice", () => ({ notify: h.notify }))
+vi.mock("../notice", () => ({ notify: h.notify, notifyError: h.notifyError }))
 vi.mock("../updater", () => ({ checkForUpdates: h.checkForUpdates }))
 vi.mock("../logger", () => ({
   logPath: h.logPath,
@@ -419,11 +422,12 @@ describe("app and help commands", () => {
   })
 
   it("copies the log path to the clipboard", async () => {
-    const writeText = vi.fn(async () => {})
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } })
+    // Through Tauri's plugin, not `navigator.clipboard`: the webview refuses the
+    // web API without a secure context and a gesture, and the rejection used to
+    // be swallowed — the menu item did nothing and said nothing.
+    h.clipboardWrite.mockClear()
     runMenuCommand("help:copyLogPath")
-    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("/tmp/reado.log"))
-    vi.unstubAllGlobals()
+    await vi.waitFor(() => expect(h.clipboardWrite).toHaveBeenCalledWith("/tmp/reado.log"))
   })
 
   it("does nothing when there is no log file to reveal", async () => {

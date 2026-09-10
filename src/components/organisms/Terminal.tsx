@@ -38,6 +38,7 @@ import {
   ptyWrite,
   resolvePath,
 } from "@/lib/api"
+import { nextPaint } from "@/lib/nextPaint"
 import { notify, notifyError } from "@/lib/notice"
 import { useProject, useSettings } from "@/lib/store"
 import { shellQuote, terminalLinks, useTerminals } from "@/lib/terminals"
@@ -242,7 +243,10 @@ export function Terminal({ id, cwd, active }: Props) {
     const unlisten: UnlistenFn[] = []
     let disposed = false
 
-    requestAnimationFrame(async () => {
+    // Start on the next painted frame — that is when the container has a size
+    // and `fit()` can pick real rows/cols — but never *only* on it: see
+    // `nextPaint`, which is where that rule and its floor live.
+    const start = async () => {
       if (disposed) return
       try {
         fit.fit()
@@ -329,10 +333,13 @@ export function Terminal({ id, cwd, active }: Props) {
       term.onData((data) => ptyWrite(id, data))
 
       document.fonts?.ready.then(() => !disposed && syncSize())
-    })
+    }
+
+    const cancelStart = nextPaint(() => void start())
 
     return () => {
       disposed = true
+      cancelStart()
       if (paintTimer) clearTimeout(paintTimer)
       themeObserver.disconnect()
       // A rejecting unlisten (listener map already torn down) must not escape.
@@ -390,7 +397,9 @@ export function Terminal({ id, cwd, active }: Props) {
     if (!active) return
     const term = termRef.current
     if (!term) return
-    requestAnimationFrame(() => {
+    // Same rule as the spawn above: a pane activated while the window is not
+    // painting would otherwise keep stale dimensions and never take focus.
+    return nextPaint(() => {
       syncSize()
       term.focus()
     })

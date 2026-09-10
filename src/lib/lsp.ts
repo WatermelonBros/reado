@@ -18,7 +18,7 @@ import {
 import { getIndentUnit, indentUnit } from "@codemirror/language"
 import { type Diagnostic, forEachDiagnostic, setDiagnostics } from "@codemirror/lint"
 import type { Transport } from "@codemirror/lsp-client"
-import { LSPClient, LSPPlugin, renameKeymap, signatureHelp } from "@codemirror/lsp-client"
+import { LSPClient, LSPPlugin, signatureHelp } from "@codemirror/lsp-client"
 import {
   EditorState,
   type Extension,
@@ -31,7 +31,6 @@ import {
   type DecorationSet,
   EditorView,
   hoverTooltip,
-  keymap,
   type Tooltip,
   ViewPlugin,
   type ViewUpdate,
@@ -53,9 +52,10 @@ import { toRelative } from "./comments"
 import { useDiagnostics } from "./diagnostics"
 import { LANG_SERVERS, useExtensions } from "./extensions"
 import { useFileUndo } from "./fileUndo"
-import { createLogger } from "./logger"
+import { createLogger, safeError } from "./logger"
 import { notify } from "./notice"
 import type { OutlineSymbol } from "./outline"
+import { prompt } from "./prompt"
 import { noteSelfWrite } from "./readProgress"
 import { rootFor } from "./workspace"
 
@@ -185,32 +185,81 @@ const fromUri = (uri: string) => {
 
 /** Tap `publishDiagnostics` to surface per-file error counts outside the editor
  * (red filenames in the tree). The CodeMirror client still renders them; this
- * just mirrors the error count into a store. */
-function tapDiagnostics(payload: string) {
-  let msg: {
-    method?: string
-    params?: {
-      uri: string
-      diagnostics: {
-        severity?: number
-        message?: string
-        range?: { start?: { line?: number; character?: number } }
-      }[]
+ * just mirrors the error count into the store — through `storeDiagnostics`, the
+ * same door the pull path uses, so push and pull can never disagree. */
+function tapDiagnostics(msg: ServerMessage): void {
+  const params = msg.params as PublishParams | undefined
+  if (msg.method !== "textDocument/publishDiagnostics" || !params) return
+  storeDiagnostics(params.uri, params.diagnostics)
+}
+
+/**
+ * The plugin for this view, once its server has answered `initialize`.
+ *
+ * "Is the server ready?" is the invariant behind ⌘-click, diagnostics and
+ * rename, so it is asked in one place. `initializing` is the library's own
+ * answer to the question; deriving it from `serverCapabilities` at each call
+ * site meant three copies of the rule and a busy-wait where the promise would
+ * have done — one that gave up after ten seconds and never tried again.
+ */
+async function readyPlugin(view: EditorView): Promise<LSPPlugin | null> {
+  const plugin = LSPPlugin.get(view)
+  if (!plugin) return null
+  // `initializing` is the library's own handshake promise; a stand-in client
+  // (or one built before it existed) may not have it, and a missing handshake
+  // is simply "not ready".
+  if (plugin.client.serverCapabilities == null) {
+    await Promise.resolve(plugin.client.initializing).catch(() => null)
+  }
+  return plugin.client.serverCapabilities == null ? null : plugin
+}
+
+/** A message off the wire, parsed once by the transport and handed to whichever
+ *  of the taps below wants it. */
+interface ServerMessage {
+  id?: number | string
+  method?: string
+  params?: unknown
+}
+
+/**
+ * Answer the requests a server makes *of us*.
+ *
+ * `@codemirror/lsp-client` replies `-32601 Method not implemented` to every
+ * server-initiated request, whatever it is. Servers noticed: every session
+ * opened with `failed to register configuration change watcher` in the console,
+ * and a server that cannot register a watcher never learns that a file changed
+ * outside the editor — after a `git checkout` or an `npm install` its answers
+ * are about a tree that no longer exists.
+ *
+ * We own the transport, so these are answered here and never reach the library.
+ * Returns true when the message was handled and must not be forwarded.
+ */
+function answerServerRequest(key: string, msg: ServerMessage): boolean {
+  // A request has both an id and a method; a response has an id and no method.
+  if (msg.id == null || !msg.method) return false
+  const reply = (result: unknown) =>
+    void lspSend(key, JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }))
+  switch (msg.method) {
+    case "client/registerCapability":
+    case "client/unregisterCapability":
+      // Accepted: `didChangeWatchedFiles` below is us holding up our end.
+      reply(null)
+      return true
+    case "workspace/configuration": {
+      // "No per-server configuration" — null per requested item, which is what
+      // the spec asks an unconfigured client to say. Refusing outright makes
+      // some servers fall back to defaults they then complain about.
+      const items = (msg.params as { items?: unknown[] } | undefined)?.items ?? []
+      reply(items.map(() => null))
+      return true
     }
+    case "window/workDoneProgress/create":
+      reply(null)
+      return true
+    default:
+      return false
   }
-  try {
-    msg = JSON.parse(payload)
-  } catch {
-    return
-  }
-  if (msg.method !== "textDocument/publishDiagnostics" || !msg.params) return
-  const items = msg.params.diagnostics.map((d) => ({
-    line: (d.range?.start?.line ?? 0) + 1,
-    character: d.range?.start?.character ?? 0,
-    severity: d.severity ?? 1,
-    message: d.message ?? "",
-  }))
-  useDiagnostics.getState().setFileDiagnostics(fromUri(msg.params.uri), items)
 }
 
 // ---- Diagnostics + sync (replacing the library's bundled `serverDiagnostics`,
@@ -254,9 +303,171 @@ const autoSync = ViewPlugin.fromClass(
   },
 )
 
+/** Paint one file's diagnostics into its editor as lint markers, each carrying
+ *  the "Create task" action. Shared by the push notification and the pull
+ *  request — the two ways a server has of telling us the same thing. */
+function renderDiagnostics(view: EditorView, plugin: LSPPlugin, diags: LspDiag[]): void {
+  view.dispatch(
+    setDiagnostics(
+      view.state,
+      diags.map((item): Diagnostic => {
+        const from = plugin.unsyncedChanges.mapPos(
+          plugin.fromPosition(item.range.start, plugin.syncedDoc),
+        )
+        const to = plugin.unsyncedChanges.mapPos(
+          plugin.fromPosition(item.range.end, plugin.syncedDoc),
+        )
+        return {
+          from,
+          to,
+          severity: toSeverity(item.severity ?? 1),
+          message: item.message,
+          actions: [
+            {
+              name: t("lsp.createTask"),
+              apply: (v, f, tt) =>
+                v.dispatch({
+                  effects: taskFromDiagnostic.of({ from: f, to: tt, message: item.message }),
+                }),
+            },
+          ],
+        }
+      }),
+    ),
+  )
+}
+
+/** Mirror one file's diagnostics into the store the tree and the Problems panel
+ *  read — the counts that live outside the editor. */
+function storeDiagnostics(uri: string, diags: LspDiag[]): void {
+  useDiagnostics.getState().setFileDiagnostics(
+    fromUri(uri),
+    diags.map((d) => ({
+      line: (d.range?.start?.line ?? 0) + 1,
+      character: d.range?.start?.character ?? 0,
+      severity: d.severity ?? 1,
+      message: d.message ?? "",
+    })),
+  )
+}
+
+/** One document's answer to `textDocument/diagnostic`. `unchanged` means "the
+ *  same as the result id you sent me", which is why the id has to be kept. */
+interface DiagnosticReport {
+  kind?: "full" | "unchanged"
+  resultId?: string
+  items?: LspDiag[]
+  /** Problems the server found in *other* files while checking this one — what
+   *  `interFileDependencies` means. Keyed by URI. */
+  relatedDocuments?: Record<string, DiagnosticReport>
+}
+
+/**
+ * Pull diagnostics (`textDocument/diagnostic`).
+ *
+ * A server either pushes diagnostics at us or waits to be asked, and it says
+ * which in `diagnosticProvider`. TypeScript 7 — `tsc --lsp`, which is what a
+ * project on TS 7 gets — only waits. Reado used to only listen, and the client
+ * library advertises pull support on our behalf, so the server stayed politely
+ * silent and no TypeScript error ever reached the editor or the Problems panel.
+ *
+ * Asked on open, after an edit settles, and after a save, because those are the
+ * three moments the answer can have changed.
+ */
+const pullDiagnostics = ViewPlugin.fromClass(
+  class {
+    pending = -1
+    /** Last result id per URI, so the server can answer "unchanged". */
+    resultIds = new Map<string, string>()
+    /** Dropped when the view goes away, so a late answer can't paint a dead editor. */
+    gone = false
+
+    constructor(readonly view: EditorView) {
+      this.schedule(0)
+    }
+
+    update(u: ViewUpdate) {
+      if (u.docChanged && !this.off) this.schedule(600)
+    }
+
+    schedule(delay: number) {
+      if (this.pending > -1) clearTimeout(this.pending)
+      this.pending = window.setTimeout(() => {
+        this.pending = -1
+        void this.pull()
+      }, delay)
+    }
+
+    /** Set once the server has said it does not answer pull requests, so a
+     *  push-only server stops arming a timer on every keystroke. */
+    off = false
+
+    async pull() {
+      if (this.gone || this.off) return
+      // The editor exists before the server has answered `initialize`; wait for
+      // the answer rather than giving up, because giving up is how a file ends
+      // up with no diagnostics until the user happens to type in it.
+      const plugin = await readyPlugin(this.view)
+      if (!plugin || this.gone) return
+      if (!plugin.client.serverCapabilities?.diagnosticProvider) {
+        this.off = true
+        return
+      }
+      // The server answers about the document it has, so give it the current one
+      // first — otherwise every diagnostic is one edit stale.
+      plugin.client.sync()
+      const uri = plugin.uri
+      try {
+        const res = await plugin.client.request<object, DiagnosticReport | null>(
+          "textDocument/diagnostic",
+          {
+            textDocument: { uri },
+            ...(this.resultIds.has(uri) ? { previousResultId: this.resultIds.get(uri) } : {}),
+          },
+        )
+        if (!res || this.gone) return
+        this.apply(uri, res, plugin)
+        for (const [related, report] of Object.entries(res.relatedDocuments ?? {})) {
+          // Another file's problems: they belong in the Problems panel even
+          // though no editor here is showing them.
+          if (report.kind !== "unchanged" && report.items) storeDiagnostics(related, report.items)
+        }
+      } catch (e) {
+        log.warn("pull diagnostics failed", { error: String(e) })
+      }
+    }
+
+    apply(uri: string, res: DiagnosticReport, plugin: LSPPlugin) {
+      if (res.resultId) this.resultIds.set(uri, res.resultId)
+      // "unchanged" means keep what is on screen, not clear it.
+      if (res.kind === "unchanged") return
+      const items = res.items ?? []
+      renderDiagnostics(this.view, plugin, items)
+      storeDiagnostics(uri, items)
+    }
+
+    destroy() {
+      this.gone = true
+      if (this.pending > -1) clearTimeout(this.pending)
+    }
+  },
+)
+
+/**
+ * A buffer was just written to disk.
+ *
+ * A save is the one moment a file changes without a keystroke: formatters and
+ * codegen run there, and a server that only answers when it is asked has no
+ * other way to find out. Called from every path that writes an open buffer.
+ */
+export function fileSaved(view: EditorView): void {
+  view.plugin(pullDiagnostics)?.schedule(0)
+}
+
 /** Our `serverDiagnostics`: renders server diagnostics as lint markers (as the
  * library does) but adds a "Create task" action so the user can turn a problem
- * into an anchored task comment straight from the tooltip. */
+ * into an anchored task comment straight from the tooltip. Push and pull both
+ * land here; a server uses one or the other, never both. */
 function serverDiagnostics() {
   return {
     clientCapabilities: { textDocument: { publishDiagnostics: { versionSupport: true } } },
@@ -267,38 +478,11 @@ function serverDiagnostics() {
         const view = file.getView()
         const plugin = view && LSPPlugin.get(view)
         if (!view || !plugin) return false
-        view.dispatch(
-          setDiagnostics(
-            view.state,
-            params.diagnostics.map((item): Diagnostic => {
-              const from = plugin.unsyncedChanges.mapPos(
-                plugin.fromPosition(item.range.start, plugin.syncedDoc),
-              )
-              const to = plugin.unsyncedChanges.mapPos(
-                plugin.fromPosition(item.range.end, plugin.syncedDoc),
-              )
-              return {
-                from,
-                to,
-                severity: toSeverity(item.severity ?? 1),
-                message: item.message,
-                actions: [
-                  {
-                    name: t("lsp.createTask"),
-                    apply: (v, f, tt) =>
-                      v.dispatch({
-                        effects: taskFromDiagnostic.of({ from: f, to: tt, message: item.message }),
-                      }),
-                  },
-                ],
-              }
-            }),
-          ),
-        )
+        renderDiagnostics(view, plugin, params.diagnostics)
         return true
       },
     },
-    editorExtension: autoSync,
+    editorExtension: [autoSync, pullDiagnostics],
   }
 }
 
@@ -488,19 +672,42 @@ function lspHoverTooltip() {
 }
 
 /** The per-client LSP feature set: completion, hover, signature help, our
- * diagnostics, inlay hints, and the rename keymap. Definition/references
+ * diagnostics and inlay hints. Rename lives with the other LSP keys in
+ * `buildCodeExtensions` — a bare keymap here is not reliably installed into the
+ * editor, which is why F2 did nothing while the context menu worked.
+ * Definition/references
  * navigation is handled by the editor's own gestures (which fall back to the
  * index), so the library's F12/Shift-F12 keymaps are intentionally left out —
  * and so is its ⇧⌥F, because Reado binds Format Document globally to its own
  * pipeline (which tries the server first, then a configured formatter). Two
  * bindings on one key meant the document was formatted twice. */
+/**
+ * The capabilities behind `answerServerRequest`.
+ *
+ * Answering a request we never advertised is worse than not answering it: a
+ * server that follows the spec does not *ask*. Without
+ * `didChangeWatchedFiles.dynamicRegistration` a well-behaved server never
+ * registers a watcher, so the file-change notifications we send it are dropped —
+ * the feature works only with servers that register unconditionally. Declared
+ * here, next to the code that honours them, so the two cannot drift.
+ */
+const answeredRequests = () => ({
+  clientCapabilities: {
+    workspace: {
+      configuration: true,
+      didChangeWatchedFiles: { dynamicRegistration: true },
+    },
+    window: { workDoneProgress: true },
+  },
+})
+
 const clientExtensions = () => [
   completionWithImports(),
   lspHoverTooltip(),
-  keymap.of([...renameKeymap]),
   signatureHelp(),
   serverDiagnostics(),
   inlayHints(),
+  answeredRequests(),
 ]
 
 // ---- Completion, with the import it needs -------------------------------
@@ -708,7 +915,21 @@ export const completionWithImports = () => [EditorState.languageData.of(() => LS
 /** Is a language server attached to this view? The editor's own word completion
  *  steps aside when one is: a server's list is the better answer, and both at
  *  once is the same name twice. */
-export const lspAttached = (view: EditorView) => !!LSPPlugin.get(view)
+/**
+ * Whether this view has a language server that has actually answered.
+ *
+ * Not just "a plugin object exists": a server that started and then failed to
+ * initialize leaves the plugin in place with no capabilities, and this used to
+ * report it as attached. That is not academic — `snippetSupport` turns off
+ * word-based completion whenever a server is attached, so a dead server left the
+ * user with no completions at all instead of falling back.
+ *
+ * `serverCapabilities` is null until `initialize` comes back, so this is also
+ * false for the moment before a healthy server is ready — which is correct: it
+ * cannot answer yet either.
+ */
+export const lspAttached = (view: EditorView) =>
+  LSPPlugin.get(view)?.client.serverCapabilities != null
 
 interface LspLocation {
   uri: string
@@ -724,21 +945,31 @@ export function lspLocate(
   pos: number,
   method: "definition" | "typeDefinition" | "implementation",
   open: (path: string, line: number) => void,
-): boolean {
-  const plugin = LSPPlugin.get(view)
-  if (!plugin) return false
-  plugin.client.sync()
-  plugin.client
-    .request<unknown, LspLocation | LspLocation[] | null>(`textDocument/${method}`, {
-      textDocument: { uri: plugin.uri },
-      position: plugin.toPosition(pos),
-    })
-    .then((res) => {
+  /** What to do when the server has nothing for us. Defaults to saying so —
+   *  silence is what made ⌘-click feel broken. A caller with an index of its own
+   *  passes that instead. */
+  onMiss: () => void = () => notify("info", t("lsp.noDefinition")),
+): void {
+  void (async () => {
+    // Ready, not merely present: a server that started and never finished
+    // initializing used to be handed the request anyway, and the answer never
+    // came.
+    const plugin = await readyPlugin(view)
+    if (!plugin) return onMiss()
+    plugin.client.sync()
+    try {
+      const res = await plugin.client.request<unknown, LspLocation | LspLocation[] | null>(
+        `textDocument/${method}`,
+        { textDocument: { uri: plugin.uri }, position: plugin.toPosition(pos) },
+      )
       const loc = Array.isArray(res) ? res[0] : res
       if (loc) open(fromUri(loc.uri), loc.range.start.line + 1)
-    })
-    .catch(() => {})
-  return true
+      else onMiss()
+    } catch (e) {
+      log.warn("locate failed", { method, error: safeError(e) })
+      onMiss()
+    }
+  })()
 }
 
 /** Resolve the definition location of the symbol at `pos` via the server, for
@@ -1011,8 +1242,12 @@ function resolveAction(plugin: LSPPlugin, action: CodeAction): ResolvedAction {
  * undo history with everything else. Other files are rewritten on disk through
  * the backend — a fix that renames a symbol in five files has to reach all five,
  * and only one of them is on screen.
+ *
+ * Returns how many files it changed, so a caller can say so: a rename that
+ * reports "5 files" is a rename you can trust, and one that reports "1" tells
+ * you the server only found the one.
  */
-async function applyWorkspaceEdit(plugin: LSPPlugin, edit: LspWorkspaceEdit): Promise<void> {
+async function applyWorkspaceEdit(plugin: LSPPlugin, edit: LspWorkspaceEdit): Promise<number> {
   const byUri: Record<string, LspTextEdit[]> = { ...(edit.changes ?? {}) }
   for (const change of edit.documentChanges ?? []) {
     byUri[change.textDocument.uri] = [
@@ -1021,8 +1256,10 @@ async function applyWorkspaceEdit(plugin: LSPPlugin, edit: LspWorkspaceEdit): Pr
     ]
   }
   const backups: Backup[] = []
+  let changed = 0
   for (const [uri, edits] of Object.entries(byUri)) {
     if (!edits.length) continue
+    changed++
     if (uri === plugin.uri) {
       const view = plugin.view
       const before = view.state.doc
@@ -1040,6 +1277,66 @@ async function applyWorkspaceEdit(plugin: LSPPlugin, edit: LspWorkspaceEdit): Pr
   // One decision, one undo — the guarantee every other bulk write in the app
   // gives. The open document's own edit is already in its editor history.
   if (backups.length > 0) useFileUndo.getState().record({ kind: "replace", backups })
+  return changed
+}
+
+/**
+ * Rename the symbol at the cursor — everywhere it is used, not just here.
+ *
+ * This replaces `@codemirror/lsp-client`'s own `renameSymbol`, which applies the
+ * server's answer through `workspace.getFile(uri)` and skips any URI that
+ * returns null. The default workspace only knows files with an editor attached,
+ * so a project-wide rename silently renamed the tabs you happened to have open
+ * and left every other call site on the old name — no error, no count, nothing
+ * to notice until something failed to compile.
+ *
+ * Reado already had the machinery for the other half: `applyWorkspaceEdit` is
+ * what code actions use, and it rewrites closed files through the backend and
+ * parks a backup of each. Rename goes through it too, so the whole thing is one
+ * ⌘Z — and it says how many files it touched, because a rename you cannot see
+ * the extent of is a rename you have to go and verify by hand.
+ */
+export function renameSymbolAt(view: EditorView): boolean {
+  const plugin = LSPPlugin.get(view)
+  if (!plugin) return false
+  // Capabilities are null until the server has answered `initialize`; only a
+  // server that has answered and said no is a server that can't rename.
+  const caps = plugin.client.serverCapabilities
+  if (caps && !caps.renameProvider) return false
+  const word = view.state.wordAt(view.state.selection.main.head)
+  if (!word) return false
+  const current = view.state.sliceDoc(word.from, word.to)
+  void (async () => {
+    const next = await prompt({
+      title: t("lsp.renameTitle", { name: current }),
+      value: current,
+      confirmLabel: t("lsp.renameConfirm"),
+    })
+    if (!next || next === current) return
+    plugin.client.sync()
+    try {
+      const edit = await plugin.client.request<object, LspWorkspaceEdit | null>(
+        "textDocument/rename",
+        {
+          textDocument: { uri: plugin.uri },
+          position: plugin.toPosition(word.from),
+          newName: next,
+        },
+      )
+      // A server declines a rename it cannot do safely (a keyword, a symbol from
+      // a dependency) by answering with nothing rather than by failing.
+      if (!edit) {
+        notify("info", t("lsp.renameRefused"))
+        return
+      }
+      const files = await applyWorkspaceEdit(plugin, edit)
+      notify("success", t("lsp.renamed", { name: next, count: files }))
+    } catch (e) {
+      log.warn("rename failed", { error: String(e) })
+      notify("error", t("lsp.renameFailed"))
+    }
+  })()
+  return true
 }
 
 /**
@@ -1212,10 +1509,57 @@ export function lspTypes(
 
 interface Conn {
   client: LSPClient
+  /** The project root this server was started for, so a file change can be
+   *  matched to the servers that care about it. */
+  root: string
   unlisten: Promise<UnlistenFn>
   exitUnlisten: Promise<UnlistenFn>
 }
 const conns = new Map<string, Promise<Conn>>()
+
+/**
+ * Tell every server that a file changed underneath it.
+ *
+ * The other half of accepting `client/registerCapability`: a server that
+ * registered for `didChangeWatchedFiles` is entitled to hear about a `git
+ * checkout`, an `npm install`, or an agent's edit. Without this its view of the
+ * project quietly ages — a rename it can't see, an import it thinks is missing.
+ *
+ * Called from the one place that already knows about external changes, so there
+ * is no second watcher.
+ */
+/** Watcher events waiting to be sent, per project root, and the timer that
+ *  flushes them. */
+const watchedChanges = new Map<string, Array<{ uri: string; type: number }>>()
+let watchedFlush: number | undefined
+
+export function notifyWatchedFileChanged(root: string, relPath: string): void {
+  // Coalesced, because the bursts this exists for are bursts: a `git checkout`
+  // or an agent rewriting a tree fires thousands of watcher events, and one
+  // notification each means the server re-reads and re-validates thousands of
+  // times. The `changes` array is there for exactly this.
+  const pending = watchedChanges.get(root) ?? []
+  // 2 = Changed. Created/deleted arrive as a change of the tree too, and a
+  // server that re-reads the file finds out which it was.
+  pending.push({ uri: toUri(`${root.replace(/\/+$/, "")}/${relPath}`), type: 2 })
+  watchedChanges.set(root, pending)
+  if (watchedFlush !== undefined) return
+  watchedFlush = window.setTimeout(() => {
+    watchedFlush = undefined
+    const batches = [...watchedChanges]
+    watchedChanges.clear()
+    for (const [batchRoot, changes] of batches) {
+      for (const p of conns.values()) {
+        void p
+          .then((c) => {
+            if (c.root !== batchRoot) return
+            c.client.notification("workspace/didChangeWatchedFiles", { changes })
+          })
+          .catch(() => {})
+      }
+    }
+  }, 50)
+}
 
 // Connections we've already told the user crashed, so a flapping server notifies
 // at most once until it successfully reconnects (the flag is cleared on connect).
@@ -1279,7 +1623,18 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
     crashNotified.delete(key) // fresh connection — a future crash may notify again
     const handlers = new Set<(v: string) => void>()
     const unlisten = listen<string>(`lsp-${key}`, (e) => {
-      tapDiagnostics(e.payload)
+      // Parsed once here, not once per consumer: a completion or semantic-token
+      // response is routinely megabytes, and it arrives while you type.
+      let msg: ServerMessage | null = null
+      try {
+        msg = JSON.parse(e.payload) as ServerMessage
+      } catch {
+        /* not JSON we understand; the library gets it verbatim below */
+      }
+      // Server-initiated requests are ours to answer; the library would refuse
+      // them all with -32601.
+      if (msg && answerServerRequest(key, msg)) return
+      if (msg) tapDiagnostics(msg)
       for (const h of handlers) h(e.payload)
     })
     // The backend signals a dead server here. If we didn't tear it down on
@@ -1309,7 +1664,22 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
       rootUri: toUri(root),
       extensions: clientExtensions(),
     }).connect(transport)
-    return { client, unlisten, exitUnlisten }
+    // A server can start and then refuse to initialize — `typescript-language-server`
+    // in a project with no TypeScript installed says so and exits. Nobody was
+    // listening to that rejection: it surfaced as an unhandled promise in the
+    // console, the user was told nothing, and `lspAttached` went on reporting a
+    // live server for a process that had already gone. Take the connection down
+    // so the next interaction can start a fresh one, and say so once.
+    client.initializing.catch((e: unknown) => {
+      log.error("server failed to initialize", { server: server.id, error: String(e) })
+      dropConn(key)
+      void lspStop(key)
+      if (!crashNotified.has(key)) {
+        crashNotified.add(key)
+        notify("error", t("lsp.serverFailed", { name: server.id }))
+      }
+    })
+    return { client, root, unlisten, exitUnlisten }
   })()
 
   conns.set(key, p)

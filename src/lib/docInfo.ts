@@ -62,6 +62,7 @@ import { foldToLevel } from "./foldLevels"
 import { choiceFor, extOf } from "./formatters"
 import { type HierDir, useHierarchy } from "./hierarchy"
 import {
+  fileSaved,
   lspCalls,
   lspFormat,
   lspFormatRange,
@@ -329,7 +330,10 @@ export async function saveDocument(): Promise<void> {
   const text = await textToSave(view)
   noteSelfWrite(rel)
   writeFile(root, rel, text, encodingFor(view))
-    .then(() => useEditorActions.getState().setDirty(rel, false))
+    .then(() => {
+      useEditorActions.getState().setDirty(rel, false)
+      fileSaved(view) // the formatter may have rewritten it; re-ask the server
+    })
     .catch((e) => notifyError("docInfo", t("editor.saveError"), e))
 }
 
@@ -801,7 +805,25 @@ export const copyLineUpCmd = () => runOnView(copyLineUp)
 export const copyLineDownCmd = () => runOnView(copyLineDown)
 export const moveLineUpCmd = () => runOnView(moveLineUp)
 export const moveLineDownCmd = () => runOnView(moveLineDown)
-export const openGotoLine = () => runOnView(gotoLine)
+/**
+ * Go to Line, without stacking panels.
+ *
+ * CodeMirror's own `gotoLine` opens a fresh dialog every time it is called and
+ * never looks for one already on screen, so pressing the key (or picking the
+ * menu item) twice left two identical "Go to line" panels, each needing its own
+ * dismissal. Asking again for something already open should take you to it.
+ */
+export const gotoLineOnce = (view: EditorView): boolean => {
+  const open = view.dom.querySelector<HTMLInputElement>('.cm-panel input[name="line"]')
+  if (open) {
+    open.focus()
+    open.select()
+    return true
+  }
+  return gotoLine(view)
+}
+
+export const openGotoLine = () => runOnView(gotoLineOnce)
 export const openReplace = () => openFind() // CM's search panel includes replace
 
 /** Find references: project-wide search for the identifier at the cursor. */

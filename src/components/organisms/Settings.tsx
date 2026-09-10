@@ -1,9 +1,10 @@
 /** Settings drawer with a sidebar of tabs: Appearance, Editor, Files, System. */
 
 import { getVersion } from "@tauri-apps/api/app"
+import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
 import { revealItemInDir } from "@tauri-apps/plugin-opener"
 import type { TFunction } from "i18next"
-import { useEffect, useState, useSyncExternalStore } from "react"
+import { type CSSProperties, useEffect, useState, useSyncExternalStore } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { Checkbox } from "@/components/atoms/Checkbox"
@@ -25,7 +26,7 @@ import { DEFAULT_NESTING } from "@/lib/fileNesting"
 import { BUNDLED_FONTS, fontName, fontStack, isPresetFont, SYSTEM_FONTS } from "@/lib/fonts"
 import { logPath } from "@/lib/logger"
 import { useMarketplace } from "@/lib/marketplace"
-import { notify } from "@/lib/notice"
+import { notify, notifyError } from "@/lib/notice"
 import {
   dropProjectOverride,
   isProjectOverride,
@@ -964,7 +965,12 @@ function LoggingSettings() {
           </Button>
           <Button
             variant="secondary"
-            onClick={() => path && void navigator.clipboard.writeText(path).catch(() => {})}
+            onClick={() =>
+              path &&
+              void clipboardWriteText(path)
+                .then(() => notify("info", t("help.logPathCopied")))
+                .catch((e) => notifyError("settings", t("help.logPathCopyFailed"), e))
+            }
             disabled={!path}
           >
             {t("settings.logCopyPath")}
@@ -1347,10 +1353,20 @@ const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matc
 
 /** The swatch every theme tile shows: three syntax dots on the theme's own
  *  canvas. Small enough to read a palette from at a glance, which is the only
- *  question a theme picker actually answers. */
-function ThemeSwatch() {
+ *  question a theme picker actually answers.
+ *
+ *  The previewed palette is applied *here* and nowhere else. It used to sit on
+ *  the whole tile, so the tile's name inherited it too — and a light theme's ink
+ *  on the dark settings surface came out at a contrast ratio of 1.6, against the
+ *  4.5 this very picker holds contributed themes to. Only the swatch wants the
+ *  other theme's colours; the label wants the ones the reader is using. */
+function ThemeSwatch({ theme, style }: { theme?: string; style?: CSSProperties }) {
   return (
-    <span className="flex h-[34px] items-center gap-1.5 rounded-sm border border-line bg-canvas px-2.5">
+    <span
+      data-theme={theme}
+      style={style}
+      className="flex h-[34px] items-center gap-1.5 rounded-sm border border-line bg-canvas px-2.5"
+    >
       <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--syn-control)" }} />
       <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--syn-string)" }} />
       <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--marker)" }} />
@@ -1407,13 +1423,12 @@ function ThemeChoice({
           <button
             key={theme}
             type="button"
-            data-theme={theme}
             onClick={() => onChange(theme)}
             aria-pressed={value === theme}
             title={t(`theme.${theme}` as MessageKey)}
             className={tileClass(value === theme)}
           >
-            <ThemeSwatch />
+            <ThemeSwatch theme={theme} />
             <span className="text-left text-xs text-muted">
               {t(`theme.${theme}` as MessageKey)}
             </span>
@@ -1431,16 +1446,19 @@ function ThemeChoice({
               <button
                 key={theme.id}
                 type="button"
-                data-theme={resolved.base}
-                style={Object.fromEntries(
-                  Object.entries(resolved.tokens).map(([k, v]) => [`--${k}`, v]),
-                )}
                 onClick={() => onChange(theme.id)}
                 aria-pressed={value === theme.id}
                 title={theme.label}
                 className={tileClass(value === theme.id)}
               >
-                <ThemeSwatch />
+                <ThemeSwatch
+                  theme={resolved.base}
+                  style={
+                    Object.fromEntries(
+                      Object.entries(resolved.tokens).map(([k, v]) => [`--${k}`, v]),
+                    ) as CSSProperties
+                  }
+                />
                 <span className="truncate text-left text-xs text-muted">{theme.label}</span>
                 {verdict.ratio !== null && (
                   // Reado holds its own themes to WCAG AA. A contributed theme

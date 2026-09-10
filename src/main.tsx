@@ -10,8 +10,12 @@ import "@xterm/xterm/css/xterm.css"
 import "./styles/app.css"
 
 // Dev-only UI automation bridge (drives the live webview for testing). Stripped
-// from production builds by the DEV guard.
-if (import.meta.env.DEV) void import("./lib/automation")
+// from production builds by the DEV guard. A failure here used to be swallowed
+// by `void`: the bridge simply never came up, with nothing anywhere to say why.
+if (import.meta.env.DEV)
+  void import("./lib/automation").catch((e: unknown) => {
+    log.error("automation bridge failed to load", { message: String((e as Error)?.message ?? e) })
+  })
 
 // Backspace outside a text field is "go back" to a webview — and back from
 // Reado's only page throws the whole session away. Cancelled before anything else

@@ -833,6 +833,18 @@ describe("the landing jump", () => {
     vi.useRealTimers()
   })
 
+  it("puts the caret on the landed-on line, not just the highlight", () => {
+    // The bug: landing scrolled and lit the line but left the cursor wherever
+    // it was — line 1 of a file just opened from the Problems panel — so the
+    // first arrow key threw you back to the top. It also disagreed with the
+    // outline and F12, which both move the caret.
+    const { container } = mount({ landingLine: { line: 3, nonce: 1 } })
+    const view = EditorView.findFromDOM(container.querySelector(".cm-editor") as HTMLElement)
+    expect(view, "no editor view").toBeTruthy()
+    const head = view?.state.selection.main.head ?? 0
+    expect(view?.state.doc.lineAt(head).number).toBe(3)
+  })
+
   it("clamps a landing line past the end of the file to its last line", () => {
     const { container } = mount({ landingLine: { line: 999, nonce: 1 } })
     const lit = container.querySelectorAll(".cm-landing-line")

@@ -271,7 +271,6 @@ export function StatusBar() {
                 />
               ))}
             </Dropdown>
-            <span className="px-1">UTF-8</span>
             <Dropdown
               label={`${t("status.eol")}${ecNote(!!ec?.endOfLine)}`}
               triggerClassName={ITEM}
