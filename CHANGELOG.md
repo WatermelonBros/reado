@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.16.1] — 2026-09-10
+
 ### Fixed
 - **⌘-click goes to the definition, or says why it can't.** Three ways it could
   come up empty and tell you nothing: the language server had started but never
@@ -1765,7 +1767,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.16.1...HEAD
+[1.16.1]: https://github.com/WatermelonBros/reado/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/WatermelonBros/reado/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/WatermelonBros/reado/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/WatermelonBros/reado/compare/v1.13.0...v1.14.0
