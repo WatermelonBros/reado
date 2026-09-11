@@ -55,6 +55,7 @@ import { useComments } from "@/lib/comments"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTextView } from "@/lib/textView"
+import { useUntitled } from "@/lib/untitled"
 
 const ROOT = "/repo"
 const FILE = "/repo/src/a.ts"
@@ -334,5 +335,26 @@ describe("the split pane", () => {
     render(<Editor paneFile="/repo/src/split.ts" />)
     await screen.findByTestId("diff")
     expect(useEditorActions.getState().diffing).toBe(true)
+  })
+})
+
+describe("untitled buffers", () => {
+  it("shows the buffer's own text and asks the filesystem nothing about it", async () => {
+    useUntitled.setState({ texts: { [ROOT]: { "untitled:1": "a draft" } } })
+    useProject.setState({ active: "untitled:1" })
+    render(<Editor />)
+    expect(await screen.findByTestId("code-view")).toHaveTextContent("a draft")
+    // No path to read, re-anchor comments against, or watch for writes.
+    expect(readFile).not.toHaveBeenCalled()
+    expect(reanchorFile).not.toHaveBeenCalled()
+    expect(fileChanged).toBeNull()
+  })
+
+  it("starts empty when there is nothing parked for it", async () => {
+    useProject.setState({ active: "untitled:2" })
+    render(<Editor />)
+    await waitFor(() => expect(screen.getByTestId("code-view")).toBeInTheDocument())
+    expect(screen.getByTestId("code-view")).toHaveTextContent("")
+    expect(readFile).not.toHaveBeenCalled()
   })
 })

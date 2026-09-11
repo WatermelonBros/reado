@@ -93,7 +93,13 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .build()?;
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&new_window)
-        .item(&acc!(app, "newFile", "New File…", "CmdOrCtrl+N"))
+        .item(&acc!(
+            app,
+            "newUntitled",
+            "New Untitled File",
+            "CmdOrCtrl+N"
+        ))
+        .text("newFile", "New File…")
         .item(&acc!(app, "openFile", "Open File…", "CmdOrCtrl+O"))
         .text("openFolder", "Open Folder…")
         .text("openRecent", "Open Recent…")
@@ -267,6 +273,12 @@ fn init_macos(app: &App) -> tauri::Result<()> {
             "Split Editor",
             "CmdOrCtrl+\\"
         ))
+        .item(&acc!(
+            app,
+            "group:split",
+            "Split Editor into a New Group",
+            "CmdOrCtrl+Alt+\\"
+        ))
         .separator()
         .text("view:foldAll", "Fold All")
         .text("view:unfoldAll", "Unfold All")
@@ -292,6 +304,14 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .build()?;
 
     let terminal_menu = SubmenuBuilder::new(app, "Terminal")
+        .text("tasks:run", "Run Task…")
+        .item(&acc!(
+            app,
+            "tasks:build",
+            "Run Build Task",
+            "CmdOrCtrl+Shift+B"
+        ))
+        .separator()
         .text("terminal:new", "New Terminal")
         .text("terminal:split", "Split Terminal")
         .text("terminal:clear", "Clear Terminal")

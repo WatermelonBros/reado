@@ -57,6 +57,7 @@ import {
   formatDocument,
   setEditorConfig as recordEditorConfig,
   registerView,
+  saveAs,
   textToSave,
   useDocInfo,
 } from "@/lib/docInfo"
@@ -89,6 +90,7 @@ import {
   useSessions,
   useSettings,
 } from "@/lib/store"
+import { isUntitled, useUntitled } from "@/lib/untitled"
 import { rootFor } from "@/lib/workspace"
 import { buildCodeExtensions } from "./buildCodeExtensions"
 import {
@@ -284,6 +286,12 @@ export function CodeView({
     y: number
     actions: ResolvedAction[]
   } | null>(null)
+  // The locations a clicked code lens carried, offered at the click point.
+  const [lensMenu, setLensMenu] = useState<{
+    x: number
+    y: number
+    locations: Array<{ path: string; line: number }>
+  } | null>(null)
   // Bumped on scroll/resize so the overlays re-read their anchor coordinates.
   const [, setTick] = useState(0)
   // A failed write (read-only file, permission, disk full). Surfaced as a small
@@ -402,6 +410,8 @@ export function CodeView({
   const saveFile = async () => {
     const view = viewRef.current
     if (!view || pinned) return
+    // A scratch buffer has nowhere to be written back to: saving one is Save As.
+    if (isUntitled(path)) return saveAs()
     // Opt-in save pipeline, applied only on write (never on read): format on
     // save, then trim trailing whitespace and/or ensure a final newline. A
     // formatter that fails or hangs is reported but never blocks the write.
@@ -428,6 +438,14 @@ export function CodeView({
   // skipped on purpose: the formatter resolves "the active document", which by
   // this point is the file being switched *to*.
   const flushOnClose = (view: EditorView, root: string) => {
+    // The scratch buffer's disk is the store. This is what makes switching to
+    // another tab and back keep the text: the view unmounts, and its content
+    // has to land somewhere before it goes.
+    if (isUntitled(path)) {
+      useUntitled.getState().setText(path, view.state.doc.toString())
+      useEditorActions.getState().setDirty(relPath, false)
+      return
+    }
     noteSelfWrite(relPath)
     writeFile(
       root,
@@ -441,7 +459,15 @@ export function CodeView({
 
   // Auto Save: write only when there are unsaved edits (avoids needless writes).
   const autoSave = () => {
-    if (useEditorActions.getState().isDirty(relPath)) void saveFile()
+    if (!useEditorActions.getState().isDirty(relPath)) return
+    // Auto Save must not open a Save As dialog behind the user's back — for a
+    // scratch buffer it means "park the text", which is all there is to do.
+    const view = viewRef.current
+    if (isUntitled(path)) {
+      if (view) useUntitled.getState().setText(path, view.state.doc.toString())
+      return
+    }
+    void saveFile()
   }
 
   // In re-anchor mode the same gesture sets an orphan's new anchor instead of
@@ -641,6 +667,7 @@ export function CodeView({
         saveFile,
         peekDefinition,
         explainSymbol,
+        showLensLocations: (x, y, locations) => setLensMenu({ x, y, locations }),
         openComposerFor,
         autoSave,
       }),
@@ -1463,6 +1490,18 @@ export function CodeView({
             onSelect: () => void runAction(action),
           }))}
           onClose={() => setActionMenu(null)}
+        />
+      )}
+
+      {lensMenu && (
+        <ContextMenu
+          x={lensMenu.x}
+          y={lensMenu.y}
+          items={lensMenu.locations.map((loc) => ({
+            label: `${toRelative(fileRoot, loc.path)}:${loc.line}`,
+            onSelect: () => useProject.getState().open(loc.path, loc.line),
+          }))}
+          onClose={() => setLensMenu(null)}
         />
       )}
 

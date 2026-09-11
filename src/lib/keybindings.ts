@@ -21,6 +21,7 @@
  * and are not in here: they are the editor's own contract with the document.
  */
 import type { Chord } from "./chords"
+import { clauseHolds, unknownContexts } from "./keyContext"
 import { alt, ctrl, isMacUA, mod, shift } from "./shortcuts"
 
 /** A keystroke in canonical form: modifiers in a fixed order, then the key. */
@@ -94,7 +95,7 @@ const SHIPPED: Record<string, string> = {
   "Mod+S": "save",
   "Mod+Alt+S": "saveAll",
   "Mod+Shift+S": "saveAs",
-  "Mod+N": "newFile",
+  "Mod+N": "newUntitled",
   "Mod+O": "openFile",
   "Mod+W": "closeEditor",
   "Mod+Shift+T": "reopenClosed",
@@ -106,6 +107,18 @@ const SHIPPED: Record<string, string> = {
   "Mod+Shift+F": "palette:search",
   "Mod+Shift+O": "palette:symbols",
   "Mod+T": "palette:wsymbols",
+  "Mod+Shift+B": "tasks:build",
+  // ⌘1…⌘9 jump between editor groups, the way every editor with panes binds it.
+  // ⌘1 and ⌘2 already meant "focus pane 1 / 2"; a group *is* a pane, so those
+  // two ids keep their keys and gain the general meaning.
+  "Mod+3": "group:3",
+  "Mod+4": "group:4",
+  "Mod+5": "group:5",
+  "Mod+6": "group:6",
+  "Mod+7": "group:7",
+  "Mod+8": "group:8",
+  "Mod+9": "group:9",
+  "Mod+Alt+\\": "group:split",
   "Mod+Alt+ArrowLeft": "go:back",
   "Mod+Alt+ArrowRight": "go:forward",
   F8: "go:nextProblem",
@@ -154,10 +167,12 @@ export const DEFAULT_BINDINGS: Record<Combo, string> = Object.fromEntries(
   Object.entries(SHIPPED).map(([combo, command]) => [normalizeCombo(combo) ?? combo, command]),
 )
 
-/** One parsed override. A `command` of "" means "unbind this key". */
+/** One parsed override. A `command` of "" means "unbind this key". `when` is the
+ *  context clause that has to hold for it to apply; absent means always. */
 export interface Keybinding {
   combo: Combo
   command: string
+  when?: string
 }
 
 /** Parse the user's `combo = command` lines, skipping anything malformed. */
@@ -174,7 +189,16 @@ export function parseKeybindings(lines: string[] | undefined): Keybinding[] {
     if (at < 0) continue
     const combo = normalizeCombo(line.slice(0, at))
     if (!combo) continue
-    out.push({ combo, command: line.slice(at + 1).trim() })
+    // `combo = command when clause`. Split on the keyword rather than on
+    // whitespace: a command id never contains " when ", and the clause may.
+    const rest = line.slice(at + 1).trim()
+    // `when` at the very start is an unbind of the conditional case — there is
+    // no command before it, so there is no leading space to split on either.
+    const clauseAt = rest.startsWith("when ") ? 0 : rest.indexOf(" when ")
+    const command = clauseAt < 0 ? rest : rest.slice(0, clauseAt).trim()
+    const when =
+      clauseAt < 0 ? undefined : rest.slice(clauseAt === 0 ? 5 : clauseAt + 6).trim() || undefined
+    out.push(when ? { combo, command, when } : { combo, command })
   }
   return out
 }
@@ -185,13 +209,58 @@ export function parseKeybindings(lines: string[] | undefined): Keybinding[] {
  * A line with no command removes the binding entirely rather than pointing it at
  * nothing — that is how you give a key back to the editor.
  */
-export function resolveBindings(userLines: string[] | undefined): Map<Combo, string> {
-  const map = new Map(Object.entries(DEFAULT_BINDINGS))
-  for (const { combo, command } of parseKeybindings(userLines)) {
-    if (command) map.set(combo, command)
-    else map.delete(combo)
+export function resolveBindings(userLines: string[] | undefined): Map<Combo, Keybinding[]> {
+  const map = new Map<Combo, Keybinding[]>()
+  for (const [combo, command] of Object.entries(DEFAULT_BINDINGS))
+    map.set(combo as Combo, [{ combo: combo as Combo, command }])
+  for (const binding of parseKeybindings(userLines)) {
+    const { combo, command, when } = binding
+    // An unbind with no clause takes the combo away outright; with one it only
+    // takes away the conditional case, leaving whatever else answers to the key.
+    if (!command) {
+      if (!when) map.delete(combo)
+      else
+        map.set(
+          combo,
+          (map.get(combo) ?? []).filter((b) => b.when !== when),
+        )
+      continue
+    }
+    const existing = map.get(combo) ?? []
+    // Conditional bindings are tried in the order they were written; the
+    // unconditional one is the fallback and therefore goes last.
+    const without = existing.filter((b) => b.when !== when)
+    map.set(
+      combo,
+      when
+        ? [...without.filter((b) => b.when), binding, ...without.filter((b) => !b.when)]
+        : [...without.filter((b) => b.when), binding],
+    )
   }
   return map
+}
+
+/**
+ * Which command a combo runs right now: the first binding whose clause holds.
+ *
+ * A binding naming a context Reado does not know never matches — and says so
+ * once, because a clause that silently never fires is indistinguishable from a
+ * shortcut that does not work.
+ */
+export function commandFor(
+  candidates: Keybinding[] | undefined,
+  on: Set<string>,
+  onUnknown?: (names: string[]) => void,
+): string | undefined {
+  for (const binding of candidates ?? []) {
+    const unknown = unknownContexts(binding.when)
+    if (unknown.length) {
+      onUnknown?.(unknown)
+      continue
+    }
+    if (clauseHolds(binding.when, on)) return binding.command
+  }
+  return undefined
 }
 
 /**
@@ -204,8 +273,8 @@ export function resolveBindings(userLines: string[] | undefined): Map<Combo, str
  * to know when to redo it.
  */
 let cachedLines: string[] | undefined
-let cachedMap: Map<Combo, string> | undefined
-export function activeBindings(userLines: string[] | undefined): Map<Combo, string> {
+let cachedMap: Map<Combo, Keybinding[]> | undefined
+export function activeBindings(userLines: string[] | undefined): Map<Combo, Keybinding[]> {
   if (cachedMap && cachedLines === userLines) return cachedMap
   cachedLines = userLines
   cachedMap = resolveBindings(userLines)
@@ -225,9 +294,10 @@ export function activeBindings(userLines: string[] | undefined): Map<Combo, stri
 export function overridesFor(lines: string[]): string[] {
   const parsed = parseKeybindings(lines)
   const out = parsed
-    .filter((b) => DEFAULT_BINDINGS[b.combo] !== b.command)
-    .map((b) => `${b.combo} = ${b.command}`)
-  const mentioned = new Set(parsed.map((b) => b.combo))
+    // A binding with a clause is always an override: the defaults have none.
+    .filter((b) => b.when || DEFAULT_BINDINGS[b.combo] !== b.command)
+    .map((b) => `${b.combo} = ${b.command}${b.when ? ` when ${b.when}` : ""}`)
+  const mentioned = new Set(parsed.filter((b) => !b.when).map((b) => b.combo))
   for (const combo of Object.keys(DEFAULT_BINDINGS)) {
     if (!mentioned.has(combo)) out.push(`${combo} = `)
   }
@@ -245,8 +315,11 @@ export function unknownCommands(lines: string[], known: Set<string>): string[] {
  *  shows what there is to change instead of starting empty. */
 export function bindingsToText(userLines: string[] | undefined): string {
   const resolved = resolveBindings(userLines)
-  return `${[...resolved.entries()]
-    .map(([combo, command]) => `${combo} = ${command}`)
+  return `${[...resolved.values()]
+    .flat()
+    // A clause is part of the binding, so it is part of the line: what the
+    // editor shows has to be what the parser reads back.
+    .map((b) => `${b.combo} = ${b.command}${b.when ? ` when ${b.when}` : ""}`)
     .sort()
     .join("\n")}\n`
 }
@@ -312,8 +385,10 @@ export function comboLabel(combo: Combo): string {
  * `⌘K ⌘0`, and a rebound key was never reflected at all.
  */
 export function shortcutFor(command: string, userLines?: string[]): string | undefined {
-  for (const [combo, id] of activeBindings(userLines)) {
-    if (id === command) return comboLabel(combo)
+  for (const [combo, candidates] of activeBindings(userLines)) {
+    // The unconditional binding is the one to advertise: a conditional one only
+    // works somewhere, and a palette row cannot say where.
+    if (candidates.some((b) => !b.when && b.command === command)) return comboLabel(combo)
   }
   const chord = CHORDS.find((c) => c.command === command)
   if (chord) {

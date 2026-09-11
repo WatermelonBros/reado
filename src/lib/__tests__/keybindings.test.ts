@@ -7,6 +7,7 @@ import {
   bindingsToText,
   CHORDS,
   comboOf,
+  commandFor,
   DEFAULT_BINDINGS,
   normalizeCombo,
   overridesFor,
@@ -106,15 +107,19 @@ describe("parseKeybindings", () => {
   })
 })
 
+/** What a combo runs with nothing special going on — the common case, now that
+ *  a combo can answer to more than one command. */
+const runs = (lines: string[], combo: string) =>
+  commandFor(resolveBindings(lines).get(combo), new Set())
+
 describe("resolveBindings", () => {
   it("ships a working set on its own", () => {
-    const map = resolveBindings([])
-    expect(map.get("Mod+P")).toBe("palette:files")
-    expect(map.get("Mod+S")).toBe("save")
+    expect(runs([], "Mod+P")).toBe("palette:files")
+    expect(runs([], "Mod+S")).toBe("save")
   })
 
   it("lets an override replace a default", () => {
-    expect(resolveBindings(["Mod+P = palette:commands"]).get("Mod+P")).toBe("palette:commands")
+    expect(runs(["Mod+P = palette:commands"], "Mod+P")).toBe("palette:commands")
   })
 
   it("lets a key be given back to the editor entirely", () => {
@@ -123,13 +128,59 @@ describe("resolveBindings", () => {
   })
 
   it("lets a new key be added without disturbing the rest", () => {
-    const map = resolveBindings(["Mod+Alt+P = palette:files"])
-    expect(map.get("Mod+Alt+P")).toBe("palette:files")
-    expect(map.get("Mod+P")).toBe("palette:files")
+    const lines = ["Mod+Alt+P = palette:files"]
+    expect(runs(lines, "Mod+Alt+P")).toBe("palette:files")
+    expect(runs(lines, "Mod+P")).toBe("palette:files")
   })
 
   it("normalises the override, so how it was typed doesn't matter", () => {
-    expect(resolveBindings(["shift+mod+p = save"]).get("Mod+Shift+P")).toBe("save")
+    expect(runs(["shift+mod+p = save"], "Mod+Shift+P")).toBe("save")
+  })
+})
+
+describe("conditional bindings", () => {
+  const lines = ["Mod+K = clearTerminal when terminalFocus", "Mod+K = palette:commands"]
+
+  it("runs the clause that holds", () => {
+    expect(commandFor(resolveBindings(lines).get("Mod+K"), new Set(["terminalFocus"]))).toBe(
+      "clearTerminal",
+    )
+  })
+
+  it("falls back to the unconditional binding", () => {
+    expect(commandFor(resolveBindings(lines).get("Mod+K"), new Set(["editorFocus"]))).toBe(
+      "palette:commands",
+    )
+  })
+
+  it("reads a clause back out the way it went in", () => {
+    expect(parseKeybindings(["Mod+K = clearTerminal when terminalFocus"])).toEqual([
+      { combo: "Mod+K", command: "clearTerminal", when: "terminalFocus" },
+    ])
+  })
+
+  it("never matches a context that does not exist, and says which", () => {
+    const unknown: string[] = []
+    const cmd = commandFor(
+      resolveBindings(["Mod+K = whatever when nonsenseFocus"]).get("Mod+K"),
+      new Set(["editorFocus"]),
+      (names) => unknown.push(...names),
+    )
+    expect(cmd).toBeUndefined()
+    expect(unknown).toEqual(["nonsenseFocus"])
+  })
+
+  it("keeps a clause when the dialog writes the bindings back out", () => {
+    const text = bindingsToText(lines)
+    expect(text).toContain("Mod+K = clearTerminal when terminalFocus")
+    expect(
+      commandFor(resolveBindings(text.trim().split("\n")).get("Mod+K"), new Set(["terminalFocus"])),
+    ).toBe("clearTerminal")
+  })
+
+  it("unbinds only the conditional case when the clause is named", () => {
+    const out = resolveBindings([...lines, "Mod+K = when terminalFocus"])
+    expect(commandFor(out.get("Mod+K"), new Set(["terminalFocus"]))).toBe("palette:commands")
   })
 })
 
@@ -147,7 +198,9 @@ describe("the shipped table", () => {
   it("survives being written out and read back", () => {
     // The round trip the dialog does on every save.
     expect(resolveBindings(bindingsToText([]).trim().split("\n"))).toEqual(
-      new Map(Object.entries(DEFAULT_BINDINGS)),
+      new Map(
+        Object.entries(DEFAULT_BINDINGS).map(([combo, command]) => [combo, [{ combo, command }]]),
+      ),
     )
   })
 
@@ -271,6 +324,8 @@ describe("bindingsToText", () => {
 
   it("round-trips through the parser", () => {
     const text = bindingsToText(["Mod+P = palette:commands"])
-    expect(resolveBindings(text.split("\n")).get("Mod+P")).toBe("palette:commands")
+    expect(commandFor(resolveBindings(text.split("\n")).get("Mod+P"), new Set())).toBe(
+      "palette:commands",
+    )
   })
 })

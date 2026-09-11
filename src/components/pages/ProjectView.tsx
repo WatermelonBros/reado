@@ -93,6 +93,9 @@ export function ProjectView({ root }: { root: string }) {
   const active = useProject((s) => s.active)
   const expandedDirs = useProject((s) => s.expandedDirs)
   const splitPath = useProject((s) => s.splitPath)
+  const groups = useProject((s) => s.groups)
+  const focusedGroup = useProject((s) => s.focusedGroup)
+  const focusGroup = useProject((s) => s.focusGroup)
   const treeNonce = useProject((s) => s.treeNonce)
   const saveSession = useSessions((s) => s.save)
   const { t } = useTranslation()
@@ -255,8 +258,18 @@ export function ProjectView({ root }: { root: string }) {
   // split pane change, so reopening the project restores all of it.
   useEffect(() => {
     if (!restored.current) return
-    saveSession(root, { tabs, active, expanded: expandedDirs, split: splitPath })
-  }, [root, tabs, active, expandedDirs, splitPath, saveSession])
+    saveSession(root, {
+      tabs,
+      active,
+      expanded: expandedDirs,
+      split: splitPath,
+      // The focused group's live fields are written back so the saved
+      // arrangement describes what is on screen, not what it was at the last
+      // focus change.
+      groups: groups.map((g) => (g.id === focusedGroup ? { ...g, tabs, active } : g)),
+      focusedGroup,
+    })
+  }, [root, tabs, active, expandedDirs, splitPath, groups, focusedGroup, saveSession])
 
   // Apply per-project settings overrides, then persist changes back to them.
   useEffect(() => {
@@ -684,6 +697,32 @@ export function ProjectView({ root }: { root: string }) {
                   so picking the next one is one click and not a re-navigation. */}
               <ExtensionPage />
             </div>
+            {/* The other editor groups. Each is a real pane — its own tabs, its
+                own file, its own history — and clicking anywhere in one focuses
+                it, so the next file you open lands where you are looking. */}
+            {groups
+              .filter((g) => g.id !== focusedGroup)
+              .map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  aria-label={t("group.focus", { n: groups.indexOf(g) + 1 })}
+                  onFocusCapture={() => focusGroup(g.id)}
+                  onMouseDownCapture={() => focusGroup(g.id)}
+                  className="flex min-w-0 flex-1 cursor-default flex-col overflow-hidden border-l border-l-line text-left"
+                >
+                  <Tabs group={g.id} />
+                  <div className="relative min-h-0 flex-1 overflow-hidden">
+                    {g.active ? (
+                      <Editor paneFile={g.active} />
+                    ) : (
+                      <div className="grid h-full place-items-center text-xs text-faint">
+                        {t("group.empty")}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
             {splitPath && (
               <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-l-line">
                 <header className="flex h-9 flex-none items-center gap-2 border-b border-line pr-1.5 pl-3 text-xs text-muted">

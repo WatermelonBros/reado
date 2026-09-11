@@ -13,6 +13,7 @@ import { extractSymbols, type OutlineSymbol } from "@/lib/outline"
 import { LAST_READ_BASE } from "@/lib/readProgress"
 import { SAVED_BASE, useEditorActions, useProject } from "@/lib/store"
 import { useSynopsis } from "@/lib/synopsis"
+import { isUntitled } from "@/lib/untitled"
 
 /** A path segment: a button that doesn't look like one until you reach it. */
 const SEGMENT =
@@ -47,7 +48,9 @@ export function Breadcrumb() {
         .catch(() => {})
   }, [diffing, isRepo, root])
 
-  if (!active) return null
+  // A scratch buffer has no path to break into segments, no folder to list
+  // beside it, and nothing in git to diff or blame against.
+  if (!active || isUntitled(active)) return null
 
   const rel = toRelative(root, active)
   const segments = rel.split("/")

@@ -62,6 +62,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     "editor.columnSelection",
     "editor.sticky",
     "editor.focus",
+    "settings.codeLens",
+    "settings.semanticTokens",
     "settings.colorSwatches",
     "settings.renderWhitespace",
     "settings.bracketMatching",

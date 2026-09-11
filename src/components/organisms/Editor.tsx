@@ -27,6 +27,7 @@ import { commentsForFile, toRelative, useComments } from "@/lib/comments"
 import { prRefsFor, useGuidedReview } from "@/lib/guidedReview"
 import { SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTextView } from "@/lib/textView"
+import { isUntitled, useUntitled } from "@/lib/untitled"
 import { rootFor } from "@/lib/workspace"
 import { CodeView } from "./editor/CodeView"
 import { human, isMarkdown, PLACEHOLDER } from "./editor/extensions"
@@ -116,6 +117,15 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   const guardBytes = active && bypassed.has(active) ? 0 : Math.round(guardMb * 1024 * 1024)
   useEffect(() => {
     if (!active) return
+    // A scratch buffer has no file behind it: its text is the store's, and
+    // reading one would be a read of a path that does not exist.
+    if (isUntitled(active)) {
+      setLoaded({
+        path: active,
+        content: { kind: "text", text: useUntitled.getState().textOf(active) },
+      })
+      return
+    }
     let cancelled = false
     const rel = toRelative(root, active)
     const load: Promise<FileContent> = prRef
@@ -137,7 +147,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   // Skipped in PR mode: reanchoring reads the working tree, but the shown bytes
   // are the PR's — the comments are already anchored to those exact lines.
   useEffect(() => {
-    if (!active || prRef) return
+    if (!active || prRef || isUntitled(active)) return
     const rel = toRelative(root, active)
     reanchorFile(root, rel)
       .then((list) => useComments.getState().replaceForFile(rel, list))
@@ -147,7 +157,8 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   // Reload the open file when it changes on disk (e.g. an agent edited it),
   // unless the user has unsaved manual edits in progress.
   useEffect(() => {
-    if (!active) return
+    // Nothing on disk to follow for a buffer that isn't a file.
+    if (!active || isUntitled(active)) return
     let cancelled = false
     const rel = toRelative(root, active)
     const un = listen<{ file: string }>("file-changed", (e) => {

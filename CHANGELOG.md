@@ -11,6 +11,78 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- Untitled buffers: ⌘N opens an empty `Untitled-1` you can start typing into —
+  with no project open too, which is when a scratch buffer is wanted most. It is
+  a tab like any other (switch away, split it, close it) and its text lives in
+  Reado rather than on disk, so nothing reads or writes a file for it. Saving one
+  asks where it goes and turns the scratch tab into the file's tab, in place;
+  closing one with text in it asks first. They come back with the session, text
+  and all. ⌘N used to be New File… (which asks for a path first); that is still
+  in the File menu and the palette, without the shortcut.
+- Editor groups: more than two panes. Split the editor (⌥⌘\\ or View ▸ Split
+  Editor into a New Group) as many times as you need; each group is a real pane
+  with its own tabs, its own file and its own back/forward history. ⌘1…⌘9 jump
+  between them, opening a file lands in the group you are looking at, and closing
+  a group's last tab closes the group and hands focus to a neighbour. The
+  arrangement is saved with the project.
+- Semantic highlighting: colour from the language server laid over the grammar's.
+  The grammar guesses from the shape of the text; the server knows a type from a
+  value and a parameter from a local. Reado's palette stays six colours — what
+  colour should not carry is carried otherwise: a parameter is italic, a
+  deprecated symbol is struck through. Off with one setting, which also stops the
+  requests.
+- Project tasks: write the commands everyone runs into `.reado/tasks.json` (or
+  reuse the `.vscode/tasks.json` you already have) and run them from the palette,
+  the Terminal menu, or ⇧⌘B for the build task. They run in a real terminal pane,
+  and their output is matched into the Problems panel — file, line and message,
+  clickable, attributed to the task that produced them. Re-running a task
+  replaces its own entries rather than piling up.
+- Settings profiles: named configurations — settings, enabled extensions and
+  keybindings — switchable from the status bar or the palette. Switching saves
+  what you changed before it loads the next, so edits are never rolled back
+  behind your back. Profiles export to a file and import on another machine.
+- Conditional keybindings: a binding may carry a `when` clause
+  (`Mod+K = terminal:clear when terminalFocus`), so one key can mean different
+  things in the editor, the terminal and a text field. An unconditional binding
+  is the fallback; a clause naming a context Reado doesn't know is reported
+  rather than silently never matching.
+- Git beyond the daily loop, all from Source Control ▸ More actions: amend the
+  last commit (with its message offered for editing, and a warning when it is
+  already pushed), revert a commit, cherry-pick one from another branch, create
+  and delete tags, and manage remotes. A revert or cherry-pick that conflicts
+  says so and leaves the files for the conflict resolver.
+- A two-finger swipe walks the files you have been reading — right for back,
+  left for forward, the same history the breadcrumb arrows and ⌥⌘← use. Not the
+  webview's page history, which would leave the project. A gesture that is mostly
+  vertical is left alone, and so is one that something under the pointer actually
+  scrolled with (a long line read to its end with wrap off, a wide table) —
+  judged by whether it really moved, since the editor's own scroller reports room
+  it does not have.
+- Code lenses: the language server's "3 references" / "2 implementations" lines,
+  drawn above the symbol they describe. Clicking one goes there — straight to the
+  single place, or to a list of `file:line` to pick from — and a lens whose
+  command belongs to the server is handed back to it. Off with one setting
+  (Settings ▸ Editor ▸ Code lenses), which also stops the requests — and tells
+  the server, which otherwise keeps computing them for nobody.
+
+### Fixed
+
+- Reado now asks the language server for what it computes per document. The one
+  scheduled request went out before the `initialize` answer came back — and
+  capabilities arrive *with* that answer — so it was skipped as unsupported and
+  nothing ever asked again. Open a file and don't type in it, and server folding
+  ranges and document links were never requested at all. They are now.
+- Switching a dock tab no longer kills what is behind it. Going from Terminal to
+  Output unmounted the terminal, and a terminal pane kills its shell when it
+  unmounts — so the tab you came back to was empty and whatever was running in it
+  was gone. Every tab in a group now stays mounted; only the active one is shown.
+- The browser pane stops polling a page that isn't there. Once it had been opened
+  without a dev server running, hiding it (another dock tab, a collapsed area)
+  left the drain loop calling into a webview that had been closed — one
+  `preview_eval failed … no preview pane running` in the log every 700ms, forever.
+
 ## [1.17.0] — 2026-09-11
 
 ### Added

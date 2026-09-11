@@ -35,6 +35,14 @@ import { useOnboarding } from "@/lib/onboarding"
 import { extractSymbols, type OutlineSymbol } from "@/lib/outline"
 import { usePreReview } from "@/lib/preReview"
 import { usePreview } from "@/lib/preview"
+import {
+  createProfile,
+  deleteProfile,
+  exportProfile,
+  importProfile,
+  renameProfile,
+  useProfiles,
+} from "@/lib/profiles"
 import { saveSettingsToProject } from "@/lib/projectConfig"
 import { prompt as promptDialog } from "@/lib/prompt"
 import { useReadProgress } from "@/lib/readProgress"
@@ -47,6 +55,8 @@ import {
   importSettingsFromFile,
 } from "@/lib/settingsSync"
 import { THEMES, usePalette, useProject, useRecents, useSettings, useWorkspace } from "@/lib/store"
+import { openTaskList, runBuildTask } from "@/lib/taskCommands"
+import { commandLine, runTask, useTasks } from "@/lib/tasks"
 import { useTerminals } from "@/lib/terminals"
 import { openProjectHere } from "@/lib/window"
 import { acrossRoots, workspaceRoots } from "@/lib/workspace"
@@ -271,6 +281,26 @@ export function Palette() {
         },
       }))
     }
+    if (mode === "tasks") {
+      return useTasks.getState().tasks.map((task) => ({
+        label: task.label,
+        detail: commandLine(task),
+        run: () => {
+          void runTask(task)
+          close()
+        },
+      }))
+    }
+    if (mode === "profiles") {
+      return useProfiles.getState().profiles.map((p) => ({
+        label: p.name,
+        detail: p.id === useProfiles.getState().activeId ? t("profile.status") : undefined,
+        run: () => {
+          useProfiles.getState().switchTo(p.id)
+          close()
+        },
+      }))
+    }
     if (mode === "bookmarks") {
       const marks = useBookmarks.getState().bookmarks
       const filtered = query
@@ -321,7 +351,11 @@ export function Palette() {
             ? "recents.title"
             : mode === "bookmarks"
               ? "bookmarks.panel"
-              : "search.placeholder"
+              : mode === "profiles"
+                ? "profile.switch"
+                : mode === "tasks"
+                  ? "tasks.run"
+                  : "search.placeholder"
 
   // What to show when there are no rows: a per-mode empty state instead of a
   // blank box. `search`/`commands` only speak up once you've typed (an empty
@@ -577,6 +611,63 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
       label: t("bookmarks.goto"),
       when: hasBookmarks,
       run: () => usePalette.getState().open("bookmarks"),
+    },
+    {
+      label: t("tasks.run"),
+      run: () => {
+        void openTaskList()
+        close()
+      },
+    },
+    {
+      label: t("tasks.runBuild"),
+      run: () => {
+        void runBuildTask()
+        close()
+      },
+    },
+    {
+      label: t("profile.create"),
+      run: () => {
+        void createProfile()
+        close()
+      },
+    },
+    {
+      label: t("profile.switch"),
+      // Only worth offering once there is somewhere to switch to.
+      when: useProfiles.getState().profiles.length > 1,
+      run: () => {
+        usePalette.getState().open("profiles")
+      },
+    },
+    {
+      label: t("profile.rename"),
+      run: () => {
+        void renameProfile()
+        close()
+      },
+    },
+    {
+      label: t("profile.delete"),
+      run: () => {
+        void deleteProfile()
+        close()
+      },
+    },
+    {
+      label: t("profile.export"),
+      run: () => {
+        void exportProfile()
+        close()
+      },
+    },
+    {
+      label: t("profile.import"),
+      run: () => {
+        void importProfile()
+        close()
+      },
     },
     {
       label: t("sync.export"),

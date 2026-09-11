@@ -67,7 +67,7 @@ import { rootFor } from "./workspace"
 const log = createLogger("lsp")
 
 import { t } from "@/i18n"
-import { explainSymbolAt, taskFromDiagnostic } from "./lspActions"
+import { explainSymbolAt, showLensLocations, taskFromDiagnostic } from "./lspActions"
 
 interface ServerDef {
   /** Server name — resolved to an actual binary on the Rust side (allowlist). */
@@ -261,6 +261,14 @@ function answerServerRequest(key: string, msg: ServerMessage): boolean {
     }
     case "window/workDoneProgress/create":
       reply(null)
+      return true
+    case "workspace/codeLens/refresh":
+      // "My answer changed — ask me again." Without this, a file opened while
+      // the server was still starting keeps the empty answer it got: the fetch
+      // is scheduled once, and only a document change ever schedules another.
+      // On a large project that is every file you open first.
+      reply(null)
+      for (const again of lensRefreshers) again()
       return true
     default:
       return false
@@ -701,8 +709,19 @@ const answeredRequests = () => ({
     workspace: {
       configuration: true,
       didChangeWatchedFiles: { dynamicRegistration: true },
+      // A server only offers to tell us its lenses changed if we say we can act
+      // on it — and it does tell us, within the first 50ms, before it has
+      // finished loading the project and while its answer is still empty.
+      codeLens: { refreshSupport: true },
     },
     window: { workDoneProgress: true },
+    // Declaring this is what *creates* the lens providers in
+    // typescript-language-server (`registerHandlers` builds them only for a
+    // client that asks). Without it the server still advertises
+    // `codeLensProvider` and then answers every request with an empty list —
+    // which reads exactly like "this file has no lenses", and is why the
+    // feature looked implemented and showed nothing.
+    textDocument: { codeLens: { dynamicRegistration: false } },
   },
 })
 
@@ -715,6 +734,8 @@ const clientExtensions = () => [
   onTypeFormatting(),
   lspFolding(),
   documentLinks(),
+  codeLenses(),
+  semanticTokens(),
   linkedEditing(),
   answeredRequests(),
 ]
@@ -807,7 +828,14 @@ async function formatOnType(
  * "nothing to use yet" — never "the server said no" — so every reader falls back
  * to what Reado does without a server instead of waiting.
  */
-function documentFeature<T>(method: string, supported: (caps: ServerCaps) => boolean) {
+function documentFeature<T>(
+  method: string,
+  supported: (caps: ServerCaps) => boolean,
+  /** Turn the server's raw list into the one to store — for the features whose
+   *  items arrive incomplete and need a second round trip each (code lenses come
+   *  back with no title from every server that sets `resolveProvider`). */
+  refine?: (items: T[], client: LSPClient) => Promise<T[]>,
+) {
   const set = StateEffect.define<T[] | null>()
   const field = StateField.define<T[] | null>({
     create: () => null,
@@ -820,6 +848,8 @@ function documentFeature<T>(method: string, supported: (caps: ServerCaps) => boo
   const fetcher = ViewPlugin.fromClass(
     class {
       pending = -1
+      /** Whether we have already parked a retry on the handshake (see `fetch`). */
+      waitingForHandshake = false
       constructor(view: EditorView) {
         this.schedule(view)
       }
@@ -835,16 +865,33 @@ function documentFeature<T>(method: string, supported: (caps: ServerCaps) => boo
       }
       fetch(view: EditorView) {
         const plugin = LSPPlugin.get(view)
-        if (!plugin || !supported(plugin.client.serverCapabilities as ServerCaps)) return
+        if (!plugin) return
+        // The one scheduled fetch can land before `initialize` comes back, and
+        // capabilities arrive *with* that answer. Without waiting for it the
+        // request is skipped as "unsupported" and nothing ever asks again —
+        // opening a file and not typing in it meant no lenses, no server
+        // folding, no document links, ever. Parked once, so a server that comes
+        // back with nothing can't put us in a loop.
+        if (!plugin.client.serverCapabilities) {
+          if (this.waitingForHandshake) return
+          this.waitingForHandshake = true
+          plugin.client.initializing.then(
+            () => this.schedule(view),
+            () => {},
+          )
+          return
+        }
+        if (!supported(plugin.client.serverCapabilities as ServerCaps)) return
         const before = view.state.doc
         plugin.client.sync()
         plugin.client
           .request<object, T[] | null>(method, { textDocument: { uri: plugin.uri } })
+          .then((res) => (refine && res?.length ? refine(res, plugin.client) : (res ?? [])))
           .then((res) => {
             // The user edited while the server thought: these offsets describe a
             // document that no longer exists.
             if (view.state.doc !== before) return
-            view.dispatch({ effects: set.of(res ?? []) })
+            view.dispatch({ effects: set.of(res) })
           })
           .catch((e) => log.warn(`${method} failed`, { error: safeError(e) }))
       }
@@ -853,7 +900,10 @@ function documentFeature<T>(method: string, supported: (caps: ServerCaps) => boo
       }
     },
   )
-  return { field, extension: [field, fetcher] as Extension }
+  /** Ask again for a view that already has this feature — the server saying its
+   *  answer changed, rather than the document changing under it. */
+  const refetch = (view: EditorView) => view.plugin(fetcher)?.schedule(view)
+  return { field, refetch, extension: [field, fetcher] as Extension }
 }
 
 /** The server capabilities these features read. */
@@ -861,6 +911,13 @@ interface ServerCaps {
   foldingRangeProvider?: boolean | object
   documentLinkProvider?: { resolveProvider?: boolean }
   linkedEditingRangeProvider?: boolean | object
+  codeLensProvider?: { resolveProvider?: boolean }
+  executeCommandProvider?: { commands?: string[] }
+  semanticTokensProvider?: {
+    legend?: { tokenTypes?: string[]; tokenModifiers?: string[] }
+    full?: boolean | { delta?: boolean }
+    range?: boolean
+  }
 }
 
 // ---- Folding ranges ---------------------------------------------------------
@@ -934,6 +991,500 @@ export function documentLinkAt(
   }
   return null
 }
+
+// ---- Code lenses ------------------------------------------------------------
+
+/** An LSP `Command` — what a lens does when it is clicked. */
+interface LspCommand {
+  title: string
+  command: string
+  arguments?: unknown[]
+}
+
+/** An LSP `CodeLens`. `command` is absent until resolved; `data` is the server's
+ *  own handle for resolving it, and is passed back untouched. */
+interface CodeLens {
+  range: { start: LspPos; end: LspPos }
+  command?: LspCommand
+  data?: unknown
+}
+
+/** How many lenses one document is allowed to resolve. A resolve is a round trip
+ *  per lens; a 5000-line file with a lens on every symbol would spend the
+ *  server's attention on lines nobody is looking at. */
+const MAX_LENSES = 200
+
+/** Lenses arrive titleless from every server that sets `resolveProvider` — the
+ *  count *is* the expensive part, so it is computed only for the lenses someone
+ *  asked for. A lens that fails to resolve is dropped, not shown blank. */
+async function resolveLenses(items: CodeLens[], client: LSPClient): Promise<CodeLens[]> {
+  const wanted = items.slice(0, MAX_LENSES)
+  const resolved = await Promise.all(
+    wanted.map((lens) =>
+      lens.command
+        ? Promise.resolve(lens)
+        : client
+            .request<CodeLens, CodeLens | null>("codeLens/resolve", lens)
+            // The resolved lens replaces the original, but its range is ours to
+            // keep: it is what the row is drawn at, and a server that answers
+            // with only a command must not cost us the line it belongs to.
+            .then((res) => (res ? { ...lens, ...res } : null))
+            .catch(() => null as CodeLens | null),
+    ),
+  )
+  return resolved.filter((l): l is CodeLens => !!l?.command?.title)
+}
+
+const lenses = documentFeature<CodeLens>(
+  "textDocument/codeLens",
+  // The setting gates the request itself: off means the server is never asked.
+  (caps) => useSettings.getState().codeLens && !!caps?.codeLensProvider,
+  resolveLenses,
+)
+
+/** The offset a `line`/`character` pair names, clamped to the document — the
+ *  server's idea of the document can be one keystroke behind ours. */
+function offsetOf(doc: EditorState["doc"], pos: LspPos): number {
+  const line = doc.line(Math.min(Math.max(pos.line + 1, 1), doc.lines))
+  return Math.min(line.from + pos.character, line.to)
+}
+
+/** One row of lenses, drawn above the line they describe. */
+class LensWidget extends WidgetType {
+  constructor(
+    readonly items: CodeLens[],
+    readonly indent: number,
+  ) {
+    super()
+  }
+  eq(o: LensWidget) {
+    return (
+      o.indent === this.indent &&
+      o.items.length === this.items.length &&
+      o.items.every((l, i) => l.command?.title === this.items[i].command?.title)
+    )
+  }
+  toDOM(view: EditorView) {
+    const row = document.createElement("div")
+    row.className = "cm-codelens"
+    row.style.paddingLeft = `${this.indent}ch`
+    this.items.forEach((lens, i) => {
+      if (i > 0) {
+        const sep = document.createElement("span")
+        sep.className = "cm-codelens-sep"
+        sep.textContent = "·"
+        row.appendChild(sep)
+      }
+      const b = document.createElement("button")
+      b.type = "button"
+      b.className = "cm-codelens-item"
+      b.textContent = lens.command?.title ?? ""
+      b.onclick = (e) => void runLens(view, lens, e)
+      row.appendChild(b)
+    })
+    return row
+  }
+  /** The row is chrome, not text: clicks belong to its buttons, not the editor. */
+  ignoreEvent() {
+    return true
+  }
+}
+
+/** Group the document's lenses by line and turn each group into one row above it. */
+function lensDecorations(state: EditorState): DecorationSet {
+  const all = state.field(lenses.field, false)
+  if (!all?.length || !useSettings.getState().codeLens) return Decoration.none
+  const doc = state.doc
+  const byLine = new Map<number, CodeLens[]>()
+  for (const lens of all) {
+    const line = doc.lineAt(offsetOf(doc, lens.range.start)).number
+    const at = byLine.get(line)
+    if (at) at.push(lens)
+    else byLine.set(line, [lens])
+  }
+  const b = new RangeSetBuilder<Decoration>()
+  for (const line of [...byLine.keys()].sort((x, y) => x - y)) {
+    const text = doc.line(line)
+    const indent = /^[ \t]*/.exec(text.text)?.[0].length ?? 0
+    b.add(
+      text.from,
+      text.from,
+      Decoration.widget({
+        widget: new LensWidget(byLine.get(line) ?? [], indent),
+        block: true,
+        side: -1,
+      }),
+    )
+  }
+  return b.finish()
+}
+
+/** The locations a lens's command carries, whatever shape the server used:
+ *  `Location[]` (what `editor.action.showReferences` passes) or `LocationLink[]`. */
+function locationsIn(args: unknown[] | undefined): LspLocation[] {
+  const found: LspLocation[] = []
+  for (const arg of args ?? []) {
+    if (!Array.isArray(arg)) continue
+    for (const item of arg) {
+      const o = item as Partial<LspLocation> & {
+        targetUri?: string
+        targetSelectionRange?: LspLocation["range"]
+        targetRange?: LspLocation["range"]
+      }
+      if (o?.uri && o.range) found.push({ uri: o.uri, range: o.range })
+      else if (o?.targetUri && (o.targetSelectionRange || o.targetRange))
+        found.push({
+          uri: o.targetUri,
+          range: (o.targetSelectionRange ?? o.targetRange) as LspLocation["range"],
+        })
+    }
+  }
+  return found
+}
+
+const openLocation = (loc: LspLocation) =>
+  useProject.getState().open(fromUri(loc.uri), loc.range.start.line + 1)
+
+/**
+ * Do what the lens says.
+ *
+ * A lens that carries locations is Reado's to open — one goes straight there,
+ * several become a list to pick from. A lens that names a command the *server*
+ * runs goes back to the server. Anything else says so: a click that silently
+ * does nothing is worse than one that admits it can't.
+ */
+async function runLens(view: EditorView, lens: CodeLens, e: MouseEvent): Promise<void> {
+  const cmd = lens.command
+  if (!cmd) return
+  const locs = locationsIn(cmd.arguments)
+  if (locs.length === 1) return openLocation(locs[0])
+  if (locs.length > 1) {
+    view.dispatch({
+      effects: showLensLocations.of({
+        x: e.clientX,
+        y: e.clientY,
+        locations: locs.map((l) => ({ path: fromUri(l.uri), line: l.range.start.line + 1 })),
+      }),
+    })
+    return
+  }
+  const plugin = LSPPlugin.get(view)
+  const caps = plugin?.client.serverCapabilities as ServerCaps | undefined
+  if (plugin && caps?.executeCommandProvider?.commands?.includes(cmd.command)) {
+    try {
+      await plugin.client.request("workspace/executeCommand", {
+        command: cmd.command,
+        arguments: cmd.arguments,
+      })
+    } catch (err) {
+      log.warn("workspace/executeCommand failed", { error: safeError(err) })
+      notify("error", t("lsp.lensFailed", { title: cmd.title }))
+    }
+    return
+  }
+  notify("info", t("lsp.lensUnsupported", { command: cmd.command }))
+}
+
+/** Recompute the rows because something outside the document changed — today
+ *  only the setting being switched. */
+const redrawLenses = StateEffect.define<null>()
+
+/**
+ * The rows themselves.
+ *
+ * A state field, not a view plugin: these are *block* widgets, and a decoration
+ * that changes the vertical layout has to be part of the state — CodeMirror
+ * ignores a block widget handed to it by a plugin, which is why the lenses
+ * resolved, arrived, and drew nothing.
+ */
+const lensRows = StateField.define<DecorationSet>({
+  create: (state) => lensDecorations(state),
+  update(value, tr) {
+    if (
+      tr.docChanged ||
+      tr.startState.field(lenses.field, false) !== tr.state.field(lenses.field, false) ||
+      tr.effects.some((e) => e.is(redrawLenses))
+    )
+      return lensDecorations(tr.state)
+    return value
+  },
+  provide: (f) => EditorView.decorations.from(f),
+})
+
+/**
+ * Tell a server whether to compute lenses at all.
+ *
+ * Declaring `textDocument.codeLens` is only half of it: that makes
+ * typescript-language-server *build* its lens providers, and they then refuse to
+ * answer because their setting is off in the workspace configuration it starts
+ * with. It never asks us about that section — it only asks about formatting — so
+ * a client that never pushes its settings gets an empty list forever, with
+ * providers in place and nothing to say. This is the push.
+ */
+function pushLensConfig(key: string): void {
+  const on = useSettings.getState().codeLens
+  const lens = {
+    implementationsCodeLens: { enabled: on },
+    // A plain function's callers are exactly what a reader wants without asking.
+    referencesCodeLens: { enabled: on, showOnAllFunctions: on },
+  }
+  void lspSend(
+    key,
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeConfiguration",
+      params: { settings: { typescript: lens, javascript: lens } },
+    }),
+  )
+}
+
+/**
+ * Turning the setting on after a server is already up has to reach it, or the
+ * requests we start making come back empty from providers that were told no.
+ *
+ * Registered on the first connection rather than at import: a module that
+ * subscribes to a store the moment it is loaded does work for a program that
+ * may never open a file, and breaks anything standing in for that store.
+ */
+let watchingLensSetting = false
+function watchLensSetting(): void {
+  if (watchingLensSetting) return
+  watchingLensSetting = true
+  useSettings.subscribe((now, before) => {
+    if (now.codeLens === before.codeLens) return
+    for (const key of conns.keys()) pushLensConfig(key)
+  })
+}
+
+/** Live lens views, so a server's "ask me again" reaches the open documents. A
+ *  set rather than a store: nothing outside this module needs it, and each view
+ *  adds and removes itself. */
+const lensRefreshers = new Set<() => void>()
+
+/**
+ * The two things that move lenses from outside the document: the user flipping
+ * the setting (not editor state, so it schedules no update of its own), and the
+ * server saying its answer changed.
+ */
+const lensSettingWatcher = ViewPlugin.fromClass(
+  class {
+    off: () => void
+    again: () => void
+    constructor(view: EditorView) {
+      this.off = useSettings.subscribe((s, prev) => {
+        if (s.codeLens !== prev.codeLens) view.dispatch({ effects: redrawLenses.of(null) })
+      })
+      this.again = () => lenses.refetch(view)
+      lensRefreshers.add(this.again)
+    }
+    destroy() {
+      this.off()
+      lensRefreshers.delete(this.again)
+    }
+  },
+)
+
+export const codeLenses = (): Extension => [lenses.extension, lensRows, lensSettingWatcher]
+
+// ---- Semantic tokens --------------------------------------------------------
+
+/**
+ * Colouring from the server, laid over the grammar's.
+ *
+ * The grammar guesses from the shape of the text; the server knows. But Reado's
+ * palette is six colours on purpose (see `codemirror.ts`), and an installed
+ * theme defines those and no others — so the server's meaning is expressed with
+ * the colours that already exist, and the distinctions colour should not carry
+ * are carried by italics and a strike-through instead.
+ *
+ * Layered, not substituted: only the ranges the server names are touched, so a
+ * server that answers for half a file leaves the other half exactly as it was.
+ */
+const SEMANTIC_CLASS: Record<string, string> = {
+  // The server knows a name is a type where the grammar saw an identifier.
+  type: "cm-sem-type",
+  class: "cm-sem-type",
+  enum: "cm-sem-type",
+  interface: "cm-sem-type",
+  struct: "cm-sem-type",
+  typeParameter: "cm-sem-type",
+  namespace: "cm-sem-type",
+  function: "cm-sem-type",
+  method: "cm-sem-type",
+  // A parameter is the one distinction worth drawing and the one Reado has no
+  // colour for: italic says it without a seventh hue.
+  parameter: "cm-sem-parameter",
+  keyword: "cm-sem-keyword",
+  modifier: "cm-sem-keyword",
+  macro: "cm-sem-keyword",
+  decorator: "cm-sem-keyword",
+  string: "cm-sem-string",
+  number: "cm-sem-number",
+  enumMember: "cm-sem-number",
+  comment: "cm-sem-comment",
+  operator: "cm-sem-punctuation",
+}
+
+/** How many tokens one document may colour. A generated file can report tens of
+ *  thousands; past this the grammar's answer is good enough and the decoration
+ *  set stops being free. */
+const MAX_SEMANTIC_TOKENS = 20000
+
+interface TokensResult {
+  resultId?: string
+  data?: number[]
+}
+
+/** One decoded token: where it is, and what the server called it. */
+interface SemanticToken {
+  line: number
+  start: number
+  length: number
+  type: number
+  modifiers: number
+}
+
+/**
+ * Decode the flat encoding: five integers per token, each line/character
+ * relative to the token before it. Exported for its own test — the packing is
+ * the part most likely to be wrong, and it is pure arithmetic.
+ */
+export function decodeSemanticTokens(data: readonly number[]): SemanticToken[] {
+  const out: SemanticToken[] = []
+  let line = 0
+  let start = 0
+  for (let i = 0; i + 4 < data.length && out.length < MAX_SEMANTIC_TOKENS; i += 5) {
+    const deltaLine = data[i]
+    const deltaStart = data[i + 1]
+    line += deltaLine
+    // The character delta restarts at every new line, and continues along one.
+    start = deltaLine === 0 ? start + deltaStart : deltaStart
+    out.push({ line, start, length: data[i + 2], type: data[i + 3], modifiers: data[i + 4] })
+  }
+  return out
+}
+
+const setTokens = StateEffect.define<DecorationSet>()
+const semanticField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(setTokens)) return e.value
+    // An edit moves every offset after it; mapping keeps the colouring on the
+    // right text until the server answers again.
+    return tr.docChanged ? value.map(tr.changes) : value
+  },
+  provide: (f) => EditorView.decorations.from(f),
+})
+
+/** Turn decoded tokens into decorations, using the server's own legend for the
+ *  type and modifier names — the numbers mean nothing without it. */
+function semanticDecorations(
+  state: EditorState,
+  tokens: readonly SemanticToken[],
+  legend: { tokenTypes?: string[]; tokenModifiers?: string[] } | undefined,
+): DecorationSet {
+  const types = legend?.tokenTypes ?? []
+  const mods = legend?.tokenModifiers ?? []
+  const deprecated = mods.indexOf("deprecated")
+  const b = new RangeSetBuilder<Decoration>()
+  const doc = state.doc
+  for (const tok of tokens) {
+    if (tok.line + 1 > doc.lines) break
+    const line = doc.line(tok.line + 1)
+    const from = Math.min(line.from + tok.start, line.to)
+    const to = Math.min(from + tok.length, line.to)
+    if (to <= from) continue
+    const classes = [SEMANTIC_CLASS[types[tok.type] ?? ""]]
+    // Deprecated is the one modifier worth drawing: struck through, which no
+    // theme can take away and no colour blindness can hide.
+    if (deprecated >= 0 && tok.modifiers & (1 << deprecated)) classes.push("cm-sem-deprecated")
+    const className = classes.filter(Boolean).join(" ")
+    if (!className) continue
+    b.add(from, to, Decoration.mark({ class: className }))
+  }
+  return b.finish()
+}
+
+const semanticFetcher = ViewPlugin.fromClass(
+  class {
+    pending = -1
+    waitingForHandshake = false
+    /** The server's own id for the last answer, so it can send a delta instead
+     *  of the whole file. Dropped whenever a full answer is asked for. */
+    resultId: string | undefined
+    /** The last decoded tokens, which a delta patches rather than replaces. */
+    tokens: SemanticToken[] = []
+    constructor(view: EditorView) {
+      this.schedule(view)
+    }
+    update(u: ViewUpdate) {
+      if (u.docChanged) this.schedule(u.view)
+    }
+    schedule(view: EditorView) {
+      if (this.pending > -1) clearTimeout(this.pending)
+      this.pending = window.setTimeout(() => {
+        this.pending = -1
+        void this.fetch(view)
+      }, 400)
+    }
+    async fetch(view: EditorView) {
+      const plugin = LSPPlugin.get(view)
+      if (!plugin) return
+      // Capabilities arrive with the handshake; asking before it lands would be
+      // skipped as unsupported and never retried. See `documentFeature`.
+      if (!plugin.client.serverCapabilities) {
+        if (this.waitingForHandshake) return
+        this.waitingForHandshake = true
+        plugin.client.initializing.then(
+          () => this.schedule(view),
+          () => {},
+        )
+        return
+      }
+      const caps = plugin.client.serverCapabilities as ServerCaps
+      const provider = caps?.semanticTokensProvider
+      if (!provider?.full || !useSettings.getState().semanticTokens) return
+      const before = view.state.doc
+      plugin.client.sync()
+      const wantsDelta =
+        typeof provider.full === "object" && provider.full.delta && this.resultId !== undefined
+      try {
+        const res = wantsDelta
+          ? await plugin.client.request<object, (TokensResult & { edits?: unknown }) | null>(
+              "textDocument/semanticTokens/full/delta",
+              { textDocument: { uri: plugin.uri }, previousResultId: this.resultId },
+            )
+          : await plugin.client.request<object, TokensResult | null>(
+              "textDocument/semanticTokens/full",
+              { textDocument: { uri: plugin.uri } },
+            )
+        if (view.state.doc !== before) return
+        // A delta answer we cannot use (the server sent edits rather than data)
+        // is not an error — ask for the whole file next time.
+        if (!res || !Array.isArray(res.data)) {
+          if (wantsDelta) {
+            this.resultId = undefined
+            this.schedule(view)
+          }
+          return
+        }
+        this.resultId = res.resultId
+        this.tokens = decodeSemanticTokens(res.data)
+        view.dispatch({
+          effects: setTokens.of(semanticDecorations(view.state, this.tokens, provider.legend)),
+        })
+      } catch (e) {
+        this.resultId = undefined
+        log.warn("semanticTokens failed", { error: safeError(e) })
+      }
+    }
+    destroy() {
+      if (this.pending > -1) clearTimeout(this.pending)
+    }
+  },
+)
+
+export const semanticTokens = (): Extension => [semanticField, semanticFetcher]
 
 /**
  * Follow a document link: a file in the editor, a web address in the browser
@@ -1312,9 +1863,11 @@ export const completionWithImports = () => [EditorState.languageData.of(() => LS
 export const lspAttached = (view: EditorView) =>
   LSPPlugin.get(view)?.client.serverCapabilities != null
 
+/** An LSP `Location`: where a symbol is, and what a "3 references" code lens
+ *  carries in its command's arguments. Only `start` is ever read. */
 interface LspLocation {
   uri: string
-  range: { start: { line: number; character: number } }
+  range: { start: LspPos }
 }
 
 /** Ask the server to locate a symbol (definition/typeDefinition/implementation)
@@ -2190,7 +2743,11 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
     // live server for a process that had already gone. Take the connection down
     // so the next interaction can start a fresh one, and say so once.
     client.initializing.then(
-      () => failedAt.delete(key),
+      () => {
+        failedAt.delete(key)
+        pushLensConfig(key)
+        watchLensSetting()
+      },
       () => failedAt.set(key, Date.now()),
     )
     client.initializing.catch((e: unknown) => {

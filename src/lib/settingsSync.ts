@@ -54,7 +54,7 @@ export function syncableKeys(s: SettingsState): (keyof SettingsState)[] {
   )
 }
 
-interface Bundle {
+export interface Bundle {
   version: number
   settings: Partial<SettingsState>
   extensionsDisabled: string[]

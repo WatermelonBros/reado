@@ -8,13 +8,56 @@ import { OVERRIDDEN_TOKENS, tokensFor } from "./colorVision"
 import { useExtensions } from "./extensions"
 import { allIconThemes, useIconTheme } from "./extIcons"
 import { applyExtTheme, clearExtTheme } from "./extThemes"
-import { activeBindings, CHORDS, comboOf } from "./keybindings"
+import { activeBindings, CHORDS, comboOf, commandFor } from "./keybindings"
+import { currentContexts } from "./keyContext"
 import { enabledExtensions, useMarketplace } from "./marketplace"
 import { runMenuCommand } from "./menu"
 import { notify } from "./notice"
 import { isMacUA } from "./shortcuts"
 import { type BuiltinTheme, isExtTheme, type ThemeName, useProject, useSettings } from "./store"
 import { checkForUpdates } from "./updater"
+
+/** Context names already reported as unknown, so a held-down key does not raise
+ *  the same notice thirty times. */
+const reportedContexts = new Set<string>()
+
+/** Say once that a binding names a context that does not exist — a clause that
+ *  silently never matches is indistinguishable from a broken shortcut. */
+function notifyUnknownContext(names: string[]): void {
+  const fresh = names.filter((n) => !reportedContexts.has(n))
+  if (!fresh.length) return
+  for (const n of fresh) reportedContexts.add(n)
+  notify("error", t("sc.unknownContext", { names: fresh.join(", ") }))
+}
+
+/** How far a two-finger swipe has to travel to count as back/forward. Roughly a
+ *  deliberate flick: short enough to feel immediate, long enough that nudging a
+ *  scroll sideways never changes the file. */
+const SWIPE_PX = 100
+
+/** Quiet time that ends one swipe, so the momentum tail of a flick doesn't walk
+ *  back through the history. */
+const GESTURE_IDLE_MS = 300
+
+/**
+ * The nearest box under the pointer that claims it can scroll sideways.
+ *
+ * Only a claim: the editor's scroller reports a width past its box even with
+ * wrap on, where there is nothing to scroll to. Whether it *really* scrolls is
+ * settled by watching it — see the gesture handler.
+ */
+function sidewaysScroller(el: EventTarget | null): Element | null {
+  // `instanceof` rather than a truthy check: a wheel event's target is the
+  // window itself when nothing is under the pointer, and `getComputedStyle`
+  // throws on anything that is not an element — inside a listener, that would
+  // take the whole gesture down with it.
+  for (let node = el instanceof Element ? el : null; node; node = node.parentElement) {
+    if (node.scrollWidth - node.clientWidth <= 1) continue
+    const overflow = getComputedStyle(node).overflowX
+    if (overflow === "auto" || overflow === "scroll") return node
+  }
+  return null
+}
 
 /** The dark Reado themes — used to match the native window (title bar) chrome. */
 const DARK_THEMES: BuiltinTheme[] = ["reado-dark", "reado-high-contrast"]
@@ -240,7 +283,13 @@ export function useGlobalShortcuts(): void {
         return
       }
 
-      const command = activeBindings(useSettings.getState().keybindings).get(combo)
+      // A combo can mean different things in different places; the contexts are
+      // read now, from what is actually focused, not from a mirrored flag.
+      const command = commandFor(
+        activeBindings(useSettings.getState().keybindings).get(combo),
+        currentContexts(),
+        (names) => notifyUnknownContext(names),
+      )
       if (!command) return
       // ⌘S and ⌘. are bound inside the editor too; when it handled the key
       // there is nothing left to do here. Every other command is window-level
@@ -291,6 +340,59 @@ export function useGlobalShortcuts(): void {
       window.removeEventListener("mousedown", block)
       window.removeEventListener("auxclick", block)
       window.removeEventListener("mouseup", onUp)
+    }
+  }, [])
+
+  // Two-finger swipe walks the same read-history. A trackpad sends a long stream
+  // of small horizontal deltas, so the gesture is accumulated and fires once,
+  // then stays disarmed until the stream stops — otherwise one flick would walk
+  // back through five files.
+  useEffect(() => {
+    let travelled = 0
+    let armed = true
+    let idle = 0
+    let open = false
+    let watched: Element | null = null
+    let watchedLeft = 0
+    const endGesture = () => {
+      travelled = 0
+      open = false
+      watched = null
+    }
+    const onWheel = (e: WheelEvent) => {
+      // A gesture that is mostly vertical is scrolling, not navigation. This is
+      // also what keeps a diagonal scroll from drifting into a file change.
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) {
+        endGesture()
+        return
+      }
+      if (!open) {
+        open = true
+        watched = sidewaysScroller(e.target)
+        watchedLeft = watched?.scrollLeft ?? 0
+      }
+      travelled += e.deltaX
+      clearTimeout(idle)
+      idle = window.setTimeout(() => {
+        endGesture()
+        armed = true
+      }, GESTURE_IDLE_MS)
+      if (!armed) return
+      if (Math.abs(travelled) < SWIPE_PX) return
+      armed = false
+      // Something under the pointer actually moved: this was its scroll — a long
+      // line being read to its end, a wide table — and not a navigation. Asking
+      // afterwards rather than up front is the only reliable test: a box that
+      // merely *claims* room (the editor's scroller does, even with wrap on)
+      // would otherwise swallow every swipe.
+      if (watched && watched.scrollLeft !== watchedLeft) return
+      if (travelled < 0) useProject.getState().goBack()
+      else useProject.getState().goForward()
+    }
+    window.addEventListener("wheel", onWheel, { passive: true })
+    return () => {
+      window.removeEventListener("wheel", onWheel)
+      clearTimeout(idle)
     }
   }, [])
 }

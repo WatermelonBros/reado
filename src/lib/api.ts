@@ -311,6 +311,57 @@ export const gitDiscardAll = (root: string, untracked: boolean) =>
 export const gitCommit = (root: string, message: string) =>
   invoke<void>("git_commit", { root, message })
 
+/** Whether the commit at HEAD is already on the upstream — amending it then
+ *  rewrites history other people may have. */
+export const gitHeadIsPushed = (root: string) => invoke<boolean>("git_head_is_pushed", { root })
+
+/** Amend the last commit with whatever is staged. No message reuses its own. */
+export const gitAmend = (root: string, message?: string) =>
+  invoke<void>("git_amend", { root, message })
+
+/** What applying a commit elsewhere did: empty `conflicted` means it went in. */
+export interface ApplyOutcome {
+  conflicted: string[]
+}
+
+/** A new commit that undoes an old one. */
+export const gitRevert = (root: string, commit: string) =>
+  invoke<ApplyOutcome>("git_revert", { root, commit })
+
+/** Apply one commit from another branch onto this one. */
+export const gitCherryPick = (root: string, commit: string) =>
+  invoke<ApplyOutcome>("git_cherry_pick", { root, commit })
+
+/** The repository's tags, newest first. */
+export const gitTags = (root: string) => invoke<string[]>("git_tags", { root })
+
+/** Create a tag at HEAD; a message makes it annotated. */
+export const gitTagCreate = (root: string, name: string, message?: string) =>
+  invoke<void>("git_tag_create", { root, name, message })
+
+export const gitTagDelete = (root: string, name: string) =>
+  invoke<void>("git_tag_delete", { root, name })
+
+export const gitTagPush = (root: string, name: string, remote: string) =>
+  invoke<void>("git_tag_push", { root, name, remote })
+
+/** A remote and where it points. */
+export interface Remote {
+  name: string
+  url: string
+}
+
+export const gitRemotes = (root: string) => invoke<Remote[]>("git_remotes", { root })
+
+export const gitRemoteAdd = (root: string, name: string, url: string) =>
+  invoke<void>("git_remote_add", { root, name, url })
+
+export const gitRemoteRename = (root: string, from: string, to: string) =>
+  invoke<void>("git_remote_rename", { root, from, to })
+
+export const gitRemoteRemove = (root: string, name: string) =>
+  invoke<void>("git_remote_remove", { root, name })
+
 /** Create and switch to a new branch. */
 export const gitCreateBranch = (root: string, name: string) =>
   invoke<void>("git_create_branch", { root, name })

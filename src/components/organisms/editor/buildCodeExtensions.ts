@@ -54,7 +54,7 @@ import {
 import { emmetTab } from "@/lib/emmet"
 import { formatOnPaste } from "@/lib/formatOnPaste"
 import { renameSymbolAt } from "@/lib/lsp"
-import { explainSymbolAt, taskFromDiagnostic } from "@/lib/lspActions"
+import { explainSymbolAt, showLensLocations, taskFromDiagnostic } from "@/lib/lspActions"
 import { occurrenceHighlight } from "@/lib/occurrenceHighlight"
 import { diagnosticsRuler } from "@/lib/overviewRuler"
 import { readoSearchPanel } from "@/lib/searchPanel"
@@ -148,6 +148,12 @@ export interface CodeExtensionsCtx {
   saveFile: () => void
   peekDefinition: () => boolean
   explainSymbol: (pos: number) => void
+  /** A code lens carrying several locations was clicked — offer them at the click. */
+  showLensLocations: (
+    x: number,
+    y: number,
+    locations: Array<{ path: string; line: number }>,
+  ) => void
   openComposerFor: (
     start: number,
     end: number,
@@ -263,6 +269,10 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
         for (const eff of tr.effects) {
           if (eff.is(explainSymbolAt)) {
             ctx.explainSymbol(eff.value.pos)
+            continue
+          }
+          if (eff.is(showLensLocations)) {
+            ctx.showLensLocations(eff.value.x, eff.value.y, eff.value.locations)
             continue
           }
           if (!eff.is(taskFromDiagnostic)) continue

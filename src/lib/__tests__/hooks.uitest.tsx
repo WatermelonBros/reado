@@ -62,6 +62,8 @@ vi.mock("../comments", () => ({
   toRelative: (root: string, p: string) => p.slice(root.length + 1),
 }))
 const doc = vi.hoisted(() => ({
+  // The context vocabulary reads the focused view to answer `editorHasSelection`.
+  useDocInfo: { getState: () => ({ view: null }) },
   formatDocument: vi.fn(),
   nextProblem: vi.fn(),
   prevProblem: vi.fn(),
@@ -397,6 +399,90 @@ describe("mouse navigation buttons", () => {
 
   it("leaves the normal buttons alone", () => {
     window.dispatchEvent(new MouseEvent("mouseup", { button: 0 }))
+    expect(project.goBack).not.toHaveBeenCalled()
+  })
+})
+
+describe("two-finger swipe navigation", () => {
+  beforeEach(() => renderHook(() => useGlobalShortcuts()))
+
+  /** A trackpad flick: one gesture arrives as a stream of small deltas. */
+  const swipe = (deltaX: number, target?: Element) => {
+    for (let sent = 0; Math.abs(sent) < Math.abs(deltaX); sent += deltaX / 10) {
+      const e = new WheelEvent("wheel", { deltaX: deltaX / 10, deltaY: 0, bubbles: true })
+      if (target) target.dispatchEvent(e)
+      else window.dispatchEvent(e)
+    }
+  }
+
+  it("walks the file history, one step per flick", () => {
+    swipe(-200)
+    expect(project.goBack).toHaveBeenCalledTimes(1)
+    swipe(200)
+    // Still one back: the forward flick has to re-arm from the idle gap first.
+    expect(project.goBack).toHaveBeenCalledTimes(1)
+  })
+
+  it("goes forward the other way", () => {
+    swipe(200)
+    expect(project.goForward).toHaveBeenCalledTimes(1)
+    expect(project.goBack).not.toHaveBeenCalled()
+  })
+
+  it("ignores a scroll that is mostly vertical", () => {
+    for (let i = 0; i < 20; i++)
+      window.dispatchEvent(new WheelEvent("wheel", { deltaX: -20, deltaY: -60 }))
+    expect(project.goBack).not.toHaveBeenCalled()
+  })
+
+  /** A box that claims it can scroll sideways. `moves` makes it actually do so,
+   *  the way a real scroller consumes the gesture. */
+  const scroller = ({ scrollLeft = 0, moves = false } = {}) => {
+    const el = document.createElement("div")
+    Object.defineProperty(el, "scrollWidth", { value: 900 })
+    Object.defineProperty(el, "clientWidth", { value: 300 })
+    el.scrollLeft = scrollLeft
+    el.style.overflowX = "auto"
+    if (moves) el.addEventListener("wheel", (e) => (el.scrollLeft += (e as WheelEvent).deltaX))
+    document.body.appendChild(el)
+    return el
+  }
+
+  it("leaves the gesture to a box that really scrolls", () => {
+    // Reading along a long line with wrap off must not change the file.
+    const el = scroller({ scrollLeft: 400, moves: true })
+    swipe(-300, el)
+    expect(project.goBack).not.toHaveBeenCalled()
+    el.remove()
+  })
+
+  it("takes the gesture from a box that only claims it could", () => {
+    // The editor's scroller reports a width past its box even with wrap on.
+    // Believing that claim swallowed every swipe and nothing ever navigated.
+    const el = scroller()
+    swipe(-300, el)
+    expect(project.goBack).toHaveBeenCalledTimes(1)
+    el.remove()
+  })
+
+  it("goes forward over that same scroller", () => {
+    // The claimed room is to the *right*, so this is the direction the claim
+    // used to eat outright.
+    const el = scroller()
+    swipe(300, el)
+    expect(project.goForward).toHaveBeenCalledTimes(1)
+    el.remove()
+  })
+
+  it("survives a gesture with no element under it", () => {
+    // A wheel event's target is the window when the pointer is over no element;
+    // getComputedStyle throws on that, which would kill the listener.
+    expect(() => swipe(-200)).not.toThrow()
+    expect(project.goBack).toHaveBeenCalledTimes(1)
+  })
+
+  it("does nothing for a nudge too small to be meant", () => {
+    swipe(-40)
     expect(project.goBack).not.toHaveBeenCalled()
   })
 })

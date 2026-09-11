@@ -16,3 +16,12 @@ export const taskFromDiagnostic = StateEffect.define<{
  * the focused agent to explain the symbol at `pos`, using the server's hover
  * docs as context. */
 export const explainSymbolAt = StateEffect.define<{ pos: number }>()
+
+/** A code lens carrying several locations was clicked: the editor catches this
+ *  and offers them as a list at the click point. Locations are already resolved
+ *  to absolute paths and 1-based lines — the menu only has to show and open. */
+export const showLensLocations = StateEffect.define<{
+  x: number
+  y: number
+  locations: Array<{ path: string; line: number }>
+}>()

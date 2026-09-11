@@ -88,7 +88,7 @@ describe("what the area renders", () => {
     expect(screen.getByText("tool-body:search")).toBeInTheDocument()
   })
 
-  it("renders a stack's active tab, with the other tab still on the strip", () => {
+  it("keeps an inactive tab mounted but hidden, so its PTY survives", () => {
     usePreview.setState({ open: true })
     useLayout.setState({
       layout: layoutWith("bottom", [
@@ -96,8 +96,9 @@ describe("what the area renders", () => {
       ]),
     })
     render(<DockRegion area="bottom" />)
-    expect(screen.getByText("browser-body")).toBeInTheDocument()
-    expect(screen.queryByText("terminal-body")).not.toBeInTheDocument()
+    expect(screen.getByText("browser-body").parentElement).toHaveClass("contents")
+    // Mounted — unmounting it would kill the terminal's shell — but out of layout.
+    expect(screen.getByText("terminal-body").parentElement).toHaveClass("hidden")
     expect(screen.getByText("dock.terminal")).toBeInTheDocument()
   })
 

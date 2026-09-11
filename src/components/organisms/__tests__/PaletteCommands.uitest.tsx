@@ -84,6 +84,35 @@ const sync = vi.hoisted(() => ({
   importSettingsFromFile: vi.fn(async () => {}),
 }))
 vi.mock("../../../lib/settingsSync", () => sync)
+const profiles = vi.hoisted(() => {
+  const state = {
+    profiles: [
+      { id: "default", name: "Default", bundle: {} },
+      { id: "rust", name: "Rust", bundle: {} },
+    ],
+    activeId: "default",
+    switchTo: vi.fn(),
+  }
+  return {
+    createProfile: vi.fn(async () => {}),
+    renameProfile: vi.fn(async () => {}),
+    deleteProfile: vi.fn(async () => {}),
+    exportProfile: vi.fn(async () => {}),
+    importProfile: vi.fn(async () => {}),
+    useProfiles: Object.assign(() => state, { getState: () => state }),
+  }
+})
+vi.mock("../../../lib/profiles", () => profiles)
+const taskCmds = vi.hoisted(() => ({
+  openTaskList: vi.fn(async () => {}),
+  runBuildTask: vi.fn(async () => {}),
+}))
+vi.mock("../../../lib/taskCommands", () => taskCmds)
+vi.mock("../../../lib/tasks", () => ({
+  useTasks: Object.assign(() => ({ tasks: [] }), { getState: () => ({ tasks: [] }) }),
+  commandLine: (t: { command: string }) => t.command,
+  runTask: vi.fn(),
+}))
 const { saveSettingsToProject } = vi.hoisted(() => ({
   saveSettingsToProject: vi.fn(async () => {}),
 }))
@@ -616,6 +645,14 @@ describe("running a command", () => {
       "mcp.enable": () => expect(enableMcp).toHaveBeenCalledWith("/repo"),
       "anywhere.open": () => expect(usePalette.getState().anywhereOpen).toBe(true),
       "settings.json": () => expect(usePalette.getState().settingsJsonOpen).toBe(true),
+      "tasks.run": () => expect(taskCmds.openTaskList).toHaveBeenCalled(),
+      "tasks.runBuild": () => expect(taskCmds.runBuildTask).toHaveBeenCalled(),
+      "profile.create": () => expect(profiles.createProfile).toHaveBeenCalled(),
+      "profile.rename": () => expect(profiles.renameProfile).toHaveBeenCalled(),
+      "profile.delete": () => expect(profiles.deleteProfile).toHaveBeenCalled(),
+      "profile.export": () => expect(profiles.exportProfile).toHaveBeenCalled(),
+      "profile.import": () => expect(profiles.importProfile).toHaveBeenCalled(),
+      "profile.switch": () => expect(usePalette.getState().mode).toBe("profiles"),
       "sync.export": () => expect(sync.exportSettings).toHaveBeenCalled(),
       "sync.import": () => expect(sync.importSettings).toHaveBeenCalled(),
       "sync.exportFile": () => expect(sync.exportSettingsToFile).toHaveBeenCalled(),

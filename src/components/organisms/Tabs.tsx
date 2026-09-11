@@ -1,6 +1,7 @@
 /** Open-file tab strip, with a right-click context menu per tab. */
 
 import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
+import { ask } from "@tauri-apps/plugin-dialog"
 import { revealItemInDir } from "@tauri-apps/plugin-opener"
 import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -12,6 +13,7 @@ import { formatDocument } from "@/lib/docInfo"
 import { useFlip, usePointerReorder } from "@/lib/pointerReorder"
 import { useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
+import { isUntitled, untitledName, useUntitled } from "@/lib/untitled"
 import { revealAppName } from "@/lib/window"
 
 const dirname = (p: string) => p.slice(0, p.length - baseName(p).length - 1)
@@ -24,23 +26,46 @@ const dirname = (p: string) => p.slice(0, p.length - baseName(p).length - 1)
  * strip stops being readable at a glance.
  */
 export function tabLabels(paths: string[]): Map<string, { name: string; dir?: string }> {
+  // A scratch buffer's id is not a path — its name is the whole of it, and two
+  // of them are never ambiguous, because the number is what tells them apart.
+  const nameOf = (p: string) => (isUntitled(p) ? untitledName(p) : baseName(p))
   const counts = new Map<string, number>()
-  for (const p of paths) counts.set(baseName(p), (counts.get(baseName(p)) ?? 0) + 1)
+  for (const p of paths) counts.set(nameOf(p), (counts.get(nameOf(p)) ?? 0) + 1)
   return new Map(
     paths.map((p) => {
-      const name = baseName(p)
-      const ambiguous = (counts.get(name) ?? 0) > 1
+      const name = nameOf(p)
+      const ambiguous = !isUntitled(p) && (counts.get(name) ?? 0) > 1
       return [p, { name, dir: ambiguous ? baseName(dirname(p)) : undefined }]
     }),
   )
 }
 
-export function Tabs() {
-  const tabs = useProject((s) => s.tabs)
+/**
+ * The tab strip.
+ *
+ * With no `group` it is the focused group's strip and reads the live fields, as
+ * it always has. Given a group id it shows that group's tabs instead, and every
+ * action on them focuses the group first — so the whole of the machinery below
+ * only ever deals with "the focused group", which is the single-pane case it was
+ * written for.
+ */
+export function Tabs({ group }: { group?: string } = {}) {
+  const otherGroup = useProject((s) =>
+    group && group !== s.focusedGroup ? s.groups.find((g) => g.id === group) : undefined,
+  )
+  const liveTabs = useProject((s) => s.tabs)
+  const liveActive = useProject((s) => s.active)
+  const activateInGroup = useProject((s) => s.activateInGroup)
+  const closeInGroup = useProject((s) => s.closeInGroup)
+  const tabs = otherGroup ? otherGroup.tabs : liveTabs
   const root = useProject((s) => s.root)
-  const active = useProject((s) => s.active)
-  const setActive = useProject((s) => s.setActive)
-  const close = useProject((s) => s.close)
+  const active = otherGroup ? otherGroup.active : liveActive
+  const setActive = otherGroup
+    ? (path: string) => activateInGroup(otherGroup.id, path)
+    : useProject.getState().setActive
+  const close = otherGroup
+    ? (path: string) => closeInGroup(otherGroup.id, path)
+    : useProject.getState().close
   const closeOthers = useProject((s) => s.closeOthers)
   const closeToRight = useProject((s) => s.closeToRight)
   const closeAll = useProject((s) => s.closeAll)
@@ -58,6 +83,28 @@ export function Tabs() {
   const { t } = useTranslation()
 
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null)
+
+  /**
+   * Close a tab, asking first when that would throw text away.
+   *
+   * A file's edits are on disk (or flushed on the way out); a scratch buffer's
+   * are only here, so closing one is the single close that destroys something.
+   */
+  const closeTab = (tabPath: string) => {
+    if (!isUntitled(tabPath) || !useUntitled.getState().textOf(tabPath).trim()) {
+      close(tabPath)
+      return
+    }
+    void ask(t("file.untitledDiscardBody"), {
+      title: t("file.untitledDiscardTitle", { name: untitledName(tabPath) }),
+      okLabel: t("file.untitledDiscard"),
+      kind: "warning",
+    }).then((yes) => {
+      if (!yes) return
+      close(tabPath)
+      useUntitled.getState().drop(tabPath)
+    })
+  }
   // Drag-to-reorder (pointer-based; HTML5 DnD is hijacked by Tauri's OS drop).
   const { dragging, over, onPointerDown } = usePointerReorder("x", (from, to, after) => {
     const idx = tabs.indexOf(to)
@@ -81,7 +128,7 @@ export function Tabs() {
   const isLast = menu ? tabs.indexOf(menu.path) === tabs.length - 1 : true
   const savedCount = tabs.filter((p) => !dirtyPaths.includes(toRelative(root, p))).length
   const items: ContextMenuItem[] = [
-    { label: t("tabs.close"), onSelect: () => close(path) },
+    { label: t("tabs.close"), onSelect: () => closeTab(path) },
     { label: t("tabs.closeOthers"), onSelect: () => closeOthers(path), disabled: tabs.length < 2 },
     { label: t("tabs.closeRight"), onSelect: () => closeToRight(path), disabled: isLast },
     {
@@ -167,7 +214,7 @@ export function Tabs() {
             onAuxClick={(e) => {
               if (e.button === 1) {
                 e.preventDefault()
-                close(tabPath)
+                closeTab(tabPath)
               }
             }}
             title={tabPath}
@@ -233,7 +280,7 @@ export function Tabs() {
               icon={<CloseIcon className="block h-[13px] w-[13px]" />}
               onClick={(e) => {
                 e.stopPropagation()
-                close(tabPath)
+                closeTab(tabPath)
               }}
               className={`my-auto transition-opacity ${
                 isActive && !dirty

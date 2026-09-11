@@ -161,3 +161,161 @@ linked ranges while the link is live.
 - **WHEN** the server does not advertise linked editing ranges
 - **THEN** no request is made and typing behaves as it does today
 
+### Requirement: Code Lenses
+
+Reado SHALL show the code lenses the language server reports for the open
+document (`textDocument/codeLens`), each on its own line directly above the line
+it describes, and SHALL resolve a lens that arrives without a title
+(`codeLens/resolve`) before showing it. Lenses SHALL be re-fetched when the
+document changes, and SHALL disappear rather than point at stale offsets while
+the answer is out of date.
+
+A setting SHALL turn lenses off, and a server that advertises no
+`codeLensProvider` SHALL simply show none — never an error, never a gap where
+Reado's own behaviour used to be.
+
+#### Scenario: A function's references are visible without asking
+
+- **WHEN** a document is open in a language whose server reports code lenses
+- **THEN** each lens the server reports appears above its line, showing the text
+  the server gave it (e.g. "3 references")
+
+#### Scenario: Lenses do not survive the edit that invalidates them
+
+- **WHEN** the user edits the document
+- **THEN** the lenses computed against the old text are dropped, and a fresh set
+  is requested for the new text
+
+#### Scenario: Turned off
+
+- **WHEN** the code-lens setting is off
+- **THEN** no lens is drawn and no `textDocument/codeLens` request is made
+
+#### Scenario: A server with nothing to offer
+
+- **WHEN** the server does not advertise `codeLensProvider`
+- **THEN** no lens is shown and nothing is reported as failed
+
+#### Scenario: Reado asks to be offered them
+
+- **WHEN** Reado connects to a language server
+- **THEN** it declares `textDocument.codeLens` among its client capabilities, and
+  sends its lens settings with `workspace/didChangeConfiguration` — a server that
+  builds its providers only for a client that asks, and then keeps them switched
+  off until it is told otherwise, would advertise `codeLensProvider` and answer
+  every request with an empty list, which is indistinguishable from a file that
+  has no lenses
+
+#### Scenario: The setting reaches a server already running
+
+- **WHEN** the user turns code lenses on or off while a server is connected
+- **THEN** Reado tells that server, so its answers match what Reado will draw
+
+#### Scenario: The server says its answer changed
+
+- **WHEN** a server sends `workspace/codeLens/refresh`
+- **THEN** Reado answers it and asks again for the open documents, so an empty
+  answer given while the server was still starting does not stand
+
+### Requirement: Acting On A Lens
+
+A lens SHALL be clickable, and the click SHALL do what the lens says.
+
+When the lens's command carries locations (as `editor.action.showReferences`
+does), Reado SHALL open the location itself if there is exactly one, and
+otherwise offer the locations as a list of `file:line` to choose from. When the
+command is one the **server** executes, Reado SHALL send it back with
+`workspace/executeCommand`. A command Reado can neither open nor delegate SHALL
+say so rather than doing nothing.
+
+#### Scenario: One location
+
+- **WHEN** the user clicks a lens whose command carries a single location
+- **THEN** that file opens at that line
+
+#### Scenario: Several locations
+
+- **WHEN** the user clicks a lens whose command carries several locations
+- **THEN** a list of `file:line` appears at the click, and choosing one opens it
+
+#### Scenario: The server's own command
+
+- **WHEN** the user clicks a lens whose command the server advertises in
+  `executeCommandProvider`
+- **THEN** Reado sends `workspace/executeCommand` with that command and arguments
+
+#### Scenario: A command nobody can run
+
+- **WHEN** the lens's command is neither a location list nor one the server
+  advertises
+- **THEN** Reado says the command is not supported instead of ignoring the click
+
+### Requirement: Semantic Highlighting
+
+Reado SHALL request `textDocument/semanticTokens` for the open document when the
+server offers it, and SHALL apply the result **over** the grammar's highlighting
+rather than instead of it: a range the server describes takes the server's
+meaning, and everything else keeps the grammar's.
+
+The server's token types and modifiers SHALL be mapped onto the theme's
+**existing** colours — Reado's palette is deliberately small, and an installed
+theme defines those and no others — with non-colour cues carrying the
+distinctions colour should not. A server that offers no semantic tokens SHALL
+cost nothing and change nothing.
+
+#### Scenario: The server's meaning wins where it speaks
+
+- **WHEN** the server reports a range as a type and the grammar coloured it as a
+  plain identifier
+- **THEN** the range is drawn with the theme's definition colour
+
+#### Scenario: A distinction colour should not carry
+
+- **WHEN** the server reports a range as a parameter
+- **THEN** it is drawn italic rather than given a seventh colour, so the
+  distinction survives grayscale and any installed theme
+
+#### Scenario: The grammar still covers the rest
+
+- **WHEN** the server reports tokens for only part of the file
+- **THEN** the rest keeps the grammar's colours
+
+#### Scenario: A server with nothing to offer
+
+- **WHEN** the server does not advertise semantic tokens
+- **THEN** no request is made and the file looks exactly as it did
+
+#### Scenario: Deprecated reads as deprecated
+
+- **WHEN** the server marks a symbol deprecated
+- **THEN** it is drawn struck through, which survives any theme
+
+### Requirement: Keeping Up With Edits
+
+Colouring SHALL follow the document as it is edited. Reado SHALL ask for a delta
+rather than the whole file when the server offers deltas, and SHALL fall back to
+a full request when it does not or when the delta cannot be applied.
+
+Tokens computed against text that has since changed SHALL NOT be drawn against
+the new text.
+
+#### Scenario: Typing recolours
+
+- **WHEN** the user renames an identifier and the server answers
+- **THEN** the new text is coloured from the new answer
+
+#### Scenario: A stale answer is dropped
+
+- **WHEN** an answer arrives for text the user has already changed
+- **THEN** it is discarded rather than applied at the wrong offsets
+
+### Requirement: Turning It Off
+
+A setting SHALL turn semantic highlighting off. With it off, no request SHALL be
+made and the grammar's colouring SHALL stand alone.
+
+#### Scenario: Off means silent
+
+- **WHEN** the setting is off
+- **THEN** no `textDocument/semanticTokens` request is made and the file shows
+  the grammar's colours

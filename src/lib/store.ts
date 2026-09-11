@@ -157,6 +157,12 @@ export interface SettingsState {
   stickyScroll: boolean
   /** A clickable swatch beside every colour literal in the document. */
   colorSwatches: boolean
+  /** Show the language server's code lenses (references, implementations, …)
+   *  above the line they describe. Off means the server is never asked. */
+  codeLens: boolean
+  /** Colour from the language server on top of the grammar's colouring. Off
+   *  means the server is never asked. */
+  semanticTokens: boolean
   /** Interface zoom factor (1 = 100%). */
   zoom: number
   /** Version `.reado/` (except the rebuildable index) instead of gitignoring it. */
@@ -302,6 +308,8 @@ export const DEFAULTS = {
   wrapColumn: 0,
   stickyScroll: true,
   colorSwatches: true,
+  codeLens: true,
+  semanticTokens: true,
   zoom: 1,
   versionReado: false,
   keybindings: [],
@@ -439,6 +447,9 @@ export interface Session {
   expanded?: string[]
   /** The file shown in the split pane, so a side-by-side comparison survives. */
   split?: string | null
+  /** The editor groups, so a three-pane arrangement comes back too. */
+  groups?: EditorGroup[]
+  focusedGroup?: string
 }
 
 interface SessionsState {
@@ -667,6 +678,15 @@ export const useWorkspace = create<WorkspaceState>()(
   ),
 )
 
+/** One editor group: its own tabs, its own active file, its own history. */
+export interface EditorGroup {
+  id: string
+  tabs: string[]
+  active: string | null
+  navStack: { path: string; line?: number }[]
+  navIndex: number
+}
+
 export type PaletteMode =
   | "commands"
   | "files"
@@ -675,6 +695,8 @@ export type PaletteMode =
   | "wsymbols"
   | "recents"
   | "bookmarks"
+  | "profiles"
+  | "tasks"
   | null
 
 interface PaletteState {
@@ -913,6 +935,26 @@ interface ProjectState {
   reopenClosed: () => void
   /** Cycle the active tab in order (Ctrl+Tab / Ctrl+Shift+Tab). */
   cycleTab: (dir: 1 | -1) => void
+  /**
+   * Editor groups beyond the focused one.
+   *
+   * The focused group's tabs, active file and history are the fields above:
+   * every reader and writer in the app already works on them, and a second
+   * description of "the open files" would be one more thing to keep in step.
+   * Focusing another group writes those fields into the group being left and
+   * loads the next one's — the same save-then-load that makes profiles safe.
+   */
+  groups: EditorGroup[]
+  /** Which group the fields above belong to. */
+  focusedGroup: string
+  /** Put the focused file in a new group to its right. */
+  splitGroup: () => void
+  /** Focus a group by id, or by position (0-based) for ⌘1…⌘9. */
+  focusGroup: (idOrIndex: string | number) => void
+  /** Act on a tab of a group that is not focused: focus it first, so everything
+   *  downstream is the ordinary single-group case. */
+  activateInGroup: (groupId: string, path: string) => void
+  closeInGroup: (groupId: string, path: string) => void
   /** A second file shown side-by-side, or null when not split. */
   splitPath: string | null
   /** Open the split pane (defaults to the current file), or set its file. */
@@ -1030,6 +1072,73 @@ export const useProject = create<ProjectState>((set, get) => ({
       const next = (i + dir + s.tabs.length) % s.tabs.length
       return { active: s.tabs[next] }
     }),
+  groups: [{ id: "g1", tabs: [], active: null, navStack: [], navIndex: -1 }],
+  focusedGroup: "g1",
+  splitGroup: () =>
+    set((s) => {
+      const id = `g${Math.max(0, ...s.groups.map((g) => Number(g.id.slice(1)) || 0)) + 1}`
+      const at = s.groups.findIndex((g) => g.id === s.focusedGroup)
+      // The new group opens on the file you were reading, which is what makes a
+      // split useful the instant it appears rather than a blank pane to fill.
+      const seed = s.active
+      const group: EditorGroup = {
+        id,
+        tabs: seed ? [seed] : [],
+        active: seed,
+        navStack: seed ? [{ path: seed }] : [],
+        navIndex: seed ? 0 : -1,
+      }
+      const groups = [...s.groups]
+      // Write the live fields back into the group being left, so nothing that
+      // happened while it was focused is lost to the split.
+      groups[at] = {
+        ...groups[at],
+        tabs: s.tabs,
+        active: s.active,
+        navStack: s.navStack,
+        navIndex: s.navIndex,
+      }
+      groups.splice(at + 1, 0, group)
+      return {
+        groups,
+        focusedGroup: id,
+        tabs: group.tabs,
+        active: group.active,
+        navStack: group.navStack,
+        navIndex: group.navIndex,
+      }
+    }),
+  focusGroup: (idOrIndex) =>
+    set((s) => {
+      const target =
+        typeof idOrIndex === "number"
+          ? s.groups[idOrIndex]
+          : s.groups.find((g) => g.id === idOrIndex)
+      if (!target || target.id === s.focusedGroup) return s
+      const groups = s.groups.map((g) =>
+        g.id === s.focusedGroup
+          ? { ...g, tabs: s.tabs, active: s.active, navStack: s.navStack, navIndex: s.navIndex }
+          : g,
+      )
+      return {
+        groups,
+        focusedGroup: target.id,
+        tabs: target.tabs,
+        active: target.active,
+        navStack: target.navStack,
+        navIndex: target.navIndex,
+      }
+    }),
+  activateInGroup: (groupId, path) => {
+    const s = get()
+    if (groupId !== s.focusedGroup) s.focusGroup(groupId)
+    get().open(path)
+  },
+  closeInGroup: (groupId, path) => {
+    const s = get()
+    if (groupId !== s.focusedGroup) s.focusGroup(groupId)
+    get().close(path)
+  },
   splitPath: null,
   openSplit: (path) => set((s) => ({ splitPath: path ?? s.active })),
   closeSplit: () => set({ splitPath: null }),
@@ -1041,6 +1150,19 @@ export const useProject = create<ProjectState>((set, get) => ({
       git,
       tabs: session?.tabs ?? [],
       active: session?.active ?? null,
+      // A three-pane arrangement is part of where you left off, like the tabs.
+      groups: session?.groups?.length
+        ? session.groups
+        : [
+            {
+              id: "g1",
+              tabs: session?.tabs ?? [],
+              active: session?.active ?? null,
+              navStack: session?.active ? [{ path: session.active }] : [],
+              navIndex: session?.active ? 0 : -1,
+            },
+          ],
+      focusedGroup: session?.focusedGroup ?? session?.groups?.[0]?.id ?? "g1",
       // Restore the per-project drill-down, split, and hidden-files preference so
       // reopening a repo lands where you left it rather than fully collapsed.
       expandedDirs: session?.expanded ?? [],
@@ -1147,13 +1269,29 @@ export const useProject = create<ProjectState>((set, get) => ({
     set((s) => {
       const tabs = s.tabs.filter((t) => t !== path)
       const active = s.active === path ? (tabs[tabs.length - 1] ?? null) : s.active
-      return {
-        tabs,
-        active,
+      const common = {
         previewPath: s.previewPath === path ? null : s.previewPath,
         pinnedTabs: s.pinnedTabs.filter((p) => p !== path),
         closedTabs: [...s.closedTabs, path].slice(-25),
       }
+      // A group with nothing left in it is a pane showing nothing; it goes, and
+      // a neighbour takes the focus. Except the last one — an editor with no
+      // group at all is not a state anything downstream expects.
+      if (!tabs.length && s.groups.length > 1) {
+        const at = s.groups.findIndex((g) => g.id === s.focusedGroup)
+        const groups = s.groups.filter((g) => g.id !== s.focusedGroup)
+        const next = groups[Math.min(at, groups.length - 1)]
+        return {
+          ...common,
+          groups,
+          focusedGroup: next.id,
+          tabs: next.tabs,
+          active: next.active,
+          navStack: next.navStack,
+          navIndex: next.navIndex,
+        }
+      }
+      return { ...common, tabs, active }
     }),
   // The bulk closes spare pinned tabs: pinning is the user saying "not this
   // one", and a bulk action that ignores that makes the pin worthless.

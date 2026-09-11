@@ -41,6 +41,7 @@ import {
 } from "@/lib/docInfo"
 import { notify, notifyError } from "@/lib/notice"
 import { usePreview } from "@/lib/preview"
+import { DEFAULT_PROFILE_ID, useProfiles } from "@/lib/profiles"
 import { mod } from "@/lib/shortcuts"
 import { useCursor, usePalette, useProject, useSettings } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
@@ -61,6 +62,7 @@ const STATUS_ITEMS: Array<{ id: string; labelKey: MessageKey }> = [
   { id: "anywhere", labelKey: "anywhere.title" },
   { id: "terminal", labelKey: "terminal.toggle" },
   { id: "column", labelKey: "editor.columnSelection" },
+  { id: "profile", labelKey: "profile.status" },
 ]
 
 /** Path relative to the project root, with forward slashes. Delegates to the
@@ -77,6 +79,9 @@ export function StatusBar() {
   const root = useProject((s) => s.root)
   const active = useProject((s) => s.active)
   const git = useProject((s) => s.git)
+  const profiles = useProfiles((s) => s.profiles)
+  const activeProfileId = useProfiles((s) => s.activeId)
+  const activeProfile = profiles.find((p) => p.id === activeProfileId) ?? profiles[0]
   const previewOpen = usePreview((s) => s.open)
   const { line, col } = useCursor()
   const eol = useDocInfo((s) => s.eol)
@@ -341,6 +346,25 @@ export function StatusBar() {
               </Dropdown>
             )}
           </>
+        )}
+        {/* Which configuration is in use. Shown only when it is not the default
+            one: a bar that always says "Default" is a bar saying nothing. */}
+        {show("profile") && activeProfile.id !== DEFAULT_PROFILE_ID && (
+          <Dropdown
+            label={t("profile.status")}
+            triggerClassName={ITEM}
+            trigger={activeProfile.name}
+            className="max-h-72 w-56 overflow-y-auto"
+          >
+            {profiles.map((p) => (
+              <MenuRow
+                key={p.id}
+                label={p.name}
+                checked={p.id === activeProfile.id}
+                onClick={() => useProfiles.getState().switchTo(p.id)}
+              />
+            ))}
+          </Dropdown>
         )}
         {show("branch") && git.isRepo ? (
           <Dropdown

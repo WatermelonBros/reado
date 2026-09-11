@@ -41,10 +41,13 @@ vi.mock("../bookmarks", () => ({ useBookmarks: { getState: () => ({ toggle }) } 
 const project = {
   root: "/root",
   active: "/root/src/a.ts" as string | null,
+  tabs: [] as string[],
   open: vi.fn(),
+  renamePath: vi.fn(),
   bumpTree: vi.fn(),
 }
 const setDirty = vi.fn()
+const setEditing = vi.fn()
 const setCompareBuffer = vi.fn()
 const setDiffBase = vi.fn()
 const setDiffing = vi.fn()
@@ -54,7 +57,7 @@ vi.mock("../store", () => ({
   useProject: { getState: () => project },
   useSettings: { getState: () => settings },
   useEditorActions: {
-    getState: () => ({ setDirty, setCompareBuffer, setDiffBase, setDiffing }),
+    getState: () => ({ setDirty, setEditing, setCompareBuffer, setDiffBase, setDiffing }),
   },
   SAVED_BASE: "reado:saved",
   useWorkspace: Object.assign(() => ({ searchFor }), {
@@ -90,6 +93,7 @@ import {
   moveLineDownCmd,
   moveLineUpCmd,
   newFile,
+  newUntitled,
   nextProblem,
   openFind,
   openGotoLine,
@@ -118,12 +122,13 @@ import {
   lspTypes,
 } from "@/lib/lsp"
 import { prompt } from "@/lib/prompt"
+import { useUntitled } from "@/lib/untitled"
 
 let view: EditorView
 
 /** Mount a real editor over `doc` and make it the active view. Multi-selection
  *  is on, as it is in the real editor — without it CodeMirror drops extra cursors. */
-function mount(doc: string, extra: Extension[] = []) {
+function mount(doc: string, extra: Extension[] = [], rel = "src/a.ts") {
   view = new EditorView({
     doc,
     parent: document.body,
@@ -133,7 +138,7 @@ function mount(doc: string, extra: Extension[] = []) {
   // Saving resolves the path through the registry, not through the active tab:
   // with the editor split, the focused view is often the *other* file.
   unregister?.()
-  unregister = registerView(view, "src/a.ts", "/root", true, detectEol(doc))
+  unregister = registerView(view, rel, "/root", true, detectEol(doc))
   return view
 }
 let unregister: (() => void) | undefined
@@ -427,6 +432,55 @@ describe("newFile", () => {
     vi.mocked(createFile).mockRejectedValue(new Error("exists"))
     await expect(newFile()).resolves.toBeUndefined()
     expect(project.open).not.toHaveBeenCalled()
+  })
+})
+
+describe("untitled buffers", () => {
+  beforeEach(() => {
+    project.tabs = []
+    useUntitled.setState({ texts: {} })
+  })
+
+  it("opens the lowest free number, ready to type", () => {
+    newUntitled()
+    expect(project.open).toHaveBeenCalledWith("untitled:1")
+    // Read-first is right for someone else's code, not for a page you write.
+    expect(setEditing).toHaveBeenCalledWith(true)
+    // Closing #2 and asking again gives #2 back rather than climbing to #4.
+    project.tabs = ["untitled:1", "untitled:3"]
+    newUntitled()
+    expect(project.open).toHaveBeenLastCalledWith("untitled:2")
+  })
+
+  it("saves as, and the scratch tab becomes the file where it stood", async () => {
+    vi.mocked(prompt).mockResolvedValue("src/scratch.ts")
+    useUntitled.setState({ texts: { "/root": { "untitled:1": "scratch text" } } })
+    project.active = "untitled:1"
+    mount("scratch text", [], "untitled:1")
+    await saveDocument()
+    expect(writeFile).toHaveBeenCalledWith("/root", "src/scratch.ts", "scratch text", undefined)
+    expect(project.renamePath).toHaveBeenCalledWith("untitled:1", "/root/src/scratch.ts")
+    // Replaced, not duplicated: no second tab is opened beside it.
+    expect(project.open).not.toHaveBeenCalled()
+    expect(useUntitled.getState().textOf("untitled:1")).toBe("")
+  })
+
+  it("leaves the buffer alone when the destination prompt is dismissed", async () => {
+    vi.mocked(prompt).mockResolvedValue(null)
+    project.active = "untitled:1"
+    mount("scratch", [], "untitled:1")
+    await saveDocument()
+    expect(writeFile).not.toHaveBeenCalled()
+    expect(project.renamePath).not.toHaveBeenCalled()
+  })
+
+  it("has nowhere to write with no folder open, and says so instead of asking", async () => {
+    project.root = ""
+    project.active = "untitled:1"
+    mount("scratch", [], "untitled:1")
+    await saveDocument()
+    expect(prompt).not.toHaveBeenCalled()
+    expect(writeFile).not.toHaveBeenCalled()
   })
 })
 

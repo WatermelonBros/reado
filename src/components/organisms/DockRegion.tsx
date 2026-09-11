@@ -424,7 +424,17 @@ export function DockRegion({ area }: { area: DockArea }) {
                 />
               </div>
               <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-                {renderPanel(g.active)}
+                {/* Every tab in the group stays mounted; only the active one is
+                    laid out. Rendering just the active tab unmounted the others,
+                    and a <Terminal> kills its PTY on unmount — so switching the
+                    bottom dock from Terminal to Output threw away the shell and
+                    whatever was running in it. Same reason the collapsed region
+                    above hides rather than returns null. */}
+                {g.tabs.map((id) => (
+                  <div key={id} className={id === g.active ? "contents" : "hidden"}>
+                    {renderPanel(id)}
+                  </div>
+                ))}
                 {/* Split target: a thick accent frame over the body, shown only while
                     the pointer is over this group's body during a drag. */}
                 {zone === "split" && (

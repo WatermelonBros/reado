@@ -31,6 +31,10 @@ const MENU_SAFE = new Set([
   "settings",
   "window:new",
   "newFile",
+  "newUntitled",
+  "tasks:run",
+  "tasks:build",
+  "group:split",
   "openFile",
   "save",
   "saveAll",
@@ -113,6 +117,7 @@ export const APP_MENUS: Menu[] = [
     label: "File",
     items: [
       { id: "window:new", label: "New Window" },
+      { id: "newUntitled", label: "New Untitled File" },
       { id: "newFile", label: "New File…" },
       { id: "openFile", label: "Open File…" },
       { id: "openFolder", label: "Open Folder…" },
@@ -245,6 +250,7 @@ export const APP_MENUS: Menu[] = [
       { id: "view:output", label: "Output" },
       { id: "terminal:runSelection", label: "Run Selected Text in Terminal" },
       { id: "view:splitToggle", label: "Split Editor" },
+      { id: "group:split", label: "Split Editor into a New Group" },
       { sep: true },
       { id: "view:foldAll", label: "Fold All" },
       { id: "view:unfoldAll", label: "Unfold All" },
@@ -270,6 +276,9 @@ export const APP_MENUS: Menu[] = [
   {
     label: "Terminal",
     items: [
+      { id: "tasks:run", label: "Run Task…" },
+      { id: "tasks:build", label: "Run Build Task" },
+      { sep: true },
       { id: "terminal:new", label: "New Terminal" },
       { id: "terminal:split", label: "Split Terminal" },
       { id: "terminal:clear", label: "Clear Terminal" },

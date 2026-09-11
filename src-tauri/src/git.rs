@@ -749,6 +749,173 @@ fn parse_blame_porcelain(out: &str) -> Vec<BlameLine> {
 mod tests {
     use super::*;
 
+    /// A throwaway repository with one commit, for the commands that can only be
+    /// judged against a real one.
+    fn repo(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("reado-git-{name}-{}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        let root = dir.to_string_lossy().into_owned();
+        for args in [
+            vec!["init", "-q", "-b", "main"],
+            vec!["config", "user.email", "t@example.com"],
+            vec!["config", "user.name", "Test"],
+            vec!["config", "commit.gpgsign", "false"],
+        ] {
+            run_git_checked(&root, &args).unwrap();
+        }
+        std::fs::write(dir.join("a.txt"), "one\n").unwrap();
+        run_git_checked(&root, &["add", "."]).unwrap();
+        run_git_checked(&root, &["commit", "-qm", "first"]).unwrap();
+        dir
+    }
+
+    /// The subject lines of the history, newest first.
+    fn log(root: &str) -> Vec<String> {
+        run_git(Path::new(root), &["log", "--format=%s"])
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn amend_rewrites_the_last_commit_rather_than_adding_one() {
+        let dir = repo("amend");
+        let root = dir.to_string_lossy().into_owned();
+        std::fs::write(dir.join("b.txt"), "two\n").unwrap();
+        run_git_checked(&root, &["add", "."]).unwrap();
+        git_amend(root.clone(), Some("first, properly".into())).unwrap();
+        assert_eq!(log(&root), vec!["first, properly"]);
+        // The forgotten file is part of that one commit now.
+        let files = run_git(
+            Path::new(&root),
+            &["show", "--name-only", "--format=", "HEAD"],
+        )
+        .unwrap();
+        assert!(files.contains("b.txt"), "got: {files}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn amend_with_no_message_keeps_the_one_it_had() {
+        let dir = repo("amend-nomsg");
+        let root = dir.to_string_lossy().into_owned();
+        std::fs::write(dir.join("b.txt"), "two\n").unwrap();
+        run_git_checked(&root, &["add", "."]).unwrap();
+        git_amend(root.clone(), None).unwrap();
+        assert_eq!(log(&root), vec!["first"]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_commit_that_never_left_is_not_reported_as_pushed() {
+        let dir = repo("pushed");
+        let root = dir.to_string_lossy().into_owned();
+        assert!(!git_head_is_pushed(root));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn revert_undoes_a_commit_and_leaves_it_in_the_history() {
+        let dir = repo("revert");
+        let root = dir.to_string_lossy().into_owned();
+        std::fs::write(dir.join("a.txt"), "two\n").unwrap();
+        run_git_checked(&root, &["commit", "-aqm", "second"]).unwrap();
+        let head = run_git(Path::new(&root), &["rev-parse", "HEAD"]).unwrap();
+        let out = git_revert(root.clone(), head.trim().into()).unwrap();
+        assert!(out.conflicted.is_empty());
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "one\n");
+        // Three entries: the revert is a new commit, not a rewrite.
+        assert_eq!(log(&root).len(), 3);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_revert_that_conflicts_reports_the_files_rather_than_claiming_success() {
+        let dir = repo("revert-conflict");
+        let root = dir.to_string_lossy().into_owned();
+        std::fs::write(dir.join("a.txt"), "two\n").unwrap();
+        run_git_checked(&root, &["commit", "-aqm", "second"]).unwrap();
+        let head = run_git(Path::new(&root), &["rev-parse", "HEAD"]).unwrap();
+        // Move the same line again, so undoing the middle commit cannot apply.
+        std::fs::write(dir.join("a.txt"), "three\n").unwrap();
+        run_git_checked(&root, &["commit", "-aqm", "third"]).unwrap();
+        let out = git_revert(root.clone(), head.trim().into()).unwrap();
+        assert_eq!(out.conflicted, vec!["a.txt".to_string()]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn cherry_pick_brings_one_commit_across() {
+        let dir = repo("cherry");
+        let root = dir.to_string_lossy().into_owned();
+        run_git_checked(&root, &["checkout", "-qb", "side"]).unwrap();
+        std::fs::write(dir.join("c.txt"), "from side\n").unwrap();
+        run_git_checked(&root, &["add", "."]).unwrap();
+        run_git_checked(&root, &["commit", "-qm", "side work"]).unwrap();
+        let head = run_git(Path::new(&root), &["rev-parse", "HEAD"]).unwrap();
+        run_git_checked(&root, &["checkout", "-q", "main"]).unwrap();
+        assert!(!dir.join("c.txt").exists());
+        let out = git_cherry_pick(root.clone(), head.trim().into()).unwrap();
+        assert!(out.conflicted.is_empty());
+        assert!(dir.join("c.txt").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn tags_are_listed_created_and_deleted() {
+        let dir = repo("tags");
+        let root = dir.to_string_lossy().into_owned();
+        assert!(git_tags(root.clone()).is_empty());
+        git_tag_create(root.clone(), "v1.0.0".into(), Some("first release".into())).unwrap();
+        assert_eq!(git_tags(root.clone()), vec!["v1.0.0".to_string()]);
+        // A name already taken is refused rather than silently moved.
+        assert!(git_tag_create(root.clone(), "v1.0.0".into(), None).is_err());
+        git_tag_delete(root.clone(), "v1.0.0".into()).unwrap();
+        assert!(git_tags(root).is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_empty_tag_name_is_refused_before_git_sees_it() {
+        let dir = repo("tag-empty");
+        let root = dir.to_string_lossy().into_owned();
+        assert!(git_tag_create(root, "   ".into(), None).is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn remotes_are_listed_once_each_added_renamed_and_removed() {
+        let dir = repo("remotes");
+        let root = dir.to_string_lossy().into_owned();
+        assert!(git_remotes(root.clone()).is_empty());
+        git_remote_add(
+            root.clone(),
+            "origin".into(),
+            "https://example.com/x.git".into(),
+        )
+        .unwrap();
+        let listed = git_remotes(root.clone());
+        // `remote -v` prints fetch and push rows for the same remote.
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "origin");
+        assert_eq!(listed[0].url, "https://example.com/x.git");
+        git_remote_rename(root.clone(), "origin".into(), "upstream".into()).unwrap();
+        assert_eq!(git_remotes(root.clone())[0].name, "upstream");
+        git_remote_remove(root.clone(), "upstream".into()).unwrap();
+        assert!(git_remotes(root).is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_remote_needs_both_a_name_and_a_url() {
+        let dir = repo("remote-empty");
+        let root = dir.to_string_lossy().into_owned();
+        assert!(git_remote_add(root, "origin".into(), "  ".into()).is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn pull_error_drops_fetch_noise_and_keeps_reason() {
         // git pull: fetch chatter on stderr, the real reason buried among it.
@@ -1804,4 +1971,170 @@ mod review_grade_tests {
         );
         assert_eq!(text, None);
     }
+}
+
+// ---- Fixing what just happened ----------------------------------------------
+//
+// Amend, revert, cherry-pick, tags and remotes. These are what a reader reaches
+// for *after* a commit — a typo in the message, a commit that has to come back
+// out, a fix that belongs on this branch too — and until now every one of them
+// meant leaving the editor for a terminal.
+
+/// Whether the commit at HEAD is already on the upstream.
+///
+/// Amending it then rewrites history other people may already have, which is a
+/// different decision from fixing a commit that never left this machine — so the
+/// UI asks first, and this is the question behind that.
+#[tauri::command]
+pub fn git_head_is_pushed(root: String) -> bool {
+    let path = Path::new(&root);
+    let Some(head) = run_git(path, &["rev-parse", "HEAD"]) else {
+        return false;
+    };
+    // `branch -r --contains` lists the remote branches holding this commit;
+    // anything at all means it is out there.
+    run_git(path, &["branch", "-r", "--contains", head.trim()])
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+}
+
+/// Amend the last commit with whatever is staged. An empty message reuses the
+/// existing one (`--no-edit`), which is the "I forgot a file" case.
+#[tauri::command]
+pub fn git_amend(root: String, message: Option<String>) -> Result<(), String> {
+    match message.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+        Some(m) => run_git_checked(&root, &["commit", "--amend", "-m", m]),
+        None => run_git_checked(&root, &["commit", "--amend", "--no-edit"]),
+    }
+}
+
+/// What an apply-a-commit operation did.
+#[derive(serde::Serialize)]
+pub struct ApplyOutcome {
+    /// Files left conflicted; empty means it applied cleanly.
+    pub conflicted: Vec<String>,
+}
+
+/// Revert a commit: a new commit that undoes it, leaving the original in place.
+#[tauri::command]
+pub fn git_revert(root: String, commit: String) -> Result<ApplyOutcome, String> {
+    apply_commit(&root, &["revert", "--no-edit", commit.trim()])
+}
+
+/// Apply one commit from elsewhere onto the current branch.
+#[tauri::command]
+pub fn git_cherry_pick(root: String, commit: String) -> Result<ApplyOutcome, String> {
+    apply_commit(&root, &["cherry-pick", commit.trim()])
+}
+
+/// The shared half of revert and cherry-pick: run it, and read a failure as
+/// conflicts when that is what it is.
+fn apply_commit(root: &str, args: &[&str]) -> Result<ApplyOutcome, String> {
+    match run_git_checked(root, args) {
+        Ok(()) => Ok(ApplyOutcome { conflicted: vec![] }),
+        Err(e) => {
+            // Not a failure with a message nobody can act on: it is work waiting
+            // in the working tree, and Reado already has a resolver for it.
+            let conflicted = conflicted_files(root);
+            if conflicted.is_empty() {
+                Err(e)
+            } else {
+                Ok(ApplyOutcome { conflicted })
+            }
+        }
+    }
+}
+
+/// The repository's tags, newest first.
+#[tauri::command]
+pub fn git_tags(root: String) -> Vec<String> {
+    run_git(Path::new(&root), &["tag", "--sort=-creatordate", "--list"])
+        .map(|s| {
+            s.lines()
+                .map(str::to_string)
+                .filter(|l| !l.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Create a tag at HEAD. With a message it is annotated, which is what a release
+/// wants; without, it is the lightweight kind.
+#[tauri::command]
+pub fn git_tag_create(root: String, name: String, message: Option<String>) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Empty tag name".into());
+    }
+    match message.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+        Some(m) => run_git_checked(&root, &["tag", "-a", name, "-m", m]),
+        None => run_git_checked(&root, &["tag", name]),
+    }
+}
+
+/// Delete a tag locally.
+#[tauri::command]
+pub fn git_tag_delete(root: String, name: String) -> Result<(), String> {
+    run_git_checked(&root, &["tag", "-d", name.trim()])
+}
+
+/// Push one tag to a remote.
+#[tauri::command]
+pub fn git_tag_push(root: String, name: String, remote: String) -> Result<(), String> {
+    run_git_checked(&root, &["push", remote.trim(), name.trim()])
+}
+
+/// A remote and where it points.
+#[derive(serde::Serialize)]
+pub struct Remote {
+    pub name: String,
+    pub url: String,
+}
+
+/// The repository's remotes.
+#[tauri::command]
+pub fn git_remotes(root: String) -> Vec<Remote> {
+    run_git(Path::new(&root), &["remote", "-v"])
+        .map(|s| {
+            let mut out: Vec<Remote> = Vec::new();
+            for line in s.lines() {
+                // `origin\tgit@host:repo (fetch)` — the fetch and push rows name
+                // the same remote, so the second one is a duplicate.
+                let mut parts = line.split_whitespace();
+                let (Some(name), Some(url)) = (parts.next(), parts.next()) else {
+                    continue;
+                };
+                if out.iter().any(|r| r.name == name) {
+                    continue;
+                }
+                out.push(Remote {
+                    name: name.to_string(),
+                    url: url.to_string(),
+                });
+            }
+            out
+        })
+        .unwrap_or_default()
+}
+
+/// Add a remote.
+#[tauri::command]
+pub fn git_remote_add(root: String, name: String, url: String) -> Result<(), String> {
+    let (name, url) = (name.trim(), url.trim());
+    if name.is_empty() || url.is_empty() {
+        return Err("A remote needs a name and a URL".into());
+    }
+    run_git_checked(&root, &["remote", "add", name, url])
+}
+
+/// Rename a remote.
+#[tauri::command]
+pub fn git_remote_rename(root: String, from: String, to: String) -> Result<(), String> {
+    run_git_checked(&root, &["remote", "rename", from.trim(), to.trim()])
+}
+
+/// Remove a remote.
+#[tauri::command]
+pub fn git_remote_remove(root: String, name: String) -> Result<(), String> {
+    run_git_checked(&root, &["remote", "remove", name.trim()])
 }

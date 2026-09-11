@@ -38,6 +38,7 @@ import {
   gitInfo,
   gitPull,
   gitPush,
+  gitRefs,
   gitStage,
   gitStageAll,
   gitStash,
@@ -48,9 +49,21 @@ import {
   gitSync,
   gitUnstage,
   gitUnstageAll,
+  type Remote,
   type StashEntry,
   submitToTerminal,
 } from "@/lib/api"
+import {
+  addRemote,
+  amendLastCommit,
+  cherryPickCommit,
+  createTag,
+  deleteTag,
+  listRemotes,
+  listTags,
+  removeRemote,
+  revertCommit,
+} from "@/lib/gitOps"
 import { STATUS, useGitStatus } from "@/lib/gitStatus"
 import { notify } from "@/lib/notice"
 import { composeCommitPrompt } from "@/lib/review"
@@ -90,6 +103,20 @@ export function GitPanel() {
   const [branchName, setBranchName] = useState<string | null>(null) // null = input hidden
   const [confirmDiscardAll, setConfirmDiscardAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Which picker is open — the commit list for revert/cherry-pick, or the tag
+   *  and remote lists. One at a time, so the panel never stacks two questions. */
+  const [picking, setPicking] = useState<"revert" | "cherry" | "tags" | "remotes" | null>(null)
+  const [commits, setCommits] = useState<Array<{ hash: string; subject: string }>>([])
+  const [tags, setTags] = useState<string[]>([])
+  const [remotes, setRemotes] = useState<Remote[]>([])
+
+  // Load what the open picker needs, and nothing else.
+  useEffect(() => {
+    if (!picking) return
+    if (picking === "tags") void listTags().then(setTags)
+    else if (picking === "remotes") void listRemotes().then(setRemotes)
+    else void gitRefs(root).then((r) => setCommits(r.commits))
+  }, [picking, root])
 
   const refresh = useCallback(() => {
     void useGitStatus.getState().refresh(root)
@@ -108,6 +135,12 @@ export function GitPanel() {
       .then(setGit)
       .catch(() => {})
   }, [root, setGit])
+
+  /** After an operation that can move HEAD or the working tree, re-read both. */
+  const refreshAll = useCallback(() => {
+    refresh()
+    refreshInfo()
+  }, [refresh, refreshInfo])
 
   useEffect(() => {
     refresh()
@@ -366,6 +399,89 @@ export function GitPanel() {
             t("git.more"),
             MoreIcon,
           )}
+          {picking && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setPicking(null)} />
+              <div className="fixed top-1/4 left-1/2 z-30 max-h-[50vh] w-[28rem] -translate-x-1/2 overflow-y-auto rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]">
+                {picking === "tags" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPicking(null)
+                        void createTag().then(refreshAll)
+                      }}
+                      className="flex w-full items-center px-3 py-1.5 text-left text-ink hover:bg-surface"
+                    >
+                      {t("git.tagCreate")}
+                    </button>
+                    {tags.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => {
+                          setPicking(null)
+                          void deleteTag(name).then(refreshAll)
+                        }}
+                        className="flex w-full items-center justify-between px-3 py-1.5 text-left text-muted hover:bg-surface"
+                      >
+                        <span>{name}</span>
+                        <span className="text-[10px] text-faint">{t("git.tagDelete")}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {picking === "remotes" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPicking(null)
+                        void addRemote().then(refreshAll)
+                      }}
+                      className="flex w-full items-center px-3 py-1.5 text-left text-ink hover:bg-surface"
+                    >
+                      {t("git.remoteAdd")}
+                    </button>
+                    {remotes.map((r) => (
+                      <button
+                        key={r.name}
+                        type="button"
+                        onClick={() => {
+                          setPicking(null)
+                          void removeRemote(r.name).then(refreshAll)
+                        }}
+                        className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-muted hover:bg-surface"
+                      >
+                        <span className="flex-none text-ink">{r.name}</span>
+                        <span className="min-w-0 truncate text-[10px] text-faint">{r.url}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {(picking === "revert" || picking === "cherry") &&
+                  commits.map((c) => (
+                    <button
+                      key={c.hash}
+                      type="button"
+                      onClick={() => {
+                        const commit = c.hash
+                        setPicking(null)
+                        void (
+                          picking === "revert" ? revertCommit(commit) : cherryPickCommit(commit)
+                        ).then(refreshAll)
+                      }}
+                      className="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-surface"
+                    >
+                      <span className="flex-none font-mono text-[10px] text-faint">
+                        {c.hash.slice(0, 7)}
+                      </span>
+                      <span className="min-w-0 truncate text-ink">{c.subject}</span>
+                    </button>
+                  ))}
+              </div>
+            </>
+          )}
           {menuOpen && menuPos && (
             <>
               <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
@@ -387,6 +503,64 @@ export function GitPanel() {
                 >
                   <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
                   {t("git.newBranch")}
+                </button>
+                {/* Fixing what just happened. These used to mean leaving for a
+                    terminal, which is the one place a read-first editor should
+                    not have to send anyone. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    void amendLastCommit().then(refreshAll)
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                >
+                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
+                  {t("git.amend")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setPicking("revert")
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                >
+                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
+                  {t("git.revert")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setPicking("cherry")
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                >
+                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
+                  {t("git.cherryPick")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setPicking("tags")
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                >
+                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
+                  {t("git.tags")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setPicking("remotes")
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                >
+                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
+                  {t("git.remotes")}
                 </button>
                 <button
                   type="button"

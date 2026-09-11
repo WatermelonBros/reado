@@ -11,6 +11,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMen
 import { toRelative } from "@/lib/comments"
 import { type DiagItem, useDiagnostics } from "@/lib/diagnostics"
 import { useProject } from "@/lib/store"
+import { useTasks } from "@/lib/tasks"
 
 // LSP severity → token + short label key. Hints fold into "info".
 const SEVERITY: Record<number, { color: string; bucket: "error" | "warn" | "info" }> = {
@@ -22,6 +23,7 @@ const SEVERITY: Record<number, { color: string; bucket: "error" | "warn" | "info
 
 export function ProblemsPanel() {
   const byFile = useDiagnostics((s) => s.byFile)
+  const taskProblems = useTasks((s) => s.byTask)
   const root = useProject((s) => s.root)
   const open = useProject((s) => s.open)
   const { t } = useTranslation()
@@ -34,7 +36,26 @@ export function ProblemsPanel() {
   // bucket drive the filter chips.
   const { files, counts } = useMemo(() => {
     const counts = { error: 0, warn: 0, info: 0 }
-    const files = Object.entries(byFile)
+    // A task's output and a language server's diagnostics are both "problems in
+    // this file", and the panel is where you look for either. They are kept
+    // apart at the source — a re-run replaces a task's own entries and nobody
+    // else's — and joined here, where the reader wants one list.
+    const merged: Record<string, DiagItem[]> = { ...byFile }
+    for (const [task, problems] of Object.entries(taskProblems)) {
+      for (const p of problems) {
+        const path = p.path.startsWith("/") ? p.path : `${root}/${p.path}`
+        merged[path] = [
+          ...(merged[path] ?? []),
+          {
+            line: p.line,
+            character: p.character,
+            severity: p.severity,
+            message: `${p.message} (${task})`,
+          },
+        ]
+      }
+    }
+    const files = Object.entries(merged)
       .map(([path, items]) => {
         const sorted = [...items].sort((a, b) => a.line - b.line)
         for (const d of sorted) counts[SEVERITY[d.severity]?.bucket ?? "info"]++
@@ -43,7 +64,7 @@ export function ProblemsPanel() {
       .filter((f) => f.items.length)
       .sort((a, b) => a.path.localeCompare(b.path))
     return { files, counts }
-  }, [byFile])
+  }, [byFile, taskProblems, root])
 
   const visible = (d: DiagItem) => !hidden.has(SEVERITY[d.severity]?.bucket ?? "info")
   const shown = files

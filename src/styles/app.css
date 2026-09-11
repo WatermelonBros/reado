@@ -633,6 +633,65 @@
     font-style: normal;
   }
 
+  /* Semantic tokens — the language server's colouring, laid over the grammar's.
+     Only Reado's six syntax colours are used: an installed theme defines those
+     and no others, so a seventh would simply be missing. What colour cannot say
+     is said another way — a parameter is italic, a deprecated symbol is struck
+     through, and both survive grayscale and any theme. */
+  .cm-sem-type {
+    color: var(--syn-definition);
+  }
+  .cm-sem-keyword {
+    color: var(--syn-keyword);
+  }
+  .cm-sem-string {
+    color: var(--syn-string);
+  }
+  .cm-sem-number {
+    color: var(--syn-number);
+  }
+  .cm-sem-comment {
+    color: var(--syn-comment);
+    font-style: italic;
+  }
+  .cm-sem-punctuation {
+    color: var(--syn-punctuation);
+  }
+  .cm-sem-parameter {
+    font-style: italic;
+  }
+  .cm-sem-deprecated {
+    text-decoration: line-through;
+    opacity: 0.75;
+  }
+
+  /* Code lenses — the server's "3 references" line above a symbol. A lens is
+     chrome sitting in the middle of the code, so it is quieter than the code
+     and smaller than it: no background, no border, nothing that reads as a
+     line of the file. Only hovering one says it is clickable. */
+  .cm-codelens {
+    font-size: 0.82em;
+    line-height: 1.5;
+    color: var(--text-faint);
+    user-select: none;
+  }
+  .cm-codelens-item {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .cm-codelens-item:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+  .cm-codelens-sep {
+    padding: 0 0.5ch;
+    opacity: 0.6;
+  }
+
   /* ---- Language server: hover tooltips + diagnostics --------------------- */
   /* CodeMirror's defaults are loud (bright wavy underlines, a stark white
      tooltip). Re-skin both onto Reado's surface tokens so they read as calm,

@@ -565,6 +565,28 @@ describe("more of the page bridge", () => {
     expect(api.previewOpen).toHaveBeenCalled()
   })
 
+  it("stops polling when the pane has no window to poll", async () => {
+    // Zero-sized placeholder: the pane is behind another dock tab or its area is
+    // collapsed, so no child window was ever opened. Polling it anyway failed
+    // with "no preview pane running" every 700ms, forever, filling the log.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+      right: 0,
+      bottom: 0,
+      toJSON: () => ({}),
+    } as DOMRect)
+    render(<BrowserPanel />)
+    await tick()
+    await tick()
+    expect(api.previewOpen).not.toHaveBeenCalled()
+    expect(api.previewEval).not.toHaveBeenCalled()
+  })
+
   it("shrugs off any other eval failure", async () => {
     api.previewEval.mockRejectedValue(new Error("page still loading"))
     render(<BrowserPanel />)

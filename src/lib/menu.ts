@@ -49,6 +49,7 @@ import {
   moveLineDownCmd,
   moveLineUpCmd,
   newFile,
+  newUntitled,
   nextProblem,
   openFind,
   openGotoLine,
@@ -93,6 +94,7 @@ import {
   useSettings,
   useWorkspace,
 } from "./store"
+import { openTaskList, runBuildTask } from "./taskCommands"
 import { useTerminals } from "./terminals"
 import { checkForUpdates } from "./updater"
 import {
@@ -295,6 +297,12 @@ export function runMenuCommand(id: string): void {
     return
   }
 
+  // ⌘3…⌘9 are seven ids with one meaning; a prefix match beats seven cases.
+  const group = /^group:([1-9])$/.exec(id)
+  if (group) {
+    useProject.getState().focusGroup(Number(group[1]) - 1)
+    return
+  }
   switch (id) {
     // App
     case "settings":
@@ -334,6 +342,18 @@ export function runMenuCommand(id: string): void {
       break
     case "newFile":
       void newFile()
+      break
+    case "group:split":
+      useProject.getState().splitGroup()
+      break
+    case "tasks:run":
+      void openTaskList()
+      break
+    case "tasks:build":
+      void runBuildTask()
+      break
+    case "newUntitled":
+      newUntitled()
       break
     case "saveAs":
       void saveAs()
@@ -553,10 +573,15 @@ export function runMenuCommand(id: string): void {
       else project.openSplit()
       break
     case "view:focusPane1":
-      if (!focusPane(1)) notify("info", t("menu.needSplit"))
+      // A group is a pane, and these two ids were already the keys for "pane 1"
+      // and "pane 2": with groups they mean the first and second group, and
+      // still move the caret into it when there is an editor there.
+      useProject.getState().focusGroup(0)
+      focusPane(1)
       break
     case "view:focusPane2":
-      if (!focusPane(2)) notify("info", t("menu.needSplit"))
+      useProject.getState().focusGroup(1)
+      focusPane(2)
       break
     case "view:fullscreen":
       toggleFullscreen()
@@ -756,7 +781,11 @@ export function knownCommands(): Set<string> {
   for (const menu of APP_MENUS) {
     for (const item of menu.items) if ("id" in item) ids.add(item.id)
   }
+  // The group jumps are seven ids with one meaning, matched by prefix rather
+  // than listed as seven cases — so they are named here, where the registry is.
+  for (let n = 1; n <= 9; n++) ids.add(`group:${n}`)
   for (const id of [
+    "group:split",
     "view:fullscreen",
     "view:zen",
     "view:secondarySidebar",

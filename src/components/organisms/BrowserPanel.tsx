@@ -212,6 +212,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   useEffect(() => {
     let alive = true
     const tick = async () => {
+      // No child window right now — the pane is hidden behind another dock tab,
+      // its area is collapsed, or it never opened (a dead dev server still opens
+      // one, so this is genuinely "not there"). Every eval would fail with
+      // "no preview pane running", once per tick, forever. The ResizeObserver
+      // below flips this back and reopens the window when the pane returns.
+      if (!openedRef.current) return
       let raw: string | null = null
       try {
         raw = await previewEval("window.__readoBridge ? window.__readoBridge.drain() : null")
@@ -561,7 +567,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     const look = async () => {
       if (!alive || tries++ > 5) return
       try {
-        if ((await previewEval(HAS_LOGIN_JS)) === "true") {
+        // `openedRef` first: with no child window there is no page to sniff, and
+        // the eval would just be another "no preview pane running" in the log.
+        if (openedRef.current && (await previewEval(HAS_LOGIN_JS)) === "true") {
           if (alive && vaultDismissed.current !== url) setVaultOpen(true)
           return
         }

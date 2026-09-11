@@ -77,6 +77,7 @@ import { useQa } from "./qa"
 import { noteSelfWrite } from "./readProgress"
 import { SAVED_BASE, useEditorActions, useProject, useSettings, useWorkspace } from "./store"
 import { expandSelection, shrinkSelection } from "./syntaxSelection"
+import { isUntitled, nextUntitledId, useUntitled } from "./untitled"
 
 export type Eol = "LF" | "CRLF"
 
@@ -327,6 +328,8 @@ export async function saveDocument(): Promise<void> {
   const entry = view && liveViews.get(view)
   if (!view || !entry) return
   const { rel, root } = entry
+  // A buffer with no path cannot be written back to one: Save *is* Save As.
+  if (isUntitled(rel)) return saveAs()
   const text = await textToSave(view)
   noteSelfWrite(rel)
   writeFile(root, rel, text, encodingFor(view))
@@ -746,6 +749,20 @@ export async function newFile(): Promise<void> {
   }
 }
 
+/**
+ * Open an empty buffer with no path — the "open Reado and start typing" case.
+ *
+ * Deliberately asks for nothing: not a name, not a folder, not even a project.
+ * Editing goes on so the caret is live the moment it opens; a read-first default
+ * is right for someone else's code, not for a page you are writing yourself.
+ */
+export function newUntitled(): void {
+  const id = nextUntitledId(useProject.getState().tabs)
+  useUntitled.getState().setText(id, "")
+  useEditorActions.getState().setEditing(true)
+  useProject.getState().open(id)
+}
+
 /** Create a folder at a prompted, project-relative path. */
 export async function newFolder(): Promise<void> {
   const root = useProject.getState().root
@@ -768,10 +785,20 @@ export async function newFolder(): Promise<void> {
 export async function saveAs(): Promise<void> {
   const { view } = useDocInfo.getState()
   const { root, active } = useProject.getState()
-  if (!view || !root) return
+  if (!view) return
+  // The buffer being saved, which is the focused pane's — not `active`, which is
+  // the *primary* pane's file and would name the wrong document in a split.
+  const from = liveViews.get(view)?.rel ?? active ?? ""
+  const scratch = isUntitled(from)
+  if (!root) {
+    // Every write is confined to an open folder, so there is nowhere to put it.
+    notify("info", t("file.untitledNeedFolder"))
+    return
+  }
   const dest = await prompt({
     title: t("file.saveAs"),
-    value: active ? toRelative(root, active) : "",
+    // A scratch buffer has no path to offer back as the default.
+    value: scratch ? "" : active ? toRelative(root, active) : "",
     confirmLabel: t("editor.save"),
   })
   if (!dest) return
@@ -782,7 +809,15 @@ export async function saveAs(): Promise<void> {
   const rel = liveViews.get(view)?.rel
   const out = applyEol(applyHygiene(view.state.doc.toString(), rel), eolFor(view))
   await writeFile(root, dest, out, encodingFor(view)).catch(() => {})
-  useProject.getState().open(`${root}/${dest}`)
+  if (scratch) {
+    // The buffer *becomes* the file: swap the tab where it stands, rather than
+    // opening a second one beside the scratch tab it came from.
+    useProject.getState().renamePath(from, `${root}/${dest}`)
+    useEditorActions.getState().setDirty(from, false)
+    useUntitled.getState().drop(from)
+  } else {
+    useProject.getState().open(`${root}/${dest}`)
+  }
   useProject.getState().bumpTree()
 }
 

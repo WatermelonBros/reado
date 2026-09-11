@@ -5,9 +5,14 @@
 
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const ask = vi.fn(async () => true)
+vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: (...a: unknown[]) => ask(...(a as [])) }))
+
 import { Tabs, tabLabels } from "@/components/organisms/Tabs"
 import { useEditorActions, useProject, useSettings } from "@/lib/store"
+import { useUntitled } from "@/lib/untitled"
 
 // Seed just the slice Tabs reads (the store's action functions stay intact).
 // `closedTabs` is needed because close() pushes onto it.
@@ -20,6 +25,45 @@ beforeEach(() => {
   useSettings.setState({ tabBar: "multiple" })
   useEditorActions.setState({ dirtyPaths: [] })
   useProject.setState({ previewPath: null, pinnedTabs: [] })
+  useUntitled.setState({ texts: {} })
+  ask.mockClear()
+  ask.mockResolvedValue(true)
+})
+
+describe("untitled tabs", () => {
+  beforeEach(() => {
+    useProject.setState({ root: "/proj", tabs: ["untitled:1"], active: "untitled:1" })
+  })
+
+  it("shows the buffer's name, not the id it is keyed by", () => {
+    render(<Tabs />)
+    expect(screen.getByRole("tab", { name: "Untitled-1" })).toBeInTheDocument()
+  })
+
+  it("asks before closing one with text in it, and drops the text on yes", async () => {
+    useUntitled.setState({ texts: { "/proj": { "untitled:1": "a draft" } } })
+    render(<Tabs />)
+    await userEvent.click(screen.getByRole("button", { name: "tabs.close Untitled-1" }))
+    expect(ask).toHaveBeenCalled()
+    expect(useProject.getState().tabs).toEqual([])
+    expect(useUntitled.getState().textOf("untitled:1")).toBe("")
+  })
+
+  it("keeps the buffer when the question is answered no", async () => {
+    useUntitled.setState({ texts: { "/proj": { "untitled:1": "a draft" } } })
+    ask.mockResolvedValue(false)
+    render(<Tabs />)
+    await userEvent.click(screen.getByRole("button", { name: "tabs.close Untitled-1" }))
+    expect(useProject.getState().tabs).toEqual(["untitled:1"])
+    expect(useUntitled.getState().textOf("untitled:1")).toBe("a draft")
+  })
+
+  it("closes an empty one without a question", async () => {
+    render(<Tabs />)
+    await userEvent.click(screen.getByRole("button", { name: "tabs.close Untitled-1" }))
+    expect(ask).not.toHaveBeenCalled()
+    expect(useProject.getState().tabs).toEqual([])
+  })
 })
 
 describe("Tabs", () => {

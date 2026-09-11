@@ -405,6 +405,20 @@ function EditorTab() {
           hint={t("settings.stickyHint")}
         />
         <ToggleField
+          settingKey="codeLens"
+          checked={settings.codeLens}
+          onChange={(v) => settings.set({ codeLens: v })}
+          label={t("settings.codeLens")}
+          hint={t("settings.codeLensHint")}
+        />
+        <ToggleField
+          settingKey="semanticTokens"
+          checked={settings.semanticTokens}
+          onChange={(v) => settings.set({ semanticTokens: v })}
+          label={t("settings.semanticTokens")}
+          hint={t("settings.semanticTokensHint")}
+        />
+        <ToggleField
           settingKey="colorSwatches"
           checked={settings.colorSwatches}
           onChange={(v) => settings.set({ colorSwatches: v })}
