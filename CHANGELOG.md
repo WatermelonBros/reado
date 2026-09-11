@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-09-12
+
 ### Added
 
 - Untitled buffers: ⌘N opens an empty `Untitled-1` you can start typing into —
@@ -2003,7 +2005,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/WatermelonBros/reado/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/WatermelonBros/reado/compare/v1.16.1...v1.17.0
 [1.16.1]: https://github.com/WatermelonBros/reado/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/WatermelonBros/reado/compare/v1.15.0...v1.16.0
