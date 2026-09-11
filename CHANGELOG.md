@@ -11,6 +11,170 @@ commit.
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-09-11
+
+### Added
+
+- Terminal tabs can be dragged to reorder them, and renamed from the right-click
+  menu on the tab itself (it was already there on the pane).
+- Spanish, French and German interfaces, complete against English, and the
+  startup language now follows the OS for any language Reado ships. The locale
+  list is one registry, so the picker, the loaded messages and the types cannot
+  disagree; a test fails if a locale drops a key or a `{placeholder}`.
+- Named terminal profiles: define `Node REPL = node` (Settings → Terminal) and
+  open a terminal from it through the caret beside the + button. Panes carry the
+  profile's name, and a restart re-runs it.
+- Run Selected Text in Terminal (the palette, the Terminal menu): sends the
+  editor's selection — or the cursor's line — to the focused terminal, opening
+  one if none is.
+- A portable workspace file (`.reado-workspace`): save the folders you have open
+  as one file, commit it, hand it to someone else, and open it with a double
+  click. File ▸ Open Workspace… / Save Workspace As…; adding or removing a folder
+  updates the file the window was opened from. Folders opened directly keep
+  using `.reado/workspace.json`, unchanged.
+- Local file history: Reado parks a copy of a file's previous content on every
+  save, independent of git, and the Timeline panel lists them above the commits —
+  so the version from twenty minutes ago is recoverable even for a file that was
+  never committed. Diff against any of them, or restore one (⌘Z takes it back).
+  Kept to 50 copies per file and 30 days, under `.reado/.history/`.
+- An Output panel: Reado's own log, in the app, one channel per source — with
+  each language server's output among them, so a server that refuses to start
+  says why without leaving the app. Filter by channel, level and text; follow the
+  tail; copy or clear. It lives as a tab of the bottom panel beside the terminal,
+  where VS Code keeps it (View ▸ Output, or the palette); an existing layout gets
+  it added there once.
+- Go to Symbol in Project also asks the language servers: symbols that are
+  generated, or live in a dependency, now appear beside the ones Reado's own
+  index finds. The index still answers first, so the picker never waits.
+- Folding by what the language server knows: an import block, a `#region`, a run
+  of comments — regions the syntax tree has no single node for — now fold from the
+  gutter. Syntax folding still covers everything the server says nothing about.
+- Document links from the language server: the path in a `tsconfig`'s `extends`,
+  a `$ref` in a schema, any range the server reports, opens on ⌘-click — a file in
+  the editor, a web address in the browser pane.
+- Linked editing: rename an opening HTML tag and its closing tag follows, in one
+  undo step, wherever the language server reports the ranges as linked.
+- Format on paste and format while typing (Settings → Files → On save). Pasted
+  code is re-indented to where it lands, keeping its own shape, in one undo step;
+  with a language server, the characters it asks about (a closing brace, a
+  semicolon) re-format their line. Both off by default.
+- Column selection mode: a plain drag selects a rectangle while it is on
+  (⇧⌥⌘C, the View menu, the palette, or Settings → Editor), with the mode shown
+  in the status bar. ⇧⌥⌘↑/↓ add a cursor per line and ⇧⌥⌘←/→ widen every cursor,
+  with or without the mode.
+- Find in selection in the editor's find panel: a fourth toggle beside Aa / ab /
+  .* confines finding, the match count and Replace All to the selected range —
+  opening the panel with more than one line selected turns it on for you.
+- A wrap column: with wrap on, long lines can break at a column of your choosing
+  instead of at the window's edge, so the wrap point and the ruler agree however
+  wide the window is (Settings → Editor).
+
+### Changed
+
+- Every window is named after its project (`my-project — Reado`) on every
+  platform, and macOS is told to keep the string while not painting it over the
+  content. That string is what the Window menu, the Dock's window list and the
+  taskbar read: with two projects open — one minimised or hidden — there was
+  previously nothing to tell them apart or to click to get one back. The Window
+  menu is also registered with macOS as *the* windows menu, which is what makes
+  it list the open windows at all.
+- Rename (F2) asks the language server for the range it would rewrite before
+  asking you for a name: a decorator, a `$variable` or a `--custom-property` now
+  renames as a whole, and a symbol the server cannot rename says so instead of
+  prompting first and refusing after.
+
+
+- **The knowledge graph now draws the links, not the folders.** It used to draw
+  containment only — a document sits in a folder, a note sits on a file — which
+  is what the file tree already shows, and on this repository that produced 187
+  look-alike nodes in a ring, 64 of them labelled `spec`, 418 pairs of
+  overlapping labels, and 67 disconnected pieces (65 of them a lone hub beside a
+  lone child). What a tree can't show is the links documents make to each other,
+  and those are read out of the markdown itself. The same project now draws 125
+  nodes with 35 real references between documents, no repeated label, and no
+  overlapping ones. Alongside that:
+  - The canvas **zooms and pans** (wheel to zoom about the pointer, drag the
+    background to pan, "Reset view" to go back), so a large graph can be read up
+    close instead of only from too far away.
+  - The **legend switches layers off** — docs, specs, notes, files — and takes
+    their edges with them.
+  - **Labels appear where they can be read**: on the anchors and the
+    best-connected nodes, on hover along with a node's neighbours, and on
+    everything once you zoom in. A node nothing connects to is drawn quieter
+    rather than at full strength, and a label at the right edge reads inward
+    instead of off the canvas.
+  - A spec group holding a single document **is** that document, named for the
+    capability, instead of a hub beside a child called `spec`.
+  - Documents are grouped by the folder they live in, rather than every one of
+    them hanging off a single hub whose spokes crossed the whole canvas.
+- **The knowledge base index is grouped and foldable.** It listed 120 entries in
+  three flat columns, labelled with full paths that truncated on the half that
+  identifies the document (`docs/testing/testbook/01-launc…`). Documents are now
+  named by their file under a header for their folder, each group counted and
+  collapsible, and a capability whose group holds one document appears once
+  under its own name.
+- Vue files are served by `typescript-language-server` carrying
+  `@vue/typescript-plugin`, instead of by `@vue/language-server`. Vue 3's
+  language server is hybrid-only: it holds no TypeScript of its own and relays
+  every type question to a tsserver, so run on its own it answered nothing — no
+  completion, no hover, no diagnostics in any `.vue` file. The plugin is the half
+  that does the work, and with it a `.vue` file gets the script block's
+  completions and the template's, `<script setup>` bindings in scope. Install it
+  with `npm install -g typescript-language-server typescript @vue/typescript-plugin`;
+  a project that carries the plugin itself uses its own.
+
+### Fixed
+
+- The browser pane can no longer be dragged out of the panel it lives in. It is a
+  real OS child window parked over the pane, and it was left resizable, so a drag
+  aimed at the dock's resize handle stretched the browser past its panel; the
+  handle also straddled the panel edge, putting half its grab area under that
+  window. The window is now fixed (Reado owns its frame) and the handle sits
+  entirely outside the region, where nothing can cover it.
+- The credential picker in the browser pane shows one credential as one control:
+  the login and its one-time code now share a single bordered shell instead of
+  reading as two buttons of different weights.
+- A menu opened by a left click no longer closes in the same click. React flushes
+  the state that mounts the menu while that click is still travelling to the
+  window, so the menu's own outside-click listener caught it; the listener now
+  waits a frame. Right-click menus were never affected, which is why it only
+  surfaced on the terminal's new profile picker.
+- A new terminal is no longer named after a tab that already exists. The name
+  counted the open panes, so closing "Terminal 1" and opening another one gave a
+  second "Terminal 2"; it now takes the lowest free number.
+
+- Code intelligence in a monorepo, or in any project whose root holds no project
+  of its own. Language servers look in the root they are given and nowhere else,
+  so opening the repository root — the normal way to work on a monorepo — left
+  every file with an error and no completion. Reado now finds the project below
+  the root (three levels down at most) and tells the server where it is:
+  - **TypeScript / JavaScript**: `typescript-language-server` exited during
+    `initialize` ("Could not find a valid TypeScript installation…"). It is now
+    handed the TypeScript of the package that owns the file (`tsserver.path`), so
+    a workspace on TypeScript 4.6 is served by 4.6 and not by whatever `tsc` is
+    installed on the machine. A TypeScript 7 anywhere — the root's, a package's,
+    or the global one — answers LSP itself through `tsc --lsp`, and a globally
+    installed TypeScript is the last resort for a folder of loose `.ts` files.
+  - **Rust**: rust-analyzer answered "Failed to discover workspace" and served
+    nothing; it now gets the `Cargo.toml` of each workspace under the folder as
+    `linkedProjects` (a manifest inside another workspace is left alone — handing
+    over both is an error).
+  - **Angular**: an app below the opened root was not recognised as an Angular
+    project at all — Reado looked for `angular.json` in the root and nowhere
+    else — so every component `.ts` went to the plain TypeScript server. The
+    project is now the nearest `angular.json` at or above the file, and the
+    server runs rooted there, so a repo with several Angular apps serves each as
+    its own project.
+- Clicking a node in the knowledge graph does something again. Any pointer
+  movement at all counted as a drag and suppressed the click, and a real mouse
+  always moves a pixel or two, so nodes simply never opened. A drag now needs 4px
+  of travel. Dragging a node in a settled graph also repaints instead of leaving
+  it painted where it was.
+- A language server that fails to start or to initialize is no longer retried on
+  every keystroke — it spawned a fresh process and raised a fresh error toast
+  every few seconds for as long as the file stayed open. Failures now wait 30s
+  before the next attempt.
+
 ## [1.16.1] — 2026-09-10
 
 ### Fixed
@@ -1767,7 +1931,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.16.1...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/WatermelonBros/reado/compare/v1.16.1...v1.17.0
 [1.16.1]: https://github.com/WatermelonBros/reado/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/WatermelonBros/reado/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/WatermelonBros/reado/compare/v1.14.0...v1.15.0
