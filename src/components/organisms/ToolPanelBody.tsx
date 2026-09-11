@@ -21,6 +21,7 @@ import { HierarchyPanel } from "./HierarchyPanel"
 import { OpenEditors } from "./OpenEditors"
 import { OrphansPanel } from "./OrphansPanel"
 import { OutlinePanel } from "./OutlinePanel"
+import { OutputPanel } from "./OutputPanel"
 import { PreReviewPanel } from "./PreReviewPanel"
 import { ProblemsPanel } from "./ProblemsPanel"
 import { QaPanel } from "./QaPanel"
@@ -49,6 +50,7 @@ export const TOOL_TITLE: Record<Tool, MessageKey> = {
   guidedreview: "guided.panel",
   coverage: "coverage.panel",
   extensions: "ext.panel",
+  output: "output.panel",
 }
 
 const TOOLS = Object.keys(TOOL_TITLE) as Tool[]
@@ -103,5 +105,7 @@ export function ToolPanelBody({ tool }: { tool: Tool }) {
       return <CoveragePanel />
     case "extensions":
       return <ExtensionsPanel />
+    case "output":
+      return <OutputPanel />
   }
 }

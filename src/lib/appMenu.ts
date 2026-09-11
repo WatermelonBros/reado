@@ -58,6 +58,7 @@ const MENU_SAFE = new Set([
   "terminal",
   "view:splitToggle",
   "view:wrap",
+  "view:columnSelection",
   // Deliberately not `terminal:new`: `⌃⇧\`` is Ctrl on *every* platform, which
   // is the one shape the `Mod` alias cannot express — derived, it would come out
   // as `CmdOrCtrl` off macOS and disagree with the native menu. The binding
@@ -117,6 +118,8 @@ export const APP_MENUS: Menu[] = [
       { id: "openFolder", label: "Open Folder…" },
       { id: "openRecent", label: "Open Recent…" },
       { id: "workspace:addFolder", label: "Add Folder to Workspace…" },
+      { id: "workspace:open", label: "Open Workspace…" },
+      { id: "workspace:saveAs", label: "Save Workspace As…" },
       { sep: true },
       { id: "save", label: "Save" },
       { id: "saveAll", label: "Save All" },
@@ -239,12 +242,15 @@ export const APP_MENUS: Menu[] = [
       { id: "view:statusBar", label: "Toggle Status Bar" },
       { id: "view:breadcrumbs", label: "Toggle Breadcrumbs" },
       { id: "terminal", label: "Toggle Terminal" },
+      { id: "view:output", label: "Output" },
+      { id: "terminal:runSelection", label: "Run Selected Text in Terminal" },
       { id: "view:splitToggle", label: "Split Editor" },
       { sep: true },
       { id: "view:foldAll", label: "Fold All" },
       { id: "view:unfoldAll", label: "Unfold All" },
       { sep: true },
       { id: "view:wrap", label: "Toggle Word Wrap" },
+      { id: "view:columnSelection", label: "Column Selection Mode" },
       { id: "view:whitespace", label: "Render Whitespace" },
       { id: "view:focus", label: "Focus Mode" },
       { sep: true },

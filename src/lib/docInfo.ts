@@ -555,8 +555,9 @@ export const toggleBlockCommentCmd = () => runOnView(toggleBlockComment)
 export const addNextOccurrence = () => runOnView(selectNextOccurrence)
 export const selectAllOccurrences = () => runOnView(selectSelectionMatches)
 
-/** Add a cursor one line above/below each current cursor (multi-cursor). */
-function addCursorVertical(dir: -1 | 1) {
+/** Add a cursor one line above/below each current cursor (multi-cursor). The
+ *  editor binds it to the column-selection keys; the menu wraps it below. */
+export function addCursorVertical(dir: -1 | 1) {
   return (view: EditorView): boolean => {
     const { state } = view
     const extra = []

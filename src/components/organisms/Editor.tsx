@@ -51,7 +51,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
   const compareSnapshot = useEditorActions((s) => s.compareBuffer)
   const compareBuffer = diffBase === SAVED_BASE ? compareSnapshot : null
   const resolvingConflict = useEditorActions((s) => s.resolvingConflict)
-  const { wrap, codeFont, focusMode, renderWhitespace } = useSettings()
+  const { wrap, wrapColumn, codeFont, focusMode, renderWhitespace } = useSettings()
   const showResolvedComments = useSettings((s) => s.showResolvedComments)
   // The comments shown inline: open ones always; resolved (done) ones only when
   // the setting allows — hiding them declutters without touching the data.
@@ -286,6 +286,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             text={content.text}
             comments={mdComments}
             wrap={wrap}
+            wrapColumn={wrapColumn}
             codeFont={codeFont}
             focusMode={focusMode}
             renderWhitespace={renderWhitespace}
@@ -331,6 +332,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
       text={content.text}
       comments={fileComments}
       wrap={wrap}
+      wrapColumn={wrapColumn}
       codeFont={codeFont}
       focusMode={focusMode}
       renderWhitespace={renderWhitespace}

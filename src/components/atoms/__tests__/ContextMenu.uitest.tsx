@@ -99,4 +99,22 @@ describe("ContextMenu", () => {
     await userEvent.click(document.body)
     expect(onClose).toHaveBeenCalled()
   })
+
+  it("does not arm its outside-click listener within the click that opened it", async () => {
+    // A menu opened from a *left* click (the terminal's profile picker) used to
+    // vanish instantly in the real app: React flushes the state update that
+    // mounts the menu while that click is still on its way to the window, so the
+    // menu's own outside-click listener received it and closed immediately.
+    // Right-click menus never showed it — `contextmenu` is not followed by a
+    // `click` — which is why only a real mouse found it, and why this test has
+    // to watch the registration rather than replay a click: this DOM dispatches
+    // in an order that hides the bug.
+    const spy = vi.spyOn(window, "addEventListener")
+    setup()
+    const armedNow = spy.mock.calls.filter(([type]) => type === "click")
+    expect(armedNow, "the click listener must wait a frame").toHaveLength(0)
+    await new Promise((r) => requestAnimationFrame(() => r(null)))
+    expect(spy.mock.calls.filter(([type]) => type === "click")).toHaveLength(1)
+    spy.mockRestore()
+  })
 })

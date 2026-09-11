@@ -1,10 +1,17 @@
 // Reado's in-editor find/replace panel: a plain-DOM CodeMirror panel, so it is
 // driven here the way the user drives it — typing, clicking and pressing keys.
-import { getSearchQuery, openSearchPanel, search, searchPanelOpen } from "@codemirror/search"
+import {
+  closeSearchPanel,
+  getSearchQuery,
+  openSearchPanel,
+  search,
+  searchPanelOpen,
+} from "@codemirror/search"
 import { EditorState } from "@codemirror/state"
 import { EditorView } from "@codemirror/view"
 import { afterEach, describe, expect, it } from "vitest"
 import { readoSearchPanel } from "@/lib/searchPanel"
+import { scopeOf, searchScope } from "@/lib/searchScope"
 
 let view: EditorView
 
@@ -14,7 +21,7 @@ function openPanel(doc = "alpha beta\nalpha gamma", selection?: { anchor: number
     state: EditorState.create({
       doc,
       selection,
-      extensions: [search({ top: true, createPanel: readoSearchPanel })],
+      extensions: [search({ top: true, createPanel: readoSearchPanel }), searchScope],
     }),
     parent: document.body,
   })
@@ -177,6 +184,87 @@ describe("finding and replacing", () => {
     expect(sel()).toEqual([11, 16])
     buttonByLabel(panel, "Previous match").click()
     expect(sel()).toEqual([0, 5])
+  })
+})
+
+describe("find in selection", () => {
+  const doc = "alpha one\nalpha two\nalpha three"
+  //           0        9 10      19 20
+
+  it("a multi-line selection is a scope, not a search term", () => {
+    const panel = openPanel(doc, { anchor: 0, head: 19 })
+    expect(scopeOf(view.state)).toEqual({ from: 0, to: 19 })
+    // The selected text is three lines: putting it in the search field would be
+    // searching for the thing you were pointing at.
+    expect(fields(panel)[0].value).toBe("")
+    expect(buttonByLabel(panel, "Find in selection").getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("replaces only inside the range", () => {
+    const panel = openPanel(doc, { anchor: 0, head: 19 })
+    fields(panel)[1].value = "omega"
+    fields(panel)[1].dispatchEvent(new Event("input", { bubbles: true }))
+    type(fields(panel)[0], "alpha")
+    buttonByLabel(panel, "Replace all").click()
+    expect(view.state.doc.toString()).toBe("omega one\nomega two\nalpha three")
+  })
+
+  it("counts, and walks, only the matches inside the range", () => {
+    const panel = openPanel(doc, { anchor: 0, head: 19 })
+    type(fields(panel)[0], "alpha")
+    const counter = panel.querySelector("span") as HTMLElement
+    expect(counter.textContent).toContain("2")
+    expect(counter.textContent).not.toContain("3")
+
+    const sel = () => [view.state.selection.main.from, view.state.selection.main.to]
+    buttonByLabel(panel, "Next match").click()
+    expect(sel()).toEqual([0, 5])
+    buttonByLabel(panel, "Next match").click()
+    expect(sel()).toEqual([10, 15])
+    // Wraps at the range's end, never at the document's.
+    buttonByLabel(panel, "Next match").click()
+    expect(sel()).toEqual([0, 5])
+    // And selecting a match inside the range did not destroy the range.
+    expect(scopeOf(view.state)).toEqual({ from: 0, to: 19 })
+  })
+
+  it("the range follows edits made inside it", () => {
+    const panel = openPanel(doc, { anchor: 0, head: 19 })
+    fields(panel)[1].value = "much-longer"
+    fields(panel)[1].dispatchEvent(new Event("input", { bubbles: true }))
+    type(fields(panel)[0], "alpha")
+    buttonByLabel(panel, "Replace all").click()
+    // Two replacements, each six characters longer: the end moved with them,
+    // so the last line is still outside.
+    expect(scopeOf(view.state)).toEqual({ from: 0, to: 31 })
+    expect(view.state.doc.toString()).toContain("alpha three")
+  })
+
+  it("the toggle turns the scope off", () => {
+    const panel = openPanel(doc, { anchor: 0, head: 19 })
+    buttonByLabel(panel, "Find in selection").click()
+    expect(scopeOf(view.state)).toBeNull()
+  })
+
+  it("closing the panel drops the scope", () => {
+    openPanel(doc, { anchor: 0, head: 19 })
+    expect(scopeOf(view.state)).not.toBeNull()
+    // Blur first: this environment fires `selectionchange` synchronously as the
+    // panel's field goes away, which CodeMirror sees as an update inside an
+    // update. The browser fires it after the fact.
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    closeSearchPanel(view)
+    expect(scopeOf(view.state)).toBeNull()
+  })
+
+  it("without a range, replace all still rewrites the whole document", () => {
+    const panel = openPanel(doc)
+    expect(scopeOf(view.state)).toBeNull()
+    fields(panel)[1].value = "omega"
+    fields(panel)[1].dispatchEvent(new Event("input", { bubbles: true }))
+    type(fields(panel)[0], "alpha")
+    buttonByLabel(panel, "Replace all").click()
+    expect(view.state.doc.toString()).toBe("omega one\nomega two\nomega three")
   })
 })
 

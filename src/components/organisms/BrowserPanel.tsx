@@ -475,7 +475,6 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       alive = false
       window.clearInterval(id)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [root, appendLogs, setNet])
 
   // The pane rect for the child window: centred at the chosen device size (scaled
@@ -550,7 +549,6 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       const r = useProject.getState().root
       if (r) void previewClearState(r)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncBounds, openAt, computeBounds])
 
   // Offer the credential strip when the page shows a login form, the way a
@@ -743,7 +741,6 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       alive = false
       window.clearInterval(id)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [root, openAt])
 
   /** Take the page's own URL as the truth, unless the user is mid-edit in the

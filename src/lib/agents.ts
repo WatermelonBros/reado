@@ -6,6 +6,7 @@
 import { listen } from "@tauri-apps/api/event"
 import { agentInstalled, ptyDefaultShell, ptyWrite, submitToTerminal } from "./api"
 import { syncClaudeTheme } from "./claudeTheme"
+import { useDocInfo } from "./docInfo"
 import { useNotice } from "./notice"
 import { useProject } from "./store"
 import { useTerminals } from "./terminals"
@@ -112,6 +113,34 @@ export const sanitizePromptText = (s: string): string =>
 export function clearTerminal(): void {
   const { activeId } = useTerminals.getState()
   if (activeId) void ptyWrite(activeId, "\x0c")
+}
+
+/**
+ * Send the editor's selection — or, with nothing selected, the cursor's line —
+ * to the focused terminal and run it.
+ *
+ * Opening a terminal when none is open is the point: the command is "run this",
+ * and refusing because there is no terminal yet would make the user do the
+ * boring half themselves.
+ */
+export async function runSelectionInTerminal(): Promise<void> {
+  const { view } = useDocInfo.getState()
+  if (!view) {
+    const { t } = await import("../i18n")
+    useNotice.getState().show("info", t("terminal.runSelectionEmpty"))
+    return
+  }
+  const sel = view.state.selection.main
+  const line = view.state.doc.lineAt(sel.head)
+  const text = (sel.empty ? line.text : view.state.sliceDoc(sel.from, sel.to)).trim()
+  if (!text) return
+  const terminals = useTerminals.getState()
+  // A freshly spawned PTY needs a moment before it will accept input; an
+  // existing one does not.
+  const fresh = !terminals.activeId
+  const id = terminals.activeId ?? terminals.add()
+  terminals.toggle(true)
+  submitToTerminal(id, text, fresh ? 400 : 0)
 }
 
 /** Restart the active terminal in place (kills the shell, spawns a fresh one). */

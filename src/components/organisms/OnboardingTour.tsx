@@ -225,14 +225,12 @@ export function OnboardingTour() {
       tour.start("welcome") // always from the first step
     }, 800) // let the UI settle
     return () => window.clearTimeout(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inProject])
 
   // Replay on demand (Settings → "Replay the intro tour"). Pass the first step
   // id explicitly: tour.start() with no id resumes wherever the tour last was.
   useEffect(() => {
     if (runNonce > 0) tour.start("welcome")
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runNonce])
 
   return (

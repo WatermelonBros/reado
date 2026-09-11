@@ -12,9 +12,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window"
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog"
 import { useEffect, useState } from "react"
 import { t } from "@/i18n"
+import { hideNativeTitleText } from "./api"
 import { currentOS } from "./extensions"
 import { isMacUA } from "./shortcuts"
 import { useProject, useRecents } from "./store"
+import { WORKSPACE_EXT } from "./workspaceFile"
 
 // A per-window salt keeps new-window labels unique even if two windows spawn a
 // window in the same millisecond (each runs its own module with windowSeq = 0).
@@ -31,11 +33,12 @@ export function revealAppName(): string {
   return t("tree.fileManager")
 }
 
-export function openInNewWindow(projectPath?: string, file?: string): void {
+export function openInNewWindow(projectPath?: string, file?: string, workspaceFile?: string): void {
   const label = `project_${WIN_SALT}_${Date.now().toString(36)}_${windowSeq++}`
   const params: string[] = []
   if (projectPath) params.push(`project=${encodeURIComponent(projectPath)}`)
   if (file) params.push(`open=${encodeURIComponent(file)}`)
+  if (workspaceFile) params.push(`ws=${encodeURIComponent(workspaceFile)}`)
   const hash = params.length ? `#${params.join("&")}` : ""
   const mac = currentOS() === "mac"
   new WebviewWindow(label, {
@@ -102,6 +105,23 @@ export function currentProjectPath(): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
+/** The workspace file this window was opened from, encoded in the hash. */
+export function currentWorkspaceFile(): string | null {
+  const match = window.location.hash.match(/[#&]ws=([^&]+)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+/** Open `root` as the primary folder of the workspace described by `file`. Reuses
+ *  this window when it is the empty launcher, as opening a project does. */
+export async function openWorkspaceWindow(root: string, file: string): Promise<void> {
+  useRecents.getState().touch(root)
+  if (currentProjectPath()) {
+    openInNewWindow(root, undefined, file)
+    return
+  }
+  window.location.hash = `project=${encodeURIComponent(root)}&ws=${encodeURIComponent(file)}`
+}
+
 /** A file to open on load (from an OS "open with Reado"), encoded in the hash. */
 export function currentOpenFile(): string | null {
   const match = window.location.hash.match(/[#&]open=([^&]+)/)
@@ -118,6 +138,13 @@ export function clearOpenFile(): void {
 /** Open a specific file (from an OS file association) at its project root: reuse
  *  this window if it's the empty launcher, else open a dedicated new window. */
 export async function openPathTarget(root: string, file: string): Promise<void> {
+  // A workspace file is a workspace, not a document to read: double-clicking one
+  // in Finder must open its folders, not show its JSON.
+  if (file.endsWith(`.${WORKSPACE_EXT}`)) {
+    const { openWorkspaceFile } = await import("./workspaceFile")
+    await openWorkspaceFile(file)
+    return
+  }
   useRecents.getState().touch(root)
   if (!currentProjectPath()) {
     window.location.hash = `project=${encodeURIComponent(root)}&open=${encodeURIComponent(file)}`
@@ -144,8 +171,13 @@ export async function closeProject(): Promise<void> {
  *  platforms have no native title strip but their taskbar/switcher uses it. */
 export async function setWindowTitle(title: string): Promise<void> {
   try {
-    const text = currentOS() === "mac" ? "" : title ? `${title} — Reado` : "Reado"
-    await getCurrentWindow().setTitle(text)
+    await getCurrentWindow().setTitle(title ? `${title} — Reado` : "Reado")
+    // macOS would paint that title across the content, because an overlay title
+    // bar is transparent rather than titleless — so the text is hidden natively
+    // and the string kept. The string is what the Dock's window list and the
+    // Window menu show, and with two projects open (one of them minimised) it is
+    // the only thing that tells them apart, or gets a hidden one back.
+    if (currentOS() === "mac") await hideNativeTitleText()
   } catch {
     /* non-fatal in the browser dev context */
   }

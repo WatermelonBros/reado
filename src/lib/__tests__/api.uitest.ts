@@ -22,7 +22,10 @@ const snake = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCas
 
 /** Wrappers whose command id isn't the snake_case of their name. Each one is a
  *  deliberate deviation, listed here so a *new* one can't slip in unnoticed. */
-const RENAMED: Record<string, string> = { setReadState: "set_read" }
+const RENAMED: Record<string, string> = {
+  setReadState: "set_read",
+  hideNativeTitleText: "window_hide_title_text",
+}
 
 /** Wrappers that aren't a single `invoke` — they're covered separately. */
 const NOT_A_WRAPPER = new Set(["submitToTerminal"])
@@ -64,7 +67,7 @@ describe("the command boundary", () => {
   it("still sees every wrapper — bump this when you add one", () => {
     // A tripwire on the sweep itself. Exact, not `>=`: a loosened filter or a
     // broken mock would otherwise shrink the sweep silently.
-    expect(wrappers).toHaveLength(174)
+    expect(wrappers).toHaveLength(180)
   })
 
   for (const [name, fn] of wrappers) {

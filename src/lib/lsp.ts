@@ -15,7 +15,7 @@ import {
   insertCompletionText,
   snippet,
 } from "@codemirror/autocomplete"
-import { getIndentUnit, indentUnit } from "@codemirror/language"
+import { foldService, getIndentUnit, indentUnit } from "@codemirror/language"
 import { type Diagnostic, forEachDiagnostic, setDiagnostics } from "@codemirror/lint"
 import type { Transport } from "@codemirror/lsp-client"
 import { LSPClient, LSPPlugin, signatureHelp } from "@codemirror/lsp-client"
@@ -25,6 +25,7 @@ import {
   RangeSetBuilder,
   StateEffect,
   StateField,
+  Transaction,
 } from "@codemirror/state"
 import {
   Decoration,
@@ -38,14 +39,16 @@ import {
 } from "@codemirror/view"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { create } from "zustand"
+import type { Symbol as IndexedSymbol } from "./api"
 import {
+  angularRoot,
   type Backup,
+  lspInitOptions,
   lspInstalled,
   lspSend,
   lspStart,
   lspStop,
   readFile,
-  resolvePath,
   writeBacked,
 } from "./api"
 import { toRelative } from "./comments"
@@ -55,8 +58,10 @@ import { useFileUndo } from "./fileUndo"
 import { createLogger, safeError } from "./logger"
 import { notify } from "./notice"
 import type { OutlineSymbol } from "./outline"
+import { usePreview } from "./preview"
 import { prompt } from "./prompt"
 import { noteSelfWrite } from "./readProgress"
+import { useProject, useSettings } from "./store"
 import { rootFor } from "./workspace"
 
 const log = createLogger("lsp")
@@ -707,8 +712,384 @@ const clientExtensions = () => [
   signatureHelp(),
   serverDiagnostics(),
   inlayHints(),
+  onTypeFormatting(),
+  lspFolding(),
+  documentLinks(),
+  linkedEditing(),
   answeredRequests(),
 ]
+
+// ---- Formatting as you type -------------------------------------------------
+
+/** What a server advertises for `textDocument/onTypeFormatting`. */
+interface OnTypeCaps {
+  firstTriggerCharacter: string
+  moreTriggerCharacter?: string[]
+}
+
+/** The formatting options every format request carries: the document's own
+ *  indentation, as the editor has it. */
+const formatOptions = (state: EditorState) => ({
+  tabSize: getIndentUnit(state),
+  insertSpaces: !state.facet(indentUnit).includes("\t"),
+})
+
+/**
+ * Re-format around the cursor after a character the server asked to be told
+ * about — the closing brace that should pull its line back out a level, the
+ * semicolon that ends a statement.
+ *
+ * Off unless the user turns it on, and silent when the server doesn't offer it:
+ * typing is the one place where a surprise edit is least welcome.
+ */
+export function onTypeFormatting(): Extension {
+  return EditorView.updateListener.of((u) => {
+    if (!u.docChanged || !useSettings.getState().formatOnType) return
+    const plugin = LSPPlugin.get(u.view)
+    const caps = plugin?.client.serverCapabilities?.documentOnTypeFormattingProvider as
+      | OnTypeCaps
+      | undefined
+    if (!plugin || !caps) return
+    const triggers = new Set([caps.firstTriggerCharacter, ...(caps.moreTriggerCharacter ?? [])])
+    let typed: { ch: string; pos: number } | null = null
+    for (const tr of u.transactions) {
+      if (!tr.isUserEvent("input.type")) continue
+      tr.changes.iterChanges((_fromA, _toA, _fromB, toB, inserted) => {
+        const text = inserted.toString()
+        if (text.length === 1 && triggers.has(text)) typed = { ch: text, pos: toB }
+      })
+    }
+    if (typed) void formatOnType(u.view, plugin, typed)
+  })
+}
+
+async function formatOnType(
+  view: EditorView,
+  plugin: LSPPlugin,
+  typed: { ch: string; pos: number },
+): Promise<void> {
+  const before = view.state.doc
+  try {
+    plugin.client.sync()
+    const edits = await plugin.client.request<object, LspTextEdit[] | null>(
+      "textDocument/onTypeFormatting",
+      {
+        textDocument: { uri: plugin.uri },
+        position: plugin.toPosition(typed.pos, before),
+        ch: typed.ch,
+        options: formatOptions(view.state),
+      },
+    )
+    // The user types faster than a server answers. Offsets computed against a
+    // document that has moved on would corrupt it.
+    if (!edits?.length || view.state.doc !== before) return
+    view.dispatch({
+      changes: edits.map((e) => ({
+        from: plugin.fromPosition(e.range.start, before),
+        to: plugin.fromPosition(e.range.end, before),
+        insert: e.newText,
+      })),
+      userEvent: "format.onType",
+    })
+  } catch (e) {
+    log.warn("on-type formatting failed", { error: safeError(e) })
+  }
+}
+
+// ---- Whole-document answers (folding ranges, links) -------------------------
+
+/**
+ * A list the server computes for the whole document, refreshed when the document
+ * changes.
+ *
+ * Two features want the same shape: ask once per document version, hold the
+ * answer, throw it away the moment an edit makes its offsets wrong. `null` means
+ * "nothing to use yet" — never "the server said no" — so every reader falls back
+ * to what Reado does without a server instead of waiting.
+ */
+function documentFeature<T>(method: string, supported: (caps: ServerCaps) => boolean) {
+  const set = StateEffect.define<T[] | null>()
+  const field = StateField.define<T[] | null>({
+    create: () => null,
+    update(value, tr) {
+      for (const e of tr.effects) if (e.is(set)) return e.value
+      // An edit invalidates every offset computed against the old text.
+      return tr.docChanged ? null : value
+    },
+  })
+  const fetcher = ViewPlugin.fromClass(
+    class {
+      pending = -1
+      constructor(view: EditorView) {
+        this.schedule(view)
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged) this.schedule(u.view)
+      }
+      schedule(view: EditorView) {
+        if (this.pending > -1) clearTimeout(this.pending)
+        this.pending = window.setTimeout(() => {
+          this.pending = -1
+          this.fetch(view)
+        }, 400)
+      }
+      fetch(view: EditorView) {
+        const plugin = LSPPlugin.get(view)
+        if (!plugin || !supported(plugin.client.serverCapabilities as ServerCaps)) return
+        const before = view.state.doc
+        plugin.client.sync()
+        plugin.client
+          .request<object, T[] | null>(method, { textDocument: { uri: plugin.uri } })
+          .then((res) => {
+            // The user edited while the server thought: these offsets describe a
+            // document that no longer exists.
+            if (view.state.doc !== before) return
+            view.dispatch({ effects: set.of(res ?? []) })
+          })
+          .catch((e) => log.warn(`${method} failed`, { error: safeError(e) }))
+      }
+      destroy() {
+        if (this.pending > -1) clearTimeout(this.pending)
+      }
+    },
+  )
+  return { field, extension: [field, fetcher] as Extension }
+}
+
+/** The server capabilities these features read. */
+interface ServerCaps {
+  foldingRangeProvider?: boolean | object
+  documentLinkProvider?: { resolveProvider?: boolean }
+  linkedEditingRangeProvider?: boolean | object
+}
+
+// ---- Folding ranges ---------------------------------------------------------
+
+/** An LSP `FoldingRange`. Lines are 0-based; the characters are optional. */
+interface FoldingRange {
+  startLine: number
+  startCharacter?: number
+  endLine: number
+  endCharacter?: number
+  kind?: string
+}
+
+const folding = documentFeature<FoldingRange>(
+  "textDocument/foldingRange",
+  (caps) => !!caps?.foldingRangeProvider,
+)
+
+/**
+ * Folding by what the server knows, with the syntax tree as the floor.
+ *
+ * The syntax folder knows nodes: a function body folds, a block of imports or a
+ * `#region` does not, because neither is one node. Returning null for a line the
+ * server says nothing about leaves those to the folder that was already there,
+ * so this can only add.
+ */
+export const lspFolding = (): Extension => [
+  folding.extension,
+  foldService.of((state, lineStart, lineEnd) => {
+    const ranges = state.field(folding.field, false)
+    if (!ranges?.length) return null
+    const line = state.doc.lineAt(lineStart)
+    const match = ranges.find((r) => r.startLine === line.number - 1 && r.endLine > r.startLine)
+    if (!match) return null
+    const endLine = state.doc.line(Math.min(match.endLine + 1, state.doc.lines))
+    const from = match.startCharacter != null ? line.from + match.startCharacter : lineEnd
+    const to = match.endCharacter != null ? endLine.from + match.endCharacter : endLine.to
+    return to > from ? { from, to } : null
+  }),
+]
+
+// ---- Document links ---------------------------------------------------------
+
+/** An LSP `DocumentLink`. `target` may be absent until resolved. */
+export interface DocumentLink {
+  range: { start: LspPos; end: LspPos }
+  target?: string
+  tooltip?: string
+  data?: unknown
+}
+
+const links = documentFeature<DocumentLink>(
+  "textDocument/documentLink",
+  (caps) => !!caps?.documentLinkProvider,
+)
+
+export const documentLinks = (): Extension => links.extension
+
+/** The server-reported link covering `pos`, as document offsets. */
+export function documentLinkAt(
+  view: EditorView,
+  pos: number,
+): { from: number; to: number; link: DocumentLink } | null {
+  const all = view.state.field(links.field, false)
+  const plugin = LSPPlugin.get(view)
+  if (!all?.length || !plugin) return null
+  for (const link of all) {
+    const from = plugin.fromPosition(link.range.start)
+    const to = plugin.fromPosition(link.range.end)
+    if (pos >= from && pos <= to) return { from, to, link }
+  }
+  return null
+}
+
+/**
+ * Follow a document link: a file in the editor, a web address in the browser
+ * pane. A link the server has not resolved is resolved now — at the moment it is
+ * used, not for every link in the file on the chance one is clicked.
+ */
+export async function openDocumentLink(view: EditorView, link: DocumentLink): Promise<boolean> {
+  const plugin = LSPPlugin.get(view)
+  let target = link.target
+  if (!target && plugin) {
+    try {
+      const resolved = await plugin.client.request<DocumentLink, DocumentLink | null>(
+        "documentLink/resolve",
+        link,
+      )
+      target = resolved?.target
+    } catch (e) {
+      log.warn("documentLink/resolve failed", { error: safeError(e) })
+    }
+  }
+  if (!target) {
+    notify("info", t("lsp.linkUnresolved"))
+    return false
+  }
+  if (target.startsWith("file:")) {
+    // `#L12` / `#12` — the line, when the server names one.
+    const [uri, fragment] = target.split("#")
+    const line = fragment ? Number(fragment.replace(/^L/, "")) : Number.NaN
+    useProject.getState().open(fromUri(uri), Number.isFinite(line) ? line : undefined)
+    return true
+  }
+  if (/^https?:/.test(target)) {
+    usePreview.getState().openPane(target)
+    return true
+  }
+  notify("info", t("lsp.linkUnopenable", { target }))
+  return false
+}
+
+// ---- Linked editing ---------------------------------------------------------
+
+/** The ranges the server says must stay identical, and the document they were
+ *  computed against. */
+const setLinked = StateEffect.define<{ from: number; to: number }[] | null>()
+
+const linkedRanges = StateField.define<{ from: number; to: number }[] | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(setLinked)) return e.value
+    if (!value) return null
+    // Mapped through edits so a mirrored change keeps the partner correct; a
+    // change that is not inside one of the ranges drops the link (`mirrorLinked`
+    // is what decides that, before this runs).
+    return value.map((r) => ({
+      from: tr.changes.mapPos(r.from, 1),
+      to: tr.changes.mapPos(r.to, -1),
+    }))
+  },
+  provide: (f) =>
+    EditorView.decorations.from(f, (ranges) =>
+      ranges?.length
+        ? Decoration.set(
+            ranges.map((r) => Decoration.mark({ class: "cm-linked-range" }).range(r.from, r.to)),
+            true,
+          )
+        : Decoration.none,
+    ),
+})
+
+/** Ask where the cursor's linked ranges are, when the cursor has moved out of
+ *  the ones we hold. */
+const linkedFetcher = ViewPlugin.fromClass(
+  class {
+    pending = -1
+    update(u: ViewUpdate) {
+      if (!u.selectionSet && !u.docChanged) return
+      const held = u.state.field(linkedRanges, false)
+      const head = u.state.selection.main.head
+      if (held?.some((r) => head >= r.from && head <= r.to)) return
+      if (this.pending > -1) clearTimeout(this.pending)
+      this.pending = window.setTimeout(() => {
+        this.pending = -1
+        this.fetch(u.view)
+      }, 150)
+    }
+    fetch(view: EditorView) {
+      const plugin = LSPPlugin.get(view)
+      const caps = plugin?.client.serverCapabilities as ServerCaps | undefined
+      if (!plugin || !caps?.linkedEditingRangeProvider) return
+      const held = view.state.field(linkedRanges, false)
+      const before = view.state.doc
+      const head = view.state.selection.main.head
+      plugin.client.sync()
+      plugin.client
+        .request<object, { ranges: Array<{ start: LspPos; end: LspPos }> } | null>(
+          "textDocument/linkedEditingRange",
+          { textDocument: { uri: plugin.uri }, position: plugin.toPosition(head) },
+        )
+        .then((res) => {
+          if (view.state.doc !== before) return
+          const ranges =
+            res?.ranges.map((r) => ({
+              from: plugin.fromPosition(r.start),
+              to: plugin.fromPosition(r.end),
+            })) ?? null
+          if (!ranges && !held) return
+          view.dispatch({ effects: setLinked.of(ranges?.length ? ranges : null) })
+        })
+        .catch((e) => log.warn("linkedEditingRange failed", { error: safeError(e) }))
+    }
+    destroy() {
+      if (this.pending > -1) clearTimeout(this.pending)
+    }
+  },
+)
+
+/**
+ * Apply an edit made inside one linked range to the others, in the same
+ * transaction — so the pair can never half-change, and one undo takes back both.
+ *
+ * An edit that leaves the range (a paste over its end, a selection spanning it)
+ * mirrors nothing and drops the link: the server's answer described text that is
+ * no longer there.
+ */
+const mirrorLinked = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged || tr.annotation(Transaction.remote)) return tr
+  const ranges = tr.startState.field(linkedRanges, false)
+  if (!ranges || ranges.length < 2) return tr
+  const edits: Array<{ from: number; to: number; insert: string }> = []
+  let inside: { from: number; to: number } | null = null
+  let escaped = false
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    const home = ranges.find((r) => fromA >= r.from && toA <= r.to)
+    if (!home || (inside && inside !== home)) {
+      escaped = true
+      return
+    }
+    inside = home
+    for (const other of ranges) {
+      if (other === home) continue
+      // Mapped through this transaction: the mirrored change is applied to the
+      // document the transaction *produces*, where everything after the edit has
+      // already moved.
+      edits.push({
+        from: tr.changes.mapPos(other.from + (fromA - home.from), 1),
+        to: tr.changes.mapPos(other.from + (toA - home.from), 1),
+        insert: inserted.toString(),
+      })
+    }
+  })
+  if (escaped) return [tr, { effects: setLinked.of(null) }]
+  if (!edits.length) return tr
+  return [tr, { changes: edits, sequential: true }]
+})
+
+export const linkedEditing = (): Extension => [linkedRanges, linkedFetcher, mirrorLinked]
 
 // ---- Completion, with the import it needs -------------------------------
 
@@ -1280,6 +1661,50 @@ async function applyWorkspaceEdit(plugin: LSPPlugin, edit: LspWorkspaceEdit): Pr
   return changed
 }
 
+/** The three shapes a server may answer `textDocument/prepareRename` with. */
+type PrepareRename =
+  | { start: LspPos; end: LspPos }
+  | { range: { start: LspPos; end: LspPos }; placeholder?: string }
+  | { defaultBehavior: boolean }
+  | null
+
+/**
+ * The range the server would rename, asked before anyone is prompted.
+ *
+ * `wordAt()` decides what a symbol is from the text alone, and a word is letters
+ * and underscores: on `@Component` it picks `Component`, on `$scope` it picks
+ * `scope`, on a CSS `--brand-color` one fragment of three. The server knows the
+ * real range, and knows when there isn't one.
+ *
+ * `"refused"` is the server saying this position cannot be renamed; `null` is
+ * "no answer to use" — no prepare support, an error, or `defaultBehavior`, all of
+ * which mean the word guess stands.
+ */
+async function preparedRange(
+  plugin: LSPPlugin,
+  pos: number,
+): Promise<{ from: number; to: number } | "refused" | null> {
+  const rename = (
+    plugin.client.serverCapabilities as {
+      renameProvider?: boolean | { prepareProvider?: boolean }
+    } | null
+  )?.renameProvider
+  if (typeof rename !== "object" || !rename?.prepareProvider) return null
+  try {
+    const res = await plugin.client.request<object, PrepareRename>("textDocument/prepareRename", {
+      textDocument: { uri: plugin.uri },
+      position: plugin.toPosition(pos),
+    })
+    if (res === null) return "refused"
+    const range = res && "range" in res ? res.range : res && "start" in res ? res : null
+    if (!range) return null
+    return { from: plugin.fromPosition(range.start), to: plugin.fromPosition(range.end) }
+  } catch (e) {
+    log.warn("prepareRename failed", { error: safeError(e) })
+    return null
+  }
+}
+
 /**
  * Rename the symbol at the cursor — everywhere it is used, not just here.
  *
@@ -1303,10 +1728,20 @@ export function renameSymbolAt(view: EditorView): boolean {
   // server that has answered and said no is a server that can't rename.
   const caps = plugin.client.serverCapabilities
   if (caps && !caps.renameProvider) return false
-  const word = view.state.wordAt(view.state.selection.main.head)
+  const head = view.state.selection.main.head
+  const word = view.state.wordAt(head)
   if (!word) return false
-  const current = view.state.sliceDoc(word.from, word.to)
   void (async () => {
+    // Ask the server what it would rename before asking the user for a name: a
+    // refusal that arrives after the prompt is a question that was never worth
+    // asking, and a range that disagrees with the server renames the wrong text.
+    const prepared = await preparedRange(plugin, head)
+    if (prepared === "refused") {
+      notify("info", t("lsp.renameRefused"))
+      return
+    }
+    const range = prepared ?? word
+    const current = view.state.sliceDoc(range.from, range.to)
     const next = await prompt({
       title: t("lsp.renameTitle", { name: current }),
       value: current,
@@ -1319,7 +1754,7 @@ export function renameSymbolAt(view: EditorView): boolean {
         "textDocument/rename",
         {
           textDocument: { uri: plugin.uri },
-          position: plugin.toPosition(word.from),
+          position: plugin.toPosition(range.from),
           newName: next,
         },
       )
@@ -1517,6 +1952,59 @@ interface Conn {
 }
 const conns = new Map<string, Promise<Conn>>()
 
+/** An LSP `SymbolInformation` (a `location`) or `WorkspaceSymbol` (a `location`
+ *  that may be just a `uri`). Servers send one shape or the other. */
+interface LspWorkspaceSymbol {
+  name: string
+  kind?: number
+  containerName?: string
+  location: { uri: string; range?: { start: LspPos } } | { uri: string }
+}
+
+/**
+ * Ask every running language server for the project's symbols matching `query`.
+ *
+ * Reado's own index finds what is written literally in the project's source. A
+ * server finds what a macro generated, what a dependency exports, and what is
+ * spelled differently from its declaration — so the picker asks both and merges.
+ * An empty answer (no server, a server that doesn't offer it, an error) is
+ * nothing added, never an error shown: the index has already answered.
+ */
+export async function lspWorkspaceSymbols(query: string): Promise<IndexedSymbol[]> {
+  const clients = await Promise.all([...conns.values()].map((p) => p.catch(() => null)))
+  const answers = await Promise.all(
+    clients
+      .filter((c) => c !== null)
+      .map(async (conn) => {
+        if (!conn.client.serverCapabilities?.workspaceSymbolProvider) return []
+        try {
+          const res = await conn.client.request<object, LspWorkspaceSymbol[] | null>(
+            "workspace/symbol",
+            { query },
+          )
+          return res ?? []
+        } catch (e) {
+          log.warn("workspace/symbol failed", { error: safeError(e) })
+          return []
+        }
+      }),
+  )
+  // Deduped: with two servers attached (a workspace with a TypeScript and a Rust
+  // root, say) a symbol either of them can see is reported twice.
+  const out = new Map<string, IndexedSymbol>()
+  for (const s of answers.flat()) {
+    const location = s.location as { uri: string; range?: { start: LspPos } }
+    const symbol: IndexedSymbol = {
+      name: s.name,
+      kind: SYMBOL_KIND[s.kind ?? 0] ?? "variable",
+      path: fromUri(location.uri),
+      line: (location.range?.start.line ?? 0) + 1,
+    }
+    out.set(`${symbol.name}\u0000${symbol.path}\u0000${symbol.line}`, symbol)
+  }
+  return [...out.values()]
+}
+
 /**
  * Tell every server that a file changed underneath it.
  *
@@ -1565,6 +2053,10 @@ export function notifyWatchedFileChanged(root: string, relPath: string): void {
 // at most once until it successfully reconnects (the flag is cleared on connect).
 const crashNotified = new Set<string>()
 
+/** When a connection last failed, so a dead server isn't respawned per keystroke. */
+const failedAt = new Map<string, number>()
+const RETRY_COOLDOWN_MS = 30_000
+
 /** Drop a connection and unsubscribe both its listeners (idempotent). */
 function dropConn(key: string): void {
   const p = conns.get(key)
@@ -1610,11 +2102,33 @@ function connKey(serverId: string, root: string): string {
   return `${serverId}:${root.replace(/[^A-Za-z0-9\-/:_]/g, "_")}:${(h >>> 0).toString(36)}`
 }
 
+/** Splice `options` into an outgoing `initialize` request; anything else passes
+ * through untouched (and unparsed — every keystroke goes through here). */
+function withInitOptions(message: string, options: Record<string, unknown> | null): string {
+  if (!options || !message.includes('"method":"initialize"')) return message
+  try {
+    const msg = JSON.parse(message) as { method?: string; params?: Record<string, unknown> }
+    if (msg.method !== "initialize" || !msg.params) return message
+    msg.params.initializationOptions = options
+    return JSON.stringify(msg)
+  } catch {
+    return message
+  }
+}
+
 /** Get (or create) a connected client for a server + project root. */
 function connect(server: ServerDef, root: string): Promise<Conn> {
   const key = connKey(server.id, root)
   const existing = conns.get(key)
   if (existing) return existing
+  // A server that just failed fails again the same way, and every keystroke,
+  // hover and file open asks for one: without this, a missing or non-starting
+  // server spawned a fresh process and raised a fresh error toast every few
+  // seconds for as long as the file stayed open.
+  const failed = failedAt.get(key)
+  if (failed !== undefined && Date.now() - failed < RETRY_COOLDOWN_MS) {
+    return Promise.reject(new Error(`${server.id} failed to start recently`))
+  }
 
   const p = (async () => {
     // Spawn the server first; this throws if it isn't installed/allowed.
@@ -1651,8 +2165,13 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
       }
     })
     await unlisten // subscription live before we send `initialize`
+    // Options only the backend can work out — which `tsserver.js` this project's
+    // TypeScript is, for one. `@codemirror/lsp-client` sends no
+    // `initializationOptions` and exposes no hook for them, so they go in as the
+    // `initialize` request passes through here.
+    const initOptions = await lspInitOptions(server.id, root).catch(() => null)
     const transport: Transport = {
-      send: (m) => void lspSend(key, m),
+      send: (m) => void lspSend(key, withInitOptions(m, initOptions)),
       subscribe: (h) => handlers.add(h),
       unsubscribe: (h) => handlers.delete(h),
     }
@@ -1670,6 +2189,10 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
     // console, the user was told nothing, and `lspAttached` went on reporting a
     // live server for a process that had already gone. Take the connection down
     // so the next interaction can start a fresh one, and say so once.
+    client.initializing.then(
+      () => failedAt.delete(key),
+      () => failedAt.set(key, Date.now()),
+    )
     client.initializing.catch((e: unknown) => {
       log.error("server failed to initialize", { server: server.id, error: String(e) })
       dropConn(key)
@@ -1688,21 +2211,23 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
   p.catch((e) => {
     log.error("client connect failed", { server: server.id, error: String(e) })
     conns.delete(key)
+    failedAt.set(key, Date.now())
   })
   return p
 }
 
 // Angular has no extension of its own — it shares .ts/.html with TypeScript and
-// HTML. Detect an Angular project (angular.json present) once per root so we can
-// route those files to the Angular server instead.
-const angularCache = new Map<string, Promise<boolean>>()
-function isAngularProject(root: string): Promise<boolean> {
-  let p = angularCache.get(root)
+// HTML. The project that owns a file is the nearest `angular.json` at or above
+// it, which is also the root that server gets: a monorepo keeps its apps a level
+// down, and may hold more than one. Cached per directory, since the answer is
+// the same for every file in it and this is asked on every file open.
+const angularCache = new Map<string, Promise<string | null>>()
+function angularProject(root: string, path: string): Promise<string | null> {
+  const dir = path.slice(0, path.lastIndexOf("/")) || root
+  let p = angularCache.get(dir)
   if (!p) {
-    p = resolvePath(root, "angular.json")
-      .then((r) => r !== null)
-      .catch(() => false)
-    angularCache.set(root, p)
+    p = angularRoot(root, path).catch(() => null)
+    angularCache.set(dir, p)
   }
   return p
 }
@@ -1770,13 +2295,17 @@ function checkInstalled(id: string, root: string): Promise<boolean> {
 export async function lspSupport(root: string, path: string): Promise<Extension | null> {
   const ext = extOf(path)
   let server = serverFor(path)
-  // In an Angular project, .ts/.html go to the Angular language server.
+  // In an Angular project, .ts/.html go to the Angular language server — rooted
+  // at that project, not at the folder that happens to be open above it.
   if (
     (ext === "ts" || ext === "html" || ext === "htm") &&
-    useExtensions.getState().isEnabled("angular") &&
-    (await isAngularProject(root))
+    useExtensions.getState().isEnabled("angular")
   ) {
-    server = { id: "angular", exts: server?.exts ?? [ext] }
+    const ngRoot = await angularProject(root, path)
+    if (ngRoot) {
+      server = { id: "angular", exts: server?.exts ?? [ext] }
+      root = ngRoot
+    }
   }
   if (!server) return null
   if (!(await checkInstalled(server.id, root))) return null
@@ -1802,6 +2331,7 @@ if (import.meta.hot) {
       void lspStop(key).catch(() => {})
     }
     crashNotified.clear()
+    failedAt.clear()
     useDiagnostics.getState().reset()
   })
 }

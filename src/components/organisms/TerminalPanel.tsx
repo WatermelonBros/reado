@@ -11,6 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react"
@@ -20,6 +21,7 @@ import { Button } from "@/components/atoms/Button"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import {
+  ChevronIcon,
   ClaudeIcon,
   CloseIcon,
   CodexIcon,
@@ -39,8 +41,10 @@ import { AGENT_BIN, AGENT_ORDER, type Agent, launchAgent } from "@/lib/agents"
 import { agentInstalled } from "@/lib/api"
 import { toRelative, useComments } from "@/lib/comments"
 import { findPanel, useLayout } from "@/lib/layout"
+import { useFlip, usePointerReorder } from "@/lib/pointerReorder"
 import { prompt } from "@/lib/prompt"
 import { useProject, useSettings } from "@/lib/store"
+import { parseProfiles } from "@/lib/terminalProfiles"
 import { useTerminals } from "@/lib/terminals"
 
 // Brand colours for the agent launchers.
@@ -73,6 +77,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
   const split = useTerminals((s) => s.split)
   const remove = useTerminals((s) => s.remove)
   const removeGroup = useTerminals((s) => s.removeGroup)
+  const moveGroup = useTerminals((s) => s.moveGroup)
   const setActive = useTerminals((s) => s.setActive)
   const setActiveGroup = useTerminals((s) => s.setActiveGroup)
   const setTitle = useTerminals((s) => s.setTitle)
@@ -93,6 +98,14 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
     (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
   )
   const { t } = useTranslation()
+
+  // Drag-to-reorder the tabs (pointer-based; HTML5 DnD is hijacked by Tauri's
+  // OS drop handler — same reason the editor tabs use this).
+  const { dragging, over, onPointerDown } = usePointerReorder("x", (from, to, after) =>
+    moveGroup(from, to, after),
+  )
+  const tabsRef = useRef<HTMLDivElement>(null)
+  useFlip(tabsRef, groups.map((g) => g.id).join(" "))
 
   const activeGroup = groups.find((g) => g.id === activeGroupId) ?? null
   const titleOf = (paneId: string) => sessions.find((p) => p.id === paneId)?.title ?? "Terminal"
@@ -128,6 +141,9 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
   const [reviewOpen, setReviewOpen] = useState(false)
   const [auditTarget, setAuditTarget] = useState<AuditTarget | null>(null)
   const [paneMenu, setPaneMenu] = useState<{ x: number; y: number; paneId: string } | null>(null)
+  const [profileMenu, setProfileMenu] = useState<{ x: number; y: number } | null>(null)
+  const profileLines = useSettings((s) => s.terminalProfiles)
+  const profiles = useMemo(() => parseProfiles(profileLines), [profileLines])
 
   // Right-click a pane → terminal management menu (also suppresses the global
   // edit menu / native menu for this area).
@@ -272,16 +288,28 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
       {/* Tab bar. */}
       <div className="flex h-9 flex-none items-center gap-1 border-b border-line pr-2 pl-1">
         <div
+          ref={tabsRef}
           role="tablist"
           className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {groups.map((g) => (
             <div
               key={g.id}
-              className={`group flex items-center gap-2 rounded-md px-3 py-1 text-xs whitespace-nowrap transition-colors ${
+              data-reorder-id={g.id}
+              onPointerDown={onPointerDown(g.id)}
+              onContextMenu={(e) => openPaneMenu(e, g.paneIds[0])}
+              className={`group relative flex items-center gap-2 rounded-md px-3 py-1 text-xs whitespace-nowrap transition-colors ${
                 g.id === activeGroupId ? "bg-surface text-ink" : "text-muted hover:text-ink"
-              }`}
+              } ${dragging === g.id ? "opacity-40" : ""}`}
             >
+              {over?.id === g.id && (
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-accent ${
+                    over.after ? "right-0" : "left-0"
+                  }`}
+                />
+              )}
               <button
                 type="button"
                 role="tab"
@@ -311,6 +339,19 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
             size="sm"
             className="ml-1"
           />
+          {/* The profiles, when there are any: the button itself keeps opening
+              the default, the caret asks which. */}
+          {profiles.length > 0 && (
+            <IconButton
+              label={t("terminal.profiles")}
+              icon={<ChevronIcon className="h-3 w-3 rotate-90" />}
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect()
+                setProfileMenu({ x: r.left, y: r.bottom })
+              }}
+              size="sm"
+            />
+          )}
         </div>
 
         {/* Send review (collapses to icon-only when narrow). */}
@@ -410,7 +451,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
             // A pane from another group: keep it mounted but out of layout.
             return (
               <div key={s.id} className="hidden">
-                <Terminal id={s.id} cwd={s.cwd ?? root} active={false} />
+                <Terminal id={s.id} cwd={s.cwd ?? root} active={false} profile={s.profile} />
               </div>
             )
           }
@@ -427,7 +468,12 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
                 boxShadow: multi && s.id === activeId ? "inset 0 0 0 1px var(--accent)" : undefined,
               }}
             >
-              <Terminal id={s.id} cwd={s.cwd ?? root} active={s.id === activeId} />
+              <Terminal
+                id={s.id}
+                cwd={s.cwd ?? root}
+                active={s.id === activeId}
+                profile={s.profile}
+              />
               {multi && (
                 <IconButton
                   size="xs"
@@ -466,6 +512,14 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
           y={paneMenu.y}
           items={paneMenuItems()}
           onClose={() => setPaneMenu(null)}
+        />
+      )}
+      {profileMenu && (
+        <ContextMenu
+          x={profileMenu.x}
+          y={profileMenu.y}
+          items={profiles.map((p) => ({ label: p.name, onSelect: () => add(undefined, p.name) }))}
+          onClose={() => setProfileMenu(null)}
         />
       )}
 

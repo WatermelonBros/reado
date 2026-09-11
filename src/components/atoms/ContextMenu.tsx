@@ -98,12 +98,20 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       onClose()
     }
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
-    window.addEventListener("click", close)
+    // The click listener waits a frame. React flushes the state update that
+    // *opened* the menu while the opening click is still on its way to the
+    // window, so a menu opened by a left click (the terminal's profile picker)
+    // would receive that very click and close before it was ever seen. A menu
+    // opened by a right click never had the problem — `contextmenu` is not
+    // followed by a `click` — which is why this only showed up under a real
+    // mouse.
+    const armed = requestAnimationFrame(() => window.addEventListener("click", close))
     window.addEventListener("resize", close)
     window.addEventListener("blur", close)
     document.addEventListener("scroll", close, true)
     window.addEventListener("keydown", onKey)
     return () => {
+      cancelAnimationFrame(armed)
       window.removeEventListener("click", close)
       window.removeEventListener("resize", close)
       window.removeEventListener("blur", close)

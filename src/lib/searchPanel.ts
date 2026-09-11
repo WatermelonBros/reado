@@ -8,18 +8,18 @@
  * the app's Tailwind utilities.
  */
 
-import {
-  closeSearchPanel,
-  findNext,
-  findPrevious,
-  getSearchQuery,
-  replaceAll,
-  replaceNext,
-  SearchQuery,
-  setSearchQuery,
-} from "@codemirror/search"
+import { closeSearchPanel, getSearchQuery, SearchQuery, setSearchQuery } from "@codemirror/search"
 import type { EditorView, Panel } from "@codemirror/view"
 import { t } from "@/i18n"
+import {
+  countIn,
+  findNextInScope,
+  findPrevInScope,
+  replaceAllInScope,
+  replaceNextInScope,
+  scopeOf,
+  setSearchScope,
+} from "./searchScope"
 
 const svg = (path: string) =>
   `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`
@@ -67,11 +67,15 @@ export function readoSearchPanel(view: EditorView): Panel {
   let wholeWord = initial.wholeWord
   let regexp = initial.regexp
 
+  // The library seeds the query with whatever is selected, newlines and all.
+  // When that selection is a *scope* (see `searchScope`), the field starts empty
+  // instead — the region was the point, not the text in it.
+  const scoped = scopeOf(view.state) !== null
   const searchInput = el("textarea", FIELD, {
     rows: 1,
     placeholder: t("search.placeholder"),
     spellcheck: false,
-    value: initial.search,
+    value: scoped ? "" : initial.search,
   })
   const replaceInput = el("textarea", FIELD, {
     rows: 1,
@@ -111,8 +115,15 @@ export function readoSearchPanel(view: EditorView): Panel {
       onEnter()
     }
   }
-  searchInput.addEventListener("keydown", (e) => onKeydown(e, () => findNext(view)))
-  replaceInput.addEventListener("keydown", (e) => onKeydown(e, () => replaceNext(view)))
+  searchInput.addEventListener("keydown", (e) => onKeydown(e, () => findNextInScope(view)))
+  replaceInput.addEventListener("keydown", (e) => onKeydown(e, () => replaceNextInScope(view)))
+
+  /** A toggle's look and its announced state, in one place — the panel repaints
+   *  the selection toggle from the editor's own state as well as on click. */
+  const repaint = (btn: HTMLButtonElement, on: boolean) => {
+    btn.className = `${FLAG_BASE} ${on ? FLAG_ON : FLAG_OFF}`
+    btn.setAttribute("aria-pressed", String(on))
+  }
 
   const flag = (label: string, title: string, get: () => boolean, set: (v: boolean) => void) => {
     const btn = el("button", `${FLAG_BASE} ${get() ? FLAG_ON : FLAG_OFF}`, {
@@ -124,8 +135,7 @@ export function readoSearchPanel(view: EditorView): Panel {
     btn.setAttribute("aria-pressed", String(get()))
     btn.addEventListener("click", () => {
       set(!get())
-      btn.className = `${FLAG_BASE} ${get() ? FLAG_ON : FLAG_OFF}`
-      btn.setAttribute("aria-pressed", String(get()))
+      repaint(btn, get())
       commit()
       searchInput.focus()
     })
@@ -158,6 +168,20 @@ export function readoSearchPanel(view: EditorView): Panel {
     (v) => (regexp = v),
   )
 
+  // Find in selection. Not part of the `SearchQuery` — the library has no notion
+  // of a scope — so it sets a range in the editor's state that every command in
+  // this panel honours. The selection is frozen at the moment it is turned on:
+  // the first Find Next selects a match *inside* the range, and a scope that
+  // followed the selection would destroy itself on its own first use.
+  const scopeOn = () => scopeOf(view.state) !== null
+  const setScope = (on: boolean) => {
+    const sel = view.state.selection.main
+    view.dispatch({
+      effects: setSearchScope.of(on && !sel.empty ? { from: sel.from, to: sel.to } : null),
+    })
+  }
+  const scopeBtn = flag("[]", t("search.inSelection"), scopeOn, setScope)
+
   // "3 of 17", like every other editor's find bar. Counting is capped: on a
   // very large document an exact total is not worth a full scan per keystroke,
   // so past the cap it reads "1000+" instead of lying or stalling.
@@ -167,6 +191,12 @@ export function readoSearchPanel(view: EditorView): Panel {
     const query = getSearchQuery(view.state)
     if (!query.search || !query.valid) {
       counter.textContent = ""
+      return
+    }
+    const range = scopeOf(view.state)
+    if (range) {
+      const { current, total } = countIn(view.state, range)
+      counter.textContent = total ? t("search.count", { current, total }) : t("search.noResults")
       return
     }
     const sel = view.state.selection.main
@@ -184,18 +214,18 @@ export function readoSearchPanel(view: EditorView): Panel {
     counter.textContent = total ? t("search.count", { current, total }) : t("search.noResults")
   }
 
-  const prevBtn = iconBtn(CHEVRON_UP, t("search.prev"), () => findPrevious(view))
-  const nextBtn = iconBtn(CHEVRON_DOWN, t("search.next"), () => findNext(view))
+  const prevBtn = iconBtn(CHEVRON_UP, t("search.prev"), () => findPrevInScope(view))
+  const nextBtn = iconBtn(CHEVRON_DOWN, t("search.next"), () => findNextInScope(view))
   const closeBtn = iconBtn(CLOSE, t("settings.close"), () => {
     closeSearchPanel(view)
     view.focus()
   })
 
-  const replaceBtn = iconBtn(REPLACE, t("search.replaceOne"), () => replaceNext(view))
-  const replaceAllBtn = iconBtn(REPLACE_ALL, t("search.replaceAll"), () => replaceAll(view))
+  const replaceBtn = iconBtn(REPLACE, t("search.replaceOne"), () => replaceNextInScope(view))
+  const replaceAllBtn = iconBtn(REPLACE_ALL, t("search.replaceAll"), () => replaceAllInScope(view))
 
   const toggles = el("div", "flex flex-none items-center gap-0.5")
-  toggles.append(caseBtn, wordBtn, reBtn)
+  toggles.append(caseBtn, wordBtn, reBtn, scopeBtn)
   const nav = el("div", "flex flex-none items-center gap-0.5")
   nav.append(prevBtn, nextBtn, closeBtn)
 
@@ -222,17 +252,26 @@ export function readoSearchPanel(view: EditorView): Panel {
       ) {
         renderCount()
       }
+      // The scope can end from outside the panel (an edit that collapses it), so
+      // the toggle reads the editor rather than remembering.
+      repaint(scopeBtn, scopeOn())
+      // A scope needs something to scope: with no range and an empty selection
+      // there is nothing the button could mean.
+      scopeBtn.disabled = !scopeOn() && u.state.selection.main.empty
     },
     mount() {
-      // Seed from a single-line selection if the field is empty (VS Code-like).
-      if (!searchInput.value) {
+      // Take the library's seeded query back when the selection was a scope. A
+      // panel is mounted during an editor update, where dispatching is refused —
+      // hence the microtask.
+      if (scoped && initial.search) queueMicrotask(commit)
+      else if (!searchInput.value) {
         const sel = view.state.sliceDoc(
           view.state.selection.main.from,
           view.state.selection.main.to,
         )
         if (sel && !sel.includes("\n")) {
           searchInput.value = sel
-          commit()
+          queueMicrotask(commit)
         }
       }
       autoRows(searchInput)

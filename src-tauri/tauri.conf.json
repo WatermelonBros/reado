@@ -123,6 +123,12 @@
         "name": "Text or source file",
         "description": "Open with Reado",
         "role": "Editor"
+      },
+      {
+        "ext": ["reado-workspace"],
+        "name": "Reado workspace",
+        "description": "A set of folders worked on together",
+        "role": "Editor"
       }
     ]
   },

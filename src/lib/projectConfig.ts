@@ -29,10 +29,13 @@ import { useSettings } from "./store"
  */
 export const PROJECT_KEYS = [
   "wrap",
+  "wrapColumn",
   "focusMode",
   "codeFont",
   "versionReado",
   "formatOnSave",
+  "formatOnPaste",
+  "formatOnType",
   "trimTrailingWhitespace",
   "insertFinalNewline",
   "defaultEol",

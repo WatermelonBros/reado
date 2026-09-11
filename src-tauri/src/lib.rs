@@ -18,6 +18,7 @@ mod forge;
 mod format;
 mod fs;
 mod git;
+mod history;
 mod index;
 mod log;
 mod lsp;
@@ -149,6 +150,7 @@ pub fn run() {
             encoding::list_encodings,
             fs::resolve_import,
             fs::resolve_path,
+            fs::doc_links,
             fs::clipboard_image_to_temp,
             git::git_info,
             git::git_branches,
@@ -166,6 +168,9 @@ pub fn run() {
             git::git_merge_abort,
             git::git_rebase_abort,
             git::git_file_history,
+            history::history_list,
+            menu::window_hide_title_text,
+            history::history_read,
             git::git_head,
             git::git_stage,
             git::git_unstage,
@@ -259,6 +264,8 @@ pub fn run() {
             pty::pty_resize,
             pty::pty_kill,
             lsp::lsp_start,
+            lsp::lsp_init_options,
+            lsp::angular_root,
             lsp::lsp_send,
             lsp::lsp_stop,
             lsp::lsp_installed,

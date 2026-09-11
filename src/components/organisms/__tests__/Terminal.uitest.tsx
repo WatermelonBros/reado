@@ -105,7 +105,13 @@ beforeEach(() => {
 describe("the PTY lifecycle", () => {
   it("spawns one for the pane, in the project directory", async () => {
     await mount("t1")
-    expect(ptySpawn).toHaveBeenCalledWith("t1", "/repo", expect.any(Number), expect.any(Number))
+    expect(ptySpawn).toHaveBeenCalledWith(
+      "t1",
+      "/repo",
+      expect.any(Number),
+      expect.any(Number),
+      undefined,
+    )
   })
 
   it("spawns even when the window never paints a frame", async () => {
@@ -512,7 +518,13 @@ describe("an inactive pane", () => {
   it("stays mounted without taking focus", async () => {
     const { container } = render(<Terminal id="t2" cwd="/repo" active={false} />)
     await waitFor(() =>
-      expect(ptySpawn).toHaveBeenCalledWith("t2", "/repo", expect.any(Number), expect.any(Number)),
+      expect(ptySpawn).toHaveBeenCalledWith(
+        "t2",
+        "/repo",
+        expect.any(Number),
+        expect.any(Number),
+        undefined,
+      ),
     )
     expect(container.querySelector(".xterm")).toBeTruthy()
     // The pane keeps its PTY, but the caret belongs to the focused one.

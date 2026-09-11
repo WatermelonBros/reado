@@ -17,7 +17,7 @@ import { Select } from "@/components/atoms/Select"
 import { Textarea } from "@/components/atoms/Textarea"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { SettingsJson } from "@/components/organisms/SettingsJson"
-import { type Locale, type MessageKey, useLocale } from "@/i18n"
+import { LOCALES, type Locale, type MessageKey, useLocale } from "@/i18n"
 import { cliInstalled, installCli } from "@/lib/api"
 import { makeDefaultApp } from "@/lib/defaults"
 import { allIconThemes } from "@/lib/extIcons"
@@ -227,10 +227,7 @@ function AppearanceTab() {
         <Select
           value={locale}
           onChange={(v) => setLocale(v as Locale)}
-          options={[
-            { value: "en", label: "English" },
-            { value: "it", label: "Italiano" },
-          ]}
+          options={LOCALES.map((l) => ({ value: l.code, label: l.label }))}
           ariaLabel={t("settings.language")}
         />
       </Section>
@@ -380,6 +377,25 @@ function EditorTab() {
           onChange={(v) => settings.set({ wrap: v })}
           label={t("editor.wrap")}
           hint={t("settings.wrapHint")}
+        />
+        {settings.wrap && (
+          <NumberField
+            settingKey="wrapColumn"
+            label={t("settings.wrapColumn")}
+            value={settings.wrapColumn}
+            min={0}
+            max={400}
+            step={1}
+            onCommit={(n) => settings.set({ wrapColumn: n })}
+            hint={t("settings.wrapColumnHint")}
+          />
+        )}
+        <ToggleField
+          settingKey="columnSelection"
+          checked={settings.columnSelection}
+          onChange={(v) => settings.set({ columnSelection: v })}
+          label={t("editor.columnSelection")}
+          hint={t("settings.columnSelectionHint")}
         />
         <ToggleField
           settingKey="stickyScroll"
@@ -674,6 +690,20 @@ function FilesTab() {
           hint={t("settings.formatOnSaveHint")}
         />
         <ToggleField
+          settingKey="formatOnPaste"
+          checked={settings.formatOnPaste}
+          onChange={(v) => settings.set({ formatOnPaste: v })}
+          label={t("settings.formatOnPaste")}
+          hint={t("settings.formatOnPasteHint")}
+        />
+        <ToggleField
+          settingKey="formatOnType"
+          checked={settings.formatOnType}
+          onChange={(v) => settings.set({ formatOnType: v })}
+          label={t("settings.formatOnType")}
+          hint={t("settings.formatOnTypeHint")}
+        />
+        <ToggleField
           settingKey="trimTrailingWhitespace"
           checked={settings.trimTrailingWhitespace}
           onChange={(v) => settings.set({ trimTrailingWhitespace: v })}
@@ -888,6 +918,29 @@ function TerminalSettings() {
           {t("settings.terminalShellHint")}
         </span>
       </Field>
+      <LinesField
+        settingKey="terminalProfiles"
+        label={t("settings.terminalProfiles")}
+        value={settings.terminalProfiles}
+        onCommit={(lines) => settings.set({ terminalProfiles: lines })}
+        rows={3}
+        placeholder={"Node REPL = node\nContainer = docker exec -it app sh"}
+        hint={t("settings.terminalProfilesHint")}
+      />
+      {settings.terminalProfiles.length > 0 && (
+        <Field label={t("settings.defaultTerminalProfile")} settingKey="defaultTerminalProfile">
+          <Input
+            value={settings.defaultTerminalProfile}
+            onChange={(e) => settings.set({ defaultTerminalProfile: e.target.value })}
+            placeholder="Node REPL"
+            spellCheck={false}
+            className="bg-canvas font-mono text-xs"
+          />
+          <span className="text-xs leading-relaxed text-faint">
+            {t("settings.defaultTerminalProfileHint")}
+          </span>
+        </Field>
+      )}
       {/* Only with an override: the default shell's `-il` is chosen for it, and
         an arguments box that does nothing is worse than no box. */}
       {settings.terminalShell.trim() !== "" && (

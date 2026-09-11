@@ -164,7 +164,8 @@
     "unfoldAll": "Espandi tutto",
     "foldLevel": "Comprimi al livello {level}",
     "saveAll": "Salva tutto",
-    "saveAllDone": "Salvati {count} file."
+    "saveAllDone": "Salvati {count} file.",
+    "columnSelection": "Selezione a colonna"
   },
   "pdf": {
     "zoomIn": "Ingrandisci",
@@ -231,7 +232,14 @@
     "panel": "Cronologia",
     "noFile": "Apri un file per vederne la cronologia.",
     "empty": "Nessuna cronologia per questo file.",
-    "error": "Impossibile caricare la cronologia di questo file."
+    "error": "Impossibile caricare la cronologia di questo file.",
+    "local": "Cronologia locale",
+    "commits": "Commit",
+    "save": "Salvato in Reado",
+    "restore": "Ripristina",
+    "restoreAsk": "Ripristinare questa versione?",
+    "restored": "Ripristinata. Con ⌘Z torni indietro.",
+    "restoreFailed": "Non è stato possibile ripristinare quella versione."
   },
   "semantic": {
     "title": "Ricerca semantica",
@@ -745,7 +753,8 @@
     "encodingReopened": "Riaperto come {name}.",
     "encodingSaveSet": "Verrà salvato come {name}.",
     "encodingDirty": "Salva le modifiche prima di riaprire con un'altra codifica.",
-    "encodingFailed": "Impossibile leggere il file come {name}."
+    "encodingFailed": "Impossibile leggere il file come {name}.",
+    "columnSelection": "Selezione a colonna — clicca per disattivarla"
   },
   "palette": {
     "placeholder": "Digita un comando…",
@@ -797,7 +806,8 @@
     "resultsApply": "Applica {count} modifiche",
     "resultsNone": "Non hai ancora cambiato niente.",
     "resultsShape": "Sono state aggiunte o tolte righe — Reado può applicare le modifiche solo alle righe che ha costruito.",
-    "resultsApplied": "Riscritti {files} file."
+    "resultsApplied": "Riscritti {files} file.",
+    "inSelection": "Cerca nella selezione"
   },
   "settings": {
     "title": "Impostazioni",
@@ -985,7 +995,18 @@
     "fileNestingRules": "Regole di annidamento",
     "fileNestingRulesHint": "Una regola per riga, `genitore : figlio, figlio`. ${capture} è ciò che ha catturato l'asterisco del genitore. Vuoto usa il set di Reado.",
     "previewTabs": "Tab in anteprima",
-    "previewTabsHint": "Un file su cui clicchi si apre in anteprima e viene sostituito dal successivo. Doppio click, modifica o pin per tenerlo."
+    "previewTabsHint": "Un file su cui clicchi si apre in anteprima e viene sostituito dal successivo. Doppio click, modifica o pin per tenerlo.",
+    "wrapColumn": "Colonna di a capo",
+    "wrapColumnHint": "Dove va a capo una riga lunga. 0 va a capo al bordo dell'editor.",
+    "columnSelectionHint": "Trascina senza tenere Alt per selezionare un rettangolo. Con Alt funziona sempre.",
+    "formatOnPaste": "Formatta quando incolli",
+    "formatOnPasteHint": "Reindenta il codice incollato in base a dove arriva. Il blocco mantiene la sua forma; il resto del file non viene toccato.",
+    "formatOnType": "Formatta mentre scrivi",
+    "formatOnTypeHint": "Lascia che il language server riformatti dopo i caratteri che segnala, per esempio una graffa chiusa. Senza server non fa nulla.",
+    "terminalProfiles": "Profili del terminale",
+    "terminalProfilesHint": "Uno per riga, come `Nome = comando argomenti`. Compaiono accanto al + nel terminale.",
+    "defaultTerminalProfile": "Profilo predefinito",
+    "defaultTerminalProfileHint": "Il profilo che apre un nuovo terminale. Vuoto significa la shell qui sopra."
   },
   "defaultApp": {
     "title": "App predefinita per i file di testo",
@@ -1093,7 +1114,10 @@
     "pasteImageFailed": "Impossibile incollare l'immagine dagli appunti.",
     "rename": "Rinomina terminale…",
     "renameTitle": "Dai un nome a questo terminale",
-    "renamePlaceholder": "dev server, test, …"
+    "renamePlaceholder": "dev server, test, …",
+    "profiles": "Nuovo terminale da un profilo",
+    "runSelection": "Esegui il testo selezionato nel terminale",
+    "runSelectionEmpty": "Niente da eseguire: apri prima un file."
   },
   "review": {
     "title": "Invia revisione",
@@ -1202,7 +1226,9 @@
     "renamed_other": "Rinominato in “{name}” in {count} file.",
     "renameRefused": "Questo simbolo non si può rinominare qui.",
     "renameFailed": "La rinomina non è stata applicata.",
-    "serverFailed": "Il language server {name} è partito ma non si è inizializzato: per questi file non c'è code intelligence. Il motivo è nel log."
+    "serverFailed": "Il language server {name} è partito ma non si è inizializzato: per questi file non c'è code intelligence. Il motivo è nel log.",
+    "linkUnresolved": "Il language server non ha una destinazione per quel link.",
+    "linkUnopenable": "Reado non può aprire {target}."
   },
   "file": {
     "newFile": "Nuovo file",
@@ -1313,7 +1339,9 @@
       "doc": "Doc",
       "link": "Collegato"
     },
-    "empty": "Ancora niente da mappare. Commenti, spec e doc appaiono qui come nodi collegati man mano che li aggiungi."
+    "empty": "Ancora niente da mappare. Commenti, spec e doc appaiono qui come nodi collegati man mano che li aggiungi.",
+    "count": "{{nodes}} nodi · {{links}} collegamenti",
+    "reset": "Reimposta vista"
   },
   "docs": {
     "title": "Documentazione"
@@ -1323,7 +1351,8 @@
     "search": "Filtra…",
     "docs": "Doc",
     "specs": "Spec",
-    "notes": "Note"
+    "notes": "Note",
+    "root": "Radice del progetto"
   },
   "orphans": {
     "panel": "Orfani",
@@ -1432,7 +1461,14 @@
     "collapseFolder": "Comprimi",
     "added": "{name} aggiunta allo spazio di lavoro.",
     "removed": "{name} tolta dallo spazio di lavoro.",
-    "primaryNote": "La prima cartella tiene l'elenco e i commenti; le altre vengono lette e cercate insieme a lei."
+    "primaryNote": "La prima cartella tiene l'elenco e i commenti; le altre vengono lette e cercate insieme a lei.",
+    "openFile": "Apri workspace…",
+    "saveAs": "Salva workspace come…",
+    "fileEmpty": "Quel file di workspace non indica nessuna cartella.",
+    "fileOpenFailed": "Non è stato possibile aprire quel file di workspace.",
+    "fileSaved": "Workspace salvato come {name}.",
+    "fileSaveFailed": "Non è stato possibile salvare il file di workspace.",
+    "fileMissing": "{name} fa parte del workspace ma non esiste più."
   },
   "cm": {
     "close": "chiudi",
@@ -1450,5 +1486,18 @@
   "help": {
     "logPathCopied": "Percorso del log copiato negli appunti.",
     "logPathCopyFailed": "Non sono riuscito a copiare il percorso del log."
+  },
+  "output": {
+    "panel": "Output",
+    "channel": "Canale",
+    "allChannels": "Tutti i canali",
+    "level": "Livello",
+    "filter": "Filtra…",
+    "follow": "Segui",
+    "copy": "Copia il visibile",
+    "clear": "Svuota",
+    "empty": "Ancora niente per questo filtro.",
+    "loggingOff": "Il log è disattivato nelle impostazioni, quindi non viene raccolto nulla.",
+    "revealLog": "Mostra il file di log — tiene tutto quello che qui scorre via"
   }
 }

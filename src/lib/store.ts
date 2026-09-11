@@ -129,6 +129,10 @@ export interface SettingsState {
   iconTheme: string | null
   /** Format the buffer with the project's formatter on save. */
   formatOnSave: boolean
+  /** Re-indent pasted text to where it lands. */
+  formatOnPaste: boolean
+  /** Ask the language server to format after a character it names as a trigger. */
+  formatOnType: boolean
   /** Trim trailing whitespace on save (never on read). */
   trimTrailingWhitespace: boolean
   /** Ensure a single final newline on save (never on read). */
@@ -141,8 +145,14 @@ export interface SettingsState {
   diffGutter: boolean
   /** Soft-focus the rest of the file around the cursor. */
   focusMode: boolean
+  /** Select rectangles with a plain drag, without holding Alt (VS Code's
+   *  column selection mode). Alt-drag selects a rectangle either way. */
+  columnSelection: boolean
   /** Wrap long lines instead of scrolling horizontally. */
   wrap: boolean
+  /** Where a wrapped line breaks: 0 = the editor's edge, otherwise that column
+   *  (so the wrap point and the ruler agree however wide the window is). */
+  wrapColumn: number
   /** Pin the enclosing scope headers while scrolling. */
   stickyScroll: boolean
   /** A clickable swatch beside every colour literal in the document. */
@@ -215,6 +225,12 @@ export interface SettingsState {
   terminalShell: string
   /** Extra arguments for `terminalShell`, one per entry. */
   terminalShellArgs: string[]
+  /** Named shells a terminal can be opened with, as `Name = command args`
+   *  lines. Empty means the one shell above, as it always was. */
+  terminalProfiles: string[]
+  /** The profile the plain "new terminal" action runs; "" means the shell
+   *  setting (or the login shell). */
+  defaultTerminalProfile: string
   /** Last-used guided-review objective, so it isn't re-picked every time. */
   reviewObjective: string
   /** The user dismissed the "make Reado the default app for text files" prompt. */
@@ -271,6 +287,8 @@ export const DEFAULTS = {
   restoreSession: true,
   iconTheme: null,
   formatOnSave: false,
+  formatOnPaste: false,
+  formatOnType: false,
   trimTrailingWhitespace: false,
   insertFinalNewline: false,
   // 2 MB: comfortably above any file written by hand, comfortably below the
@@ -279,7 +297,9 @@ export const DEFAULTS = {
   inlineBlame: false,
   diffGutter: false,
   focusMode: false,
+  columnSelection: false,
   wrap: true,
+  wrapColumn: 0,
   stickyScroll: true,
   colorSwatches: true,
   zoom: 1,
@@ -312,6 +332,8 @@ export const DEFAULTS = {
   terminalScrollback: 5000,
   terminalCursorStyle: "block",
   terminalShell: "",
+  terminalProfiles: [],
+  defaultTerminalProfile: "",
   terminalShellArgs: [],
   reviewObjective: "bug_risk",
   defaultAppsDismissed: false,
@@ -493,6 +515,7 @@ export type Tool =
   | "guidedreview"
   | "coverage"
   | "extensions"
+  | "output"
 
 interface WorkspaceState {
   /** Active side-panel tool, or null when the panel is collapsed. */
@@ -818,6 +841,10 @@ export const SAVED_BASE = "reado:saved"
  *  `SAVED_BASE`/`LAST_READ_BASE`, so a base is still one string. */
 export const FILE_BASE = "reado:file:"
 
+/** Diff base prefix for a local-history entry: the rest of the string is the
+ *  copy's stamp. Same sentinel shape as the others — a base is one string. */
+export const HISTORY_BASE = "reado:history:"
+
 interface CursorState {
   line: number
   col: number
@@ -852,6 +879,10 @@ interface ProjectState {
   root: string
   /** Every folder in the workspace, primary first. */
   roots: string[]
+  /** The `.reado-workspace` file this window was opened from, when it was. The
+   *  folder list is written back there instead of to a folder's `.reado/`. */
+  workspaceFile: string | null
+  setWorkspaceFile: (path: string | null) => void
   /** Add a folder to the workspace (no-op if it is already there). */
   addRoot: (path: string) => void
   /** Remove a folder. The primary one can't be removed — that is "close
@@ -1023,6 +1054,8 @@ export const useProject = create<ProjectState>((set, get) => ({
     }),
   setGit: (git) => set({ git }),
   roots: [],
+  workspaceFile: null,
+  setWorkspaceFile: (path) => set({ workspaceFile: path }),
   addRoot: (path) => set((s) => (s.roots.includes(path) ? s : { roots: [...s.roots, path] })),
   removeRoot: (path) =>
     set((s) => {

@@ -29,6 +29,7 @@ import {
   activeLineExt,
   blockField,
   buildFocusDeco,
+  columnDragFilter,
   editableExtension,
   filePathFacet,
   findReferencesAt,
@@ -50,8 +51,9 @@ import {
   setLink,
   stickyScrollMargin,
   useReconfigure,
+  wrapExt,
 } from "@/components/organisms/editor/extensions"
-import { useProject, useWorkspace } from "@/lib/store"
+import { useProject, useSettings, useWorkspace } from "@/lib/store"
 
 let view: EditorView | undefined
 
@@ -342,6 +344,34 @@ describe("the settings-driven extensions", () => {
     const content = v.dom.querySelector(".cm-content") as HTMLElement
     expect(content.className).toContain("cm-ruler")
     expect(content.style.getPropertyValue("--ruler-col").trim()).toBe("80")
+  })
+
+  it("a plain drag selects a rectangle only in column selection mode", () => {
+    const plain = { altKey: false } as MouseEvent
+    const withAlt = { altKey: true } as MouseEvent
+    useSettings.setState({ columnSelection: false })
+    expect(columnDragFilter(plain)).toBe(false)
+    // Alt-drag is a rectangle whether the mode is on or off — it always was.
+    expect(columnDragFilter(withAlt)).toBe(true)
+    useSettings.setState({ columnSelection: true })
+    expect(columnDragFilter(plain)).toBe(true)
+    useSettings.setState({ columnSelection: false })
+  })
+
+  it("wrap holds the text to a column when asked, and to the window otherwise", () => {
+    // Off is nothing at all — not "wrapping with no limit".
+    expect(wrapExt(false, 120)).toEqual([])
+
+    const edge = mount("x", wrapExt(true, 0))
+    const edgeContent = edge.dom.querySelector(".cm-content") as HTMLElement
+    expect(edgeContent.className).toContain("cm-lineWrapping")
+    expect(edgeContent.style.maxWidth).toBe("")
+
+    const held = mount("x", wrapExt(true, 120))
+    const heldContent = held.dom.querySelector(".cm-content") as HTMLElement
+    expect(heldContent.style.maxWidth).toBe("calc(120ch + 8px)")
+    // And it is still wrapping — the measure is a cap, not a replacement.
+    expect(heldContent.className).toContain("cm-lineWrapping")
   })
 })
 

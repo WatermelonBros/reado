@@ -60,6 +60,7 @@ const STATUS_ITEMS: Array<{ id: string; labelKey: MessageKey }> = [
   { id: "agent", labelKey: "status.agentIdle" },
   { id: "anywhere", labelKey: "anywhere.title" },
   { id: "terminal", labelKey: "terminal.toggle" },
+  { id: "column", labelKey: "editor.columnSelection" },
 ]
 
 /** Path relative to the project root, with forward slashes. Delegates to the
@@ -142,6 +143,7 @@ export function StatusBar() {
   // Which of the optional indicators are showing. The file path and the caret
   // position are not in here: they are what a status bar is *for*.
   const hidden = useSettings((s) => s.hiddenStatusItems)
+  const columnSelection = useSettings((s) => s.columnSelection)
   const show = (id: string) => !hidden.includes(id)
   const toggleItem = (id: string) =>
     useSettings.getState().set({
@@ -407,6 +409,20 @@ export function StatusBar() {
               className="h-1.5 w-1.5 rounded-full"
               style={{ background: anywhereOn ? "var(--syn-string)" : "var(--border-strong)" }}
             />
+          </button>
+        )}
+        {/* Only while it is on: a mode you cannot see is a mode that confuses
+            whoever next touches the keyboard — but an indicator that is always
+            there, and always says "off", is noise. */}
+        {show("column") && columnSelection && (
+          <button
+            type="button"
+            onClick={() => useSettings.getState().set({ columnSelection: false })}
+            title={t("status.columnSelection")}
+            aria-label={t("status.columnSelection")}
+            className={`${ITEM} text-accent`}
+          >
+            {t("editor.columnSelection")}
           </button>
         )}
         {show("terminal") && (

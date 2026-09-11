@@ -115,6 +115,32 @@ describe("useTerminals — sessions & groups", () => {
     expect(T().lastAgent).toBe("codex")
   })
 
+  it("reuses the lowest free number instead of counting open panes", () => {
+    const a = T().add()
+    T().add()
+    expect(T().sessions.map((s) => s.title)).toEqual(["Terminal 1", "Terminal 2"])
+    T().remove(a)
+    // Counting the open panes made this a second "Terminal 2".
+    T().add()
+    expect(T().sessions.map((s) => s.title)).toEqual(["Terminal 2", "Terminal 1"])
+  })
+
+  it("moveGroup reorders the tabs", () => {
+    const a = T().add()
+    const b = T().add()
+    const g = (id: string) => T().groups.find((x) => x.paneIds.includes(id))?.id ?? ""
+    T().moveGroup(g(b), g(a))
+    expect(T().groups.map((x) => x.paneIds[0])).toEqual([b, a])
+    // Dropped on the right half of a tab → lands after it.
+    T().moveGroup(g(b), g(a), true)
+    expect(T().groups.map((x) => x.paneIds[0])).toEqual([a, b])
+    // Unknown ids and self-drops leave the order alone.
+    T().moveGroup(g(b), g(b))
+    T().moveGroup("nope", g(a))
+    T().moveGroup(g(a), "nope")
+    expect(T().groups.map((x) => x.paneIds[0])).toEqual([a, b])
+  })
+
   it("removeGroup removes the group and all its sessions", () => {
     T().add()
     const g = T().activeGroupId!

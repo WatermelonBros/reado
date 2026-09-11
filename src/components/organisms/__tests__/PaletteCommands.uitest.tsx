@@ -66,7 +66,11 @@ vi.mock("../../../lib/docInfo", async (orig) => ({
   ...(await orig<typeof import("../../../lib/docInfo")>()),
   ...doc,
 }))
-const agents = vi.hoisted(() => ({ clearTerminal: vi.fn(), restartTerminal: vi.fn() }))
+const agents = vi.hoisted(() => ({
+  clearTerminal: vi.fn(),
+  restartTerminal: vi.fn(),
+  runSelectionInTerminal: vi.fn(async () => {}),
+}))
 vi.mock("../../../lib/agents", async (orig) => ({
   ...(await orig<typeof import("../../../lib/agents")>()),
   ...agents,
@@ -90,6 +94,15 @@ const { addWorkspaceFolder } = vi.hoisted(() => ({ addWorkspaceFolder: vi.fn(asy
 vi.mock("../../../lib/workspace", async (orig) => ({
   ...(await orig<typeof import("../../../lib/workspace")>()),
   addWorkspaceFolder,
+}))
+const { pickWorkspaceFile, saveWorkspaceAs } = vi.hoisted(() => ({
+  pickWorkspaceFile: vi.fn(async () => {}),
+  saveWorkspaceAs: vi.fn(async () => {}),
+}))
+vi.mock("../../../lib/workspaceFile", async (orig) => ({
+  ...(await orig<typeof import("../../../lib/workspaceFile")>()),
+  pickWorkspaceFile,
+  saveWorkspaceAs,
 }))
 const { promptDialog } = vi.hoisted(() => ({
   promptDialog: vi.fn(async () => null as string | null),
@@ -115,6 +128,7 @@ import { Palette } from "@/components/organisms/Palette"
 import { useBookmarks } from "@/lib/bookmarks"
 import { useDocInfo } from "@/lib/docInfo"
 import { useGuidedReview } from "@/lib/guidedReview"
+import { useLayout } from "@/lib/layout"
 import { knownCommands } from "@/lib/menu"
 import { useOnboarding } from "@/lib/onboarding"
 import { usePreReview } from "@/lib/preReview"
@@ -489,6 +503,7 @@ describe("running a command", () => {
     "terminal.restart",
     "terminal.move",
     "editor.wrap:",
+    "editor.columnSelection:",
     "editor.focus:",
     "editor.sticky:",
     "editor.ribbon:",
@@ -562,6 +577,8 @@ describe("running a command", () => {
       "lsp.quickFix": () => expect(useEditorActions.getState().quickFixNonce).toBe(1),
       "lsp.organizeImports": () => expect(organizeImports).toHaveBeenCalled(),
       "workspace.addFolder": () => expect(addWorkspaceFolder).toHaveBeenCalled(),
+      "workspace.openFile": () => expect(pickWorkspaceFile).toHaveBeenCalled(),
+      "workspace.saveAs": () => expect(saveWorkspaceAs).toHaveBeenCalled(),
       "qa.ask": () => expect(doc.askAboutSelection).toHaveBeenCalled(),
       "editor.goToBracket": () => expect(doc.goToBracket).toHaveBeenCalled(),
       "editor.lastEdit": () => expect(doc.gotoLastEdit).toHaveBeenCalled(),
@@ -622,6 +639,12 @@ describe("running a command", () => {
       "editor.convertToTabs": () => expect(doc.convertIndentationTo).toHaveBeenCalledWith("tabs"),
       "editor.cursorUndo": () => expect(doc.cursorUndo).toHaveBeenCalled(),
       "editor.cursorRedo": () => expect(doc.cursorRedo).toHaveBeenCalled(),
+      "output.panel": () =>
+        // Output is a tab of the bottom dock, so "show it" is a layout move.
+        expect(
+          useLayout.getState().layout.areas.bottom.groups.some((g) => g.active === "output"),
+        ).toBe(true),
+      "terminal.runSelection": () => expect(agents.runSelectionInTerminal).toHaveBeenCalled(),
       "terminal.clear": () => expect(agents.clearTerminal).toHaveBeenCalled(),
       "terminal.restart": () => expect(agents.restartTerminal).toHaveBeenCalled(),
       "terminal.move": () => expect(togglePosition).toHaveBeenCalled(),
@@ -639,6 +662,11 @@ describe("running a command", () => {
         expect(useSettings.getState().wrap).toBe(true)
         again()
         expect(useSettings.getState().wrap).toBe(false)
+      },
+      "editor.columnSelection:": (again) => {
+        expect(useSettings.getState().columnSelection).toBe(true)
+        again()
+        expect(useSettings.getState().columnSelection).toBe(false)
       },
       "editor.focus:": (again) => {
         expect(useSettings.getState().focusMode).toBe(true)

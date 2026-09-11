@@ -368,6 +368,15 @@ describe("resizing", () => {
     fireEvent.pointerUp(window)
   })
 
+  it("keeps the grab strip outside the region, where no child window can cover it", () => {
+    // The browser pane is a real OS child window parked over its region. A strip
+    // that straddled the edge put half its hit area under that window, so half
+    // the sash was dead.
+    const { container } = render(<DockRegion area="bottom" />)
+    const handle = container.querySelector<HTMLElement>(".cursor-row-resize") as HTMLElement
+    expect(handle.className).toContain("-top-2")
+  })
+
   it("stops shrinking at the minimum", () => {
     const { container } = render(<DockRegion area="bottom" />)
     const handle = container.querySelector<HTMLElement>(".cursor-row-resize") as HTMLElement

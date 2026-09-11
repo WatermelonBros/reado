@@ -440,6 +440,20 @@
     scroll-behavior: auto !important;
   }
 
+  /* The partner of the range being edited, while the server holds them linked
+     (an HTML tag pair): faint, so it is visible that the edit will be mirrored
+     before a key is pressed. */
+  .cm-linked-range {
+    border-bottom: 1px dashed color-mix(in oklch, var(--accent) 60%, transparent);
+  }
+
+  /* The range "find in selection" is confined to: a faint band, so what the
+     find panel means by "the selection" stays visible after the first match is
+     selected inside it. */
+  .cm-search-scope {
+    background: color-mix(in oklch, var(--accent) 10%, transparent);
+  }
+
   /* Vertical line-length guide: a faint rule at `--ruler-col` characters in,
      a target beyond which lines are getting long. Monospace → 1ch = 1 column. */
   .cm-content.cm-ruler {

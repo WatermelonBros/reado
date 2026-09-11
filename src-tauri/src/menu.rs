@@ -98,6 +98,8 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("openFolder", "Open Folder…")
         .text("openRecent", "Open Recent…")
         .text("workspace:addFolder", "Add Folder to Workspace…")
+        .text("workspace:open", "Open Workspace…")
+        .text("workspace:saveAs", "Save Workspace As…")
         .separator()
         .item(&acc!(app, "save", "Save", "CmdOrCtrl+S"))
         .item(&acc!(app, "saveAll", "Save All", "CmdOrCtrl+Alt+S"))
@@ -270,6 +272,12 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("view:unfoldAll", "Unfold All")
         .separator()
         .item(&acc!(app, "view:wrap", "Toggle Word Wrap", "Alt+Z"))
+        .item(&acc!(
+            app,
+            "view:columnSelection",
+            "Column Selection Mode",
+            "CmdOrCtrl+Alt+Shift+C"
+        ))
         .text("view:whitespace", "Render Whitespace")
         .text("view:ribbon", "Structure Ribbon")
         .text("view:focus", "Focus Mode")
@@ -330,6 +338,14 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .build()?;
 
     app.set_menu(menu)?;
+    // Hand the Window submenu to AppKit as *the* windows menu, after the bar is
+    // installed — before it, there is no NSMenu yet to attach. Without this macOS
+    // keeps no window list at all: the Window menu never lists what is open and
+    // the Dock icon's context menu has nothing to show, so with two projects open
+    // (one of them hidden) there was no way to tell them apart or get the hidden
+    // one back. AppKit fills the list from each window's title, which is why the
+    // title now names the project.
+    window_menu.set_as_windows_menu_for_nsapp()?;
 
     app.on_menu_event(|app, event| {
         // Predefined items are handled natively; forward our custom ids so the
@@ -362,5 +378,60 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         }
     });
 
+    Ok(())
+}
+
+/// Keep the window's title *string* while hiding the text macOS would draw.
+///
+/// The title bar is an overlay (`titleBarStyle: "overlay"`), which makes it
+/// transparent but does not stop AppKit painting the title across the content —
+/// which is why Reado used to leave the title empty on macOS. But that string is
+/// exactly what the Dock's window list and the Window menu read: with two
+/// projects open and one of them minimised, an empty title leaves it unreachable
+/// — nothing in the Dock's context menu names it. So the string stays, and only
+/// its drawing goes.
+#[tauri::command]
+pub fn window_hide_title_text(window: tauri::Window) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        // AppKit only from the main thread — and a Tauri command does not run
+        // there, which is why the first version of this silently did nothing.
+        let target = window.clone();
+        window
+            .run_on_main_thread(move || {
+                use objc2::MainThreadMarker;
+                use objc2_app_kit::{NSApplication, NSWindow, NSWindowTitleVisibility};
+
+                let Ok(ptr) = target.ns_window() else { return };
+                let Some(mtm) = MainThreadMarker::new() else {
+                    return;
+                };
+                // Safety: `ns_window()` hands back this window's live NSWindow,
+                // and this closure runs on the main thread.
+                unsafe {
+                    let Some(ns) = (ptr as *mut NSWindow).as_ref() else {
+                        return;
+                    };
+                    ns.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+                    // Put the window in the Windows menu under its title — which
+                    // is what the Dock icon's context menu lists too. AppKit
+                    // registers a window itself only if it is ordered front
+                    // *after* the windows menu exists, and the first window is
+                    // built from the config before this app's menu is, so it
+                    // would never appear.
+                    ns.setExcludedFromWindowsMenu(false);
+                    let app = NSApplication::sharedApplication(mtm);
+                    app.addWindowsItem_title_filename(ns, &ns.title(), false);
+                    app.changeWindowsItem_title_filename(ns, &ns.title(), false);
+                }
+            })
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Everywhere else the title bar is Reado's own and draws no title text,
+        // and the taskbar already reads the title.
+        let _ = window;
+    }
     Ok(())
 }

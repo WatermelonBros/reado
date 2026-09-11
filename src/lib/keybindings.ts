@@ -126,6 +126,7 @@ const SHIPPED: Record<string, string> = {
   // View
   F11: "view:fullscreen",
   "Alt+Z": "view:wrap",
+  "Mod+Shift+Alt+C": "view:columnSelection",
   "Mod+=": "zoom:in",
   "Mod+-": "zoom:out",
   "Mod+0": "zoom:reset",

@@ -21,9 +21,9 @@ import { type RefObject, useEffect } from "react"
 import { t } from "@/i18n"
 import { findDefinition, resolveImport } from "@/lib/api"
 import { focusBlockRange } from "@/lib/focusBlock"
-import { lspLocate } from "@/lib/lsp"
+import { documentLinkAt, lspLocate, openDocumentLink } from "@/lib/lsp"
 import { notify } from "@/lib/notice"
-import { useProject, useWorkspace } from "@/lib/store"
+import { useProject, useSettings, useWorkspace } from "@/lib/store"
 
 /** Shared layout for the non-code placeholder states (empty / loading / binary). */
 export const PLACEHOLDER = "grid h-full place-items-center p-8 text-center text-muted"
@@ -117,6 +117,13 @@ export function stringLiteralAt(view: EditorView, pos: number): string | null {
  *  import path opens the file it points at; otherwise the identifier is resolved
  *  via the symbol index. */
 export function goToDefinitionAt(view: EditorView, pos: number) {
+  // A link the language server reported wins: it knows the `extends` of a
+  // tsconfig and the `$ref` of a schema, which no heuristic here does.
+  const link = documentLinkAt(view, pos)
+  if (link) {
+    void openDocumentLink(view, link.link)
+    return
+  }
   const str = stringLiteralAt(view, pos)
   if (str && (str.startsWith("./") || str.startsWith("../"))) {
     const fromFile = view.state.facet(filePathFacet) || useProject.getState().active
@@ -203,8 +210,12 @@ export const gotoDefinitionHandlers = EditorView.domEventHandlers({
       return false
     }
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+    // Underline what the click would actually follow: a server-reported link
+    // whole, or the word the index would look up.
+    const link = pos != null ? documentLinkAt(view, pos) : null
     const word = pos != null ? view.state.wordAt(pos) : null
-    view.dispatch({ effects: setLink.of(word ? { from: word.from, to: word.to } : null) })
+    const range = link ?? (word ? { from: word.from, to: word.to } : null)
+    view.dispatch({ effects: setLink.of(range && { from: range.from, to: range.to }) })
     return false
   },
 })
@@ -291,6 +302,32 @@ export function indentGuidesExt(mode: "off" | "all" | "active") {
   return indentationMarkers({ hideFirstIndent: true, highlightActiveBlock: mode === "active" })
 }
 
+/**
+ * When a drag selects a rectangle rather than a run of text: always with Alt
+ * held, and with no modifier at all while column selection mode is on. Read per
+ * event, so turning the mode on applies to files that are already open.
+ */
+export const columnDragFilter = (e: MouseEvent): boolean =>
+  e.altKey || useSettings.getState().columnSelection
+
+/**
+ * Line wrapping, optionally held to a fixed column.
+ *
+ * `col = 0` is wrapping as it always was — at whatever the editor's edge happens
+ * to be, which on a wide window is nowhere near the width the project agreed on.
+ * Any other column caps the text measure instead, so the wrap point and the
+ * ruler line up however wide the window is. The 8px is `.cm-line`'s own
+ * left/right padding: without it the text would break one column early.
+ */
+export function wrapExt(wrap: boolean, col: number): Extension {
+  if (!wrap) return []
+  if (col <= 0) return EditorView.lineWrapping
+  return [
+    EditorView.lineWrapping,
+    EditorView.contentAttributes.of({ style: `max-width:calc(${col}ch + 8px)` }),
+  ]
+}
+
 /** A vertical line-length guide at column `col` (0 = off): tags `.cm-content`
  *  with the ruler class and its column, drawn by CSS at `col` characters in. */
 export function rulerExt(col: number) {
@@ -310,6 +347,5 @@ export function useReconfigure(
 ): void {
   useEffect(() => {
     viewRef.current?.dispatch({ effects: comp.reconfigure(value) })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 }

@@ -365,10 +365,15 @@ export function DockRegion({ area }: { area: DockArea }) {
             : { width: areaState.size }
       }
     >
-      {/* Resize the whole area (straddles its inner edge toward the editor). */}
+      {/* Resize the whole area. The grab strip sits entirely *outside* the
+        region, in the neighbour: the browser pane is a real OS child window
+        parked over this one, and a strip that straddled the edge put half its
+        hit area under that window — where the drag reached the child window
+        instead of this handle. The neighbour is always HTML, so there it is
+        always grabbable. */}
       <div
         onPointerDown={startAreaResize}
-        className={`absolute z-20 ${horizontal ? "-top-1 right-0 left-0 h-2 cursor-row-resize" : "top-0 -left-1 bottom-0 w-2 cursor-col-resize"}`}
+        className={`absolute z-20 ${horizontal ? "-top-2 right-0 left-0 h-2 cursor-row-resize" : "top-0 -left-2 bottom-0 w-2 cursor-col-resize"}`}
       />
       {groups.map((g, i) => {
         const zone = targetZone(g.id)

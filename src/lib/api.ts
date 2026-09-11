@@ -11,6 +11,7 @@
 import type { VaultItem, VaultStatus } from "@/lib/vault"
 import { tracedInvoke as invoke } from "./logger"
 import { useSettings } from "./store"
+import { profileFor } from "./terminalProfiles"
 
 /** The user's exclude-from-tree/search globs, read at call time. */
 const excludeGlobs = () => useSettings.getState().excludeGlobs
@@ -197,6 +198,25 @@ export const gitRebaseAbort = (root: string) => invoke<void>("git_rebase_abort",
 /** Line ranges the working tree changes vs HEAD — the diff gutter's input. */
 export const gitWorkingDiffLines = (root: string, file: string) =>
   invoke<Array<[number, number]>>("git_working_diff_lines", { root, file })
+
+/** Keep the window's title string (the Dock's window list reads it) while
+ *  hiding the text macOS would paint over the content. macOS only. */
+export const hideNativeTitleText = () => invoke<void>("window_hide_title_text")
+
+/** One parked copy of a file's earlier content (local history). */
+export interface HistoryEntry {
+  /** Nanoseconds since the epoch, as a string — the key `historyRead` takes. */
+  stamp: string
+  size: number
+}
+
+/** The copies kept for one project file, newest first. Independent of git. */
+export const historyList = (root: string, path: string) =>
+  invoke<HistoryEntry[]>("history_list", { root, path })
+
+/** The content of one parked copy. */
+export const historyRead = (root: string, path: string, stamp: string) =>
+  invoke<string>("history_read", { root, path, stamp })
 
 /** Write UTF-8 text back to a file (manual editing). */
 export const writeFile = (root: string, path: string, content: string, encoding?: string) =>
@@ -1130,9 +1150,19 @@ export const rebuildIndex = (root: string) => invoke<number>("rebuild_index", { 
 
 // ---- Integrated terminal (PTY) -------------------------------------------
 
-/** Spawn a login shell in a PTY for terminal tab `id`. */
-export const ptySpawn = (id: string, cwd: string, rows: number, cols: number) => {
+/** Spawn a shell in a PTY for terminal tab `id`: the named profile's command,
+ *  the configured shell, or the platform's login shell — in that order. */
+export const ptySpawn = (
+  id: string,
+  cwd: string,
+  rows: number,
+  cols: number,
+  // Explicitly defaulted so it is not counted as a required argument: it names a
+  // profile resolved *here*, and is not a key the command receives.
+  profileName: string | undefined = undefined,
+) => {
   const { terminalShell, terminalShellArgs } = useSettings.getState()
+  const profile = profileFor(profileName)
   return invoke<void>("pty_spawn", {
     id,
     cwd,
@@ -1140,8 +1170,8 @@ export const ptySpawn = (id: string, cwd: string, rows: number, cols: number) =>
     cols,
     // Null, not "", so the backend can tell "no override" from "a shell whose
     // name is the empty string" and fall back to the platform's login shell.
-    shell: terminalShell.trim() || null,
-    shellArgs: terminalShell.trim() ? terminalShellArgs : null,
+    shell: profile?.command ?? (terminalShell.trim() || null),
+    shellArgs: profile ? profile.args : terminalShell.trim() ? terminalShellArgs : null,
   })
 }
 
@@ -1172,6 +1202,21 @@ export const ptyResize = (id: string, rows: number, cols: number) =>
  * `id`, running in `cwd`; output via `lsp-{id}`. */
 export const lspStart = (id: string, server: string, cwd: string) =>
   invoke<void>("lsp_start", { id, server, cwd })
+
+/** The links the project's own markdown documents make to each other, as
+ * `[from, to]` pairs of project-relative paths (both ends within `files`). */
+export const docLinks = (root: string, files: string[]) =>
+  invoke<Array<[string, string]>>("doc_links", { root, files })
+
+/** The Angular project owning `file` (nearest `angular.json` at or above it,
+ * never above `root`), or null when the file is not in one. */
+export const angularRoot = (root: string, file: string) =>
+  invoke<string | null>("angular_root", { root, file })
+
+/** The `initializationOptions` a server needs (a TypeScript's `tsserver.path`,
+ * say), or null — the client splices them into its `initialize` request. */
+export const lspInitOptions = (server: string, root: string) =>
+  invoke<Record<string, unknown> | null>("lsp_init_options", { server, root })
 
 /** Send a JSON-RPC message to language server `id`. */
 export const lspSend = (id: string, message: string) => invoke<void>("lsp_send", { id, message })

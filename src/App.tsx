@@ -37,6 +37,7 @@ import {
 } from "./lib/hooks"
 import { applyLogConfig, log } from "./lib/logger"
 import { listenForMenu } from "./lib/menu"
+import { listenToServerOutput } from "./lib/outputLog"
 import { runStartupChecks } from "./lib/startup"
 import { useRecents, useSettings } from "./lib/store"
 import { currentProjectPath, openInNewWindow, openPathTarget } from "./lib/window"
@@ -101,6 +102,13 @@ export default function App() {
   // Route native-menu clicks to in-app commands.
   useEffect(() => {
     const off = listenForMenu()
+    return () => void off.then((fn) => fn()).catch(() => {})
+  }, [])
+
+  // Language-server stderr lands on its own Output channel — the one place a
+  // server that refuses to start explains itself.
+  useEffect(() => {
+    const off = listenToServerOutput()
     return () => void off.then((fn) => fn()).catch(() => {})
   }, [])
 

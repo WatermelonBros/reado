@@ -69,7 +69,6 @@ export function IconButton({
   return (
     <Tooltip label={label} placement={tooltipPlacement}>
       <button
-        // eslint-disable-next-line react/button-has-type
         type={type}
         aria-label={label}
         // A toggle (caller passes `active`) always exposes aria-pressed

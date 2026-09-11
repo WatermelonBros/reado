@@ -124,3 +124,13 @@ xcap = { version = "0.9", features = ["image"] }
 # macOS Launch Services FFI, for "make Reado the default app for text files".
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
+# Two calls on the NSWindow: hide the drawn title (the title bar is an overlay)
+# while keeping the title *string*, which is what the Dock's window list and the
+# Window menu read. Already in the tree — Tauri itself builds on these.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = [
+  "NSWindow",
+  "NSResponder",
+  "NSApplication",
+] }
+objc2-foundation = "0.3"

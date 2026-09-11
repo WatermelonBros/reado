@@ -2,8 +2,9 @@
 // wrappers that fall back when no server is attached, and the connection
 // lifecycle (spawn, diagnostics tap, crash notice). The CodeMirror LSP client
 // and the Rust backend are both mocked.
-import type { EditorView } from "@codemirror/view"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { EditorState } from "@codemirror/state"
+import { EditorView } from "@codemirror/view"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const h = vi.hoisted(() => ({
   /** The plugin `LSPPlugin.get(view)` resolves to, or null for "no server". */
@@ -36,6 +37,14 @@ vi.mock("@codemirror/lsp-client", () => ({
     // so a server that starts and then refuses to initialize is reported instead
     // of surfacing as an unhandled rejection.
     initializing = h.initializing()
+    // Requests that don't go through a view (workspace/symbol) reach the client
+    // held in the connection map. It answers as the attached fake server does,
+    // so a test sets up one server and both doors work.
+    request = (...args: unknown[]) =>
+      (h.plugin?.client.request as ((...a: unknown[]) => Promise<unknown>) | undefined)?.(...args)
+    get serverCapabilities() {
+      return h.plugin?.client.serverCapabilities
+    }
   },
   formatKeymap: [],
   renameKeymap: [],
@@ -46,12 +55,16 @@ vi.mock("@codemirror/lsp-client", () => ({
 const readFile = vi.fn(async () => ({ kind: "text", text: "old old\n", encoding: "utf-8" }))
 const writeBacked = vi.fn(async () => ({ changed: 1, backups: [] }))
 const lspStart = vi.fn(async () => {})
+const lspInitOptions = vi.fn(async () => null as Record<string, unknown> | null)
+const angularRoot = vi.fn(async () => null as string | null)
 const lspSend = vi.fn(async () => {})
 const lspStop = vi.fn(async () => {})
 const resolvePath = vi.fn(async () => null as string | null)
 vi.mock("../api", async (orig) => ({
   ...(await orig<typeof import("../api")>()),
   lspStart: (...a: unknown[]) => lspStart(...(a as [])),
+  lspInitOptions: (...a: unknown[]) => lspInitOptions(...(a as [])),
+  angularRoot: (...a: unknown[]) => angularRoot(...(a as [])),
   lspSend: (...a: unknown[]) => lspSend(...(a as [])),
   lspStop: (...a: unknown[]) => lspStop(...(a as [])),
   resolvePath: (...a: unknown[]) => resolvePath(...(a as [])),
@@ -87,9 +100,11 @@ import {
   lspPrepareTypeHierarchy,
   lspSupport,
   lspTypes,
+  lspWorkspaceSymbols,
+  onTypeFormatting,
   renameSymbolAt,
 } from "@/lib/lsp"
-import { useProject } from "@/lib/store"
+import { useProject, useSettings } from "@/lib/store"
 
 /** A stand-in view; every function reaches the server through LSPPlugin.get. */
 const view = {} as EditorView
@@ -119,6 +134,8 @@ beforeEach(() => {
   listeners.clear()
   h.plugin = null
   lspStart.mockResolvedValue(undefined)
+  lspInitOptions.mockResolvedValue(null)
+  angularRoot.mockResolvedValue(null)
   resolvePath.mockResolvedValue(null)
   useExtensions.setState({ disabled: [] })
   useDiagnostics.setState({ byFile: {}, errors: {} })
@@ -349,13 +366,36 @@ describe("lspSupport", () => {
   })
 
   it("routes .ts to the Angular server in an Angular project", async () => {
-    resolvePath.mockResolvedValue("/ng/angular.json")
+    angularRoot.mockResolvedValue("/ng")
     await lspSupport("/ng", "/ng/src/app.ts")
     expect(lspStart).toHaveBeenCalledWith(expect.stringMatching(/^angular:/), "angular", "/ng")
   })
 
+  it("roots the Angular server at the app, not at the monorepo opened above it", async () => {
+    // Rooted at the folder the user opened, the server finds no angular.json,
+    // no tsconfig and no node_modules — it has to run in the app's own directory.
+    angularRoot.mockResolvedValue("/repo/apps/admin")
+    await lspSupport("/repo", "/repo/apps/admin/src/app.ts")
+    expect(angularRoot).toHaveBeenCalledWith("/repo", "/repo/apps/admin/src/app.ts")
+    expect(lspStart).toHaveBeenCalledWith(
+      expect.stringMatching(/^angular:/),
+      "angular",
+      "/repo/apps/admin",
+    )
+  })
+
+  it("leaves a .ts outside any Angular app on the TypeScript server", async () => {
+    angularRoot.mockResolvedValue(null)
+    await lspSupport("/repo2", "/repo2/packages/util/index.ts")
+    expect(lspStart).toHaveBeenCalledWith(
+      expect.stringMatching(/^typescript:/),
+      "typescript",
+      "/repo2",
+    )
+  })
+
   it("leaves .ts alone when the Angular extension is disabled", async () => {
-    resolvePath.mockResolvedValue("/ng-off/angular.json")
+    angularRoot.mockResolvedValue("/ng-off")
     useExtensions.setState({ disabled: ["angular"] })
     await lspSupport("/ng-off", "/ng-off/src/app.ts")
     expect(lspStart).toHaveBeenCalledWith(
@@ -363,6 +403,33 @@ describe("lspSupport", () => {
       "typescript",
       "/ng-off",
     )
+  })
+
+  it("puts the backend's initializationOptions in the initialize request", async () => {
+    // typescript-language-server only finds a TypeScript in the workspace root;
+    // in a monorepo the backend resolves a package's one and it must reach the
+    // server, which happens nowhere else — the client sends no options of its own.
+    const options = { tsserver: { path: "/mono/apps/web/node_modules/typescript/lib/tsserver.js" } }
+    lspInitOptions.mockResolvedValue(options)
+    await lspSupport("/mono", "/mono/apps/web/src/a.ts")
+    expect(lspInitOptions).toHaveBeenCalledWith("typescript", "/mono")
+
+    const lastSent = () => {
+      const calls = lspSend.mock.calls as unknown as string[][]
+      return calls[calls.length - 1][1]
+    }
+    const connects = h.connect.mock.calls as unknown as Array<[{ send: (m: string) => void }]>
+    const transport = connects[connects.length - 1][0]
+    transport.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "initialize", params: {} }))
+    expect(JSON.parse(lastSent())).toMatchObject({
+      method: "initialize",
+      params: { initializationOptions: options },
+    })
+
+    // Every other message — one per keystroke — passes through untouched.
+    const edit = JSON.stringify({ jsonrpc: "2.0", method: "textDocument/didChange" })
+    transport.send(edit)
+    expect(lastSent()).toBe(edit)
   })
 
   it("reuses one connection per server and root", async () => {
@@ -480,6 +547,118 @@ describe("a server that refuses to initialize", () => {
   })
 })
 
+describe("lspWorkspaceSymbols", () => {
+  /** A started server whose `workspace/symbol` answers `res`. */
+  async function withServer(caps: Record<string, unknown>, res: unknown) {
+    const request = attach(res)
+    const plugin = h.plugin as NonNullable<typeof h.plugin>
+    plugin.client.serverCapabilities = caps
+    // `lspSupport` is what puts a client in the connection map; the mocked
+    // LSPClient's `connect` returns itself, so this request spy is the server's.
+    await lspSupport("/repo", "/repo/src/a.ts")
+    return request
+  }
+
+  it("maps both response shapes and reports where each symbol is", async () => {
+    const request = await withServer({ workspaceSymbolProvider: true }, [
+      // `SymbolInformation`: a full location.
+      {
+        name: "generatedThing",
+        kind: 12,
+        location: { uri: "file:///repo/src/gen.ts", range: { start: { line: 41 } } },
+      },
+      // `WorkspaceSymbol`: a uri and nothing else.
+      {
+        name: "fromDependency",
+        kind: 5,
+        location: { uri: "file:///repo/node_modules/x/index.d.ts" },
+      },
+    ])
+    const found = await lspWorkspaceSymbols("thing")
+    expect(request).toHaveBeenCalledWith("workspace/symbol", { query: "thing" })
+    expect(found).toEqual([
+      { name: "generatedThing", kind: "function", path: "/repo/src/gen.ts", line: 42 },
+      {
+        name: "fromDependency",
+        kind: "class",
+        path: "/repo/node_modules/x/index.d.ts",
+        line: 1,
+      },
+    ])
+  })
+
+  it("contributes nothing when the server can't answer, rather than failing", async () => {
+    await withServer({}, [{ name: "x", location: { uri: "file:///repo/a.ts" } }])
+    // No `workspaceSymbolProvider` → not asked at all.
+    await expect(lspWorkspaceSymbols("x")).resolves.toEqual([])
+
+    const request = await withServer({ workspaceSymbolProvider: true }, null)
+    request.mockRejectedValue(new Error("server busy"))
+    await expect(lspWorkspaceSymbols("x")).resolves.toEqual([])
+  })
+})
+
+describe("formatting as you type", () => {
+  /** A real editor carrying the on-type extension, over a fake server. */
+  function typing(caps: unknown) {
+    const request = attach([
+      { range: { start: { character: 0 }, end: { character: 2 } }, newText: "" },
+    ])
+    const plugin = h.plugin as NonNullable<typeof h.plugin>
+    plugin.client.serverCapabilities = { documentOnTypeFormattingProvider: caps }
+    plugin.fromPosition = (p: { character: number }) => p.character
+    const view = new EditorView({
+      state: EditorState.create({ doc: "  }", extensions: [onTypeFormatting()] }),
+      parent: document.body,
+    })
+    return { request, view }
+  }
+
+  const typeChar = (view: EditorView, ch: string) =>
+    view.dispatch({ changes: { from: 3, insert: ch }, userEvent: "input.type" })
+
+  afterEach(() => useSettings.setState({ formatOnType: false }))
+
+  it("asks the server after a character it named, and applies the answer", async () => {
+    useSettings.setState({ formatOnType: true })
+    const { request, view } = typing({ firstTriggerCharacter: "}", moreTriggerCharacter: [";"] })
+    typeChar(view, "}")
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "textDocument/onTypeFormatting",
+        expect.objectContaining({ ch: "}" }),
+      ),
+    )
+    // The server asked for the leading whitespace to go; it went.
+    await vi.waitFor(() => expect(view.state.doc.toString()).toBe("}}"))
+    view.destroy()
+  })
+
+  it("says nothing about a character the server did not name", async () => {
+    useSettings.setState({ formatOnType: true })
+    const { request, view } = typing({ firstTriggerCharacter: "}" })
+    typeChar(view, "x")
+    await new Promise((r) => setTimeout(r, 0))
+    expect(request).not.toHaveBeenCalled()
+    view.destroy()
+  })
+
+  it("is silent while the setting is off, and when the server does not offer it", async () => {
+    const off = typing({ firstTriggerCharacter: "}" })
+    typeChar(off.view, "}")
+    await new Promise((r) => setTimeout(r, 0))
+    expect(off.request).not.toHaveBeenCalled()
+    off.view.destroy()
+
+    useSettings.setState({ formatOnType: true })
+    const unsupported = typing(undefined)
+    typeChar(unsupported.view, "}")
+    await new Promise((r) => setTimeout(r, 0))
+    expect(unsupported.request).not.toHaveBeenCalled()
+    unsupported.view.destroy()
+  })
+})
+
 describe("renameSymbolAt", () => {
   /** A view holding `word` at the cursor, plus a server that can rename. */
   function renamable(changes: unknown) {
@@ -500,7 +679,7 @@ describe("renameSymbolAt", () => {
         state: {
           selection: { main: { head: 4 } },
           wordAt: () => ({ from: 0, to: 3 }),
-          sliceDoc: () => "old",
+          sliceDoc: vi.fn(() => "old"),
         },
       } as unknown as EditorView,
     }
@@ -544,6 +723,66 @@ describe("renameSymbolAt", () => {
     const { view, plugin } = renamable({})
     plugin.client.serverCapabilities = { renameProvider: false }
     expect(renameSymbolAt(view)).toBe(false)
+  })
+
+  it("renames the range the server prepares, not the word under the cursor", async () => {
+    // `wordAt` on `@decorator` hands back `decorator`; the server hands back the
+    // range including the `@`, and that is the one that must be renamed.
+    const { view, plugin } = renamable({})
+    plugin.client.serverCapabilities = { renameProvider: { prepareProvider: true } }
+    const request = vi.fn(async (method: string) =>
+      method === "textDocument/prepareRename"
+        ? { range: { start: { character: 0 }, end: { character: 10 } } }
+        : { changes: {} },
+    )
+    plugin.client.request = request as unknown as typeof plugin.client.request
+    prompt.mockResolvedValue("next")
+
+    expect(renameSymbolAt(view)).toBe(true)
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith("textDocument/rename", expect.any(Object)),
+    )
+    // The prompt was seeded from the prepared range...
+    expect(view.state.sliceDoc).toHaveBeenCalledWith(0, 10)
+    // ...and the rename was asked for at its start.
+    expect(request).toHaveBeenCalledWith(
+      "textDocument/rename",
+      expect.objectContaining({ position: { line: 0, character: 0 } }),
+    )
+  })
+
+  it("refuses before prompting when the server says the symbol cannot be renamed", async () => {
+    const { view, plugin } = renamable({})
+    plugin.client.serverCapabilities = { renameProvider: { prepareProvider: true } }
+    plugin.client.request = vi.fn(async () => null)
+    renameSymbolAt(view)
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledWith("info", "lsp.renameRefused"))
+    // The point of asking first: the user is never made to type a name that is
+    // thrown away.
+    expect(prompt).not.toHaveBeenCalled()
+  })
+
+  it("still renames when prepare is unsupported or fails", async () => {
+    const { view, plugin } = renamable({})
+    // No `prepareProvider` → the request is never sent.
+    const request = vi.fn(async () => ({ changes: {} }))
+    plugin.client.request = request as unknown as typeof plugin.client.request
+    prompt.mockResolvedValue("next")
+    renameSymbolAt(view)
+    await vi.waitFor(() => expect(request).toHaveBeenCalled())
+    expect(request).not.toHaveBeenCalledWith("textDocument/prepareRename", expect.anything())
+
+    // And a server that offers it but throws falls back to the word range.
+    plugin.client.serverCapabilities = { renameProvider: { prepareProvider: true } }
+    const throwing = vi.fn(async (method: string) => {
+      if (method === "textDocument/prepareRename") throw new Error("nope")
+      return { changes: {} }
+    })
+    plugin.client.request = throwing as unknown as typeof plugin.client.request
+    renameSymbolAt(view)
+    await vi.waitFor(() =>
+      expect(throwing).toHaveBeenCalledWith("textDocument/rename", expect.any(Object)),
+    )
   })
 
   it("says so when the server refuses this particular symbol", async () => {

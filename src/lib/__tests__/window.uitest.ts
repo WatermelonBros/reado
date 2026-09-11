@@ -25,6 +25,9 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(async () => true), open
 let os = "mac"
 vi.mock("../extensions", () => ({ currentOS: () => os }))
 
+const { hideNativeTitleText } = vi.hoisted(() => ({ hideNativeTitleText: vi.fn(async () => {}) }))
+vi.mock("../api", () => ({ hideNativeTitleText }))
+
 const touch = vi.fn()
 const open = vi.fn()
 vi.mock("../store", () => ({
@@ -194,15 +197,27 @@ describe("the file/folder dialogs", () => {
 })
 
 describe("setWindowTitle", () => {
-  it("stays empty on macOS, where the title would render over the pill", async () => {
-    await setWindowTitle("my project")
-    expect(setTitle).toHaveBeenCalledWith("")
-  })
-
-  it("names the project elsewhere, for the taskbar", async () => {
-    os = "linux"
+  it("names the project on every platform — the window lists read that string", async () => {
+    // It is what the Dock's window list, the Window menu and the taskbar show.
+    // With two projects open and one minimised, it is the only thing that says
+    // which is which, or gets the hidden one back.
     await setWindowTitle("my project")
     expect(setTitle).toHaveBeenCalledWith("my project — Reado")
+
+    os = "linux"
+    await setWindowTitle("my project")
+    expect(setTitle).toHaveBeenLastCalledWith("my project — Reado")
+  })
+
+  it("hides the drawn title only on macOS, which paints it over the content", async () => {
+    await setWindowTitle("my project")
+    expect(hideNativeTitleText).toHaveBeenCalled()
+
+    hideNativeTitleText.mockClear()
+    os = "windows"
+    await setWindowTitle("my project")
+    // Elsewhere the title bar is Reado's own and draws no title text.
+    expect(hideNativeTitleText).not.toHaveBeenCalled()
   })
 
   it("falls back to the app name with no project", async () => {

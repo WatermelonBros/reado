@@ -158,7 +158,6 @@ export function VaultBar({
     void (pick.kind === "otp" ? fillCode(it) : fillLogin(it))
     // `fillLogin`/`fillCode` are rebuilt each render; the pick identity is what
     // gates this, and acting on it twice would fetch the credential twice.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pick])
 
   const body = () => {
@@ -209,20 +208,28 @@ export function VaultBar({
         {items?.length ? (
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {items.map((it) => (
-              <span key={it.id} className="flex items-center gap-0.5">
+              // One credential, two actions: a single bordered shell with a
+              // divider, so the code button can't read as a different control at
+              // a different size from the login it belongs to.
+              <span
+                key={it.id}
+                className="flex min-w-0 items-stretch overflow-hidden rounded-md border border-line"
+              >
                 <Button
                   size="sm"
-                  variant="secondary"
+                  variant="ghost"
+                  className="min-w-0 rounded-none"
                   disabled={busy}
                   onClick={() => void fillLogin(it)}
                 >
                   <span className="truncate">{it.title}</span>
-                  {it.username && <span className="text-faint">{it.username}</span>}
+                  {it.username && <span className="truncate text-faint">{it.username}</span>}
                 </Button>
                 {it.hasOtp && (
                   <Button
                     size="sm"
                     variant={filled === it.id ? "primary" : "ghost"}
+                    className="rounded-none border-line border-l"
                     disabled={busy}
                     onClick={() => void fillCode(it)}
                   >

@@ -84,6 +84,7 @@ import {
   LayoutIcon as Layout,
   LinkBreakIcon as LinkBreak,
   ListBulletsIcon as ListBullets,
+  ListDashesIcon as ListDashes,
   MagnifyingGlassIcon as MagnifyingGlass,
   MinusIcon as Minus,
   PaintBrushIcon as PaintBrush,
@@ -154,6 +155,8 @@ export const SendIcon = wrap(PaperPlaneTilt)
 export const CheckIcon = wrap(Check)
 export const InfoIcon = wrap(Info)
 export const TerminalIcon = wrap(Terminal)
+/** The Output panel: the app's own log, by channel. */
+export const OutputIcon = wrap(ListDashes)
 export const PaintBrushIcon = wrap(PaintBrush)
 /** Verified publisher (Open VSX namespace ownership). */
 export const SealCheckIcon = wrap(SealCheck)

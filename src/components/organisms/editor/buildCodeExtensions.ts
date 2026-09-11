@@ -9,6 +9,8 @@ import {
   history,
   historyKeymap,
   indentWithTab,
+  selectCharLeft,
+  selectCharRight,
   selectLine,
 } from "@codemirror/commands"
 import {
@@ -42,7 +44,7 @@ import { bracketColors } from "@/lib/bracketColors"
 import { changedLinesHighlight } from "@/lib/changedLines"
 import { readoAppearance, readoPhrases } from "@/lib/codemirror"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
-import { gotoLineOnce, setLastEdit, useDocInfo } from "@/lib/docInfo"
+import { addCursorVertical, gotoLineOnce, setLastEdit, useDocInfo } from "@/lib/docInfo"
 import {
   cursorsToLineEnds,
   insertLineAbove,
@@ -50,17 +52,20 @@ import {
   joinLines,
 } from "@/lib/editorCommands"
 import { emmetTab } from "@/lib/emmet"
+import { formatOnPaste } from "@/lib/formatOnPaste"
 import { renameSymbolAt } from "@/lib/lsp"
 import { explainSymbolAt, taskFromDiagnostic } from "@/lib/lspActions"
 import { occurrenceHighlight } from "@/lib/occurrenceHighlight"
 import { diagnosticsRuler } from "@/lib/overviewRuler"
 import { readoSearchPanel } from "@/lib/searchPanel"
+import { findNextInScope, findPrevInScope, searchScope } from "@/lib/searchScope"
 import { contributedLanguage, contributedSnippets } from "@/lib/snippetSupport"
 import { useCursor, useEditorActions, useProject, useSessions, useSettings } from "@/lib/store"
 import { expandSelection, shrinkSelection, syntaxSelection } from "@/lib/syntaxSelection"
 import {
   activeLineExt,
   blockField,
+  columnDragFilter,
   ExternalReload,
   editableExtension,
   filePathFacet,
@@ -75,6 +80,7 @@ import {
   linkField,
   rulerExt,
   stickyScrollMargin,
+  wrapExt,
 } from "./extensions"
 
 /** Everything the CodeMirror extensions array references that is not a
@@ -116,6 +122,8 @@ export interface CodeExtensionsCtx {
   rulerColumn: number
   indentGuidesMode: "off" | "all" | "active"
   wrap: boolean
+  /** Column a wrapped line breaks at; 0 means the editor's edge. */
+  wrapColumn: number
   /** Whether the popup opens as you type, or waits for ⌃Space. */
   suggestOnTyping: boolean
   /** Built by CodeView, which owns the click handler. */
@@ -173,10 +181,12 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     ctx.rulerComp.of(rulerExt(ctx.rulerColumn)),
     highlightSelectionMatches(),
     // Multiple cursors: Cmd/Ctrl+D adds the next occurrence, Alt+click adds a
-    // caret, Alt+drag selects a column.
+    // caret, Alt+drag selects a column — and in column selection mode a plain
+    // drag does too. The filter reads the setting per event rather than through
+    // a compartment, so turning the mode on applies to files already open.
     EditorState.allowMultipleSelections.of(true),
     EditorView.clickAddsSelectionRange.of((e) => e.altKey),
-    rectangularSelection(),
+    rectangularSelection({ eventFilter: columnDragFilter }),
     crosshairCursor(),
     // Reading aids: highlight the symbol under the cursor, indentation guides,
     // and syntax-aware expand/shrink selection.
@@ -191,8 +201,18 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // snippets, the server); this is the popup itself, in a compartment so
     // "suggest as you type" applies to a file that is already open.
     ctx.completionComp.of(autocompletion({ activateOnTyping: ctx.suggestOnTyping })),
-    // Find & replace panel (Mod-F to find, Mod-Alt-F to replace).
+    // Find & replace panel (Mod-F to find, Mod-Alt-F to replace), and the
+    // "find in selection" range its toggle sets. The scoped commands sit ahead
+    // of `searchKeymap` below so Find Next from the keyboard honours the range
+    // too; with no range set each one *is* the library's command.
     search({ top: true, createPanel: readoSearchPanel }),
+    searchScope,
+    keymap.of([
+      { key: "F3", run: findNextInScope, shift: findPrevInScope, preventDefault: true },
+      // Mac only: there ⌘G is Find Next. Elsewhere Ctrl+G is Go to Line (bound
+      // below), and taking it here would shadow it.
+      { mac: "Cmd-g", run: findNextInScope, shift: findPrevInScope, preventDefault: true },
+    ]),
     // Mirror the cursor position into the status bar; track unsaved edits.
     // The cursor is shared state, so only the primary pane writes it; the dirty
     // flag is per file, so both panes must — the split pane edits its own file
@@ -227,6 +247,8 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
         }
       }
     }),
+    // Re-indent pasted text to where it lands, when the user asks for it.
+    formatOnPaste,
     // Auto Save (on-focus-change): write when the editor loses focus.
     EditorView.domEventHandlers({
       blur: () => {
@@ -305,6 +327,15 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     ctx.indentUnitComp.of(indentUnit.of(detectedIndentUnit())),
     // Create-comment gesture (spec: a dedicated key on a selection).
     keymap.of([{ key: "Mod-Shift-m", run: ctx.startComposer }]),
+    // Column selection from the keyboard: a cursor per line above/below, and
+    // every cursor extended by a character. Useful with or without the mode —
+    // the mode is about the mouse.
+    keymap.of([
+      { key: "Mod-Shift-Alt-ArrowUp", run: addCursorVertical(-1), preventDefault: true },
+      { key: "Mod-Shift-Alt-ArrowDown", run: addCursorVertical(1), preventDefault: true },
+      { key: "Mod-Shift-Alt-ArrowLeft", run: selectCharLeft, preventDefault: true },
+      { key: "Mod-Shift-Alt-ArrowRight", run: selectCharRight, preventDefault: true },
+    ]),
     // VS Code editing keys CodeMirror has commands for but doesn't bind.
     keymap.of([
       { key: "Mod-l", run: selectLine },
@@ -369,7 +400,7 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     readoPhrases(),
     // Mark diagnostics along the scrollbar so problems are easy to find.
     diagnosticsRuler,
-    ctx.wrapComp.of(ctx.wrap ? EditorView.lineWrapping : []),
+    ctx.wrapComp.of(wrapExt(ctx.wrap, ctx.wrapColumn)),
     ctx.colorComp.of(ctx.colorSwatchesExt),
     ctx.bracketColorComp.of(ctx.bracketColorsOn ? bracketColors : []),
     ctx.whitespaceComp.of(ctx.renderWhitespace ? highlightWhitespace() : []),

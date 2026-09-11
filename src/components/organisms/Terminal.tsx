@@ -52,6 +52,8 @@ interface Props {
   id: string
   cwd: string
   active: boolean
+  /** The named profile this pane runs, when it was opened from one. */
+  profile?: string
 }
 
 /** The mirrored tail, per terminal. Bounded: a phone wants the last screenful of
@@ -74,7 +76,7 @@ function mirrorToPhone(id: string, bytes: Uint8Array) {
   }, 400)
 }
 
-export function Terminal({ id, cwd, active }: Props) {
+export function Terminal({ id, cwd, active, profile }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -255,7 +257,7 @@ export function Terminal({ id, cwd, active }: Props) {
       }
       lastSize.current = { rows: term.rows, cols: term.cols }
       try {
-        await ptySpawn(id, cwd, term.rows, term.cols)
+        await ptySpawn(id, cwd, term.rows, term.cols, profile)
       } catch {
         // No backend session was created (bad $SHELL, invalid cwd, openpty
         // failure…). Surface it instead of leaving a silent dead pane, and don't
@@ -348,7 +350,6 @@ export function Terminal({ id, cwd, active }: Props) {
       term.dispose()
       termRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

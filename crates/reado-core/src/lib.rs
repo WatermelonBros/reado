@@ -1008,6 +1008,7 @@ pub const MACHINE_LOCAL: &[&str] = &[
     ".reado/read-snapshots.json",
     ".reado/.trash/",
     ".reado/.undo/",
+    ".reado/.history/",
 ];
 
 /// Add `.reado/` (or just the index when versioning) to the project `.gitignore`.

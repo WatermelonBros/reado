@@ -271,6 +271,19 @@ fn image_mime(path: &Path) -> Option<&'static str> {
     }
 }
 
+/// The project-relative path local history should file a write under, or `None`
+/// for a write that has no business in the history (anything under `.reado/`).
+fn history_key(root: &Path, target: &Path) -> Option<String> {
+    let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let resolved = std::fs::canonicalize(target).unwrap_or_else(|_| target.to_path_buf());
+    let rel = resolved
+        .strip_prefix(&root)
+        .ok()?
+        .to_string_lossy()
+        .replace('\\', "/");
+    (!rel.is_empty() && !rel.starts_with(".reado/")).then_some(rel)
+}
+
 /// Write UTF-8 text back to a file (optional manual editing). The path is
 /// confined to the project root.
 #[tauri::command]
@@ -295,6 +308,16 @@ pub fn write_file(
             ))
         })?,
     };
+    // Park the previous content first: local history is the answer to "I saved
+    // over the good version and undo is spent", and every write Reado makes to a
+    // project file comes through here. The key is derived from the *resolved*
+    // target, not from the caller's string — callers pass both relative and
+    // absolute paths, and an absolute one would key the history by the whole
+    // path. `.reado/` is Reado's own scratch and config: snapshotting it would
+    // be keeping a history of the history.
+    if let Some(rel) = history_key(&root, &path) {
+        crate::history::snapshot(&root, &rel, &path);
+    }
     let bytes = out.len();
     std::fs::write(&path, out).inspect_err(|e| {
         crate::log::error(
@@ -698,6 +721,99 @@ pub fn resolve_import(root: String, from_file: String, spec: String) -> Result<O
 /// suffix across the indexed files. Agents and build tools print paths relative
 /// to wherever they ran, or none at all (`Terminal.tsx:104`), so a root-join is
 /// the minority case — without the fallback most clicks resolve to nothing.
+/// Links between the project's own markdown documents.
+///
+/// The knowledge graph used to draw only containment — a document sits in a
+/// folder, a comment sits on a file — which is what the file tree already shows,
+/// and drawing it as a graph produced one hairball of look-alike nodes. The
+/// relations a tree *can't* show are the links the documents make to each other,
+/// and those are written in the markdown itself.
+///
+/// Reads each of `files` (project-relative) and returns the `(from, to)` pairs
+/// whose target resolves to another file in that same list. Inline links
+/// (`[text](../other.md)`) and reference definitions both count; anything
+/// off-project — a URL, a missing file, a link to code — is dropped.
+#[tauri::command]
+pub fn doc_links(root: String, files: Vec<String>) -> Vec<(String, String)> {
+    let root = PathBuf::from(&root);
+    let known: std::collections::HashSet<&str> = files.iter().map(String::as_str).collect();
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for from in files.iter().take(MAX_LINKED_DOCS) {
+        let path = root.join(from);
+        // A document big enough to be a data file is not one someone links notes
+        // through; skip it rather than read megabytes to find no links.
+        if std::fs::metadata(&path).is_ok_and(|m| m.len() > MAX_DOC_BYTES) {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let dir = Path::new(from).parent().unwrap_or(Path::new(""));
+        for target in doc_link_targets(&text) {
+            // `dir/../a.md` → `a.md`, without touching the disk: the link is
+            // relative to the document that makes it.
+            let Some(to) = normalize_rel(&dir.join(target)) else {
+                continue;
+            };
+            if to == *from || !known.contains(to.as_str()) {
+                continue;
+            }
+            if seen.insert((from.clone(), to.clone())) {
+                out.push((from.clone(), to));
+            }
+        }
+    }
+    out
+}
+
+/// Documents read per call, and the size past which one is skipped — the graph
+/// is drawn while the user waits, and a generated changelog or a data dump is
+/// not what anyone links their notes through.
+const MAX_LINKED_DOCS: usize = 2000;
+const MAX_DOC_BYTES: u64 = 512 * 1024;
+
+/// The markdown-link targets in `text` that point at another markdown file.
+fn doc_link_targets(text: &str) -> Vec<&str> {
+    static LINK: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = LINK.get_or_init(|| {
+        // `[text](target)` and `[label]: target` alike; the target runs to the
+        // first `)`, whitespace, `#` or quote, so anchors and titles fall away.
+        regex::Regex::new(r#"(?m)(?:\]\(|^\[[^\]]*\]:\s*)<?([^)>\s#"']+)"#).unwrap()
+    });
+    re.captures_iter(text)
+        .filter_map(|c| c.get(1))
+        .map(|m| m.as_str())
+        .filter(|t| {
+            !t.contains("://")
+                && !t.starts_with("mailto:")
+                && t.rsplit('.').next().is_some_and(|e| {
+                    ["md", "markdown", "mdx"]
+                        .iter()
+                        .any(|k| e.eq_ignore_ascii_case(k))
+                })
+        })
+        .collect()
+}
+
+/// Collapse `.`/`..` in a project-relative path, without touching the disk and
+/// without ever escaping the project (`../..` from the root yields None).
+fn normalize_rel(p: &Path) -> Option<String> {
+    let mut parts: Vec<&str> = Vec::new();
+    for c in p.components() {
+        match c {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                parts.pop()?;
+            }
+            std::path::Component::Normal(s) => parts.push(s.to_str()?),
+            // An absolute link is not a project-relative document.
+            _ => return None,
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join("/"))
+}
+
 #[tauri::command]
 pub fn resolve_path(root: String, spec: String, search: Option<bool>) -> Result<Option<String>> {
     let root = PathBuf::from(&root);
@@ -814,18 +930,23 @@ pub fn allow_project_assets(app: tauri::AppHandle, root: String) -> Result<()> {
 /// Largest settings bundle Reado will read back (a bundle is a few KB).
 const MAX_BUNDLE_BYTES: u64 = 1_048_576;
 
-/// Reject a settings-bundle path that isn't a plain `.json` file.
+/// Reject a document path that isn't one of the two JSON documents Reado hands
+/// to the OS dialogs: a settings bundle (`.json`) or a workspace file
+/// (`.reado-workspace`).
 ///
 /// These two commands are the only ones that touch a path outside the open
 /// project, so they are kept as narrow as the feature allows: the path comes
 /// from the OS save/open dialog (which the webview cannot show without the user
-/// acting), it must end in `.json`, and reads are size-capped. That is the whole
-/// of the widening — there is deliberately no general read/write-any-file
-/// command for the frontend to reach for.
+/// acting), its extension must be one of those two, and reads are size-capped.
+/// That is the whole of the widening — there is deliberately no general
+/// read/write-any-file command for the frontend to reach for.
 fn check_bundle_path(path: &str) -> Result<PathBuf> {
     let p = PathBuf::from(path);
-    if p.extension().and_then(|e| e.to_str()) != Some("json") {
-        return Err(Error::Other("settings files must end in .json".into()));
+    let ext = p.extension().and_then(|e| e.to_str());
+    if ext != Some("json") && ext != Some("reado-workspace") {
+        return Err(Error::Other(
+            "that path is neither a .json settings file nor a .reado-workspace".into(),
+        ));
     }
     Ok(p)
 }
@@ -851,9 +972,34 @@ pub fn read_settings_file(path: String) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::{
-        base64_encode, create_dir, create_file, list_dir, Charset, FileContent, MAX_TEXT_BYTES,
+        base64_encode, create_dir, create_file, doc_links, list_dir, normalize_rel, Charset,
+        FileContent, MAX_TEXT_BYTES,
     };
+
+    #[test]
+    fn the_history_key_is_relative_and_skips_reados_own_files() {
+        // Callers pass both shapes; keying off the caller's string gave one
+        // history directory per absolute path.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("src/a.ts"), "x").unwrap();
+        std::fs::create_dir_all(root.join(".reado")).unwrap();
+        std::fs::write(root.join(".reado/config.json"), "{}").unwrap();
+
+        assert_eq!(
+            super::history_key(root, &root.join("src/a.ts")).as_deref(),
+            Some("src/a.ts")
+        );
+        // `.reado/` is scratch and config — no history of the history.
+        assert_eq!(
+            super::history_key(root, &root.join(".reado/config.json")),
+            None
+        );
+    }
 
     #[test]
     fn an_escaping_create_leaves_no_directories_outside_the_project() {
@@ -1355,6 +1501,54 @@ mod tests {
     /// A bare filename printed by an agent (`Terminal.tsx:104`) is not a
     /// root-relative path — without the suffix search the click resolves to
     /// nothing, which is what made terminal links look broken.
+    #[test]
+    fn doc_links_are_the_links_the_documents_actually_make() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("docs/deep")).unwrap();
+        fs::write(
+            root.join("README.md"),
+            "see [guide](docs/guide.md) and [ext](https://x.dev/a.md)\n\
+             [ref]: docs/deep/notes.md\n\
+             [code](src/main.rs) [missing](docs/nope.md) [anchor](docs/guide.md#part)\n",
+        )
+        .unwrap();
+        fs::write(root.join("docs/guide.md"), "back to [home](../README.md)\n").unwrap();
+        fs::write(
+            root.join("docs/deep/notes.md"),
+            "up to [guide](../guide.md)\n",
+        )
+        .unwrap();
+        let files: Vec<String> = ["README.md", "docs/guide.md", "docs/deep/notes.md"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+
+        let mut got = doc_links(root.to_string_lossy().into_owned(), files);
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                ("README.md".into(), "docs/deep/notes.md".into()),
+                ("README.md".into(), "docs/guide.md".into()),
+                ("docs/deep/notes.md".into(), "docs/guide.md".into()),
+                ("docs/guide.md".into(), "README.md".into()),
+            ],
+            "URLs, code, missing targets and duplicate anchors are all dropped"
+        );
+    }
+
+    #[test]
+    fn a_link_cannot_escape_the_project() {
+        assert_eq!(
+            normalize_rel(Path::new("docs/../a.md")).as_deref(),
+            Some("a.md")
+        );
+        assert_eq!(normalize_rel(Path::new("docs/../../secrets.md")), None);
+        assert_eq!(normalize_rel(Path::new("/etc/passwd.md")), None);
+    }
+
     #[test]
     fn resolve_path_finds_files_by_suffix() {
         use std::fs;

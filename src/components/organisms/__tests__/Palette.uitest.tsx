@@ -22,7 +22,18 @@ vi.mock("../../../lib/api", () => ({
   // list_files returns project-relative paths; the palette basenames + opens them.
   listFiles: vi.fn(async () => ["src/app.tsx", "src/lib/store.ts", "docs/guide.md"]),
   searchText: vi.fn(async () => []),
-  listSymbols: vi.fn(async () => []),
+  listSymbols: vi.fn(async () => [
+    { name: "indexedThing", kind: "function", path: "/proj/src/app.tsx", line: 3 },
+  ]),
+}))
+
+// Go to Symbol asks the language servers as well as the index.
+const lspWorkspaceSymbols = vi.fn(async (_query: string) => [
+  { name: "generatedThing", kind: "function", path: "/proj/src/gen.ts", line: 9 },
+])
+vi.mock("@/lib/lsp", () => ({
+  lspDocumentSymbols: () => null,
+  lspWorkspaceSymbols: (q: string) => lspWorkspaceSymbols(q),
 }))
 
 const openFile = vi.fn()
@@ -32,6 +43,25 @@ beforeEach(() => {
   usePalette.setState({ mode: null })
   useProject.setState({ root: "/proj", open: openFile })
   useSettings.setState({ wrap: false })
+})
+
+describe("Go to Symbol in Project", () => {
+  it("lists what the index knows and what the language servers know", async () => {
+    usePalette.setState({ mode: "wsymbols" })
+    render(<Palette />)
+    expect(await screen.findByText("indexedThing")).toBeInTheDocument()
+    // The server's answer arrives after the index's, into the same list.
+    expect(await screen.findByText("generatedThing")).toBeInTheDocument()
+    expect(lspWorkspaceSymbols).toHaveBeenCalled()
+  })
+
+  it("opens a server-reported symbol where the server says it is", async () => {
+    const user = userEvent.setup()
+    usePalette.setState({ mode: "wsymbols" })
+    render(<Palette />)
+    await user.click(await screen.findByText("generatedThing"))
+    expect(openFile).toHaveBeenCalledWith("/proj/src/gen.ts", 9)
+  })
 })
 
 describe("Palette", () => {

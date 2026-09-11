@@ -28,7 +28,7 @@ import { toRelative } from "@/lib/comments"
 import { goToLine, toggleBookmarkAtCursor, useDocInfo } from "@/lib/docInfo"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { shortcutFor } from "@/lib/keybindings"
-import { lspDocumentSymbols } from "@/lib/lsp"
+import { lspDocumentSymbols, lspWorkspaceSymbols } from "@/lib/lsp"
 import { enableMcp } from "@/lib/mcp"
 import { runMenuCommand } from "@/lib/menu"
 import { useOnboarding } from "@/lib/onboarding"
@@ -128,6 +128,28 @@ export function Palette() {
     }
   }, [mode, project.root, wsymbols.length])
 
+  // …and ask the language servers the same question. They know what the index
+  // cannot see — generated symbols, symbols from dependencies — and they answer
+  // per query rather than once. The index's results are already on screen, so a
+  // slow server costs nothing; a stale answer is dropped.
+  const [lspSymbols, setLspSymbols] = useState<WorkspaceSymbol[]>([])
+  useEffect(() => {
+    if (mode !== "wsymbols") {
+      setLspSymbols([])
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void lspWorkspaceSymbols(query)
+        .then((syms) => !cancelled && setLspSymbols(syms))
+        .catch(() => {})
+    }, 150)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [mode, query])
+
   // Load the active file's symbols when entering file-symbol mode: prefer the
   // language server's document symbols, fall back to the heuristic extractor.
   useEffect(() => {
@@ -215,9 +237,17 @@ export function Palette() {
       }))
     }
     if (mode === "wsymbols") {
+      // The index first (it ranks, and it is what the user has been looking at),
+      // then anything the servers know that it doesn't. Same name, file and line
+      // is the same symbol.
+      const seen = new Set(wsymbols.map((s) => `${s.name}\u0000${s.path}\u0000${s.line}`))
+      const all = [
+        ...wsymbols,
+        ...lspSymbols.filter((s) => !seen.has(`${s.name}\u0000${s.path}\u0000${s.line}`)),
+      ]
       const filtered = query
-        ? fuzzysort.go(query, wsymbols, { limit: 300, key: (s) => s.name }).map((r) => r.obj)
-        : wsymbols.slice(0, 300)
+        ? fuzzysort.go(query, all, { limit: 300, key: (s) => s.name }).map((r) => r.obj)
+        : all.slice(0, 300)
       return filtered.map((s) => ({
         label: s.name,
         detail: `${s.kind} · ${relative(project.root, s.path)}:${s.line}`,
@@ -607,6 +637,8 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
     cmd("edit:cursorUndo", t("editor.cursorUndo"), { when: hasFile }),
     cmd("edit:cursorRedo", t("editor.cursorRedo"), { when: hasFile }),
     cmd("compareSaved", t("diff.compareWithSaved"), { when: hasFile }),
+    cmd("view:output", t("output.panel")),
+    cmd("terminal:runSelection", t("terminal.runSelection"), { when: hasFile }),
     cmd("terminal:clear", t("terminal.clear"), { when: hasTerminal, stayOpen: true }),
     cmd("terminal:restart", t("terminal.restart"), { when: hasTerminal, stayOpen: true }),
     // These four hand the palette to another mode rather than dismissing it.
@@ -627,6 +659,11 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
       },
     },
     cmd("view:wrap", `${t("editor.wrap")}: ${settings.wrap ? "on" : "off"}`, { stayOpen: true }),
+    cmd(
+      "view:columnSelection",
+      `${t("editor.columnSelection")}: ${settings.columnSelection ? "on" : "off"}`,
+      { stayOpen: true },
+    ),
     cmd("view:focus", `${t("editor.focus")}: ${settings.focusMode ? "on" : "off"}`, {
       stayOpen: true,
     }),
@@ -660,6 +697,8 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
     },
     cmd("view:splitToggle", t("split.toggle"), { when: canSplit, stayOpen: true }),
     cmd("workspace:addFolder", t("workspace.addFolder")),
+    cmd("workspace:open", t("workspace.openFile")),
+    cmd("workspace:saveAs", t("workspace.saveAs")),
     cmd("settings", t("settings.title"), { stayOpen: true }),
     // Opens the settings dialog *on* its JSON view, not merely next to it.
     cmd("settings:json", t("settings.json"), { stayOpen: true }),

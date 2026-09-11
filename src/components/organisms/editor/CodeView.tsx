@@ -115,6 +115,7 @@ import {
   setBlock,
   setLanding,
   useReconfigure,
+  wrapExt,
 } from "./extensions"
 
 const log = createLogger("editor")
@@ -148,6 +149,8 @@ interface CodeViewProps {
   text: string
   comments: Comment[]
   wrap: boolean
+  /** Column a wrapped line breaks at; 0 means the editor's edge. */
+  wrapColumn: number
   codeFont: string
   focusMode: boolean
   renderWhitespace: boolean
@@ -171,6 +174,7 @@ export function CodeView({
   comments,
   primary,
   wrap,
+  wrapColumn,
   codeFont,
   focusMode,
   renderWhitespace,
@@ -561,7 +565,6 @@ export function CodeView({
     lastComposeNonce.current = composeNonce
     if (viewRef.current) startComposer(viewRef.current)
     // startComposer reads live editor state on call; no need to re-bind.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composeNonce])
 
   // Explain / Peek requested from the palette or menu (primary pane only).
@@ -569,19 +572,16 @@ export function CodeView({
     if (explainNonce === lastExplainNonce.current) return
     lastExplainNonce.current = explainNonce
     if (primary) explainSelection(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [explainNonce])
   useEffect(() => {
     if (peekNonce === lastPeekNonce.current) return
     lastPeekNonce.current = peekNonce
     if (primary) peekDefinition()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peekNonce])
   useEffect(() => {
     if (quickFixNonce === lastQuickFixNonce.current) return
     lastQuickFixNonce.current = quickFixNonce
     if (primary) void openActionMenu()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quickFixNonce])
 
   // Create the editor once per file.
@@ -622,6 +622,7 @@ export function CodeView({
         rulerColumn: effectiveRuler,
         indentGuidesMode,
         wrap,
+        wrapColumn,
         suggestOnTyping,
         renderWhitespace,
         focusMode,
@@ -714,7 +715,6 @@ export function CodeView({
       if (useDocInfo.getState().view === view) useDocInfo.getState().set({ view: null })
     }
     // `text`/`path` identity drives recreation via the `key` prop in Editor.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Replace the document when the file changed on disk (e.g. an agent edited
@@ -741,7 +741,7 @@ export function CodeView({
   ])
 
   // Reconfigure line wrapping live.
-  useReconfigure(viewRef, wrapComp, wrap ? EditorView.lineWrapping : [], [wrap, wrapComp])
+  useReconfigure(viewRef, wrapComp, wrapExt(wrap, wrapColumn), [wrap, wrapColumn, wrapComp])
 
   // A stable callback: the extension captures it once, so it must not be
   // rebuilt on every render or every swatch would remount.
@@ -898,7 +898,6 @@ export function CodeView({
       effects: gutterComp.reconfigure(commentGutter(lineComments, openThreadAtLine)),
     })
     // openThreadAtLine is stable enough (only setters); rebuild on data change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineComments, gutterComp])
 
   // Rebuild the bookmark gutter when this file's bookmarks change.
@@ -1020,7 +1019,6 @@ export function CodeView({
   useEffect(() => {
     computeSticky()
     // computeSticky reads live refs/state; safe to omit from deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stickyScroll])
 
   // Scroll to, put the caret on, and softly highlight the landing line.

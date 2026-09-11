@@ -216,6 +216,11 @@ pub fn preview_open<R: Runtime>(
     )
     .title(preview_window_title(&window))
     .decorations(false)
+    // Reado owns this window's frame: it is parked over the pane's placeholder
+    // and re-parked on every layout change. Left resizable, its undecorated
+    // edges are still draggable, so a drag meant for the dock's resize handle
+    // stretched the browser out past the panel it lives in.
+    .resizable(false)
     .shadow(false)
     .skip_taskbar(true)
     .always_on_top(true)

@@ -16,12 +16,19 @@ import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import { ChevronIcon } from "@/components/atoms/icons"
 import { HunkBar } from "@/components/molecules/HunkBar"
-import { getReadSnapshot, gitDiffBase, readFile } from "@/lib/api"
+import { getReadSnapshot, gitDiffBase, historyRead, readFile } from "@/lib/api"
 import { readoAppearance } from "@/lib/codemirror"
 import { languages } from "@/lib/languages"
 import { diffRuler } from "@/lib/overviewRuler"
 import { LAST_READ_BASE, useReadProgress } from "@/lib/readProgress"
-import { FILE_BASE, SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
+import {
+  FILE_BASE,
+  HISTORY_BASE,
+  SAVED_BASE,
+  useEditorActions,
+  useProject,
+  useSettings,
+} from "@/lib/store"
 
 interface Props {
   relPath: string
@@ -47,6 +54,9 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
   const isSaved = base === SAVED_BASE
   // "Compare with Selected": the base is another file in the project.
   const otherFile = base.startsWith(FILE_BASE) ? base.slice(FILE_BASE.length) : null
+  // A local-history entry: this file as it was at one of its own saves. Not a
+  // git ref either — the case it exists for is a file git has never seen.
+  const historyStamp = base.startsWith(HISTORY_BASE) ? base.slice(HISTORY_BASE.length) : null
 
   // Fetch the base version whenever the file or chosen base changes.
   useEffect(() => {
@@ -54,18 +64,20 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
     setHead(undefined)
     // `gitDiffBase`, not `gitShowRef`: a file added since the base is not "no
     // base", it's an empty one — so a new file reads as an all-added diff.
-    const fetchBase = otherFile
-      ? readFile(root, otherFile).then((c) => (c.kind === "text" ? c.text : null))
-      : isSaved
-        ? readFile(root, relPath).then((c) => (c.kind === "text" ? c.text : null))
-        : isDelta
-          ? getReadSnapshot(root, relPath)
-          : gitDiffBase(root, relPath, base)
+    const fetchBase = historyStamp
+      ? historyRead(root, relPath, historyStamp)
+      : otherFile
+        ? readFile(root, otherFile).then((c) => (c.kind === "text" ? c.text : null))
+        : isSaved
+          ? readFile(root, relPath).then((c) => (c.kind === "text" ? c.text : null))
+          : isDelta
+            ? getReadSnapshot(root, relPath)
+            : gitDiffBase(root, relPath, base)
     fetchBase.then((h) => !cancelled && setHead(h)).catch(() => !cancelled && setHead(null))
     return () => {
       cancelled = true
     }
-  }, [root, relPath, base, isDelta, isSaved, otherFile, refresh])
+  }, [root, relPath, base, isDelta, isSaved, otherFile, historyStamp, refresh])
 
   // "Mark reviewed": re-snapshot the current content as read and leave the delta.
   const markReviewed = () => {
@@ -177,7 +189,6 @@ function DiffEditor({
       view.destroy()
       viewRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const jump = (next: boolean) => {

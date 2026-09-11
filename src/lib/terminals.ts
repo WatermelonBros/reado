@@ -117,6 +117,9 @@ export function dropPathsIntoTerminal(clientX: number, clientY: number, paths: s
 export interface TermSession {
   id: string
   title: string
+  /** The profile this pane runs, when it was opened from one. Kept so a restart
+   *  re-runs the same thing rather than dropping to the login shell. */
+  profile?: string
   /** Where the shell starts. Absent means the project root — a terminal opened
    *  on a folder from the file tree carries that folder instead. */
   cwd?: string
@@ -141,6 +144,30 @@ let counter = 0
 const newId = () => `t_${WIN}_${Date.now().toString(36)}_${counter++}`
 const newGroupId = () => `g_${WIN}_${Date.now().toString(36)}_${counter++}`
 
+/**
+ * The name a new pane gets: the profile's, or `Terminal N`.
+ *
+ * Either way the number is the lowest unused one. Counting the open panes handed
+ * out a duplicate as soon as one was closed (close #1 of two → the next pane is
+ * a second "Terminal 2"); renamed tabs simply don't take part.
+ */
+const nextTitle = (sessions: TermSession[], profile?: string): string => {
+  const base = profile?.trim() || "Terminal"
+  const re = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?: (\\d+))?$`)
+  const used = new Set(
+    sessions
+      .map((s) => {
+        const m = re.exec(s.title)
+        return m ? Number(m[1] ?? 1) : 0
+      })
+      .filter(Boolean),
+  )
+  let n = 1
+  while (used.has(n)) n++
+  // The first of a profile carries no number: "Node REPL", then "Node REPL 2".
+  return profile ? (n === 1 ? base : `${base} ${n}`) : `Terminal ${n}`
+}
+
 /** Evenly weighted sizes for `n` panes. */
 const even = (n: number): number[] => Array(n).fill(1 / n)
 
@@ -161,8 +188,9 @@ interface TerminalsState {
   /** Flip the panel between the bottom and right dock. Where it *is* lives in
    *  the layout model — this store no longer keeps a second copy of it. */
   togglePosition: () => void
-  /** Create a new tab (group with one pane) and focus it. Returns the pane id. */
-  add: (cwd?: string) => string
+  /** Create a new tab (group with one pane) and focus it, optionally running a
+   *  named profile. Returns the pane id. */
+  add: (cwd?: string, profile?: string) => string
   /** Add a pane to the active group (split), focus it. Returns the pane id. */
   split: () => string
   /** Remove a pane; removes its group when it was the last one. */
@@ -177,6 +205,8 @@ interface TerminalsState {
   lastAgent: string | null
   /** Mark a pane as running `agent` and remember it as the last used. */
   markAgent: (id: string, agent: string) => void
+  /** Reorder tabs: drop the group `id` before (or `after`) `targetId`. */
+  moveGroup: (id: string, targetId: string, after?: boolean) => void
   /** Remove a whole group (tab) and all its panes. */
   removeGroup: (groupId: string) => void
   /** Focus a pane (and select its group). */
@@ -227,12 +257,12 @@ export const useTerminals = create<TerminalsState>()(
         layout.move("terminal", at === "right" ? "bottom" : "right")
       },
 
-      add: (cwd) => {
+      add: (cwd, profile) => {
         const id = newId()
         const gid = newGroupId()
-        log.info("terminal opened", { id })
+        log.info("terminal opened", { id, profile })
         set((s) => ({
-          sessions: [...s.sessions, { id, title: `Terminal ${s.sessions.length + 1}`, cwd }],
+          sessions: [...s.sessions, { id, title: nextTitle(s.sessions, profile), cwd, profile }],
           groups: [...s.groups, { id: gid, dir: "row", paneIds: [id], sizes: [1] }],
           activeId: id,
           activeGroupId: gid,
@@ -246,7 +276,7 @@ export const useTerminals = create<TerminalsState>()(
         if (!gid) return get().add()
         const id = newId()
         set((s) => ({
-          sessions: [...s.sessions, { id, title: `Terminal ${s.sessions.length + 1}` }],
+          sessions: [...s.sessions, { id, title: nextTitle(s.sessions) }],
           groups: s.groups.map((g) =>
             g.id === gid
               ? { ...g, paneIds: [...g.paneIds, id], sizes: even(g.paneIds.length + 1) }
@@ -302,6 +332,16 @@ export const useTerminals = create<TerminalsState>()(
             : [...s.agentTerminals, id],
           lastAgent: agent,
         })),
+
+      moveGroup: (id, targetId, after = false) =>
+        set((s) => {
+          const from = s.groups.findIndex((g) => g.id === id)
+          if (from < 0 || id === targetId || !s.groups.some((g) => g.id === targetId)) return s
+          const groups = [...s.groups]
+          const [moved] = groups.splice(from, 1)
+          groups.splice(groups.findIndex((g) => g.id === targetId) + (after ? 1 : 0), 0, moved)
+          return { groups }
+        }),
 
       removeGroup: (groupId) =>
         set((s) => {
@@ -363,7 +403,7 @@ export const useTerminals = create<TerminalsState>()(
             const gid = newGroupId()
             return {
               open: true,
-              sessions: [{ id, title: "Terminal 1" }],
+              sessions: [{ id, title: nextTitle(s.sessions) }],
               groups: [{ id: gid, dir: "row", paneIds: [id], sizes: [1] }],
               activeId: id,
               activeGroupId: gid,

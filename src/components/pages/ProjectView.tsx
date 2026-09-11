@@ -75,8 +75,9 @@ import { useSpecs } from "@/lib/specs"
 import { type Tool, useProject, useSessions, useSettings, useWorkspace } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
 import { useTours } from "@/lib/tours"
-import { clearOpenFile, currentOpenFile, setWindowTitle } from "@/lib/window"
+import { clearOpenFile, currentOpenFile, currentWorkspaceFile, setWindowTitle } from "@/lib/window"
 import { acrossRoots, loadWorkspace, workspaceRoots } from "@/lib/workspace"
+import { foldersOfWorkspaceFile } from "@/lib/workspaceFile"
 
 const log = createLogger("project")
 
@@ -125,8 +126,12 @@ export function ProjectView({ root }: { root: string }) {
     restored.current = true
     // The workspace's other folders, if this one has any. Loaded after `init`
     // (which seeds the list with the primary folder) so a slow read can never
-    // leave the tree with no root at all.
-    void loadWorkspace(root).then((folders) => {
+    // leave the tree with no root at all. A window opened from a portable
+    // workspace file takes its list from *that* file — the folder's own
+    // `.reado/workspace.json` is what a folder opened directly uses.
+    const wsFile = currentWorkspaceFile()
+    useProject.getState().setWorkspaceFile(wsFile)
+    void (wsFile ? foldersOfWorkspaceFile(wsFile) : loadWorkspace(root)).then((folders) => {
       for (const folder of folders) useProject.getState().addRoot(folder)
     })
     // Opened from an OS file association: open the requested file, then drop the

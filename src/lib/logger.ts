@@ -21,6 +21,7 @@
  * round-trip) when logging is off or below the threshold.
  */
 import { invoke } from "@tauri-apps/api/core"
+import { useOutput } from "./outputLog"
 
 export type LogLevel = "error" | "warn" | "info" | "debug" | "trace"
 
@@ -44,7 +45,8 @@ export function applyLogConfig(on: boolean, level: LogLevel): void {
   invoke("log_set_config", { enabled: on, level }).catch(() => {})
 }
 
-/** Emit one record (after the local gate) to the backend sink. */
+/** Emit one record (after the local gate) to the backend sink, and to the
+ *  in-app Output panel — one gate, one path, two sinks. */
 function emit(
   level: LogLevel,
   target: string,
@@ -52,6 +54,7 @@ function emit(
   fields?: Record<string, unknown>,
 ): void {
   if (!enabled || ORDER[level] > threshold) return
+  useOutput.getState().add({ at: Date.now(), level, channel: target, msg, fields })
   // Raw `invoke` (not the traced wrapper) so logging never logs itself.
   invoke("log_record", { level, target, msg, fields: fields ?? null }).catch(() => {})
 }

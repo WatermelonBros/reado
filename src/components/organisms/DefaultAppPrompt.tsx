@@ -29,7 +29,6 @@ export function DefaultAppPrompt() {
     const id = setTimeout(() => setOpen(true), 1500)
     return () => clearTimeout(id)
     // Runs once on mount; `dismissed` is read at that point on purpose.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const close = (persist: boolean) => {

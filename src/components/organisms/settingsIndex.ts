@@ -58,6 +58,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   // so. Search could not reach word wrap, sticky scroll or focus mode at all.
   ...group("editor", "aids", "settings.aids", [
     "editor.wrap",
+    "settings.wrapColumn",
+    "editor.columnSelection",
     "editor.sticky",
     "editor.focus",
     "settings.colorSwatches",
@@ -101,6 +103,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ]),
   ...group("files", "onSave", "settings.onSave", [
     "settings.formatOnSave",
+    "settings.formatOnPaste",
+    "settings.formatOnType",
     "settings.trimTrailingWhitespace",
     "settings.insertFinalNewline",
     "settings.defaultEol",
@@ -124,6 +128,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     "settings.terminalCursor",
     "settings.terminalShell",
     "settings.terminalShellArgs",
+    "settings.terminalProfiles",
+    "settings.defaultTerminalProfile",
   ]),
   ...group("system", "logging", "settings.logging", ["settings.logEnabled"]),
   ...group("system", "cli", "settings.cli", ["settings.cliInstall"]),

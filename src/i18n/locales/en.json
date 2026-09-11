@@ -164,7 +164,8 @@
     "unfoldAll": "Unfold All",
     "foldLevel": "Fold Level {level}",
     "saveAll": "Save All",
-    "saveAllDone": "Saved {count} files."
+    "saveAllDone": "Saved {count} files.",
+    "columnSelection": "Column selection"
   },
   "pdf": {
     "zoomIn": "Zoom in",
@@ -231,7 +232,14 @@
     "panel": "Timeline",
     "noFile": "Open a file to see its history.",
     "empty": "No history for this file.",
-    "error": "Couldn't load this file's history."
+    "error": "Couldn't load this file's history.",
+    "local": "Local history",
+    "commits": "Commits",
+    "save": "Saved in Reado",
+    "restore": "Restore",
+    "restoreAsk": "Restore this version?",
+    "restored": "Restored. ⌘Z takes it back.",
+    "restoreFailed": "Couldn't restore that version."
   },
   "semantic": {
     "title": "Semantic search",
@@ -745,7 +753,8 @@
     "encodingReopened": "Reopened as {name}.",
     "encodingSaveSet": "Will be saved as {name}.",
     "encodingDirty": "Save your changes before reopening with another encoding.",
-    "encodingFailed": "Couldn't read this file as {name}."
+    "encodingFailed": "Couldn't read this file as {name}.",
+    "columnSelection": "Column selection — click to turn off"
   },
   "palette": {
     "placeholder": "Type a command…",
@@ -797,7 +806,8 @@
     "resultsApply": "Apply {count} edits",
     "resultsNone": "Nothing changed yet.",
     "resultsShape": "Rows were added or removed — Reado can only apply edits to the rows it built.",
-    "resultsApplied": "Rewrote {files} files."
+    "resultsApplied": "Rewrote {files} files.",
+    "inSelection": "Find in selection"
   },
   "settings": {
     "title": "Settings",
@@ -985,7 +995,18 @@
     "fileNestingRules": "Nesting rules",
     "fileNestingRulesHint": "One rule per line, `parent : child, child`. ${capture} is what the parent's * matched. Empty uses Reado's own set.",
     "previewTabs": "Preview tabs",
-    "previewTabsHint": "A file you click into opens as a preview and is replaced by the next one. Double-click it, edit it, or pin it to keep it."
+    "previewTabsHint": "A file you click into opens as a preview and is replaced by the next one. Double-click it, edit it, or pin it to keep it.",
+    "wrapColumn": "Wrap column",
+    "wrapColumnHint": "Where a wrapped line breaks. 0 wraps at the editor's edge.",
+    "columnSelectionHint": "Drag without holding Alt to select a rectangle. Alt-drag always does.",
+    "formatOnPaste": "Format on paste",
+    "formatOnPasteHint": "Re-indent pasted code to where it lands. The pasted block keeps its own shape; the rest of the file is untouched.",
+    "formatOnType": "Format while typing",
+    "formatOnTypeHint": "Let the language server re-format after the characters it asks about, such as a closing brace. Does nothing without a server.",
+    "terminalProfiles": "Terminal profiles",
+    "terminalProfilesHint": "One per line, as `Name = command args`. They appear beside the + button in the terminal.",
+    "defaultTerminalProfile": "Default profile",
+    "defaultTerminalProfileHint": "The profile a new terminal runs. Empty means the shell above."
   },
   "defaultApp": {
     "title": "Default app for text files",
@@ -1093,7 +1114,10 @@
     "pasteImageFailed": "Couldn't paste the clipboard image.",
     "rename": "Rename Terminal…",
     "renameTitle": "Name this terminal",
-    "renamePlaceholder": "dev server, tests, …"
+    "renamePlaceholder": "dev server, tests, …",
+    "profiles": "New terminal from a profile",
+    "runSelection": "Run Selected Text in Terminal",
+    "runSelectionEmpty": "Nothing to run: open a file first."
   },
   "review": {
     "title": "Send review",
@@ -1202,7 +1226,9 @@
     "renamed_other": "Renamed to “{name}” in {count} files.",
     "renameRefused": "That symbol can't be renamed here.",
     "renameFailed": "The rename didn't apply.",
-    "serverFailed": "The {name} language server started but couldn't initialize, so there is no code intelligence for these files. The log has the server's reason."
+    "serverFailed": "The {name} language server started but couldn't initialize, so there is no code intelligence for these files. The log has the server's reason.",
+    "linkUnresolved": "The language server has no destination for that link.",
+    "linkUnopenable": "Reado can't open {target}."
   },
   "file": {
     "newFile": "New file",
@@ -1313,7 +1339,9 @@
       "doc": "Doc",
       "link": "Linked"
     },
-    "empty": "Nothing to graph yet. Your comments, specs, and docs appear here as connected nodes once you add them."
+    "empty": "Nothing to graph yet. Your comments, specs, and docs appear here as connected nodes once you add them.",
+    "count": "{{nodes}} nodes · {{links}} links",
+    "reset": "Reset view"
   },
   "docs": {
     "title": "Documentation"
@@ -1323,7 +1351,8 @@
     "search": "Filter…",
     "docs": "Docs",
     "specs": "Specs",
-    "notes": "Notes"
+    "notes": "Notes",
+    "root": "Project root"
   },
   "orphans": {
     "panel": "Orphans",
@@ -1432,7 +1461,14 @@
     "collapseFolder": "Collapse",
     "added": "Added {name} to the workspace.",
     "removed": "Removed {name} from the workspace.",
-    "primaryNote": "The first folder holds the workspace list and the comments; the others are read and searched alongside it."
+    "primaryNote": "The first folder holds the workspace list and the comments; the others are read and searched alongside it.",
+    "openFile": "Open Workspace…",
+    "saveAs": "Save Workspace As…",
+    "fileEmpty": "That workspace file names no folders.",
+    "fileOpenFailed": "Couldn't open that workspace file.",
+    "fileSaved": "Workspace saved as {name}.",
+    "fileSaveFailed": "Couldn't save the workspace file.",
+    "fileMissing": "{name} is in the workspace but no longer exists."
   },
   "cm": {
     "close": "close",
@@ -1450,5 +1486,18 @@
   "help": {
     "logPathCopied": "Log path copied to the clipboard.",
     "logPathCopyFailed": "Couldn't copy the log path."
+  },
+  "output": {
+    "panel": "Output",
+    "channel": "Channel",
+    "allChannels": "All channels",
+    "level": "Level",
+    "filter": "Filter…",
+    "follow": "Follow",
+    "copy": "Copy shown",
+    "clear": "Clear",
+    "empty": "Nothing logged yet for this filter.",
+    "loggingOff": "Logging is off in Settings, so nothing is being collected.",
+    "revealLog": "Show the log file — it keeps everything this panel drops"
   }
 }

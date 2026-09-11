@@ -17,10 +17,13 @@ vi.mock("@/i18n", () => ({ t: (k: string) => k }))
 let listener: ((s: Record<string, unknown>) => void) | null = null
 const settings = {
   wrap: true,
+  wrapColumn: 0,
   focusMode: false,
   codeFont: "JetBrains Mono",
   versionReado: true,
   formatOnSave: true,
+  formatOnPaste: false,
+  formatOnType: false,
   trimTrailingWhitespace: false,
   insertFinalNewline: false,
   defaultEol: "auto",

@@ -13,7 +13,7 @@
  * Tool panels have no flag of their own: being placed in the layout *is* being
  * open, which is why they always report open here.
  */
-import { type DockArea, type PanelId, useLayout } from "./layout"
+import { type DockArea, findPanel, type PanelId, useLayout } from "./layout"
 import { usePreview } from "./preview"
 import { useReasoning } from "./reasoning"
 import { useTerminals } from "./terminals"
@@ -74,6 +74,21 @@ export function openPanel(id: PanelId): void {
 }
 
 /**
+ * Bring one panel to the front: unhide the region it lives in, make it the
+ * active tab of its group, and open it if it carries its own flag. A panel that
+ * has been closed out of the layout entirely is docked at the bottom again —
+ * a command that reveals a panel has to produce a panel.
+ */
+export function revealPanel(id: PanelId): void {
+  const layout = useLayout.getState()
+  const at = findPanel(layout.layout, id)
+  if (at) layout.toggleArea(at.area, false)
+  else layout.move(id, "bottom", { targetGroupId: undefined })
+  useLayout.getState().activate(id)
+  openPanel(id)
+}
+
+/**
  * Show or hide a whole dock region, the way the title bar's toggles mean it.
  *
  * Showing an area whose panels are all closed used to reveal an empty strip and
@@ -85,8 +100,12 @@ export function toggleDockArea(area: DockArea, show?: boolean): void {
   const next = show ?? !isAreaShowing(area)
   useLayout.getState().toggleArea(area, !next)
   if (!next) return
+  // The *active* tab is what the region will show, so it is the one that has to
+  // be open. Asking whether any tab is open would be answered by a tool panel
+  // sharing the group (a tool is open by virtue of being placed), and the region
+  // would come back showing a terminal that was never started.
   for (const g of useLayout.getState().layout.areas[area].groups) {
-    if (!g.tabs.some(isPanelOpen)) openPanel(g.active)
+    if (!isPanelOpen(g.active)) openPanel(g.active)
   }
 }
 

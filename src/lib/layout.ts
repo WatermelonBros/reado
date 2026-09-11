@@ -58,8 +58,9 @@ function emptyArea(area: DockArea): AreaState {
   return { groups: [], size: DEFAULT_AREA_SIZE[area] }
 }
 
-/** The migrated default: terminal docked bottom, browser docked to the right —
- *  matching today's arrangement. Both start closed; placement applies when open. */
+/** The migrated default: terminal docked bottom with Output beside it, browser
+ *  docked to the right — matching today's arrangement. Both start closed;
+ *  placement applies when open. */
 export function defaultLayout(): Layout {
   return {
     areas: {
@@ -69,11 +70,41 @@ export function defaultLayout(): Layout {
         size: 640,
       },
       bottom: {
-        groups: [{ id: "g-terminal", tabs: ["terminal"], active: "terminal", size: 1 }],
+        groups: [
+          {
+            id: "g-terminal",
+            tabs: ["terminal", "output"],
+            active: "terminal",
+            size: 1,
+          },
+        ],
         size: 320,
       },
     },
   }
+}
+
+/**
+ * Put Output beside the terminal in a layout that predates it.
+ *
+ * The arrangement is persisted, so a new default reaches nobody who has already
+ * used the app: without this, the panel exists and is unreachable. Runs once —
+ * a layout that already places Output (including one where the user moved it
+ * elsewhere, or closed it) is left exactly as it is.
+ */
+export function withOutputPanel(layout: Layout): Layout {
+  if (findPanel(layout, "output")) return layout
+  const next = cloneLayout(layout)
+  const beside = next.areas.bottom.groups.find((g) => g.tabs.includes("terminal"))
+  if (beside) beside.tabs.push("output")
+  else
+    next.areas.bottom.groups.push({
+      id: "g-output",
+      tabs: ["output"],
+      active: "output",
+      size: 1,
+    })
+  return next
 }
 
 /** Where a panel currently lives, or null if it isn't placed anywhere. */
@@ -239,6 +270,14 @@ export const useLayout = create<LayoutStore>()(
     {
       name: "reado.layout",
       partialize: (s) => ({ layout: s.layout, seq: s.seq, hidden: s.hidden }),
+      // v1 added the Output panel. A persisted layout is the whole reason a new
+      // panel needs a migration: the default only reaches a fresh install.
+      version: 1,
+      migrate: (persisted, from) => {
+        const state = persisted as { layout?: Layout } | null
+        if (from < 1 && state?.layout) state.layout = withOutputPanel(state.layout)
+        return state as never
+      },
     },
   ),
 )

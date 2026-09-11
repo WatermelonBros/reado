@@ -109,6 +109,10 @@ export async function loadWorkspace(root: string): Promise<string[]> {
 export async function saveWorkspace(): Promise<void> {
   const { root, roots } = useProject.getState()
   if (!root) return
+  // A window opened from a portable workspace file writes back to *that* file:
+  // the list the user opened is the list they expect to be editing.
+  const { updateWorkspaceFile } = await import("./workspaceFile")
+  if (await updateWorkspaceFile()) return
   await writeWorkspaceFile(root, roots)
 }
 

@@ -7,7 +7,13 @@ import { listen } from "@tauri-apps/api/event"
 import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener"
 import { type MessageKey, t } from "@/i18n"
-import { clearTerminal, dispatchToAgent, launchAgent, restartTerminal } from "./agents"
+import {
+  clearTerminal,
+  dispatchToAgent,
+  launchAgent,
+  restartTerminal,
+  runSelectionInTerminal,
+} from "./agents"
 import { APP_MENUS } from "./appMenu"
 import { organizeImports } from "./codeActions"
 import { openCount, toRelative, useComments } from "./comments"
@@ -72,7 +78,7 @@ import {
 import { useFileUndo } from "./fileUndo"
 import { logPath } from "./logger"
 import { notify, notifyError } from "./notice"
-import { toggleDockArea } from "./panels"
+import { revealPanel, toggleDockArea } from "./panels"
 import { usePreview } from "./preview"
 import { useReadProgress } from "./readProgress"
 import { composeReviewPrompt } from "./review"
@@ -97,6 +103,7 @@ import {
   toggleFullscreen,
 } from "./window"
 import { addWorkspaceFolder, rootFor } from "./workspace"
+import { pickWorkspaceFile, saveWorkspaceAs } from "./workspaceFile"
 
 /** Toggle the read/unread state of the active file. Read progress is keyed by
  *  project-relative path, so the absolute active path is converted first. */
@@ -309,6 +316,12 @@ export function runMenuCommand(id: string): void {
       break
     case "openFolder":
       void pickFolderAndOpen()
+      break
+    case "workspace:open":
+      void pickWorkspaceFile()
+      break
+    case "workspace:saveAs":
+      void saveWorkspaceAs()
       break
     case "workspace:addFolder":
       void addWorkspaceFolder()
@@ -591,6 +604,9 @@ export function runMenuCommand(id: string): void {
     case "view:wrap":
       settings.set({ wrap: !settings.wrap })
       break
+    case "view:columnSelection":
+      settings.set({ columnSelection: !settings.columnSelection })
+      break
     case "view:whitespace":
       settings.set({ renderWhitespace: !settings.renderWhitespace })
       break
@@ -646,6 +662,12 @@ export function runMenuCommand(id: string): void {
     // Terminal
     case "terminal":
       terminals.toggle()
+      break
+    case "view:output":
+      revealPanel("output")
+      break
+    case "terminal:runSelection":
+      void runSelectionInTerminal()
       break
     case "terminal:new":
       terminals.add()

@@ -49,9 +49,13 @@ describe("region toggles", () => {
   it("shows the panel by opening what lives in it", async () => {
     render(<LayoutControls />)
     const btn = screen.getByRole("button", { name: "layout.panel" })
-    // Placed but empty is not "showing" — the region would be a bare strip.
-    expect(btn).toHaveAttribute("aria-pressed", "false")
-    await userEvent.click(btn)
+    // The panel region always has something in it — Output is docked there, like
+    // VS Code's — so the toggle reports it showing from the start.
+    expect(btn).toHaveAttribute("aria-pressed", "true")
+    await userEvent.click(btn) // hide
+    await userEvent.click(btn) // and back
+    // Coming back opens the group's *active* tab: the terminal, not whichever
+    // sibling tab happened to count as open.
     expect(useTerminals.getState().open).toBe(true)
     expect(useLayout.getState().hidden.bottom).toBe(false)
     expect(btn).toHaveAttribute("aria-pressed", "true")
@@ -60,8 +64,9 @@ describe("region toggles", () => {
   it("hides the panel without closing what lives there", async () => {
     render(<LayoutControls />)
     const btn = screen.getByRole("button", { name: "layout.panel" })
-    await userEvent.click(btn) // show
     await userEvent.click(btn) // hide
+    await userEvent.click(btn) // show
+    await userEvent.click(btn) // hide again
     expect(useLayout.getState().hidden.bottom).toBe(true)
     expect(btn).toHaveAttribute("aria-pressed", "false")
     // Hiding is not closing: the terminal stays open — and, on screen, running —
@@ -73,9 +78,8 @@ describe("region toggles", () => {
   it("brings the same panel back", async () => {
     render(<LayoutControls />)
     const btn = screen.getByRole("button", { name: "layout.panel" })
-    await userEvent.click(btn)
-    await userEvent.click(btn)
-    await userEvent.click(btn)
+    await userEvent.click(btn) // hide
+    await userEvent.click(btn) // show
     expect(useLayout.getState().hidden.bottom).toBe(false)
     expect(useTerminals.getState().open).toBe(true)
     expect(btn).toHaveAttribute("aria-pressed", "true")

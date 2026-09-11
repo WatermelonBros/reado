@@ -10,6 +10,8 @@ vi.mock("../api", () => ({
   submitToTerminal: vi.fn(),
 }))
 vi.mock("../claudeTheme", () => ({ syncClaudeTheme: vi.fn(async () => {}) }))
+const docView = { current: null as unknown }
+vi.mock("../docInfo", () => ({ useDocInfo: { getState: () => ({ view: docView.current }) } }))
 vi.mock("../store", () => ({ useProject: { getState: () => ({ root: "/root" }) } }))
 vi.mock("@/i18n", () => ({ t: (k: string) => k }))
 
@@ -46,6 +48,7 @@ import {
   restartTerminal,
   runInShell,
   runInTerminal,
+  runSelectionInTerminal,
   sanitizePromptText,
 } from "@/lib/agents"
 import { agentInstalled, ptyWrite, submitToTerminal } from "@/lib/api"
@@ -134,6 +137,46 @@ describe("runInTerminal", () => {
     runInTerminal("ls")
     expect(term.add).toHaveBeenCalled()
     expect(submitToTerminal).toHaveBeenCalledWith("new", "ls", 400)
+  })
+})
+
+describe("runSelectionInTerminal", () => {
+  /** A stand-in editor holding `doc`, with `from`..`to` selected. */
+  const editor = (doc: string, from: number, to: number) => ({
+    state: {
+      selection: { main: { from, to, head: from, empty: from === to } },
+      doc: { lineAt: () => ({ text: doc.split("\n")[0] }) },
+      sliceDoc: (a: number, b: number) => doc.slice(a, b),
+    },
+  })
+
+  it("sends the selection to the focused terminal", async () => {
+    docView.current = editor("pnpm test\nsomething else", 0, 9)
+    term.activeId = "t1"
+    await runSelectionInTerminal()
+    expect(submitToTerminal).toHaveBeenCalledWith("t1", "pnpm test", 0)
+  })
+
+  it("sends the cursor's line when nothing is selected", async () => {
+    docView.current = editor("pnpm test", 2, 2)
+    term.activeId = "t1"
+    await runSelectionInTerminal()
+    expect(submitToTerminal).toHaveBeenCalledWith("t1", "pnpm test", 0)
+  })
+
+  it("opens a terminal when there is none, and waits for it to boot", async () => {
+    docView.current = editor("pnpm test", 0, 9)
+    term.activeId = null
+    await runSelectionInTerminal()
+    expect(term.add).toHaveBeenCalled()
+    expect(submitToTerminal).toHaveBeenCalledWith("new", "pnpm test", 400)
+  })
+
+  it("says so when there is no editor to take a selection from", async () => {
+    docView.current = null
+    await runSelectionInTerminal()
+    expect(submitToTerminal).not.toHaveBeenCalled()
+    expect(show).toHaveBeenCalledWith("info", "terminal.runSelectionEmpty")
   })
 })
 

@@ -167,7 +167,6 @@ export function BrowserInspector({ docked = false }: { docked?: boolean } = {}) 
   useEffect(() => {
     if (tab === "application") void loadStorage()
     if (tab === "elements") void loadDom()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
   // Serialize the previewed page's DOM into a depth/child-capped tree.
@@ -208,7 +207,6 @@ export function BrowserInspector({ docked = false }: { docked?: boolean } = {}) 
     hiNode(treePath.join("."))
     setPickMode(false) // a pick or right-click just completed
     setInspectRequest(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectRequest])
 
   const q1 = (s: string) => JSON.stringify(s)
