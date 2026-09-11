@@ -897,7 +897,15 @@ mod tests {
                 "tsserver": { "path": s(app.join("typescript/lib/tsserver.js")) },
             }))
         );
-        assert!(server_available("vue", &r));
+        // Availability asks one more question than the above: is the server
+        // binary installed? That is a property of the machine — CI has no
+        // `typescript-language-server` — so what is pinned here is the gate, not
+        // the answer: with the plugin in place, Vue is available exactly when the
+        // binary is.
+        assert_eq!(
+            server_available("vue", &r),
+            crate::proc::on_path("typescript-language-server")
+        );
 
         // Without the plugin the server would attach and answer nothing, which
         // is worse than reporting Vue as not installed.
