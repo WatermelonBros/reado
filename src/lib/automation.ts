@@ -343,7 +343,6 @@ async function loop() {
   // are silent. One that never comes up is not: the bridge would retry forever
   // and the only symptom would be an agent timing out with nothing to read.
   let failures = 0
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const r = await fetch(`${RELAY}/poll`)
