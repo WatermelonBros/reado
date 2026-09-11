@@ -49,6 +49,15 @@ pub fn login_shell_path() -> &'static str {
 /// matches the real "gh.exe" otherwise. Shared so every "is X installed?" probe
 /// agrees with what the integrated terminal can actually run.
 pub fn on_path(bin: &str) -> bool {
+    which(bin).is_some()
+}
+
+/// Where `bin` resolves on the login-shell PATH, if it does.
+///
+/// Same walk as [`on_path`], but the caller gets the path: choosing a language
+/// server sometimes needs to look *at* the binary (a global TypeScript 7 has no
+/// `tsserver.js` beside it, and so needs a different server than a TS 5 one).
+pub fn which(bin: &str) -> Option<std::path::PathBuf> {
     let sep = if cfg!(windows) { ';' } else { ':' };
     let exts: Vec<String> = if cfg!(windows) {
         let raw = std::env::var("PATHEXT").unwrap_or_else(|_| ".EXE;.CMD;.BAT;.COM".into());
@@ -62,11 +71,13 @@ pub fn on_path(bin: &str) -> bool {
     } else {
         vec![String::new()]
     };
-    login_shell_path().split(sep).any(|dir| {
-        !dir.is_empty()
-            && exts
-                .iter()
-                .any(|ext| Path::new(dir).join(format!("{bin}{ext}")).is_file())
+    login_shell_path().split(sep).find_map(|dir| {
+        if dir.is_empty() {
+            return None;
+        }
+        exts.iter()
+            .map(|ext| Path::new(dir).join(format!("{bin}{ext}")))
+            .find(|p| p.is_file())
     })
 }
 

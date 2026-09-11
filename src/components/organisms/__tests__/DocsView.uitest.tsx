@@ -69,16 +69,38 @@ describe("DocsView", () => {
   it("renders the index of docs, specs and notes", async () => {
     render(<DocsView />)
 
-    // Docs (README has no slash → basename; nested docs keep their path label).
+    // Documents are named by their file and grouped under their folder — a
+    // column of full paths truncates on the half that identifies the document.
     expect(await screen.findByText("README.md")).toBeInTheDocument()
-    expect(screen.getByText("docs/guide.md")).toBeInTheDocument()
-    // Specs group + its extension-stripped document.
+    expect(screen.getByText("guide.md")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^docs/ })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /kb.root/ })).toBeInTheDocument()
+    // A capability whose group holds one document is that document, under the
+    // capability's own name: the file inside is called `spec.md` in every one.
     expect(screen.getByText("auth")).toBeInTheDocument()
-    expect(screen.getByText("spec")).toBeInTheDocument()
+    expect(screen.queryByText("spec")).not.toBeInTheDocument()
     // Section headings + the always-present notes entry.
     expect(screen.getByText("kb.docs")).toBeInTheDocument()
     expect(screen.getByText("kb.specs")).toBeInTheDocument()
     expect(screen.getAllByText("kb.notes").length).toBeGreaterThan(0)
+  })
+
+  it("folds a folder away and back", async () => {
+    // Fifty documents in one column is what made the index unreadable; a group
+    // the reader has finished with should collapse.
+    render(<DocsView />)
+    expect(await screen.findByText("guide.md")).toBeInTheDocument()
+    const folder = screen.getByRole("button", { name: /^docs/ })
+    expect(folder).toHaveAttribute("aria-expanded", "true")
+
+    await userEvent.click(folder)
+    await waitFor(() => expect(screen.queryByText("guide.md")).not.toBeInTheDocument())
+    // The folder itself stays, so it can be opened again — and says what it holds.
+    expect(folder).toHaveAttribute("aria-expanded", "false")
+    expect(folder).toHaveTextContent("1")
+
+    await userEvent.click(folder)
+    await waitFor(() => expect(screen.getByText("guide.md")).toBeInTheDocument())
   })
 
   it("typing in the filter narrows the doc index by name", async () => {
@@ -88,7 +110,7 @@ describe("DocsView", () => {
     await userEvent.type(screen.getByLabelText("kb.search"), "guide")
 
     await waitFor(() => expect(screen.queryByText("README.md")).not.toBeInTheDocument())
-    expect(screen.getByText("docs/guide.md")).toBeInTheDocument()
+    expect(screen.getByText("guide.md")).toBeInTheDocument()
   })
 
   it("selecting a doc renders its markdown content", async () => {
@@ -98,7 +120,7 @@ describe("DocsView", () => {
     expect(await screen.findByText("Readme Heading")).toBeInTheDocument()
 
     // Switching to another doc renders that document's markdown.
-    await userEvent.click(screen.getByText("docs/guide.md"))
+    await userEvent.click(screen.getByText("guide.md"))
     expect(await screen.findByText("Guide Heading")).toBeInTheDocument()
   })
 
@@ -114,7 +136,7 @@ describe("DocsView", () => {
     )
 
     // A nested doc resolves against its own directory, not the project root.
-    await userEvent.click(screen.getByText("docs/guide.md"))
+    await userEvent.click(screen.getByText("guide.md"))
     expect(await screen.findByAltText("local")).toHaveAttribute(
       "src",
       `asset://localhost/${encodeURIComponent("/repo/docs/img/shot.png")}`,

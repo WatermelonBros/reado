@@ -236,8 +236,9 @@ export const LANG_SERVERS: LangServerExt[] = [
   {
     id: "vue",
     name: "Vue",
-    description: "Vue language server (@vue/language-server).",
-    install: all("npm install -g @vue/language-server"),
+    description:
+      "Types, diagnostics and completion in .vue files — script block and template alike. Served by typescript-language-server carrying @vue/typescript-plugin, which is how Vue 3's tooling works: the Vue language server holds no TypeScript of its own.",
+    install: all("npm install -g typescript-language-server typescript @vue/typescript-plugin"),
     requires: "Node.js",
   },
   {

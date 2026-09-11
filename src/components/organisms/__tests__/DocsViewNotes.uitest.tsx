@@ -169,7 +169,8 @@ describe("searching the knowledge base", () => {
     ])
     render(<DocsView />)
     fireEvent.change(await screen.findByLabelText("kb.search"), { target: { value: "needle" } })
-    await waitFor(() => expect(screen.getByText("docs/guide.md")).toBeInTheDocument())
+    // Documents are named by their file, under a header for their folder.
+    await waitFor(() => expect(screen.getByText("guide.md")).toBeInTheDocument())
     expect(screen.queryByText("README.md")).not.toBeInTheDocument()
     expect(screen.queryByText("app.ts")).not.toBeInTheDocument()
   })
@@ -191,10 +192,11 @@ describe("searching the knowledge base", () => {
 })
 
 describe("the index", () => {
-  it("lists the specs under their change, and opens one", async () => {
+  it("lists a one-document capability under its own name, and opens it", async () => {
+    // The document inside is `spec.md` in every capability there is; the group's
+    // title is the only part that identifies it.
     render(<DocsView />)
-    expect(await screen.findByText("auth")).toBeInTheDocument()
-    await userEvent.click(screen.getByText("spec"))
+    await userEvent.click(await screen.findByText("auth"))
     await waitFor(() =>
       expect(readFile).toHaveBeenCalledWith(ROOT, "/repo/.openspec/specs/auth/spec.md"),
     )
@@ -209,7 +211,7 @@ describe("the index", () => {
     expect(screen.queryByText("Heading")).not.toBeInTheDocument()
     // …while the index it was picked from is still there to pick again.
     expect(screen.getByText("README.md")).toBeInTheDocument()
-    expect(screen.getByText("docs/guide.md")).toBeInTheDocument()
+    expect(screen.getByText("guide.md")).toBeInTheDocument()
   })
 
   it("closes on the scrim and from the button", async () => {

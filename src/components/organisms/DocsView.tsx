@@ -17,7 +17,7 @@ import remarkGfm from "remark-gfm"
 import { COMMENT_TYPES, Dot, stateKey, TYPE_COLOR, typeKey } from "@/components/atoms/commentMeta"
 import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
-import { CloseIcon, DocsIcon, MessageIcon, SpecsIcon } from "@/components/atoms/icons"
+import { ChevronIcon, CloseIcon, DocsIcon, MessageIcon, SpecsIcon } from "@/components/atoms/icons"
 import { Select } from "@/components/atoms/Select"
 import {
   allowProjectAssets,
@@ -53,6 +53,8 @@ export function DocsView() {
   const [query, setQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState<CommentType | "all">("all")
   const [selection, setSelection] = useState<Selection>({ kind: "notes" })
+  /** Index groups the reader has folded away. */
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [content, setContent] = useState<string | null>(null)
   // KB paths whose *content* matches the query (full-text, not just the name).
   const [contentMatches, setContentMatches] = useState<Set<string>>(new Set())
@@ -181,6 +183,20 @@ export function DocsView() {
     }))
     .filter((g) => g.items.length > 0)
 
+  // Documents by the folder they live in, keeping `listDocs`' order (READMEs and
+  // root docs first) both within a folder and between folders.
+  const docFolders = useMemo(() => {
+    const byDir = new Map<string, DocItem[]>()
+    for (const d of filteredDocs) {
+      const dir = d.path.includes("/") ? d.path.slice(0, d.path.lastIndexOf("/")) : ""
+      const items = byDir.get(dir)
+      if (items) items.push(d)
+      else byDir.set(dir, [d])
+    }
+    return [...byDir.entries()]
+    // filteredDocs is derived from docs+query each render; those are the inputs.
+  }, [docs, query, contentMatches])
+
   const isSel = (kind: string, path?: string) =>
     selection.kind === kind && (kind === "notes" || (selection as { path: string }).path === path)
 
@@ -208,6 +224,34 @@ export function DocsView() {
       <span className="truncate">{label}</span>
     </button>
   )
+
+  /** A collapsible group in the index, with what it holds counted on the header. */
+  const group = (key: string, title: string, count: number, children: React.ReactNode) => {
+    const open = !collapsed.has(key)
+    return (
+      <div key={key}>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() =>
+            setCollapsed((c) => {
+              const next = new Set(c)
+              if (!next.delete(key)) next.add(key)
+              return next
+            })
+          }
+          className="flex w-full items-center gap-1 px-3 pt-1.5 pb-0.5 text-left text-xs font-medium text-muted hover:text-ink"
+        >
+          <ChevronIcon
+            className={`h-3 w-3 flex-none text-faint transition-transform ${open ? "rotate-90" : ""}`}
+          />
+          <span className="truncate">{title}</span>
+          <span className="ml-auto pl-2 tabular-nums text-faint">{count}</span>
+        </button>
+        {open && children}
+      </div>
+    )
+  }
 
   const sectionLabel = (text: string) => (
     <div className="px-3 pt-3 pb-1 text-[10px] font-semibold tracking-wide text-faint uppercase">
@@ -252,12 +296,24 @@ export function DocsView() {
             {filteredDocs.length > 0 && (
               <>
                 {sectionLabel(t("kb.docs"))}
-                {filteredDocs.map((d) =>
-                  navButton(
-                    d.path,
-                    d.label.includes("/") ? d.label : basename(d.label),
-                    <DocsIcon className="h-3.5 w-3.5 flex-none text-faint" />,
-                    { kind: "doc", path: d.path, label: d.label },
+                {/* By folder, and by file name within it. A flat list of full
+                    paths truncates on the half that identifies the document —
+                    `docs/testing/testbook/01-launc…` — and puts fifty of them in
+                    one undifferentiated column. */}
+                {docFolders.map(([dir, items]) =>
+                  group(
+                    `dir:${dir}`,
+                    dir || t("kb.root"),
+                    items.length,
+                    items.map((d) =>
+                      navButton(
+                        d.path,
+                        basename(d.label),
+                        <DocsIcon className="h-3.5 w-3.5 flex-none text-faint" />,
+                        { kind: "doc", path: d.path, label: d.label },
+                        true,
+                      ),
+                    ),
                   ),
                 )}
               </>
@@ -266,22 +322,32 @@ export function DocsView() {
             {filteredSpecs.length > 0 && (
               <>
                 {sectionLabel(t("kb.specs"))}
-                {filteredSpecs.map((g) => (
-                  <div key={`${g.kind}:${g.title}`}>
-                    <div className="truncate px-3 pt-1.5 pb-0.5 text-xs font-medium text-muted">
-                      {g.title}
-                    </div>
-                    {g.items.map((it) =>
-                      navButton(
-                        it.path,
-                        stripExt(it.label),
+                {filteredSpecs.map((g) =>
+                  // A group holding one document *is* that document: its own
+                  // name is the capability, while the file underneath is called
+                  // `spec.md` in every single one of them.
+                  g.items.length === 1
+                    ? navButton(
+                        g.items[0].path,
+                        g.title,
                         <SpecsIcon className="h-3.5 w-3.5 flex-none text-faint" />,
-                        { kind: "spec", path: it.path, label: it.label },
-                        true,
+                        { kind: "spec", path: g.items[0].path, label: g.items[0].label },
+                      )
+                    : group(
+                        `${g.kind}:${g.title}`,
+                        g.title,
+                        g.items.length,
+                        g.items.map((it) =>
+                          navButton(
+                            it.path,
+                            stripExt(it.label),
+                            <SpecsIcon className="h-3.5 w-3.5 flex-none text-faint" />,
+                            { kind: "spec", path: it.path, label: it.label },
+                            true,
+                          ),
+                        ),
                       ),
-                    )}
-                  </div>
-                ))}
+                )}
               </>
             )}
 
