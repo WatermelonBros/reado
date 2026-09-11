@@ -65,7 +65,7 @@ fn entries(dir: &Path) -> Vec<(u128, u64)> {
             Some((stamp, e.metadata().ok()?.len()))
         })
         .collect();
-    out.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+    out.sort_unstable_by_key(|e| std::cmp::Reverse(e.0));
     out
 }
 
