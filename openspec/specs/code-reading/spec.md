@@ -70,11 +70,30 @@ When navigating to a comment or symbol, Reado SHALL show a path breadcrumb and b
 - **AND** the target line is softly highlighted, then fades
 
 ### Requirement: Line Wrap Toggle
-Reado SHALL default code line wrapping to off, with a quick toggle to enable it.
+
+Reado SHALL default code line wrapping to off, with a quick toggle to enable it,
+and SHALL let the user choose where a wrapped line breaks: at the editor's edge
+(the default) or at a fixed column.
 
 #### Scenario: Toggle wrap
+
 - **WHEN** the user toggles line wrap on for a file with long lines
 - **THEN** long lines wrap instead of scrolling horizontally
+
+#### Scenario: Wrap at a column
+
+- **WHEN** wrap is on and the user sets the wrap column to 120
+- **THEN** lines break at 120 characters however wide the window is
+
+#### Scenario: Column zero means the edge
+
+- **WHEN** the wrap column is 0
+- **THEN** lines wrap at the editor's edge, as they always have
+
+#### Scenario: The setting applies to open files
+
+- **WHEN** the wrap column changes while a file is open
+- **THEN** that file re-wraps without being reopened
 
 ### Requirement: Non-Code File Rendering
 Reado SHALL render non-code files with type-appropriate viewers: formatted markdown, images, and foldable JSON, allowing comments where anchoring is meaningful.
@@ -128,4 +147,42 @@ The Outline panel SHALL highlight the symbol that contains the cursor.
 #### Scenario: Cursor inside a function
 - **WHEN** the cursor is inside a function listed in the Outline
 - **THEN** that Outline entry is highlighted as the current symbol
+
+### Requirement: Column Selection Mode
+
+Reado SHALL offer a column selection mode that persists until it is turned off.
+While it is on, a plain drag in the editor SHALL select a rectangle rather than a
+run of text, and the mode SHALL be visible in the status bar. Alt-drag SHALL
+select a rectangle whether the mode is on or off.
+
+#### Scenario: Drag selects a rectangle
+
+- **WHEN** column selection mode is on and the user drags across several lines
+- **THEN** the selection is a rectangle — one cursor per line, the same columns
+
+#### Scenario: The mode is visible
+
+- **WHEN** column selection mode is on
+- **THEN** the status bar shows it, and selecting that indicator turns it off
+
+#### Scenario: The mode survives the file
+
+- **WHEN** the user switches file or reopens the project with the mode on
+- **THEN** the mode is still on
+
+### Requirement: Keyboard Column Cursors
+
+Reado SHALL let the user grow a rectangular selection from the keyboard, without
+the pointer and without turning column selection mode on.
+
+#### Scenario: Extend the rectangle down
+
+- **WHEN** the user presses the column-cursor-down shortcut
+- **THEN** a cursor is added on the line below at the same column, with the
+  existing cursors kept
+
+#### Scenario: Widen every cursor
+
+- **WHEN** the user presses the column-cursor-right shortcut with several cursors
+- **THEN** every cursor extends its selection by one character
 

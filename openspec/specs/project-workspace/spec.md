@@ -75,11 +75,27 @@ Reado SHALL display a status bar showing the active file path, cursor line:colum
 - **THEN** the status bar shows the file path, line:column, branch, open-comment count, and agent status
 
 ### Requirement: Internationalization
-Reado SHALL ship with internationalized UI strings supporting at least Italian and English, selectable in settings.
+
+Reado SHALL ship with internationalized UI strings supporting English, Italian,
+Spanish, French and German, selectable in settings, and SHALL start in the OS
+language when it is one of them. Every locale SHALL carry the same set of keys as
+English, with the same placeholders.
 
 #### Scenario: Switch UI language
+
 - **WHEN** the user selects a different UI language in settings
 - **THEN** the interface strings update to the selected language
+
+#### Scenario: Following the system
+
+- **WHEN** Reado starts for the first time on a machine whose language is one it
+  ships
+- **THEN** the interface is in that language
+
+#### Scenario: A locale is complete
+
+- **WHEN** a locale file is missing a key, or a string drops a placeholder
+- **THEN** the test suite fails
 
 ### Requirement: Empty State Guidance
 When a project has no comments yet, Reado SHALL show a discreet empty-state hint explaining how to leave the first comment, which disappears after the first comment is created.
@@ -88,4 +104,43 @@ When a project has no comments yet, Reado SHALL show a discreet empty-state hint
 - **WHEN** a project with zero comments is opened
 - **THEN** a hint explains the comment-creation gesture
 - **AND** the hint no longer appears once a comment exists
+
+### Requirement: Portable Workspace File
+
+Reado SHALL be able to save the current set of workspace folders as a single
+portable file, and to open a workspace from such a file. Folder paths SHALL be
+stored relative to the file where possible, so the file can be committed and used
+on another machine.
+
+#### Scenario: Saving a workspace
+
+- **WHEN** the user saves the workspace with two folders open
+- **THEN** a workspace file is written naming both folders, relative to itself
+  where possible
+
+#### Scenario: Opening a workspace file
+
+- **WHEN** the user opens a workspace file
+- **THEN** every folder it names is opened in one window, the first as the primary
+  folder
+
+#### Scenario: Opened from the operating system
+
+- **WHEN** a workspace file is opened from the OS (double click, `open`, argv)
+- **THEN** Reado opens the workspace rather than showing the file's JSON
+
+#### Scenario: Edits go back to the file
+
+- **WHEN** a folder is added or removed in a window opened from a workspace file
+- **THEN** that file is updated, not a folder's `.reado/workspace.json`
+
+#### Scenario: A folder that has moved
+
+- **WHEN** a workspace file names a folder that does not exist
+- **THEN** the remaining folders open and the missing one is reported
+
+#### Scenario: Folders opened directly are unaffected
+
+- **WHEN** a folder is opened directly, with no workspace file
+- **THEN** its folder list behaves exactly as it does today
 

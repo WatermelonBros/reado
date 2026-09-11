@@ -57,3 +57,107 @@ server's document symbols.
 - **WHEN** a server provides document symbols for the open file
 - **THEN** the Outline reflects them (kinds, nesting) instead of the heuristic
 
+### Requirement: Rename Symbol
+
+Reado SHALL rename a symbol across the project through the language server, and
+SHALL determine the range to rename by asking the server
+(`textDocument/prepareRename`) before prompting the user, falling back to the
+editor's own word boundary only when the server does not offer that request or
+does not answer it.
+
+#### Scenario: Symbol that is not a word
+
+- **WHEN** the cursor is on a symbol whose text is not a plain word — a decorator,
+  a sigil-prefixed variable, a kebab-case CSS custom property
+- **THEN** the prompt opens with the symbol the server names, and the rename
+  rewrites exactly that range
+
+#### Scenario: Symbol that cannot be renamed
+
+- **WHEN** the server answers that the position cannot be renamed
+- **THEN** Reado says so and never asks the user to type a new name
+
+#### Scenario: Server without prepare support
+
+- **WHEN** the server does not advertise `prepareProvider`
+- **THEN** rename behaves as before, using the editor's word boundary
+
+#### Scenario: Prepare request fails
+
+- **WHEN** the prepare request throws or times out
+- **THEN** the rename still proceeds from the editor's word boundary
+
+### Requirement: Server Folding Ranges
+
+Where the language server offers `textDocument/foldingRange`, Reado SHALL use the
+regions it reports for folding, and SHALL fall back to syntax-tree folding for
+lines the server does not report.
+
+#### Scenario: Folding an import block
+
+- **WHEN** a file opens whose server reports the import block as a folding range
+- **THEN** the block can be folded from the gutter as one region
+
+#### Scenario: Syntax folding still works
+
+- **WHEN** the cursor is on a line the server reports no region for
+- **THEN** the syntax tree's own folding still applies
+
+#### Scenario: No server
+
+- **WHEN** no server is attached to the file
+- **THEN** folding behaves exactly as it does today
+
+### Requirement: Document Links
+
+Where the language server offers `textDocument/documentLink`, Reado SHALL present
+the ranges it reports as links in the editor and SHALL open their targets on
+activation: a file target in the editor, a web target in the browser pane.
+
+#### Scenario: A path in a config file
+
+- **WHEN** the server reports the value of a path field as a document link
+- **THEN** activating it opens that file in the editor
+
+#### Scenario: Lazily resolved target
+
+- **WHEN** the server reports a link with no target
+- **THEN** the target is resolved when the link is activated, and then opened
+
+#### Scenario: Unopenable target
+
+- **WHEN** a link's target cannot be opened
+- **THEN** Reado says so, naming the target
+
+#### Scenario: No server support
+
+- **WHEN** the server does not offer document links
+- **THEN** Reado's own link resolution applies, as it does today
+
+### Requirement: Linked Editing
+
+Where the language server reports that the range under the cursor is linked to
+others (`textDocument/linkedEditingRange`), Reado SHALL apply edits made inside
+that range to its linked ranges in the same transaction, and SHALL mark the
+linked ranges while the link is live.
+
+#### Scenario: Renaming an HTML tag
+
+- **WHEN** the user edits the name in an opening tag
+- **THEN** the matching closing tag changes with it
+
+#### Scenario: One undo
+
+- **WHEN** the user undoes after a linked edit
+- **THEN** both ranges return to their previous text in one step
+
+#### Scenario: Editing outside the range
+
+- **WHEN** an edit starts inside the linked range and extends beyond it
+- **THEN** nothing is mirrored and the link is dropped
+
+#### Scenario: No server support
+
+- **WHEN** the server does not advertise linked editing ranges
+- **THEN** no request is made and typing behaves as it does today
+
