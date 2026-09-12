@@ -8,14 +8,16 @@
 
 import { LanguageDescription } from "@codemirror/language"
 import { getChunks, goToNextChunk, goToPreviousChunk, unifiedMergeView } from "@codemirror/merge"
-import { Compartment, EditorState } from "@codemirror/state"
+import { Compartment, EditorState, Text } from "@codemirror/state"
 import { EditorView, keymap, lineNumbers } from "@codemirror/view"
+import type { TFunction } from "i18next"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import { ChevronIcon } from "@/components/atoms/icons"
 import { HunkBar } from "@/components/molecules/HunkBar"
+import { announce } from "@/lib/a11y"
 import { getReadSnapshot, gitDiffBase, historyRead, readFile } from "@/lib/api"
 import { readoAppearance } from "@/lib/codemirror"
 import { languages } from "@/lib/languages"
@@ -36,6 +38,48 @@ interface Props {
   /** Override the git base to diff against (PR review diffs head vs the PR base
    *  ref, not the working tree's HEAD). Falls back to the shared diff base. */
   base?: string
+}
+
+/**
+ * How many lines a changed chunk spans, for the announcement.
+ *
+ * A chunk's end offset points *past* its trailing newline, so measuring up to
+ * `to` counts the untouched line after it — `to - 1` lands on that newline,
+ * which still belongs to the chunk's last line. Exported for the test: an
+ * off-by-one here is invisible on screen and wrong in every announcement.
+ */
+export function chunkLines(doc: Text, from: number, to: number): number {
+  if (from >= to) return 0
+  return doc.lineAt(Math.min(to, doc.length) - 1).number - doc.lineAt(from).number + 1
+}
+
+/**
+ * Say what a jump landed on.
+ *
+ * A diff is read by colour, and colour is the one thing a screen reader cannot
+ * relay — so the chunk is described instead: which one of how many, how many
+ * lines it adds and removes, and where it is. Without this, Alt+Down moves a
+ * caret for no stated reason.
+ *
+ * The early return matters: `announce` is a no-op for a reader who has not asked
+ * for it, and rebuilding the original document to count its lines is not free.
+ */
+function describeChunk(view: EditorView, original: string, t: TFunction): void {
+  if (!useSettings.getState().screenReader) return
+  const chunks = getChunks(view.state)?.chunks ?? []
+  if (chunks.length === 0) return
+  const at = view.state.selection.main.head
+  const index = chunks.findIndex((c) => at >= c.fromB && at <= c.toB)
+  const chunk = chunks[index] ?? chunks[0]
+  announce(
+    t("a11y.diffChunk", {
+      n: (index === -1 ? 0 : index) + 1,
+      total: chunks.length,
+      added: chunkLines(view.state.doc, chunk.fromB, chunk.toB),
+      removed: chunkLines(Text.of(original.split("\n")), chunk.fromA, chunk.toA),
+      line: view.state.doc.lineAt(chunk.fromB).number,
+    }),
+  )
 }
 
 export function DiffView({ relPath, text, base: baseOverride }: Props) {
@@ -169,8 +213,22 @@ function DiffEditor({
           EditorView.editable.of(false),
           // Jump between changed regions with Alt+Up/Down.
           keymap.of([
-            { key: "Alt-ArrowDown", run: goToNextChunk },
-            { key: "Alt-ArrowUp", run: goToPreviousChunk },
+            {
+              key: "Alt-ArrowDown",
+              run: (v) => {
+                const moved = goToNextChunk(v)
+                if (moved) describeChunk(v, original, t)
+                return moved
+              },
+            },
+            {
+              key: "Alt-ArrowUp",
+              run: (v) => {
+                const moved = goToPreviousChunk(v)
+                if (moved) describeChunk(v, original, t)
+                return moved
+              },
+            },
           ]),
           // Show the current file with changes vs the committed base inline.
           unifiedMergeView({ original, mergeControls: false }),
@@ -182,7 +240,9 @@ function DiffEditor({
       }),
     })
     viewRef.current = view
-    setChunkCount(getChunks(view.state)?.chunks.length ?? 0)
+    const count = getChunks(view.state)?.chunks.length ?? 0
+    setChunkCount(count)
+    announce(t("a11y.diffSummary", { count }))
     const desc = LanguageDescription.matchFilename(languages, path)
     if (desc) desc.load().then((s) => view.dispatch({ effects: langComp.reconfigure(s) }))
     return () => {
@@ -196,6 +256,7 @@ function DiffEditor({
     if (!view) return
     ;(next ? goToNextChunk : goToPreviousChunk)(view)
     view.focus()
+    describeChunk(view, original, t)
   }
 
   return (

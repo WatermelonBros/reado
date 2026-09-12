@@ -505,6 +505,28 @@ function InterfaceTab() {
           </span>
         </Field>
 
+        {/* Not auto-detected, and the hint says why: a webview cannot see a
+        screen reader, and a wrong guess is either a flood or a silence. */}
+        <Checkbox
+          checked={settings.screenReader}
+          onChange={(screenReader) => settings.set({ screenReader })}
+          label={t("settings.screenReader")}
+          className="text-sm text-muted"
+        />
+        <span className="-mt-1 text-xs leading-relaxed text-faint">
+          {t("settings.screenReaderHint")}
+        </span>
+
+        <Checkbox
+          checked={settings.audioCues}
+          onChange={(audioCues) => settings.set({ audioCues })}
+          label={t("settings.audioCues")}
+          className="text-sm text-muted"
+        />
+        <span className="-mt-1 text-xs leading-relaxed text-faint">
+          {t("settings.audioCuesHint")}
+        </span>
+
         <Field label={t("settings.reduceMotion")} settingKey="reduceMotion">
           <Select
             value={settings.reduceMotion}

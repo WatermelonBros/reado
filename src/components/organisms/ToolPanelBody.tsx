@@ -27,6 +27,7 @@ import { ProblemsPanel } from "./ProblemsPanel"
 import { QaPanel } from "./QaPanel"
 import { SearchPanel } from "./SearchPanel"
 import { SpecsPanel } from "./SpecsPanel"
+import { TestsPanel } from "./TestsPanel"
 import { TimelinePanel } from "./TimelinePanel"
 import { ToursPanel } from "./ToursPanel"
 
@@ -49,6 +50,7 @@ export const TOOL_TITLE: Record<Tool, MessageKey> = {
   prereview: "prereview.panel",
   guidedreview: "guided.panel",
   coverage: "coverage.panel",
+  tests: "tests.panel",
   extensions: "ext.panel",
   output: "output.panel",
 }
@@ -103,6 +105,8 @@ export function ToolPanelBody({ tool }: { tool: Tool }) {
       return <GuidedReviewPanel />
     case "coverage":
       return <CoveragePanel />
+    case "tests":
+      return <TestsPanel />
     case "extensions":
       return <ExtensionsPanel />
     case "output":

@@ -29,9 +29,47 @@ struct Session {
     window: String,
 }
 
-/// Tauri-managed registry of terminal sessions, keyed by the UI's tab id.
+/// Tauri-managed registry of terminal sessions, keyed by the UI's tab id, plus
+/// the input that arrived before a session existed.
+///
+/// A pane is in the frontend's layout the moment it is created; its shell is
+/// spawned a frame or two later by the component that draws it. Anything that
+/// opens a pane and runs a command in it — a task, a test run, a notebook —
+/// writes into that gap, and a write with nowhere to go used to be discarded in
+/// silence. It waits here instead, and [`pty_spawn`] delivers it.
 #[derive(Default)]
-pub struct PtyState(Mutex<HashMap<String, Session>>);
+pub struct PtyState {
+    sessions: Mutex<HashMap<String, Session>>,
+    pending: Mutex<HashMap<String, String>>,
+}
+
+/// Most input a pane may hold before its shell exists. A command line, not a
+/// paste buffer: a pane that never spawns must not hold anything of size.
+const MAX_PENDING_BYTES: usize = 8 * 1024;
+
+impl PtyState {
+    /// Hold input for a pane whose shell has not spawned yet.
+    ///
+    /// Capped: a pane that never spawns must not keep a paste buffer alive for
+    /// the session. Past the cap the extra is dropped rather than the whole —
+    /// the beginning of a command line is what identifies it in a log.
+    fn hold(&self, id: String, data: &str) {
+        let mut pending = self.pending.lock().unwrap();
+        let waiting = pending.entry(id).or_default();
+        if waiting.len() + data.len() <= MAX_PENDING_BYTES {
+            waiting.push_str(data);
+        }
+    }
+
+    /// Take whatever a pane was holding, if anything.
+    fn take_held(&self, id: &str) -> Option<String> {
+        self.pending
+            .lock()
+            .unwrap()
+            .remove(id)
+            .filter(|t| !t.is_empty())
+    }
+}
 
 /// The login shell to spawn, with its arguments, per platform.
 fn default_shell() -> (String, Vec<&'static str>) {
@@ -134,7 +172,7 @@ pub fn pty_spawn(
     // Register the session before the reader thread runs, so a child that exits
     // immediately can't race its own cleanup (remove + reap, below) against this
     // insert and leave a stale session behind.
-    state.0.lock().unwrap().insert(
+    state.sessions.lock().unwrap().insert(
         id.clone(),
         Session {
             master: pair.master,
@@ -143,6 +181,25 @@ pub fn pty_spawn(
             window: window.label().to_string(),
         },
     );
+
+    // Anything typed into this pane before its shell existed has been waiting;
+    // deliver it now, before the first byte of output comes back.
+    if let Some(text) = state.take_held(&id) {
+        // The writer handle is cloned out from under the registry lock, which
+        // is released at the end of this statement — the same rule `pty_write`
+        // follows, and for the same reason.
+        let writer = state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(&id)
+            .map(|session| Arc::clone(&session.writer));
+        if let Some(writer) = writer {
+            let mut writer = writer.lock().unwrap();
+            let _ = writer.write_all(text.as_bytes());
+            let _ = writer.flush();
+        }
+    }
 
     // Stream output until EOF, then signal exit and drop/reap the session so its
     // PTY fds and (on Unix) the child's zombie don't linger when the shell exits
@@ -159,7 +216,12 @@ pub fn pty_spawn(
                     let _ = app.emit(&exit_event, ());
                     // Bind out of the guard so the registry lock is released
                     // before the (blocking) wait().
-                    let removed = app.state::<PtyState>().0.lock().unwrap().remove(&exit_id);
+                    let removed = app
+                        .state::<PtyState>()
+                        .sessions
+                        .lock()
+                        .unwrap()
+                        .remove(&exit_id);
                     if let Some(mut session) = removed {
                         let _ = session.child.wait();
                     }
@@ -176,15 +238,30 @@ pub fn pty_spawn(
 }
 
 /// Forward user input (keystrokes / injected text) to a session.
+///
+/// Input for a pane whose shell has not spawned yet is held rather than dropped;
+/// see [`PtyState`]. The caller does not have to know which case it is in, which
+/// is the point — every one that did know had to remember, and one of them
+/// forgot.
 #[tauri::command]
 pub fn pty_write(state: State<PtyState>, id: String, data: String) -> Result<(), String> {
+    write_or_hold(&state, id, &data)
+}
+
+/// The body of [`pty_write`], over a plain reference so a test can drive it —
+/// the branch that matters here is the one that is *not* taken in a test that
+/// only exercises the waiting room.
+fn write_or_hold(state: &PtyState, id: String, data: &str) -> Result<(), String> {
     // Grab the writer handle under the registry lock, then drop that lock before
     // writing: the PTY master is blocking, so a full input buffer (a paused or
     // non-reading TUI) must not stall every other terminal — nor app exit, which
     // contends on this same lock.
-    let writer = match state.0.lock().unwrap().get(&id) {
+    let writer = match state.sessions.lock().unwrap().get(&id) {
         Some(session) => Arc::clone(&session.writer),
-        None => return Ok(()),
+        None => {
+            state.hold(id, data);
+            return Ok(());
+        }
     };
     let mut writer = writer.lock().unwrap();
     writer
@@ -197,7 +274,7 @@ pub fn pty_write(state: State<PtyState>, id: String, data: String) -> Result<(),
 /// Resize a session's PTY to match the rendered terminal.
 #[tauri::command]
 pub fn pty_resize(state: State<PtyState>, id: String, rows: u16, cols: u16) -> Result<(), String> {
-    if let Some(session) = state.0.lock().unwrap().get(&id) {
+    if let Some(session) = state.sessions.lock().unwrap().get(&id) {
         session
             .master
             .resize(size(rows, cols))
@@ -235,7 +312,7 @@ fn terminate(session: &mut Session) {
 /// Kill a session and drop it from the registry.
 #[tauri::command]
 pub fn pty_kill(state: State<PtyState>, id: String) -> Result<(), String> {
-    if let Some(mut session) = state.0.lock().unwrap().remove(&id) {
+    if let Some(mut session) = state.sessions.lock().unwrap().remove(&id) {
         crate::log::info("pty", "killed", serde_json::json!({ "id": id }));
         terminate(&mut session);
     }
@@ -245,7 +322,7 @@ pub fn pty_kill(state: State<PtyState>, id: String) -> Result<(), String> {
 /// Terminate every live session — called when the app is exiting so no shell or
 /// dev server outlives Reado.
 pub fn kill_all(state: &PtyState) {
-    if let Ok(mut map) = state.0.lock() {
+    if let Ok(mut map) = state.sessions.lock() {
         for (_, mut session) in map.drain() {
             terminate(&mut session);
         }
@@ -255,7 +332,7 @@ pub fn kill_all(state: &PtyState) {
 /// Terminate every session owned by `window` — called when that window closes so
 /// its shells/dev servers don't linger as orphans while the app keeps running.
 pub fn kill_for_window(state: &PtyState, window: &str) {
-    if let Ok(mut map) = state.0.lock() {
+    if let Ok(mut map) = state.sessions.lock() {
         let ids: Vec<String> = map
             .iter()
             .filter(|(_, s)| s.window == window)
@@ -266,5 +343,55 @@ pub fn kill_for_window(state: &PtyState, window: &str) {
                 terminate(&mut session);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod pending_tests {
+    use super::*;
+
+    // A pane exists in the layout before its shell does, and `pty_write` into
+    // that gap used to succeed while writing nowhere — which is how a test run
+    // and a task could both look wired up and never start.
+    #[test]
+    fn input_for_an_unspawned_pane_waits_and_is_delivered_once() {
+        let state = PtyState::default();
+        // Through the command's own body, not the waiting room directly: what
+        // this is pinning is that a write with no session *reaches* it.
+        write_or_hold(&state, "p1".into(), "npx vitest run").unwrap();
+        write_or_hold(&state, "p1".into(), "\r").unwrap();
+        assert_eq!(state.take_held("p1").as_deref(), Some("npx vitest run\r"));
+        // Taken once: the shell has it now.
+        assert_eq!(state.take_held("p1"), None);
+    }
+
+    #[test]
+    fn a_pane_that_wrote_nothing_holds_nothing() {
+        let state = PtyState::default();
+        assert_eq!(state.take_held("p2"), None);
+        state.hold("p3".into(), "");
+        assert_eq!(state.take_held("p3"), None);
+    }
+
+    #[test]
+    fn what_is_held_is_capped() {
+        // A pane that never spawns must not keep a paste buffer alive for the
+        // whole session.
+        let state = PtyState::default();
+        state.hold("p4".into(), &"x".repeat(MAX_PENDING_BYTES));
+        state.hold("p4".into(), "one byte too many");
+        assert_eq!(
+            state.take_held("p4").map(|t| t.len()),
+            Some(MAX_PENDING_BYTES)
+        );
+    }
+
+    #[test]
+    fn panes_do_not_share_a_waiting_room() {
+        let state = PtyState::default();
+        state.hold("a".into(), "for a");
+        state.hold("b".into(), "for b");
+        assert_eq!(state.take_held("a").as_deref(), Some("for a"));
+        assert_eq!(state.take_held("b").as_deref(), Some("for b"));
     }
 }

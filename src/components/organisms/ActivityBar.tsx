@@ -12,6 +12,7 @@ import { Badge } from "@/components/atoms/Badge"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import {
+  BeakerIcon,
   BookmarkIcon,
   CoverageIcon,
   DocsIcon,
@@ -43,6 +44,7 @@ import { usePreReview } from "@/lib/preReview"
 import { useQa } from "@/lib/qa"
 import { useSpecs } from "@/lib/specs"
 import { type Tool, usePalette, useProject, useWorkspace } from "@/lib/store"
+import { useTesting } from "@/lib/testing"
 import { useTours } from "@/lib/tours"
 
 type ToolDef = { id: Tool; labelKey: MessageKey; Icon: typeof SearchIcon }
@@ -79,6 +81,7 @@ export function ActivityBar() {
   const hasHierarchy = useHierarchy((s) => s.root !== null || s.loading || s.unsupported)
   const qaCount = useQa((s) => s.notes.length)
   const tourCount = useTours((s) => s.tours.length)
+  const testCount = useTesting((s) => s.files.length)
   const preReviewCount = usePreReview((s) => s.drafts.length)
   const guidedOpen = useGuidedReview((s) =>
     s.sessions.reduce((n, sess) => n + openProposals(sess).length, 0),
@@ -94,6 +97,11 @@ export function ActivityBar() {
     { id: "guidedreview", labelKey: "guided.panel", Icon: RouteIcon },
     // Reading coverage is core to the read-first mission — always available.
     { id: "coverage", labelKey: "coverage.panel", Icon: CoverageIcon },
+    // Tests appear once the project has some — an explorer for nothing is a
+    // rail icon that only ever says "no tests".
+    ...(testCount > 0
+      ? [{ id: "tests" as Tool, labelKey: "tests.panel" as MessageKey, Icon: BeakerIcon }]
+      : []),
     ...(isRepo
       ? [{ id: "git" as Tool, labelKey: "git.panel" as MessageKey, Icon: GitBranchIcon }]
       : []),

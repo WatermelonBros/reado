@@ -362,6 +362,108 @@ export const gitRemoteRename = (root: string, from: string, to: string) =>
 export const gitRemoteRemove = (root: string, name: string) =>
   invoke<void>("git_remote_remove", { root, name })
 
+/** Merge a branch into the current one; conflicts come back as an outcome. */
+export const gitMerge = (root: string, branch: string) =>
+  invoke<ApplyOutcome>("git_merge", { root, branch })
+
+/** Replay this branch on top of another. */
+export const gitRebase = (root: string, onto: string) =>
+  invoke<ApplyOutcome>("git_rebase", { root, onto })
+
+/** The commits an interactive rebase would replay, oldest first. */
+export const gitRebaseCommits = (root: string, upstream: string) =>
+  invoke<Array<{ hash: string; subject: string }>>("git_rebase_commits", { root, upstream })
+
+/** What to do with one commit in an interactive rebase. */
+export type RebaseAction = "pick" | "squash" | "fixup" | "drop"
+
+/** Run an interactive rebase from a plan built in the UI. */
+export const gitRebaseInteractive = (
+  root: string,
+  upstream: string,
+  todo: Array<{ action: RebaseAction; hash: string }>,
+) => invoke<ApplyOutcome>("git_rebase_interactive", { root, upstream, todo })
+
+/** What the sequencer is halfway through: `rebase`, `merge`, `cherry-pick`,
+ *  `revert`, or nothing. It decides what finishing means. */
+export const gitSequencer = (root: string) => invoke<string | null>("git_sequencer", { root })
+
+/** Carry on once the conflicts are resolved (stages, then `--continue`). */
+export const gitSequencerContinue = (root: string) =>
+  invoke<ApplyOutcome>("git_sequencer_continue", { root })
+
+/** A checkout of this repository in another directory. */
+export interface Worktree {
+  path: string
+  branch: string | null
+  isMain: boolean
+}
+
+export const gitWorktrees = (root: string) => invoke<Worktree[]>("git_worktrees", { root })
+
+export const gitWorktreeAdd = (root: string, path: string, branch: string, newBranch: boolean) =>
+  invoke<void>("git_worktree_add", { root, path, branch, newBranch })
+
+export const gitWorktreeRemove = (root: string, path: string) =>
+  invoke<void>("git_worktree_remove", { root, path })
+
+/** A repository nested inside this one. */
+export interface Submodule {
+  path: string
+  sha: string
+  initialized: boolean
+  modified: boolean
+}
+
+export const gitSubmodules = (root: string) => invoke<Submodule[]>("git_submodules", { root })
+
+/** Clone and update submodules — all of them, or one. */
+export const gitSubmoduleUpdate = (root: string, path?: string) =>
+  invoke<void>("git_submodule_update", { root, path })
+
+/** Whether this repository signs its commits (`commit.gpgsign`). */
+export const gitSigning = (root: string) => invoke<boolean>("git_signing", { root })
+
+export const gitSetSigning = (root: string, on: boolean) =>
+  invoke<void>("git_set_signing", { root, on })
+
+/** One commit as the graph draws it. */
+export interface GraphCommit {
+  hash: string
+  parents: string[]
+  subject: string
+  author: string
+  date: string
+  refs: string[]
+}
+
+/** Every branch's history, newest first. */
+export const gitGraph = (root: string, limit: number) =>
+  invoke<GraphCommit[]>("git_graph", { root, limit })
+
+/** One runnable test, as found in the source. */
+export interface TestItem {
+  name: string
+  /** Enclosing suites, outermost first. */
+  suites: string[]
+  line: number
+}
+
+/** One file's tests, and the framework that runs them. */
+export interface TestFile {
+  /** Project-relative. */
+  path: string
+  framework: string
+  tests: TestItem[]
+  /** Last-modified time, ms since the epoch — what a remembered verdict is
+   *  checked against before it is shown as current. */
+  modified?: number
+}
+
+/** Every test in the project, found by reading the source rather than by asking
+ *  a framework that may not be installed. */
+export const discoverTests = (root: string) => invoke<TestFile[]>("discover_tests", { root })
+
 /** Create and switch to a new branch. */
 export const gitCreateBranch = (root: string, name: string) =>
   invoke<void>("git_create_branch", { root, name })
@@ -1229,7 +1331,9 @@ export const ptySpawn = (
 /** The executable used by PTY sessions (used for shell-specific command syntax). */
 export const ptyDefaultShell = () => invoke<string>("pty_default_shell")
 
-/** Forward input (keystrokes or injected text) to a terminal. */
+/** Forward input (keystrokes or injected text) to a terminal. Input for a pane
+ *  whose shell has not spawned yet is held by the backend and delivered when it
+ *  does, so a command typed into a brand-new pane is never lost. */
 export const ptyWrite = (id: string, data: string) => invoke<void>("pty_write", { id, data })
 
 /**

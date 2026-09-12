@@ -703,7 +703,8 @@
     "abort": "Abandonner la fusion",
     "abortConfirm": "Abandonner — annuler la fusion",
     "abortFailed": "Impossible d'abandonner. Une fusion ou un rebase est-il vraiment en cours ?",
-    "open": "Résoudre les conflits"
+    "open": "Résoudre les conflits",
+    "continue": "Continuer le {op}"
   },
   "hunk": {
     "at": "ligne {line}",
@@ -1010,7 +1011,11 @@
     "terminalProfiles": "Profils de terminal",
     "terminalProfilesHint": "Un par ligne, sous la forme `Nom = commande arguments`. Ils apparaissent à côté du bouton + du terminal.",
     "defaultTerminalProfile": "Profil par défaut",
-    "defaultTerminalProfileHint": "Le profil qu'un nouveau terminal lance. Vide signifie le shell ci-dessus."
+    "defaultTerminalProfileHint": "Le profil qu'un nouveau terminal lance. Vide signifie le shell ci-dessus.",
+    "screenReader": "Lecteur d'écran",
+    "screenReaderHint": "Reado ne peut pas savoir si un lecteur d'écran fonctionne : c'est donc un choix, pas une supposition. Désactivé, la région live reste muette.",
+    "audioCues": "Signaux sonores",
+    "audioCuesHint": "Un son bref pour une erreur sous le curseur et pour une exécution de tests terminée."
   },
   "defaultApp": {
     "title": "Application par défaut pour les fichiers texte",
@@ -1239,7 +1244,55 @@
     "discardAllConfirm": "Abandonner toutes les modifications de l'arbre de travail (fichiers non suivis compris) ? C'est irréversible.",
     "stashDropConfirm": "Supprimer cette remise ? C'est irréversible.",
     "sync": "Synchroniser (tirer puis pousser)",
-    "syncConflicts": "Synchronisation interrompue : {count} fichier(s) présentent des conflits. Résolvez-les, committez, puis resynchronisez."
+    "syncConflicts": "Synchronisation interrompue : {count} fichier(s) présentent des conflits. Résolvez-les, committez, puis resynchronisez.",
+    "merge": "Fusionner une branche…",
+    "merged": "Branche « {branch} » fusionnée.",
+    "mergeFailed": "Impossible de fusionner « {branch} ».",
+    "rebase": "Rebaser sur…",
+    "rebased": "Rebasage sur « {branch} » effectué.",
+    "rebaseFailed": "Impossible de rebaser sur « {branch} ».",
+    "rebasePick": "Le planifier commit par commit…",
+    "rebaseInteractive": "Rebasage interactif",
+    "rebasePlan": "Les commits rejoués sur « {branch} », du plus ancien au plus récent.",
+    "rebaseNothing": "Rien à rejouer : cette branche n'est pas en avance.",
+    "rebaseAction": "Que faire de ce commit",
+    "rebaseUp": "Déplacer avant",
+    "rebaseDown": "Déplacer après",
+    "rebaseStart": "Lancer le rebasage",
+    "rebaseFirstFolds": "Le premier commit n'a rien dans quoi se fondre.",
+    "rebaseAllDropped": "Un plan qui abandonne tous les commits ne laisserait rien.",
+    "todo": {
+      "pick": "Garder",
+      "squash": "Fusionner",
+      "fixup": "Absorber",
+      "drop": "Abandonner"
+    },
+    "noBranches": "Aucune autre branche.",
+    "continued": "Opération reprise.",
+    "continueFailed": "Impossible de continuer : vérifiez les fichiers non résolus.",
+    "worktrees": "Arbres de travail…",
+    "worktreeAdd": "Nouvel arbre de travail…",
+    "worktreeBranch": "Branche à y ouvrir",
+    "worktreePath": "Dossier de l'arbre de travail",
+    "worktreeAdded": "Arbre de travail créé dans {path}.",
+    "worktreeRemove": "Supprimer",
+    "worktreeRemoveAsk": "Supprimer l'arbre de travail dans {path} ? Le dossier disparaît avec lui.",
+    "worktreeRemoved": "Arbre de travail dans {path} supprimé.",
+    "worktreeFailed": "Ça n'a pas marché sur les arbres de travail.",
+    "detached": "détaché",
+    "submodules": "Sous-modules…",
+    "submodulesUpdate": "Mettre à jour tous les sous-modules",
+    "submodulesUpdated": "Sous-modules mis à jour.",
+    "submoduleFailed": "Impossible de mettre à jour les sous-modules.",
+    "submoduleModified": "modifié",
+    "submoduleMissing": "non cloné",
+    "noSubmodules": "Aucun sous-module.",
+    "signingEnable": "Signer les commits et les tags",
+    "signingDisable": "Ne plus signer les commits et les tags",
+    "signingOn": "Les commits et les tags de ce dépôt sont désormais signés.",
+    "signingOff": "Signature désactivée pour ce dépôt.",
+    "signingFailed": "Impossible de modifier la signature.",
+    "rebaseDirty": "Committez ou remisez d'abord vos modifications : git ne rebase pas par-dessus."
   },
   "lsp": {
     "createTask": "Créer une tâche",
@@ -1571,5 +1624,36 @@
     "empty": "Rien pour ce filtre pour l'instant.",
     "loggingOff": "La journalisation est désactivée dans les réglages, donc rien n'est collecté.",
     "revealLog": "Afficher le fichier journal — il garde tout ce que ce panneau laisse filer"
+  },
+  "gitGraph": {
+    "title": "Graphe des commits",
+    "count": "{n} commits",
+    "empty": "Pas encore d'historique.",
+    "more": "Afficher plus",
+    "diff": "Comparer à ce commit"
+  },
+  "tests": {
+    "panel": "Tests",
+    "empty": "Aucun test trouvé. Reado cherche les formes des frameworks courants : `it(…)`, `#[test]`, `def test_…`, `func TestX`.",
+    "filter": "Filtrer les tests",
+    "runAll": "Lancer tous les tests",
+    "runFile": "Lancer les tests de ce fichier",
+    "runOne": "Lancer ce test",
+    "refresh": "Rechercher les tests à nouveau",
+    "count": "{n} tests dans {files} fichiers",
+    "finished": "{passed} réussis, {failed} échoués.",
+    "stale": "Exécuté avant la modification du fichier : peut être obsolète.",
+    "staleShort": "obsolète"
+  },
+  "a11y": {
+    "line": "Ligne {n}",
+    "blankLine": "vide",
+    "diffSummary": "Diff ouvert avec {count} régions modifiées. Alt+Bas pour la suivante.",
+    "diffChunk": "Modification {n} sur {total}, {added} lignes ajoutées, {removed} supprimées, à la ligne {line}."
+  },
+  "notebook": {
+    "unreadable": "Ce fichier n'est pas un notebook lisible. Ouvrez-le comme source pour voir ce qu'il contient.",
+    "summary": "{cells} cellules, dont {code} de code",
+    "runAll": "Tout exécuter"
   }
 }

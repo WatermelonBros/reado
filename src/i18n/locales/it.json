@@ -703,7 +703,8 @@
     "abort": "Annulla merge",
     "abortConfirm": "Annulla — scarta il merge",
     "abortFailed": "Non è stato possibile annullare. C'è davvero un merge o un rebase in corso?",
-    "open": "Risolvi i conflitti"
+    "open": "Risolvi i conflitti",
+    "continue": "Prosegui il {op}"
   },
   "hunk": {
     "at": "riga {line}",
@@ -1010,7 +1011,11 @@
     "terminalProfiles": "Profili del terminale",
     "terminalProfilesHint": "Uno per riga, come `Nome = comando argomenti`. Compaiono accanto al + nel terminale.",
     "defaultTerminalProfile": "Profilo predefinito",
-    "defaultTerminalProfileHint": "Il profilo che apre un nuovo terminale. Vuoto significa la shell qui sopra."
+    "defaultTerminalProfileHint": "Il profilo che apre un nuovo terminale. Vuoto significa la shell qui sopra.",
+    "screenReader": "Screen reader",
+    "screenReaderHint": "Reado non può sapere se uno screen reader è in esecuzione, quindi è una scelta e non un'ipotesi. Disattivato, la live region resta muta.",
+    "audioCues": "Segnali acustici",
+    "audioCuesHint": "Un tono breve per un errore sotto il cursore e per un run di test concluso."
   },
   "defaultApp": {
     "title": "App predefinita per i file di testo",
@@ -1239,7 +1244,55 @@
     "discardAllConfirm": "Scartare tutte le modifiche del working tree (inclusi i file non tracciati)? Non è reversibile.",
     "stashDropConfirm": "Eliminare questo stash? L'operazione è irreversibile.",
     "sync": "Sincronizza (pull e poi push)",
-    "syncConflicts": "Sync interrotto: {count} file con conflitti da risolvere. Correggili, fai commit e sincronizza di nuovo."
+    "syncConflicts": "Sync interrotto: {count} file con conflitti da risolvere. Correggili, fai commit e sincronizza di nuovo.",
+    "merge": "Unisci un branch…",
+    "merged": "Branch “{branch}” unito.",
+    "mergeFailed": "Non è stato possibile unire “{branch}”.",
+    "rebase": "Rebase su…",
+    "rebased": "Rebase su “{branch}” completato.",
+    "rebaseFailed": "Non è stato possibile fare il rebase su “{branch}”.",
+    "rebasePick": "Pianificalo commit per commit…",
+    "rebaseInteractive": "Rebase interattivo",
+    "rebasePlan": "I commit riapplicati su “{branch}”, dal più vecchio.",
+    "rebaseNothing": "Niente da riapplicare: questo branch non è avanti.",
+    "rebaseAction": "Cosa fare con questo commit",
+    "rebaseUp": "Sposta prima",
+    "rebaseDown": "Sposta dopo",
+    "rebaseStart": "Avvia il rebase",
+    "rebaseFirstFolds": "Il primo commit non ha nulla in cui confluire.",
+    "rebaseAllDropped": "Un piano che scarta tutti i commit non lascerebbe nulla.",
+    "todo": {
+      "pick": "Tieni",
+      "squash": "Unisci",
+      "fixup": "Assorbi",
+      "drop": "Scarta"
+    },
+    "noBranches": "Nessun altro branch.",
+    "continued": "Operazione ripresa.",
+    "continueFailed": "Non è stato possibile proseguire: controlla i file non risolti.",
+    "worktrees": "Worktree…",
+    "worktreeAdd": "Nuovo worktree…",
+    "worktreeBranch": "Branch da usare lì",
+    "worktreePath": "Cartella del worktree",
+    "worktreeAdded": "Worktree creato in {path}.",
+    "worktreeRemove": "Rimuovi",
+    "worktreeRemoveAsk": "Rimuovere il worktree in {path}? La cartella viene eliminata.",
+    "worktreeRemoved": "Worktree in {path} rimosso.",
+    "worktreeFailed": "Non ha funzionato sui worktree.",
+    "detached": "staccato",
+    "submodules": "Sottomoduli…",
+    "submodulesUpdate": "Aggiorna tutti i sottomoduli",
+    "submodulesUpdated": "Sottomoduli aggiornati.",
+    "submoduleFailed": "Non è stato possibile aggiornare i sottomoduli.",
+    "submoduleModified": "modificato",
+    "submoduleMissing": "non clonato",
+    "noSubmodules": "Nessun sottomodulo.",
+    "signingEnable": "Firma commit e tag",
+    "signingDisable": "Smetti di firmare commit e tag",
+    "signingOn": "Da ora commit e tag di questo repository sono firmati.",
+    "signingOff": "Firma disattivata per questo repository.",
+    "signingFailed": "Non è stato possibile cambiare la firma.",
+    "rebaseDirty": "Prima committa o stasha le modifiche: git non fa il rebase sopra di esse."
   },
   "lsp": {
     "createTask": "Crea task",
@@ -1571,5 +1624,36 @@
     "empty": "Ancora niente per questo filtro.",
     "loggingOff": "Il log è disattivato nelle impostazioni, quindi non viene raccolto nulla.",
     "revealLog": "Mostra il file di log — tiene tutto quello che qui scorre via"
+  },
+  "gitGraph": {
+    "title": "Grafo dei commit",
+    "count": "{n} commit",
+    "empty": "Ancora nessuna storia.",
+    "more": "Mostra altri",
+    "diff": "Confronta con questo commit"
+  },
+  "tests": {
+    "panel": "Test",
+    "empty": "Nessun test trovato. Reado cerca le forme usate dai framework più comuni: `it(…)`, `#[test]`, `def test_…`, `func TestX`.",
+    "filter": "Filtra i test",
+    "runAll": "Esegui tutti i test",
+    "runFile": "Esegui i test di questo file",
+    "runOne": "Esegui questo test",
+    "refresh": "Cerca di nuovo i test",
+    "count": "{n} test in {files} file",
+    "finished": "{passed} passati, {failed} falliti.",
+    "stale": "Eseguito prima che il file cambiasse: potrebbe non essere aggiornato.",
+    "staleShort": "non aggiornato"
+  },
+  "a11y": {
+    "line": "Riga {n}",
+    "blankLine": "vuota",
+    "diffSummary": "Diff aperto con {count} regioni modificate. Alt+Giù per la prossima.",
+    "diffChunk": "Modifica {n} di {total}, {added} righe aggiunte, {removed} rimosse, alla riga {line}."
+  },
+  "notebook": {
+    "unreadable": "Questo file non è un notebook leggibile. Aprilo come sorgente per vedere cosa contiene.",
+    "summary": "{cells} celle, di cui {code} di codice",
+    "runAll": "Esegui tutto"
   }
 }

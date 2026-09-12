@@ -7,6 +7,7 @@ import { listen } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { useEffect, useState } from "react"
 import { GlobalTooltip } from "./components/atoms/GlobalTooltip"
+import { Announcer } from "./components/molecules/Announcer"
 import { EditMenu } from "./components/molecules/EditMenu"
 import { Notice } from "./components/molecules/Notice"
 import { AnywhereDialog } from "./components/organisms/AnywhereDialog"
@@ -183,6 +184,7 @@ export default function App() {
       <SemanticModal />
       <DefaultAppPrompt />
       <Notice />
+      <Announcer />
       <GlobalTooltip />
     </div>
   )

@@ -14,12 +14,14 @@ import type { Icon, IconWeight } from "@phosphor-icons/react"
 import {
   ArchiveIcon as Archive,
   ArrowCounterClockwiseIcon as ArrowCounterClockwise,
+  ArrowDownIcon as ArrowDown,
   ArrowLineDownIcon as ArrowLineDown,
   ArrowLineUpIcon as ArrowLineUp,
   ArrowSquareOutIcon as ArrowSquareOut,
   ArrowsClockwiseIcon as ArrowsClockwise,
   ArrowsDownUpIcon as ArrowsDownUp,
   ArrowsInLineVerticalIcon as ArrowsInLineVertical,
+  ArrowUpIcon as ArrowUp,
   BookmarkSimpleIcon as BookmarkSimple,
   BookOpenIcon as BookOpen,
   BrowserIcon as Browser,
@@ -72,6 +74,7 @@ import {
   FileXlsIcon as FileXls,
   FileZipIcon as FileZip,
   FingerprintIcon as Fingerprint,
+  FlaskIcon as Flask,
   FolderIcon as Folder,
   FolderOpenIcon as FolderOpen,
   FolderPlusIcon as FolderPlus,
@@ -90,6 +93,7 @@ import {
   PaintBrushIcon as PaintBrush,
   PaperPlaneTiltIcon as PaperPlaneTilt,
   PencilSimpleIcon as PencilSimple,
+  PlayIcon as Play,
   PlusIcon as Plus,
   PushPinSimpleIcon as PushPinSimple,
   PuzzlePieceIcon as PuzzlePiece,
@@ -125,6 +129,10 @@ const wrap = (P: Icon) => {
 }
 
 export const ChevronIcon = wrap(CaretRight)
+export const BeakerIcon = wrap(Flask)
+export const PlayIcon = wrap(Play)
+export const ArrowUpIcon = wrap(ArrowUp)
+export const ArrowDownIcon = wrap(ArrowDown)
 export const DeltaIcon = wrap(Triangle)
 export const DeviceIcon = wrap(DeviceMobile)
 export const CollapseAllIcon = wrap(ArrowsInLineVertical)

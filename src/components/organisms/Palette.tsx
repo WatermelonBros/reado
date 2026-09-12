@@ -58,6 +58,7 @@ import { THEMES, usePalette, useProject, useRecents, useSettings, useWorkspace }
 import { openTaskList, runBuildTask } from "@/lib/taskCommands"
 import { commandLine, runTask, useTasks } from "@/lib/tasks"
 import { useTerminals } from "@/lib/terminals"
+import { runTests, useTesting } from "@/lib/testing"
 import { openProjectHere } from "@/lib/window"
 import { acrossRoots, workspaceRoots } from "@/lib/workspace"
 
@@ -487,6 +488,7 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
   const view = useDocInfo.getState().view
   const hasSelection = !!view && !view.state.selection.main.empty
   const isRepo = project.git.isRepo
+  const hasTests = useTesting.getState().files.length > 0
   const hasTerminal = useTerminals.getState().sessions.length > 0
   const canBack = project.navIndex > 0
   const canForward = project.navIndex < project.navStack.length - 1
@@ -545,6 +547,24 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
       label: t("tours.open"),
       run: () => {
         useWorkspace.getState().selectTool("tours")
+        close()
+      },
+    },
+    {
+      label: t("tests.runAll"),
+      when: hasTests,
+      run: () => {
+        for (const framework of new Set(useTesting.getState().files.map((f) => f.framework)))
+          void runTests({ framework })
+        useWorkspace.getState().selectTool("tests")
+        close()
+      },
+    },
+    {
+      label: t("gitGraph.title"),
+      when: isRepo,
+      run: () => {
+        useWorkspace.getState().toggleGitGraph(true)
         close()
       },
     },

@@ -36,14 +36,18 @@ import {
   highlightWhitespace,
   keymap,
   rectangularSelection,
+  type ViewUpdate,
 } from "@codemirror/view"
 import type { MutableRefObject } from "react"
+import { t } from "@/i18n"
+import { announce, cue } from "@/lib/a11y"
 import type { CommentType } from "@/lib/api"
 import { bookmarkGutter } from "@/lib/bookmarkGutter"
 import { bracketColors } from "@/lib/bracketColors"
 import { changedLinesHighlight } from "@/lib/changedLines"
 import { readoAppearance, readoPhrases } from "@/lib/codemirror"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
+import { useDiagnostics } from "@/lib/diagnostics"
 import { addCursorVertical, gotoLineOnce, setLastEdit, useDocInfo } from "@/lib/docInfo"
 import {
   cursorsToLineEnds,
@@ -62,6 +66,8 @@ import { findNextInScope, findPrevInScope, searchScope } from "@/lib/searchScope
 import { contributedLanguage, contributedSnippets } from "@/lib/snippetSupport"
 import { useCursor, useEditorActions, useProject, useSessions, useSettings } from "@/lib/store"
 import { expandSelection, shrinkSelection, syntaxSelection } from "@/lib/syntaxSelection"
+import { testGutter } from "@/lib/testGutter"
+import type { TestStatus } from "@/lib/testing"
 import {
   activeLineExt,
   blockField,
@@ -100,6 +106,8 @@ export interface CodeExtensionsCtx {
   /** The diff gutter (lines changed since HEAD), empty when the setting is off. */
   diffComp: Compartment
   bookmarkComp: Compartment
+  /** The run arrow beside a test declaration; empty in a file with no tests. */
+  testComp: Compartment
   blameComp: Compartment
   lspComp: Compartment
   tabSizeComp: Compartment
@@ -138,12 +146,15 @@ export interface CodeExtensionsCtx {
   lineComments: LineComments
   changedLines: Array<[number, number]>
   bookmarkLines: Set<number>
+  /** Test declarations in this file, line → last verdict. */
+  testLines: Map<number, TestStatus | undefined>
   // Timer refs used by the updateListener.
   autoSaveTimer: MutableRefObject<number | undefined>
   cursorSaveTimer: MutableRefObject<number | undefined>
   // Callbacks the array invokes.
   openThreadAtLine: (line: number, ids: string[]) => void
   toggleBookmarkLine: (line: number) => void
+  runTestAtLine: (line: number) => void
   startComposer: (view: EditorView) => boolean
   saveFile: () => void
   peekDefinition: () => boolean
@@ -171,6 +182,34 @@ export function detectedIndentUnit(): string {
 
 /** Build the CodeMirror extensions array for the code viewer. Moved verbatim
  *  out of CodeView's "create the editor once per file" effect. */
+
+/** The line the caret is on, and whatever is wrong with it, said out loud.
+ *
+ * Announced on a change of line only — a reader typing on one line does not want
+ * it read back on every keystroke — and gated inside `announce`/`cue`, so this
+ * costs a line lookup and nothing else when the settings are off. */
+let lastAnnouncedLine = 0
+function announceCaretLine(u: ViewUpdate, path: string): void {
+  const settings = useSettings.getState()
+  if (!settings.screenReader && !settings.audioCues) return
+  const line = u.state.doc.lineAt(u.state.selection.main.head)
+  if (line.number === lastAnnouncedLine) return
+  lastAnnouncedLine = line.number
+  const here = (useDiagnostics.getState().byFile[path] ?? []).filter((d) => d.line === line.number)
+  const worst = here.reduce((n, d) => Math.min(n, d.severity), 4)
+  if (worst === 1) cue("error")
+  else if (worst === 2) cue("warning")
+  announce(
+    [
+      t("a11y.line", { n: line.number }),
+      line.text.trim() || t("a11y.blankLine"),
+      here.map((d) => d.message).join(". "),
+    ]
+      .filter(Boolean)
+      .join(", "),
+  )
+}
+
 export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
   return [
     ctx.lineNumbersComp.of(lineNumbersExt(ctx.lineNumbersMode)),
@@ -224,6 +263,14 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     // flag is per file, so both panes must — the split pane edits its own file
     // and would otherwise never auto-save.
     EditorView.updateListener.of((u) => {
+      if (u.selectionSet && u.view.hasFocus) {
+        // Say where the caret landed, for a reader who cannot see it. Here
+        // rather than in the component: this pane knows it is the focused one
+        // and holds its own file's text, where a React effect on the shared
+        // cursor store would have the *primary* pane's line number and this
+        // pane's text — confidently wrong, which is the worst kind.
+        announceCaretLine(u, ctx.path)
+      }
       if (ctx.primary && (u.selectionSet || u.docChanged)) {
         const head = u.state.selection.main.head
         const line = u.state.doc.lineAt(head)
@@ -329,6 +376,11 @@ export function buildCodeExtensions(ctx: CodeExtensionsCtx): Extension[] {
     ctx.changedComp.of(changedLinesHighlight(ctx.changedLines)),
     ctx.diffComp.of([]),
     ctx.bookmarkComp.of(bookmarkGutter(ctx.bookmarkLines, ctx.toggleBookmarkLine)),
+    ctx.testComp.of(testGutter(ctx.testLines, ctx.runTestAtLine)),
+    // The editable region is a textbox with no name otherwise: a screen reader
+    // announces "edit text" and leaves the reader to guess which file they are
+    // standing in, of the several a split can show at once.
+    EditorView.contentAttributes.of({ "aria-label": ctx.relPath }),
     ctx.blameComp.of([]),
     ctx.lspComp.of([]),
     ctx.tabSizeComp.of(EditorState.tabSize.of(useDocInfo.getState().indentSize)),

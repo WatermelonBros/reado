@@ -380,12 +380,20 @@ fn git_error_message(stdout: &str, stderr: &str) -> String {
 
 /// Run a mutating git command, surfacing the failure reason so the UI can show it.
 fn run_git_checked(root: &str, args: &[&str]) -> Result<(), String> {
-    let output = command("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .map_err(|e| e.to_string())?;
+    run_git_checked_env(root, args, &[])
+}
+
+/// As [`run_git_checked`], with environment variables for the one git command
+/// that needs them: an interactive rebase, which git insists on running through
+/// an editor. Kept on the shared helper so that command still gets the same
+/// error distillation and the same structured log as every other one.
+fn run_git_checked_env(root: &str, args: &[&str], env: &[(&str, &str)]) -> Result<(), String> {
+    let mut cmd = command("git");
+    cmd.arg("-C").arg(root).args(args);
+    for (key, value) in env {
+        cmd.env(key, value);
+    }
+    let output = cmd.output().map_err(|e| e.to_string())?;
     // Log only the git subcommand, never the full argv — callers pass free-form
     // values here (commit messages, branch/stash names) that must not be
     // persisted (the redactor keys on field names, not argv position).
@@ -2009,7 +2017,7 @@ pub fn git_amend(root: String, message: Option<String>) -> Result<(), String> {
 }
 
 /// What an apply-a-commit operation did.
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 pub struct ApplyOutcome {
     /// Files left conflicted; empty means it applied cleanly.
     pub conflicted: Vec<String>,
@@ -2030,7 +2038,16 @@ pub fn git_cherry_pick(root: String, commit: String) -> Result<ApplyOutcome, Str
 /// The shared half of revert and cherry-pick: run it, and read a failure as
 /// conflicts when that is what it is.
 fn apply_commit(root: &str, args: &[&str]) -> Result<ApplyOutcome, String> {
-    match run_git_checked(root, args) {
+    apply_commit_env(root, args, &[])
+}
+
+/// As [`apply_commit`], carrying environment variables through.
+fn apply_commit_env(
+    root: &str,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> Result<ApplyOutcome, String> {
+    match run_git_checked_env(root, args, env) {
         Ok(()) => Ok(ApplyOutcome { conflicted: vec![] }),
         Err(e) => {
             // Not a failure with a message nobody can act on: it is work waiting
@@ -2137,4 +2154,491 @@ pub fn git_remote_rename(root: String, from: String, to: String) -> Result<(), S
 #[tauri::command]
 pub fn git_remote_remove(root: String, name: String) -> Result<(), String> {
     run_git_checked(&root, &["remote", "remove", name.trim()])
+}
+
+// ---------------------------------------------------------------------------
+// The rest of the daily loop: merging, rebasing, worktrees, submodules, and the
+// history as a graph. What these have in common is that they were the reasons
+// left to open a terminal.
+// ---------------------------------------------------------------------------
+
+/// Merge a branch into the current one. A conflicting merge is not an error —
+/// it is work waiting in the working tree, the same as a cherry-pick's.
+#[tauri::command]
+pub fn git_merge(root: String, branch: String) -> Result<ApplyOutcome, String> {
+    apply_commit(&root, &["merge", "--no-edit", branch.trim()])
+}
+
+/// Replay this branch's commits on top of another (`git rebase <onto>`).
+#[tauri::command]
+pub fn git_rebase(root: String, onto: String) -> Result<ApplyOutcome, String> {
+    apply_commit(&root, &["rebase", onto.trim()])
+}
+
+/// What the sequencer is in the middle of, if anything. The conflict resolver
+/// needs it to know what finishing means: a merge ends with a commit, a rebase
+/// with `--continue`, and telling the user to commit during a rebase is how a
+/// rebase gets lost.
+#[tauri::command]
+pub fn git_sequencer(root: String) -> Option<String> {
+    let dir = run_git(Path::new(&root), &["rev-parse", "--git-dir"])?;
+    let dir = Path::new(&root).join(dir.trim());
+    // `rebase-merge` is the interactive/merge backend, `rebase-apply` the old
+    // am-based one; either means a rebase is halfway through.
+    for (marker, state) in [
+        ("rebase-merge", "rebase"),
+        ("rebase-apply", "rebase"),
+        ("CHERRY_PICK_HEAD", "cherry-pick"),
+        ("REVERT_HEAD", "revert"),
+        ("MERGE_HEAD", "merge"),
+    ] {
+        if dir.join(marker).exists() {
+            return Some(state.to_string());
+        }
+    }
+    None
+}
+
+/// Carry on after the conflicts of a rebase / cherry-pick / revert are resolved.
+/// Staging is ours to do: git will not continue with unmerged paths, and the
+/// resolver writes the files without touching the index.
+#[tauri::command]
+pub fn git_sequencer_continue(root: String) -> Result<ApplyOutcome, String> {
+    let op = git_sequencer(root.clone()).ok_or("Nothing to continue.")?;
+    if op == "merge" {
+        return Err("Finish a merge by committing.".into());
+    }
+    run_git_checked(&root, &["add", "-A"])?;
+    // `--no-edit` keeps the commit message git already has, and `GIT_EDITOR`
+    // catches the editor git opens anyway on the paths that ignore it — an
+    // interactive rebase continuing through a squash is one. Without both, the
+    // command waits forever on an editor that does not exist here.
+    apply_commit_env(
+        &root,
+        &[op.as_str(), "--continue", "--no-edit"],
+        &[("GIT_EDITOR", "true")],
+    )
+}
+
+/// One line of an interactive rebase's plan.
+#[derive(Debug, Deserialize)]
+pub struct TodoLine {
+    /// One of [`TODO_ACTIONS`].
+    pub action: String,
+    pub hash: String,
+}
+
+/// What a plan may ask for. `reword` is absent on purpose: it is the one action
+/// that opens an editor per commit, and it has no answer to give here — Reado
+/// amends instead. Anything outside this list is refused rather than written:
+/// these lines go into a file git *executes*, so the list is a trust boundary,
+/// not a convenience.
+const TODO_ACTIONS: [&str; 4] = ["pick", "squash", "fixup", "drop"];
+
+/// The commits an interactive rebase onto `upstream` would replay, oldest first
+/// — the order the todo file uses, so the UI can present the plan as git will.
+///
+/// `--no-merges` because that is what git's own todo contains: a plain
+/// `rebase -i` flattens history and never lists a merge, and asking it to `pick`
+/// one is an error. Listing a commit the plan cannot act on would be offering a
+/// button that fails.
+#[tauri::command]
+pub fn git_rebase_commits(root: String, upstream: String) -> Vec<GitCommit> {
+    run_git(
+        Path::new(&root),
+        &[
+            "log",
+            "--reverse",
+            "--no-merges",
+            "--format=%H%x1f%s",
+            &format!("{}..HEAD", upstream.trim()),
+        ],
+    )
+    .map(|s| {
+        s.lines()
+            .filter_map(|l| l.split_once('\x1f'))
+            .map(|(hash, subject)| GitCommit {
+                hash: hash.to_string(),
+                subject: subject.to_string(),
+            })
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+/// Run an interactive rebase from a plan Reado already has.
+///
+/// `git rebase -i` wants a human with an editor: it writes a todo file and opens
+/// `$GIT_SEQUENCE_EDITOR` on it. Reado has the plan the moment the user presses
+/// the button, so the "editor" is a copy of our file over git's — the same
+/// mechanism `GIT_SEQUENCE_EDITOR=true` uses to accept the default, pointed at a
+/// file instead. `GIT_EDITOR=true` covers the second editor git opens, for the
+/// message of a squash.
+#[tauri::command]
+pub fn git_rebase_interactive(
+    root: String,
+    upstream: String,
+    todo: Vec<TodoLine>,
+) -> Result<ApplyOutcome, String> {
+    if todo.is_empty() {
+        return Err("Nothing to rebase.".into());
+    }
+    for line in &todo {
+        if !TODO_ACTIONS.contains(&line.action.as_str()) {
+            return Err(format!("Unknown rebase action: {}", line.action));
+        }
+        if line.hash.len() < 4 || !line.hash.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err("A rebase plan takes commit hashes.".into());
+        }
+    }
+    if todo.iter().all(|l| l.action == "drop") {
+        return Err("A rebase that drops every commit would leave nothing.".into());
+    }
+    // A squash or fixup has nothing to fold into when it is first.
+    if matches!(todo[0].action.as_str(), "squash" | "fixup") {
+        return Err("The first commit has nothing to squash into.".into());
+    }
+    let plan: String = todo
+        .iter()
+        .map(|l| format!("{} {}\n", l.action, l.hash))
+        .collect();
+    // Written beside the repo's git dir rather than the system temp: it holds
+    // commit hashes, and it is deleted either way.
+    let file = std::env::temp_dir().join(format!("reado-rebase-{}.todo", std::process::id()));
+    std::fs::write(&file, plan).map_err(|e| e.to_string())?;
+    let quoted = file.display();
+    let editor = if cfg!(windows) {
+        format!("cmd /c copy /y \"{quoted}\"")
+    } else {
+        format!("cp '{quoted}'")
+    };
+    let outcome = apply_commit_env(
+        &root,
+        &["rebase", "-i", upstream.trim()],
+        &[("GIT_SEQUENCE_EDITOR", &editor), ("GIT_EDITOR", "true")],
+    );
+    let _ = std::fs::remove_file(&file);
+    outcome
+}
+
+/// A checkout of the same repository in another directory.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Worktree {
+    pub path: String,
+    /// Branch checked out there, or `None` when detached.
+    pub branch: Option<String>,
+    /// The repository's own working tree, which cannot be removed.
+    pub is_main: bool,
+}
+
+/// The repository's worktrees, main one first (git lists it first).
+#[tauri::command]
+pub fn git_worktrees(root: String) -> Vec<Worktree> {
+    let Some(out) = run_git(Path::new(&root), &["worktree", "list", "--porcelain"]) else {
+        return vec![];
+    };
+    let mut trees: Vec<Worktree> = Vec::new();
+    // Records are separated by a blank line; `worktree <path>` opens each one.
+    for record in out.split("\n\n") {
+        let mut path = None;
+        let mut branch = None;
+        for line in record.lines() {
+            if let Some(p) = line.strip_prefix("worktree ") {
+                path = Some(p.to_string());
+            } else if let Some(b) = line.strip_prefix("branch ") {
+                branch = Some(b.trim_start_matches("refs/heads/").to_string());
+            }
+        }
+        if let Some(path) = path {
+            trees.push(Worktree {
+                path,
+                branch,
+                is_main: trees.is_empty(),
+            });
+        }
+    }
+    trees
+}
+
+/// Check out a branch into a new directory. With `new_branch`, the branch is
+/// created there — which is the reason to want a worktree: a second branch open
+/// beside this one without stashing what is in front of you.
+#[tauri::command]
+pub fn git_worktree_add(
+    root: String,
+    path: String,
+    branch: String,
+    new_branch: bool,
+) -> Result<(), String> {
+    let (path, branch) = (path.trim(), branch.trim());
+    if path.is_empty() || branch.is_empty() {
+        return Err("A worktree needs a directory and a branch".into());
+    }
+    if new_branch {
+        run_git_checked(&root, &["worktree", "add", "-b", branch, path])
+    } else {
+        run_git_checked(&root, &["worktree", "add", path, branch])
+    }
+}
+
+/// Remove a worktree. Git refuses one holding changes, which is the right
+/// answer — discarding someone's work needs a UI that says so first.
+#[tauri::command]
+pub fn git_worktree_remove(root: String, path: String) -> Result<(), String> {
+    run_git_checked(&root, &["worktree", "remove", path.trim()])
+}
+
+/// A repository nested inside this one.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Submodule {
+    pub path: String,
+    /// The commit the parent repository pins.
+    pub sha: String,
+    /// Whether it has been cloned into the working tree. An uninitialized
+    /// submodule is an empty directory, which is what makes a build fail with a
+    /// missing file nobody can find.
+    pub initialized: bool,
+    /// Checked out at a commit other than the pinned one.
+    pub modified: bool,
+}
+
+/// The submodules declared by this repository.
+#[tauri::command]
+pub fn git_submodules(root: String) -> Vec<Submodule> {
+    run_git(Path::new(&root), &["submodule", "status"])
+        .map(|s| {
+            s.lines()
+                .filter_map(|line| {
+                    // ` <sha> <path> (<describe>)`, with a leading `-` for not
+                    // initialized and `+` for a different commit than pinned.
+                    let mark = line.chars().next()?;
+                    let rest = line.get(1..)?;
+                    let mut parts = rest.split_whitespace();
+                    let sha = parts.next()?.to_string();
+                    let path = parts.next()?.to_string();
+                    Some(Submodule {
+                        path,
+                        sha,
+                        initialized: mark != '-',
+                        modified: mark == '+',
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Clone and update submodules — all of them, or one. This is the command the
+/// "why is that directory empty" answer always turns out to be.
+#[tauri::command]
+pub fn git_submodule_update(root: String, path: Option<String>) -> Result<(), String> {
+    let mut args = vec!["submodule", "update", "--init", "--recursive"];
+    let path = path.unwrap_or_default();
+    let path = path.trim();
+    if !path.is_empty() {
+        args.push("--");
+        args.push(path);
+    }
+    run_git_checked(&root, &args)
+}
+
+/// Whether this repository signs what it commits (`commit.gpgsign`).
+#[tauri::command]
+pub fn git_signing(root: String) -> bool {
+    run_git(Path::new(&root), &["config", "--get", "commit.gpgsign"])
+        .map(|v| v.trim() == "true")
+        .unwrap_or(false)
+}
+
+/// Turn commit and tag signing on or off for this repository.
+///
+/// Written to git's own config rather than kept as a Reado setting: the key
+/// already exists, every other git tool reads it, and a second source of truth
+/// would be one that disagrees. Signing needs a configured key and an agent that
+/// can unlock it — without them git refuses the commit and says so.
+#[tauri::command]
+pub fn git_set_signing(root: String, on: bool) -> Result<(), String> {
+    let value = if on { "true" } else { "false" };
+    run_git_checked(&root, &["config", "commit.gpgsign", value])?;
+    run_git_checked(&root, &["config", "tag.gpgsign", value])
+}
+
+/// One commit as the graph draws it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphCommit {
+    pub hash: String,
+    /// Parent hashes: none for the root, two or more for a merge — which is
+    /// what the lanes are drawn from.
+    pub parents: Vec<String>,
+    pub subject: String,
+    pub author: String,
+    /// Relative ("3 days ago"), because that is what the eye wants here.
+    pub date: String,
+    /// Branch and tag names pointing at this commit, already stripped of their
+    /// `refs/` prefixes by `%D`.
+    pub refs: Vec<String>,
+}
+
+/// The history of every branch, newest first, for the graph view.
+///
+/// `--date-order` rather than git's default: it keeps a branch's commits
+/// together instead of interleaving branches by commit date, which is what makes
+/// the lanes readable.
+#[tauri::command]
+pub fn git_graph(root: String, limit: u32) -> Vec<GraphCommit> {
+    let limit = limit.clamp(1, 5000).to_string();
+    run_git(
+        Path::new(&root),
+        &[
+            "log",
+            "--all",
+            "--date-order",
+            "--max-count",
+            &limit,
+            "--format=%H%x1f%P%x1f%s%x1f%an%x1f%ar%x1f%D",
+        ],
+    )
+    .map(|s| {
+        s.lines()
+            .filter_map(|line| {
+                let mut f = line.split('\x1f');
+                Some(GraphCommit {
+                    hash: f.next()?.to_string(),
+                    parents: f.next()?.split_whitespace().map(str::to_string).collect(),
+                    subject: f.next()?.to_string(),
+                    author: f.next()?.to_string(),
+                    date: f.next()?.to_string(),
+                    refs: f
+                        .next()
+                        .unwrap_or("")
+                        .split(", ")
+                        .map(|r| r.trim().trim_start_matches("HEAD -> ").to_string())
+                        .filter(|r| !r.is_empty())
+                        .collect(),
+                })
+            })
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod rebase_plan_tests {
+    use super::*;
+
+    fn line(action: &str, hash: &str) -> TodoLine {
+        TodoLine {
+            action: action.into(),
+            hash: hash.into(),
+        }
+    }
+
+    // The plan is written into a file git executes, so what may appear in it is
+    // a trust boundary — checked before anything is written, in a directory that
+    // need not even be a repository.
+    #[test]
+    fn refuses_anything_that_is_not_one_of_the_four_actions() {
+        for bad in ["exec", "x; rm -rf /", "pick\nexec echo hi", ""] {
+            let err = git_rebase_interactive(
+                "/nonexistent".into(),
+                "main".into(),
+                vec![line(bad, "abc1234")],
+            )
+            .unwrap_err();
+            assert!(err.contains("Unknown rebase action"), "{bad}: {err}");
+        }
+    }
+
+    #[test]
+    fn refuses_a_hash_that_is_not_one() {
+        let err = git_rebase_interactive(
+            "/nonexistent".into(),
+            "main".into(),
+            vec![line("pick", "$(whoami)")],
+        )
+        .unwrap_err();
+        assert!(err.contains("commit hashes"), "{err}");
+    }
+
+    #[test]
+    fn refuses_the_plans_git_would_refuse() {
+        let empty = git_rebase_interactive("/nonexistent".into(), "main".into(), vec![]);
+        assert!(empty.unwrap_err().contains("Nothing to rebase"));
+
+        let all_dropped = git_rebase_interactive(
+            "/nonexistent".into(),
+            "main".into(),
+            vec![line("drop", "aaaaaaa"), line("drop", "bbbbbbb")],
+        );
+        assert!(all_dropped.unwrap_err().contains("every commit"));
+
+        let folds_first = git_rebase_interactive(
+            "/nonexistent".into(),
+            "main".into(),
+            vec![line("squash", "aaaaaaa"), line("pick", "bbbbbbb")],
+        );
+        assert!(folds_first.unwrap_err().contains("nothing to squash"));
+    }
+}
+
+#[cfg(test)]
+mod rebase_range_tests {
+    use super::*;
+    use std::process::Command;
+
+    /// A repository with a branch that was merged back, so the range being
+    /// replayed contains a merge.
+    fn repo_with_a_merge() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let at = dir.path();
+        let git = |args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(at)
+                .args(args)
+                .output()
+                .expect("git");
+            assert!(out.status.success(), "git {args:?}: {:?}", out);
+        };
+        let write = |name: &str, body: &str| std::fs::write(at.join(name), body).unwrap();
+        git(&["init", "-q", "-b", "main"]);
+        git(&["config", "user.email", "t@example.com"]);
+        git(&["config", "user.name", "T"]);
+        write("a", "one\n");
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "base"]);
+        git(&["branch", "start"]);
+        git(&["checkout", "-qb", "side"]);
+        write("b", "side\n");
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "on the side"]);
+        git(&["checkout", "-q", "main"]);
+        write("c", "trunk\n");
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "on the trunk"]);
+        git(&["merge", "--no-ff", "-q", "-m", "merge side", "side"]);
+        dir
+    }
+
+    // Found by running a rebase in the app: the plan listed the merge commit,
+    // and git cannot `pick` one in a plain interactive rebase — it is not in the
+    // todo it generates. Offering it is offering a button that fails.
+    #[test]
+    fn the_plan_leaves_out_merge_commits() {
+        let dir = repo_with_a_merge();
+        let root = dir.path().to_string_lossy().into_owned();
+        let subjects: Vec<String> = git_rebase_commits(root, "start".into())
+            .into_iter()
+            .map(|c| c.subject)
+            .collect();
+        assert!(
+            !subjects.iter().any(|s| s.starts_with("merge ")),
+            "the merge commit must not be in the plan: {subjects:?}"
+        );
+        // And everything that *is* replayable still is, oldest first.
+        assert_eq!(subjects, ["on the side", "on the trunk"]);
+    }
 }

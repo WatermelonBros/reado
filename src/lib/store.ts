@@ -95,6 +95,13 @@ export interface SettingsState {
    *  only the colours that carry meaning on their own are retinted. */
   colorVision: "normal" | "red-green" | "blue-yellow"
   reduceMotion: "system" | "on" | "off"
+  /** Announce what a sighted reader gets from the screen — the caret's line, a
+   *  match count, a verdict — through a live region. Not auto-detected: a
+   *  webview cannot see whether a screen reader is running, and guessing wrong
+   *  either floods a reader who has one or silences one who does. */
+  screenReader: boolean
+  /** Short tones for an error under the caret and for a finished test run. */
+  audioCues: boolean
   /** Editor tab strip: full row, single tab, or hidden. */
   tabBar: "multiple" | "single" | "hidden"
   /** Open a file you only clicked into as a *preview*: the next one you look at
@@ -278,6 +285,8 @@ export const DEFAULTS = {
   rulerColumn: 120,
   colorVision: "normal",
   reduceMotion: "system",
+  screenReader: false,
+  audioCues: false,
   tabBar: "multiple",
   previewTabs: true,
   scrollbar: "auto",
@@ -525,6 +534,7 @@ export type Tool =
   | "prereview"
   | "guidedreview"
   | "coverage"
+  | "tests"
   | "extensions"
   | "output"
 
@@ -552,6 +562,9 @@ interface WorkspaceState {
   readExtension: (ext: ReadingExtension | null) => void
   /** Whether the knowledge-graph overlay is open. */
   graphOpen: boolean
+  /** The commit graph overlay (the repository's shape, not the project's). */
+  gitGraphOpen: boolean
+  toggleGitGraph: (open?: boolean) => void
   toggleGraph: (open?: boolean) => void
   /** Whether the documentation overlay is open. */
   docsOpen: boolean
@@ -613,6 +626,8 @@ export const useWorkspace = create<WorkspaceState>()(
       readExtension: (readingExtension) => set({ readingExtension }),
       graphOpen: false,
       toggleGraph: (open) => set((s) => ({ graphOpen: open ?? !s.graphOpen })),
+      gitGraphOpen: false,
+      toggleGitGraph: (open) => set((s) => ({ gitGraphOpen: open ?? !s.gitGraphOpen })),
       docsOpen: false,
       toggleDocs: (open) => set((s) => ({ docsOpen: open ?? !s.docsOpen })),
       sidebarWidth: 264,

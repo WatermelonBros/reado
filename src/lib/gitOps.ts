@@ -1,6 +1,7 @@
 /**
  * The git operations that fix what just happened — amend, revert, cherry-pick,
- * tags, remotes.
+ * tags, remotes — and the ones that reshape the branch: merge, rebase,
+ * worktrees, submodules, signing.
  *
  * Each one asks for exactly what it needs and then says what happened. The
  * interesting case is the one that *cannot* apply: a revert or a cherry-pick
@@ -13,15 +14,25 @@ import {
   gitAmend,
   gitCherryPick,
   gitHeadIsPushed,
+  gitMerge,
+  gitRebase,
   gitRefs,
   gitRemoteAdd,
   gitRemoteRemove,
   gitRemoteRename,
   gitRemotes,
   gitRevert,
+  gitSequencerContinue,
+  gitSetSigning,
+  gitSigning,
+  gitSubmodules,
+  gitSubmoduleUpdate,
   gitTagCreate,
   gitTagDelete,
   gitTags,
+  gitWorktreeAdd,
+  gitWorktreeRemove,
+  gitWorktrees,
 } from "./api"
 import { notify, notifyError } from "./notice"
 import { prompt } from "./prompt"
@@ -164,5 +175,122 @@ export async function removeRemote(name: string): Promise<void> {
     await gitRemoteRemove(r, name)
   } catch (e) {
     notifyError("gitOps", t("git.remoteFailed"), e)
+  }
+}
+
+/** Merge a branch into the current one. */
+export async function mergeBranch(branch: string): Promise<void> {
+  const r = root()
+  if (!r) return
+  try {
+    const out = await gitMerge(r, branch)
+    reportOutcome(out.conflicted, t("git.merged", { branch }))
+  } catch (e) {
+    notifyError("gitOps", t("git.mergeFailed", { branch }), e)
+  }
+}
+
+/** Replay this branch on top of another. */
+export async function rebaseOnto(branch: string): Promise<void> {
+  const r = root()
+  if (!r) return
+  try {
+    const out = await gitRebase(r, branch)
+    reportOutcome(out.conflicted, t("git.rebased", { branch }))
+  } catch (e) {
+    notifyError("gitOps", t("git.rebaseFailed", { branch }), e)
+  }
+}
+
+/**
+ * Carry on after a conflicted rebase / cherry-pick / revert. Committing is what
+ * finishes a merge; every other sequencer operation wants `--continue`, and the
+ * two are not interchangeable — so the resolver asks the repository which it is.
+ */
+export async function continueSequencer(): Promise<void> {
+  const r = root()
+  if (!r) return
+  try {
+    const out = await gitSequencerContinue(r)
+    reportOutcome(out.conflicted, t("git.continued"))
+  } catch (e) {
+    notifyError("gitOps", t("git.continueFailed"), e)
+  }
+}
+
+export const listWorktrees = () => (root() ? gitWorktrees(root()) : Promise.resolve([]))
+export const listSubmodules = () => (root() ? gitSubmodules(root()) : Promise.resolve([]))
+
+/**
+ * Add a worktree: a second branch checked out in its own directory, which is
+ * how you look at another branch without putting down what is in front of you.
+ */
+export async function addWorktree(): Promise<void> {
+  const r = root()
+  if (!r) return
+  const branch = await prompt({ title: t("git.worktreeBranch"), placeholder: "feature/x" })
+  if (!branch) return
+  // Sibling of the project by default: a worktree inside the repository would be
+  // picked up by the file tree, the search index and git status as if it were
+  // part of it.
+  const base = r.replace(/\/+$/, "")
+  const dir = await prompt({
+    title: t("git.worktreePath"),
+    value: `${base}-${branch.replace(/[^\w.-]+/g, "-")}`,
+  })
+  if (!dir) return
+  try {
+    // A branch that already exists is checked out; a new name is created there.
+    const existing = await gitWorktrees(r)
+    const known = existing.some((w) => w.branch === branch)
+    await gitWorktreeAdd(r, dir, branch, !known)
+    notify("success", t("git.worktreeAdded", { path: dir }))
+  } catch (e) {
+    notifyError("gitOps", t("git.worktreeFailed"), e)
+  }
+}
+
+/** Remove a worktree, asking first — the directory goes with it. */
+export async function removeWorktree(path: string): Promise<void> {
+  const r = root()
+  if (!r) return
+  const yes = await ask(t("git.worktreeRemoveAsk", { path }), {
+    title: t("git.worktreeRemove"),
+    kind: "warning",
+  })
+  if (!yes) return
+  try {
+    await gitWorktreeRemove(r, path)
+    notify("info", t("git.worktreeRemoved", { path }))
+  } catch (e) {
+    notifyError("gitOps", t("git.worktreeFailed"), e)
+  }
+}
+
+/** Clone and update submodules — all of them, or one. */
+export async function updateSubmodules(path?: string): Promise<void> {
+  const r = root()
+  if (!r) return
+  try {
+    await gitSubmoduleUpdate(r, path)
+    notify("success", t("git.submodulesUpdated"))
+  } catch (e) {
+    notifyError("gitOps", t("git.submoduleFailed"), e)
+  }
+}
+
+/** Read the repository's own `commit.gpgsign`, which is where signing lives.
+ *  A folder that is not a repository simply is not signing. */
+export const signingOn = () =>
+  root() ? gitSigning(root()).catch(() => false) : Promise.resolve(false)
+
+export async function setSigning(on: boolean): Promise<void> {
+  const r = root()
+  if (!r) return
+  try {
+    await gitSetSigning(r, on)
+    notify("info", on ? t("git.signingOn") : t("git.signingOff"))
+  } catch (e) {
+    notifyError("gitOps", t("git.signingFailed"), e)
   }
 }

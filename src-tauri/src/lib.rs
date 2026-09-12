@@ -34,6 +34,7 @@ mod search;
 mod semantic;
 mod sessions;
 mod symbols;
+mod testing;
 mod vault;
 mod watcher;
 
@@ -191,6 +192,21 @@ pub fn run() {
             git::git_remote_add,
             git::git_remote_rename,
             git::git_remote_remove,
+            git::git_merge,
+            git::git_rebase,
+            git::git_rebase_commits,
+            git::git_rebase_interactive,
+            git::git_sequencer,
+            git::git_sequencer_continue,
+            git::git_worktrees,
+            git::git_worktree_add,
+            git::git_worktree_remove,
+            git::git_submodules,
+            git::git_submodule_update,
+            git::git_signing,
+            git::git_set_signing,
+            git::git_graph,
+            testing::discover_tests,
             git::git_blame,
             git::git_create_branch,
             git::git_fetch,

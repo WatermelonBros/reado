@@ -11,6 +11,81 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Jupyter notebooks open as notebooks.** A `.ipynb` used to be a wall of JSON;
+  it now renders as its cells — markdown as prose, code with its execution number
+  (which is often *not* the order the cells are in), and under each code cell the
+  outputs the file was saved with: the printed lines, the returned value, the
+  figure, the traceback with its terminal colour stripped. Rich HTML output goes
+  through the same sanitiser as project markdown, because a notebook is a
+  document that arrived from somewhere else. The source toggle beside it is the
+  same one markdown has, and that is where editing and the comment gutter stay.
+  Running is one button for the whole notebook (`jupyter nbconvert --execute`, in
+  a terminal) rather than one per cell: without a kernel session there is no such
+  thing as "this cell, in the state the last one left it", and a per-cell button
+  that quietly re-ran everything would be a lie.
+- **Accessibility, as something you can switch on.** A live region says what the
+  screen otherwise shows: the line the caret moved to, its text and any problem
+  on it; a diff announces how many regions changed and, on each jump, which one
+  of how many, how many lines it adds and removes, and where — because a diff is
+  read by colour, and colour is the one thing a screen reader cannot relay. The
+  editor's text area is named after the file it holds, so two split panes are
+  told apart. Optional audio cues give an error under the caret and a finished
+  test run a sound rather than only a hue. Both are off by default and live under
+  Settings ▸ Interface ▸ Accessibility: Reado cannot see whether a screen reader
+  is running, and guessing wrong either floods a reader or silences one.
+- **A Test Explorer.** The project's tests, as a tree, read out of the source
+  rather than asked of a framework — so the list is there before anything is
+  installed, for vitest/jest, `cargo test`, pytest and `go test`. Run all of
+  them, one file's, or one test; the run happens in a terminal pane, where a
+  framework's colour and stack traces read the way they were written, and the
+  tick or cross lands on the test as its line goes past. Every test also carries
+  a run arrow in the editor's gutter, tinted by how it last went, and a test row
+  opens the file at the line it is declared on.
+- Git's remaining half, all from Source Control ▸ More actions. **Merge** a
+  branch into this one, **rebase** onto another, or plan the rebase commit by
+  commit: an interactive rebase is a list you edit — keep, squash, fixup, drop,
+  and arrows to reorder — and the todo file git would have opened in an editor is
+  written from it. A conflicted merge, rebase, cherry-pick or revert now ends the
+  way that operation actually ends: the resolver asks the repository what is in
+  progress and offers **Continue** for a rebase where a merge offers Commit,
+  instead of sending everyone to the terminal for `--continue`.
+- **Worktrees and submodules**, listed and acted on from the same menu. A
+  worktree opens as a project (the same this-window / new-window question as any
+  folder), a new one defaults to a sibling directory rather than a path inside
+  the repository, and an uninitialised submodule is one click from being cloned —
+  which is the answer to "why is that directory empty" often enough to be worth a
+  button.
+- **Signed commits**: a toggle that writes `commit.gpgsign` and `tag.gpgsign`
+  into the repository's own git config, rather than a Reado setting that would be
+  a second source of truth for something every other git tool already reads.
+- **A commit graph** (Source Control ▸ More actions, or the palette): every
+  branch at once with the lanes drawn, tags and branch tips labelled, and a
+  commit selectable to diff the editor against it. Lanes are assigned the way
+  git's own graph does it and freed as soon as nothing is waiting in them, so a
+  long history stays a few columns wide.
+
+### Fixed
+
+- A task's problem matcher never matched anything. Terminal output is
+  base64-framed on its way through the event boundary — so escape sequences and
+  non-UTF-8 bytes survive — and the matcher was reading the frame rather than the
+  text inside it. It matched nothing, and matched nothing *silently*, which is
+  why a task could look wired up and never put a single entry in the Problems
+  panel. Both the task matcher and the test runner now decode first.
+- A command run in a freshly opened terminal pane could be swallowed. A pane
+  exists in the layout the moment it is created, but its shell is spawned a frame
+  or two later by the component that draws it, and writing into that gap was not
+  an error — there was simply nobody to write to. Input for a pane that has not
+  spawned is now held and delivered the moment it does, so nothing that opens a
+  pane and runs something in it has to know about the gap.
+- A line of output split across two reads is no longer lost. The terminal is read
+  in 8 KB blocks, so a boundary lands mid-line routinely in a long run; each
+  reader split its own chunk, saw two halves of a line and matched neither —
+  leaving a test that passed showing as still running. Lines are now framed once,
+  where the stream is decoded.
+
 ## [1.18.0] — 2026-09-12
 
 ### Added

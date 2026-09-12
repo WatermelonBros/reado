@@ -6,6 +6,7 @@
  * set with a message. Selecting a file opens it with the diff view on so you can
  * see what changed (including the agent's edits).
  */
+import type { ReactNode } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
@@ -17,11 +18,13 @@ import {
   DiscardIcon,
   FetchIcon,
   GitBranchIcon,
+  GraphIcon,
   MinusIcon,
   MoreIcon,
   PlusIcon,
   PullIcon,
   PushIcon,
+  SealCheckIcon,
   SparkleIcon,
   StashIcon,
   SyncIcon,
@@ -30,6 +33,7 @@ import { Textarea } from "@/components/atoms/Textarea"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import {
   type GitChange,
+  gitBranches,
   gitCommit,
   gitCreateBranch,
   gitDiscard,
@@ -51,30 +55,86 @@ import {
   gitUnstageAll,
   type Remote,
   type StashEntry,
+  type Submodule,
   submitToTerminal,
+  type Worktree,
 } from "@/lib/api"
 import {
   addRemote,
+  addWorktree,
   amendLastCommit,
   cherryPickCommit,
   createTag,
   deleteTag,
   listRemotes,
+  listSubmodules,
   listTags,
+  listWorktrees,
+  mergeBranch,
+  rebaseOnto,
   removeRemote,
+  removeWorktree,
   revertCommit,
+  setSigning,
+  signingOn,
+  updateSubmodules,
 } from "@/lib/gitOps"
 import { STATUS, useGitStatus } from "@/lib/gitStatus"
 import { notify } from "@/lib/notice"
 import { composeCommitPrompt } from "@/lib/review"
-import { useEditorActions, useProject } from "@/lib/store"
+import { useEditorActions, useProject, useWorkspace } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
+import { openProjectHere } from "@/lib/window"
+import { RebaseDialog } from "./RebaseDialog"
 
 const basename = (p: string) => p.split("/").pop() ?? p
 const dirname = (p: string) => {
   const i = p.lastIndexOf("/")
   return i > 0 ? p.slice(0, i) : ""
 }
+
+/** One row of the repo menu. Fifteen of these were written out by hand, which is
+ *  how two of them drifted into a different disabled style. */
+function MenuItem({
+  icon,
+  label,
+  onClick,
+  disabled,
+  danger,
+}: {
+  icon: ReactNode
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  danger?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface disabled:opacity-40 ${
+        danger ? "text-marker" : "text-ink"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+/** The menu entries that do nothing but open a picker — the whole difference
+ *  between them is which one. */
+const PICKERS = [
+  ["revert", "git.revert"],
+  ["cherry", "git.cherryPick"],
+  ["merge", "git.merge"],
+  ["rebase", "git.rebase"],
+  ["worktrees", "git.worktrees"],
+  ["submodules", "git.submodules"],
+  ["tags", "git.tags"],
+  ["remotes", "git.remotes"],
+] as const
 
 export function GitPanel() {
   const root = useProject((s) => s.root)
@@ -105,16 +165,39 @@ export function GitPanel() {
   const [error, setError] = useState<string | null>(null)
   /** Which picker is open — the commit list for revert/cherry-pick, or the tag
    *  and remote lists. One at a time, so the panel never stacks two questions. */
-  const [picking, setPicking] = useState<"revert" | "cherry" | "tags" | "remotes" | null>(null)
+  const [picking, setPicking] = useState<
+    | "revert"
+    | "cherry"
+    | "tags"
+    | "remotes"
+    | "merge"
+    | "rebase"
+    | "worktrees"
+    | "submodules"
+    | null
+  >(null)
   const [commits, setCommits] = useState<Array<{ hash: string; subject: string }>>([])
   const [tags, setTags] = useState<string[]>([])
   const [remotes, setRemotes] = useState<Remote[]>([])
+  const [branches, setBranches] = useState<string[]>([])
+  const [worktrees, setWorktrees] = useState<Worktree[]>([])
+  const [submodules, setSubmodules] = useState<Submodule[]>([])
+  /** The branch an interactive rebase is being planned against; null = closed. */
+  const [rebasing, setRebasing] = useState<string | null>(null)
+  const [signing, setSigningState] = useState(false)
 
   // Load what the open picker needs, and nothing else.
   useEffect(() => {
     if (!picking) return
     if (picking === "tags") void listTags().then(setTags)
     else if (picking === "remotes") void listRemotes().then(setRemotes)
+    else if (picking === "worktrees") void listWorktrees().then(setWorktrees)
+    else if (picking === "submodules") void listSubmodules().then(setSubmodules)
+    else if (picking === "merge" || picking === "rebase")
+      // The current branch is not a thing to merge or rebase onto itself.
+      void gitBranches(root).then((b) =>
+        setBranches([...b.local, ...b.remote].filter((n) => n !== b.current)),
+      )
     else void gitRefs(root).then((r) => setCommits(r.commits))
   }, [picking, root])
 
@@ -393,6 +476,9 @@ export function GitPanel() {
                 const r = dotsRef.current?.getBoundingClientRect()
                 if (r) setMenuPos({ top: r.top, left: r.right + 6 })
                 refreshStashes()
+                // Read signing from the repository each time: it lives in git's
+                // own config, which the user may have changed elsewhere.
+                void signingOn().then(setSigningState)
               }
               setMenuOpen(next)
             },
@@ -459,6 +545,127 @@ export function GitPanel() {
                     ))}
                   </>
                 )}
+                {(picking === "merge" || picking === "rebase") && (
+                  <>
+                    {picking === "rebase" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const onto = branches[0]
+                          setPicking(null)
+                          if (onto) setRebasing(onto)
+                        }}
+                        className="flex w-full items-center px-3 py-1.5 text-left text-muted hover:bg-surface"
+                      >
+                        {t("git.rebasePick")}
+                      </button>
+                    )}
+                    {branches.length === 0 && (
+                      <p className="px-3 py-1.5 text-xs text-faint">{t("git.noBranches")}</p>
+                    )}
+                    {branches.map((b) => (
+                      <button
+                        key={b}
+                        type="button"
+                        onClick={() => {
+                          setPicking(null)
+                          void (picking === "merge" ? mergeBranch(b) : rebaseOnto(b)).then(
+                            refreshAll,
+                          )
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
+                      >
+                        <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
+                        <span className="min-w-0 truncate">{b}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {picking === "worktrees" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPicking(null)
+                        void addWorktree().then(refreshAll)
+                      }}
+                      className="flex w-full items-center px-3 py-1.5 text-left text-ink hover:bg-surface"
+                    >
+                      {t("git.worktreeAdd")}
+                    </button>
+                    {worktrees.map((w) => (
+                      <div
+                        key={w.path}
+                        className="flex w-full items-center justify-between gap-3 px-3 py-1.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPicking(null)
+                            void openProjectHere(w.path)
+                          }}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left hover:underline"
+                        >
+                          <span className="flex-none text-ink">
+                            {w.branch ?? t("git.detached")}
+                          </span>
+                          <span className="min-w-0 truncate text-[10px] text-faint">{w.path}</span>
+                        </button>
+                        {!w.isMain && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPicking(null)
+                              void removeWorktree(w.path).then(refreshAll)
+                            }}
+                            className="flex-none text-[10px] text-marker hover:underline"
+                          >
+                            {t("git.worktreeRemove")}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+                {picking === "submodules" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPicking(null)
+                        void updateSubmodules().then(refreshAll)
+                      }}
+                      className="flex w-full items-center px-3 py-1.5 text-left text-ink hover:bg-surface"
+                    >
+                      {t("git.submodulesUpdate")}
+                    </button>
+                    {submodules.length === 0 && (
+                      <p className="px-3 py-1.5 text-xs text-faint">{t("git.noSubmodules")}</p>
+                    )}
+                    {submodules.map((m) => (
+                      <button
+                        key={m.path}
+                        type="button"
+                        onClick={() => {
+                          setPicking(null)
+                          void (m.initialized
+                            ? openProjectHere(`${root}/${m.path}`)
+                            : updateSubmodules(m.path).then(refreshAll))
+                        }}
+                        className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left hover:bg-surface"
+                      >
+                        <span className="min-w-0 truncate text-ink">{m.path}</span>
+                        <span className="flex-none text-[10px] text-faint">
+                          {m.initialized
+                            ? m.modified
+                              ? t("git.submoduleModified")
+                              : m.sha.slice(0, 7)
+                            : t("git.submoduleMissing")}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
                 {(picking === "revert" || picking === "cherry") &&
                   commits.map((c) => (
                     <button
@@ -482,6 +689,13 @@ export function GitPanel() {
               </div>
             </>
           )}
+          {rebasing && (
+            <RebaseDialog
+              upstream={rebasing}
+              onClose={() => setRebasing(null)}
+              onDone={refreshAll}
+            />
+          )}
           {menuOpen && menuPos && (
             <>
               <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
@@ -493,105 +707,76 @@ export function GitPanel() {
                   maxHeight: `calc(100vh - ${menuPos.top}px - 8px)`,
                 }}
               >
-                <button
-                  type="button"
+                <MenuItem
+                  icon={<GitBranchIcon className="h-3.5 w-3.5 text-muted" />}
+                  label={t("git.newBranch")}
                   onClick={() => {
                     setMenuOpen(false)
                     setBranchName("")
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
-                >
-                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
-                  {t("git.newBranch")}
-                </button>
-                {/* Fixing what just happened. These used to mean leaving for a
-                    terminal, which is the one place a read-first editor should
-                    not have to send anyone. */}
-                <button
-                  type="button"
+                />
+                {/* Fixing what just happened, and reshaping the branch. These
+                    used to mean leaving for a terminal, which is the one place a
+                    read-first editor should not have to send anyone. */}
+                <MenuItem
+                  icon={<GitBranchIcon className="h-3.5 w-3.5 text-muted" />}
+                  label={t("git.amend")}
                   onClick={() => {
                     setMenuOpen(false)
                     void amendLastCommit().then(refreshAll)
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
-                >
-                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
-                  {t("git.amend")}
-                </button>
-                <button
-                  type="button"
+                />
+                {PICKERS.map(([key, label]) => (
+                  <MenuItem
+                    key={key}
+                    icon={<GitBranchIcon className="h-3.5 w-3.5 text-muted" />}
+                    label={t(label)}
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setPicking(key)
+                    }}
+                  />
+                ))}
+                <MenuItem
+                  icon={<GraphIcon className="h-3.5 w-3.5 text-muted" />}
+                  label={t("gitGraph.title")}
                   onClick={() => {
                     setMenuOpen(false)
-                    setPicking("revert")
+                    useWorkspace.getState().toggleGitGraph(true)
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
-                >
-                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
-                  {t("git.revert")}
-                </button>
-                <button
-                  type="button"
+                />
+                <MenuItem
+                  icon={<SealCheckIcon className="h-3.5 w-3.5 text-muted" />}
+                  label={signing ? t("git.signingDisable") : t("git.signingEnable")}
                   onClick={() => {
                     setMenuOpen(false)
-                    setPicking("cherry")
+                    const next = !signing
+                    setSigningState(next)
+                    void setSigning(next)
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
-                >
-                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
-                  {t("git.cherryPick")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    setPicking("tags")
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
-                >
-                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
-                  {t("git.tags")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    setPicking("remotes")
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
-                >
-                  <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
-                  {t("git.remotes")}
-                </button>
-                <button
-                  type="button"
+                />
+                <MenuItem
+                  icon={<StashIcon className="h-3.5 w-3.5 text-muted" />}
+                  label={t("git.stash")}
+                  disabled={changes.length === 0}
                   onClick={() => runRepo(gitStash(root, "", false))}
+                />
+                <MenuItem
+                  icon={<StashIcon className="h-3.5 w-3.5 text-muted" />}
+                  label={t("git.stashUntracked")}
                   disabled={changes.length === 0}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface disabled:opacity-40"
-                >
-                  <StashIcon className="h-3.5 w-3.5 text-muted" />
-                  {t("git.stash")}
-                </button>
-                <button
-                  type="button"
                   onClick={() => runRepo(gitStash(root, "", true))}
-                  disabled={changes.length === 0}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface disabled:opacity-40"
-                >
-                  <StashIcon className="h-3.5 w-3.5 text-muted" />
-                  {t("git.stashUntracked")}
-                </button>
-                <button
-                  type="button"
+                />
+                <MenuItem
+                  icon={<DiscardIcon className="h-3.5 w-3.5" />}
+                  label={t("git.discardAll")}
+                  danger
+                  disabled={unstaged.length === 0}
                   onClick={() => {
                     setMenuOpen(false)
                     setConfirmDiscardAll(true)
                   }}
-                  disabled={unstaged.length === 0}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-marker hover:bg-surface disabled:opacity-40"
-                >
-                  <DiscardIcon className="h-3.5 w-3.5" />
-                  {t("git.discardAll")}
-                </button>
+                />
 
                 <div className="mt-1 border-t border-line px-3 pt-1.5 pb-0.5 text-[10px] font-medium tracking-wide text-faint uppercase">
                   {t("git.stashes")}

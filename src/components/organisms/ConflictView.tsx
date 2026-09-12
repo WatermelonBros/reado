@@ -10,6 +10,11 @@
  *
  * The escape hatch is deliberate and separate: "Abort" abandons the whole merge
  * or rebase, is styled as destructive, and asks first.
+ *
+ * Finishing is not one thing either: a merge ends with a commit, while a rebase,
+ * a cherry-pick and a revert end with `--continue`. The repository is asked which
+ * one is in progress rather than guessed at, because telling someone to commit
+ * halfway through a rebase is how a rebase gets lost.
  */
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -20,8 +25,10 @@ import {
   gitMergeAbort,
   gitRebaseAbort,
   gitResolveConflict,
+  gitSequencer,
   gitStage,
 } from "@/lib/api"
+import { continueSequencer } from "@/lib/gitOps"
 import { notifyError } from "@/lib/notice"
 import { useEditorActions, useProject } from "@/lib/store"
 
@@ -57,6 +64,8 @@ export function ConflictView({ relPath }: { relPath: string }) {
   const { t } = useTranslation()
   const [regions, setRegions] = useState<ConflictRegion[] | null>(null)
   const [confirmingAbort, setConfirmingAbort] = useState(false)
+  /** What the repository is halfway through, or null. */
+  const [op, setOp] = useState<string | null>(null)
 
   const load = useCallback(() => {
     gitConflictRegions(root, relPath)
@@ -65,6 +74,12 @@ export function ConflictView({ relPath }: { relPath: string }) {
   }, [root, relPath])
 
   useEffect(load, [load])
+
+  useEffect(() => {
+    gitSequencer(root)
+      .then(setOp)
+      .catch(() => setOp(null))
+  }, [root])
 
   const resolve = async (index: number, side: "ours" | "theirs" | "both") => {
     try {
@@ -116,11 +131,22 @@ export function ConflictView({ relPath }: { relPath: string }) {
             ? t("conflict.allResolved")
             : t("conflict.remaining", { count: regions.length })}
         </span>
-        {regions.length === 0 && (
-          <Button variant="primary" size="sm" onClick={() => void markResolved()}>
-            {t("conflict.markResolved")}
-          </Button>
-        )}
+        {regions.length === 0 &&
+          (op && op !== "merge" ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                void continueSequencer().then(load)
+              }}
+            >
+              {t("conflict.continue", { op })}
+            </Button>
+          ) : (
+            <Button variant="primary" size="sm" onClick={() => void markResolved()}>
+              {t("conflict.markResolved")}
+            </Button>
+          ))}
         {confirmingAbort ? (
           <>
             <Button variant="danger" size="sm" onClick={() => void abort()}>

@@ -703,7 +703,8 @@
     "abort": "Abortar la fusión",
     "abortConfirm": "Abortar: descartar la fusión",
     "abortFailed": "No se ha podido abortar. ¿Hay realmente una fusión o un rebase en curso?",
-    "open": "Resolver los conflictos"
+    "open": "Resolver los conflictos",
+    "continue": "Continuar el {op}"
   },
   "hunk": {
     "at": "línea {line}",
@@ -1010,7 +1011,11 @@
     "terminalProfiles": "Perfiles del terminal",
     "terminalProfilesHint": "Uno por línea, como `Nombre = comando argumentos`. Aparecen junto al botón + del terminal.",
     "defaultTerminalProfile": "Perfil predeterminado",
-    "defaultTerminalProfileHint": "El perfil que abre un terminal nuevo. Vacío significa el shell de arriba."
+    "defaultTerminalProfileHint": "El perfil que abre un terminal nuevo. Vacío significa el shell de arriba.",
+    "screenReader": "Lector de pantalla",
+    "screenReaderHint": "Reado no puede saber si hay un lector de pantalla en marcha, así que es una elección y no una suposición. Desactivado, la región activa permanece en silencio.",
+    "audioCues": "Señales sonoras",
+    "audioCuesHint": "Un tono breve para un error bajo el cursor y para una ejecución de pruebas terminada."
   },
   "defaultApp": {
     "title": "Aplicación por defecto para archivos de texto",
@@ -1239,7 +1244,55 @@
     "discardAllConfirm": "¿Descartar todos los cambios del árbol de trabajo (incluidos los archivos sin seguimiento)? No se puede deshacer.",
     "stashDropConfirm": "¿Descartar este stash? No se puede deshacer.",
     "sync": "Sincronizar (bajar y luego subir)",
-    "syncConflicts": "Sincronización detenida: {count} archivo(s) tienen conflictos que resolver. Arréglalos, confirma y vuelve a sincronizar."
+    "syncConflicts": "Sincronización detenida: {count} archivo(s) tienen conflictos que resolver. Arréglalos, confirma y vuelve a sincronizar.",
+    "merge": "Fusionar una rama…",
+    "merged": "Rama “{branch}” fusionada.",
+    "mergeFailed": "No se pudo fusionar “{branch}”.",
+    "rebase": "Rebase sobre…",
+    "rebased": "Rebase sobre “{branch}” completado.",
+    "rebaseFailed": "No se pudo hacer rebase sobre “{branch}”.",
+    "rebasePick": "Planificarlo commit a commit…",
+    "rebaseInteractive": "Rebase interactivo",
+    "rebasePlan": "Los commits reaplicados sobre “{branch}”, del más antiguo al más reciente.",
+    "rebaseNothing": "Nada que reaplicar: esta rama no va por delante.",
+    "rebaseAction": "Qué hacer con este commit",
+    "rebaseUp": "Mover antes",
+    "rebaseDown": "Mover después",
+    "rebaseStart": "Iniciar el rebase",
+    "rebaseFirstFolds": "El primer commit no tiene nada en lo que fusionarse.",
+    "rebaseAllDropped": "Un plan que descarta todos los commits no dejaría nada.",
+    "todo": {
+      "pick": "Mantener",
+      "squash": "Fusionar",
+      "fixup": "Absorber",
+      "drop": "Descartar"
+    },
+    "noBranches": "No hay otras ramas.",
+    "continued": "Operación reanudada.",
+    "continueFailed": "No se pudo continuar: revisa los archivos sin resolver.",
+    "worktrees": "Árboles de trabajo…",
+    "worktreeAdd": "Nuevo árbol de trabajo…",
+    "worktreeBranch": "Rama que se abrirá ahí",
+    "worktreePath": "Carpeta del árbol de trabajo",
+    "worktreeAdded": "Árbol de trabajo creado en {path}.",
+    "worktreeRemove": "Eliminar",
+    "worktreeRemoveAsk": "¿Eliminar el árbol de trabajo en {path}? La carpeta se borra con él.",
+    "worktreeRemoved": "Árbol de trabajo en {path} eliminado.",
+    "worktreeFailed": "Eso no funcionó en los árboles de trabajo.",
+    "detached": "desacoplado",
+    "submodules": "Submódulos…",
+    "submodulesUpdate": "Actualizar todos los submódulos",
+    "submodulesUpdated": "Submódulos actualizados.",
+    "submoduleFailed": "No se pudieron actualizar los submódulos.",
+    "submoduleModified": "modificado",
+    "submoduleMissing": "sin clonar",
+    "noSubmodules": "No hay submódulos.",
+    "signingEnable": "Firmar commits y etiquetas",
+    "signingDisable": "Dejar de firmar commits y etiquetas",
+    "signingOn": "A partir de ahora los commits y las etiquetas de este repositorio van firmados.",
+    "signingOff": "Firma desactivada para este repositorio.",
+    "signingFailed": "No se pudo cambiar la firma.",
+    "rebaseDirty": "Primero haz commit o stash de tus cambios: git no hará rebase sobre ellos."
   },
   "lsp": {
     "createTask": "Crear una tarea",
@@ -1571,5 +1624,36 @@
     "empty": "Todavía no hay nada para este filtro.",
     "loggingOff": "El registro está desactivado en los ajustes, así que no se recoge nada.",
     "revealLog": "Mostrar el archivo de registro: conserva todo lo que aquí se pierde"
+  },
+  "gitGraph": {
+    "title": "Grafo de commits",
+    "count": "{n} commits",
+    "empty": "Todavía no hay historial.",
+    "more": "Mostrar más",
+    "diff": "Comparar con este commit"
+  },
+  "tests": {
+    "panel": "Pruebas",
+    "empty": "No se encontraron pruebas. Reado busca las formas que usan los frameworks habituales: `it(…)`, `#[test]`, `def test_…`, `func TestX`.",
+    "filter": "Filtrar pruebas",
+    "runAll": "Ejecutar todas las pruebas",
+    "runFile": "Ejecutar las pruebas de este archivo",
+    "runOne": "Ejecutar esta prueba",
+    "refresh": "Volver a buscar pruebas",
+    "count": "{n} pruebas en {files} archivos",
+    "finished": "{passed} pasaron, {failed} fallaron.",
+    "stale": "Se ejecutó antes de que el archivo cambiara: puede estar desactualizado.",
+    "staleShort": "desactualizado"
+  },
+  "a11y": {
+    "line": "Línea {n}",
+    "blankLine": "vacía",
+    "diffSummary": "Diff abierto con {count} regiones modificadas. Alt+Abajo para la siguiente.",
+    "diffChunk": "Cambio {n} de {total}, {added} líneas añadidas, {removed} eliminadas, en la línea {line}."
+  },
+  "notebook": {
+    "unreadable": "Este archivo no es un notebook legible. Ábrelo como código fuente para ver qué contiene.",
+    "summary": "{cells} celdas, {code} de ellas de código",
+    "runAll": "Ejecutar todo"
   }
 }

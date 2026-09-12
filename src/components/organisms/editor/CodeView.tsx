@@ -90,6 +90,8 @@ import {
   useSessions,
   useSettings,
 } from "@/lib/store"
+import { testGutter } from "@/lib/testGutter"
+import { runTests, type TestStatus, testId, useTesting } from "@/lib/testing"
 import { isUntitled, useUntitled } from "@/lib/untitled"
 import { rootFor } from "@/lib/workspace"
 import { buildCodeExtensions } from "./buildCodeExtensions"
@@ -204,6 +206,7 @@ export function CodeView({
   const gutterComp = useMemo(() => new Compartment(), [])
   const blameComp = useMemo(() => new Compartment(), [])
   const bookmarkComp = useMemo(() => new Compartment(), [])
+  const testComp = useMemo(() => new Compartment(), [])
   const tabSizeComp = useMemo(() => new Compartment(), [])
   const indentUnitComp = useMemo(() => new Compartment(), [])
   const lspComp = useMemo(() => new Compartment(), [])
@@ -324,6 +327,31 @@ export function CodeView({
     for (const b of bookmarks) if (b.path === relPath) set.add(b.line)
     return set
   }, [bookmarks, relPath])
+  // The tests declared in this file, and how each last went — the gutter's run
+  // arrow and its tint. Discovery already walked the project; this is a lookup.
+  const testFiles = useTesting((s) => s.files)
+  const testResults = useTesting((s) => s.byRoot[fileRoot])
+  const fileTests = useMemo(() => testFiles.find((f) => f.path === relPath), [testFiles, relPath])
+  const testLines = useMemo(() => {
+    const map = new Map<number, TestStatus | undefined>()
+    for (const test of fileTests?.tests ?? [])
+      map.set(test.line, testResults?.[testId(relPath, test.suites, test.name)]?.status)
+    return map
+  }, [fileTests, testResults, relPath])
+  const runTestAtLine = useMemo(
+    () => (line: number) => {
+      const test = fileTests?.tests.find((x) => x.line === line)
+      if (!fileTests || !test) return
+      void runTests({
+        framework: fileTests.framework,
+        file: fileTests.path,
+        suites: test.suites,
+        name: test.name,
+      })
+    },
+    [fileTests],
+  )
+
   const toggleBookmarkLine = useMemo(
     () => (line: number) => {
       const view = viewRef.current
@@ -628,6 +656,7 @@ export function CodeView({
         gutterComp,
         changedComp,
         bookmarkComp,
+        testComp,
         blameComp,
         diffComp,
         lspComp,
@@ -659,10 +688,12 @@ export function CodeView({
         lineComments,
         changedLines,
         bookmarkLines,
+        testLines,
         autoSaveTimer,
         cursorSaveTimer,
         openThreadAtLine,
         toggleBookmarkLine,
+        runTestAtLine,
         startComposer,
         saveFile,
         peekDefinition,
@@ -933,6 +964,20 @@ export function CodeView({
       effects: bookmarkComp.reconfigure(bookmarkGutter(bookmarkLines, toggleBookmarkLine)),
     })
   }, [bookmarkLines, toggleBookmarkLine, bookmarkComp])
+
+  // And the test gutter, as a run finishes and verdicts land. Compared by value
+  // first: a run repaints the store once per verdict, and a file with no tests
+  // would otherwise reconfigure CodeMirror on every one of them for an empty
+  // gutter.
+  const drawnTests = useRef("")
+  useEffect(() => {
+    const shape = [...testLines].map(([line, status]) => `${line}:${status ?? ""}`).join(",")
+    if (shape === drawnTests.current) return
+    drawnTests.current = shape
+    viewRef.current?.dispatch({
+      effects: testComp.reconfigure(testGutter(testLines, runTestAtLine)),
+    })
+  }, [testLines, runTestAtLine, testComp])
 
   // The blame column (breadcrumb toggle) and the inline, cursor-line annotation
   // (a setting) read the same `git_blame`, so one fetch serves both. The column

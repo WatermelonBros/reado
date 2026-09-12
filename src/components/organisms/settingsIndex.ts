@@ -75,6 +75,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     "settings.zoom",
     "settings.colorVision",
     "settings.reduceMotion",
+    "settings.screenReader",
+    "settings.audioCues",
   ]),
   ...group("interface", "cursor", "settings.cursor", [
     "settings.cursorStyle",

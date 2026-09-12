@@ -415,6 +415,38 @@
     opacity: 0.4;
   }
 
+  /* The run arrow beside a test declaration, tinted by its last verdict. Quiet
+     until the pointer is on the gutter: a column of green arrows down a test
+     file is the gutter shouting over the code it annotates. */
+  .reado-test-gutter {
+    width: 12px;
+    cursor: pointer;
+  }
+  .reado-test-marker {
+    display: inline-block;
+    width: 100%;
+    color: var(--text-faint);
+    opacity: 0.45;
+    text-align: center;
+    font-size: 9px;
+    line-height: var(--code-line-height);
+  }
+  .reado-test-gutter:hover .reado-test-marker {
+    opacity: 1;
+  }
+  .reado-test-marker[data-status="pass"] {
+    color: var(--syn-string);
+    opacity: 0.9;
+  }
+  .reado-test-marker[data-status="fail"] {
+    color: var(--marker);
+    opacity: 1;
+  }
+  .reado-test-marker[data-status="running"] {
+    color: var(--accent);
+    opacity: 1;
+  }
+
   /* The anchored block, highlighted while its comment thread is open. */
   .cm-comment-block {
     background: color-mix(in oklch, var(--marker) 7%, transparent);

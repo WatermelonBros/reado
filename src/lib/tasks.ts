@@ -11,14 +11,14 @@
  * the command is typed by hand. The matcher reads the same stream on its way to
  * the screen.
  */
-import { listen, type UnlistenFn } from "@tauri-apps/api/event"
+import type { UnlistenFn } from "@tauri-apps/api/event"
 import { create } from "zustand"
 import { t } from "@/i18n"
 import { createFile, ptyWrite, readFile, writeFile } from "./api"
 import { createLogger, safeError } from "./logger"
 import { notify, notifyError } from "./notice"
 import { useProject } from "./store"
-import { useTerminals } from "./terminals"
+import { listenPtyLines, plainText, useTerminals } from "./terminals"
 
 const log = createLogger("tasks")
 
@@ -49,12 +49,6 @@ export interface TaskProblem {
 
 const severityOf = (word: string): number => (/^err/i.test(word) ? 1 : /^warn/i.test(word) ? 2 : 3)
 
-/** Strip the ANSI colour a compiler writes when it thinks it has a terminal —
- *  and it does, because Reado gives it a real one. */
-const plain = (line: string): string =>
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escapes are control characters by definition.
-  line.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "").replace(/\r/g, "")
-
 /** `src/a.ts(12,5): error TS2345: message` — tsc, and MSBuild. */
 const TSC = /^(.+?)\((\d+),(\d+)\):\s*(error|warning|info)\b[^:]*:\s*(.+)$/
 /** `src/a.ts:12:5: error: message` — gcc, eslint's compact format, and most
@@ -75,7 +69,7 @@ export function createMatcher(): { push: (raw: string) => TaskProblem[] } {
   let pending: { severity: number; message: string } | null = null
   return {
     push(raw) {
-      const line = plain(raw)
+      const line = plainText(raw)
       if (!line.trim()) return []
       if (pending) {
         const loc = CARGO_LOC.exec(line)
@@ -236,9 +230,8 @@ export async function runTask(task: Task): Promise<void> {
     off = null
     clearTimeout(idle)
   }
-  off = await listen<string>(`pty-output-${id}`, (e) => {
-    const text = typeof e.payload === "string" ? e.payload : String(e.payload)
-    for (const line of text.split("\n")) found.push(...matcher.push(line))
+  off = await listenPtyLines(id, (line) => {
+    found.push(...matcher.push(line))
     useTasks.getState().set({ byTask: { ...useTasks.getState().byTask, [task.label]: [...found] } })
     // A task that has stopped printing has finished, as far as the reader is
     // concerned; a watch task simply keeps the listener a little longer.

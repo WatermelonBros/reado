@@ -21,10 +21,12 @@ import { Welcome } from "@/components/molecules/Welcome"
 import { ConflictView } from "@/components/organisms/ConflictView"
 import { DiffView } from "@/components/organisms/DiffView"
 import { ImageView } from "@/components/organisms/ImageView"
+import { NotebookView } from "@/components/organisms/NotebookView"
 import { PdfView } from "@/components/organisms/PdfView"
 import { type FileContent, gitDiffLines, gitShowRef, readFile, reanchorFile } from "@/lib/api"
 import { commentsForFile, toRelative, useComments } from "@/lib/comments"
 import { prRefsFor, useGuidedReview } from "@/lib/guidedReview"
+import { isNotebook } from "@/lib/notebook"
 import { SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTextView } from "@/lib/textView"
 import { isUntitled, useUntitled } from "@/lib/untitled"
@@ -270,12 +272,16 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
 
   const relPath = toRelative(root, active)
 
-  // Markdown renders as prose by default; comments anchor to source lines, so a
-  // toggle drops to the source view (CodeView) where the gutter/threads live.
-  if (isMarkdown(active) && !diffing) {
+  // Two kinds render as something other than their bytes: markdown as prose, a
+  // notebook as its cells. Both keep the same toggle to the source view, where
+  // the JSON or the markup — and the comment gutter with it — still live. One
+  // branch rather than two: the `CodeView` call below carries fourteen props,
+  // and the copy of it was the one that would quietly miss the fifteenth.
+  const rendered = isMarkdown(active) ? "markdown" : isNotebook(active) ? "notebook" : null
+  if (rendered && !diffing) {
     // While re-anchoring, force source: the prose view has no lines to select.
     const asSource = forceText.has(active) || reanchoringId !== null
-    const mdComments = commentsForFile(inlineCommentSource, relPath)
+    const fileComments = commentsForFile(inlineCommentSource, relPath)
     return (
       <div className="relative h-full w-full">
         <Button
@@ -287,7 +293,9 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
         >
           {asSource ? <DocsIcon className="h-3.5 w-3.5" /> : <EditIcon className="h-3.5 w-3.5" />}
           {asSource ? t("editor.viewRendered") : t("editor.viewSource")}
-          {!asSource && mdComments.length > 0 && <Badge tone="accent">{mdComments.length}</Badge>}
+          {!asSource && fileComments.length > 0 && (
+            <Badge tone="accent">{fileComments.length}</Badge>
+          )}
         </Button>
         {asSource ? (
           <CodeView
@@ -295,7 +303,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             path={active}
             relPath={relPath}
             text={content.text}
-            comments={mdComments}
+            comments={fileComments}
             wrap={wrap}
             wrapColumn={wrapColumn}
             codeFont={codeFont}
@@ -307,12 +315,14 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
             changedLines={changedLines}
             encoding={content.encoding}
           />
-        ) : (
+        ) : rendered === "markdown" ? (
           <RenderedMarkdown
             text={content.text}
             root={root}
             baseDir={active.replace(/\\/g, "/").replace(/\/[^/]*$/, "")}
           />
+        ) : (
+          <NotebookView text={content.text} path={active} root={root} />
         )}
       </div>
     )

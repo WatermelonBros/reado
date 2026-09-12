@@ -31,6 +31,7 @@ import { DocsView } from "@/components/organisms/DocsView"
 import { Editor } from "@/components/organisms/Editor"
 import { ExtensionPage } from "@/components/organisms/ExtensionPage"
 import { useTreeFilter } from "@/components/organisms/FileTree"
+import { GitGraph } from "@/components/organisms/GitGraph"
 import { KnowledgeGraph } from "@/components/organisms/KnowledgeGraph"
 import { Tabs } from "@/components/organisms/Tabs"
 import { TOOL_TITLE, ToolPanelBody } from "@/components/organisms/ToolPanelBody"
@@ -74,6 +75,7 @@ import { composeReviewPrompt } from "@/lib/review"
 import { useSpecs } from "@/lib/specs"
 import { type Tool, useProject, useSessions, useSettings, useWorkspace } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
+import { useTesting } from "@/lib/testing"
 import { useTours } from "@/lib/tours"
 import { clearOpenFile, currentOpenFile, currentWorkspaceFile, setWindowTitle } from "@/lib/window"
 import { acrossRoots, loadWorkspace, workspaceRoots } from "@/lib/workspace"
@@ -174,6 +176,15 @@ export function ProjectView({ root }: { root: string }) {
   useEffect(() => {
     void useSpecs.getState().load(root)
   }, [root, treeNonce])
+
+  // The same for tests, but on open only: the Test Explorer appears in the rail
+  // once the project has tests, so the sweep cannot wait for the panel it is
+  // what reveals. Not on `treeNonce` — that fires after every save, and the
+  // sweep reads every test file in the project to answer "still the same". The
+  // panel's own Refresh button is the deliberate re-run.
+  useEffect(() => {
+    void useTesting.getState().load(root)
+  }, [root])
 
   // Re-list the tree/search when the exclude globs change (skip the initial run;
   // the tree already lists on mount).
@@ -396,6 +407,7 @@ export function ProjectView({ root }: { root: string }) {
   const docked = useLayout((s) => (selectedTool ? !!findPanel(s.layout, selectedTool) : false))
   const tool = docked ? null : selectedTool
   const graphOpen = useWorkspace((s) => s.graphOpen)
+  const gitGraphOpen = useWorkspace((s) => s.gitGraphOpen)
   const docsOpen = useWorkspace((s) => s.docsOpen)
   const sidebarWidth = useWorkspace((s) => s.sidebarWidth)
   const setSidebarWidth = useWorkspace((s) => s.setSidebarWidth)
@@ -781,6 +793,7 @@ export function ProjectView({ root }: { root: string }) {
         )}
         <GitignorePrompt />
         {graphOpen && <KnowledgeGraph />}
+        {gitGraphOpen && <GitGraph />}
         {docsOpen && <DocsView />}
       </div>
       {/* Status bar spans the full window width, below the activity bar + sidebar. */}

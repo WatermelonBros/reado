@@ -12,6 +12,7 @@
  * PTYs outlive tab switches and layout changes: each pane's `<Terminal>` stays
  * mounted (hidden when not in the active group) so scrollback persists.
  */
+import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { ptyWrite } from "./api"
@@ -460,4 +461,69 @@ function resolveActive(
     activeId = active?.paneIds[active.paneIds.length - 1] ?? null
   }
   return { activeId, activeGroupId, open: groups.length > 0 && prev.open }
+}
+
+/** The raw bytes of one `pty-output-*` payload, or null when it is not a frame
+ *  at all (a test's fake event, a future framing). */
+function frameBytes(payload: unknown): Uint8Array | null {
+  const raw = typeof payload === "string" ? payload : String(payload)
+  try {
+    return Uint8Array.from(atob(raw), (c) => c.charCodeAt(0))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Decode one `pty-output-*` payload into text.
+ *
+ * The backend base64-frames PTY output so escape sequences and non-UTF-8 bytes
+ * survive the JSON event boundary. Anything reading that stream for meaning has
+ * to undo that first; reading the frame as if it were the text matches nothing,
+ * and matches nothing *silently*, which is how a matcher can look wired up and
+ * never fire.
+ *
+ * One frame at a time. A reader following a whole stream wants
+ * [`listenPtyLines`], whose decoder carries state across frames.
+ */
+export function decodePtyOutput(payload: unknown): string {
+  const bytes = frameBytes(payload)
+  return bytes ? new TextDecoder().decode(bytes) : String(payload)
+}
+
+/** Strip the ANSI a program writes when it thinks it has a terminal — and it
+ *  does, because Reado gives it a real one. Shared, so the day this has to learn
+ *  about OSC sequences it learns once. */
+export const plainText = (line: string): string =>
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escapes are control characters by definition.
+  line.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "").replace(/\r/g, "")
+
+/**
+ * Subscribe to a pane's output as **complete lines**.
+ *
+ * The backend reads the PTY in 8 KB blocks, so a chunk boundary lands mid-line
+ * routinely in any long run. A consumer that splits each chunk on its own sees
+ * the two halves of a verdict line and matches neither — silently, leaving a
+ * test that passed showing as still running. The partial tail is held here, in
+ * the one place that knows the framing, so no reader has to.
+ */
+export async function listenPtyLines(
+  id: string,
+  onLine: (line: string) => void,
+): Promise<UnlistenFn> {
+  let tail = ""
+  // Per subscription, and streaming: the decoder holds the first bytes of a
+  // multi-byte character split across two reads, which a fresh decoder per
+  // frame would turn into U+FFFD. Sharing one across panes would interleave
+  // that state, so it belongs here rather than at module scope.
+  const decoder = new TextDecoder()
+  return listen<string>(`pty-output-${id}`, (e) => {
+    const bytes = frameBytes(e.payload)
+    const text = bytes ? decoder.decode(bytes, { stream: true }) : String(e.payload)
+    const lines = (tail + text).split("\n")
+    // The last piece has no newline after it yet: it is the start of the next
+    // line, not a line.
+    tail = lines.pop() ?? ""
+    for (const line of lines) onLine(line)
+  })
 }

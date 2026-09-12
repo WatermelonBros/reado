@@ -27,6 +27,7 @@ vi.mock("../GuidedReviewPanel", () => stub("GuidedReviewPanel"))
 vi.mock("../CoveragePanel", () => stub("CoveragePanel"))
 vi.mock("../ExtensionsPanel", () => stub("ExtensionsPanel"))
 vi.mock("../OutputPanel", () => stub("OutputPanel"))
+vi.mock("../TestsPanel", () => stub("TestsPanel"))
 
 import { isTool, TOOL_TITLE, ToolPanelBody } from "@/components/organisms/ToolPanelBody"
 
@@ -53,6 +54,7 @@ const EXPECTED: Record<string, string> = {
   coverage: "CoveragePanel",
   extensions: "ExtensionsPanel",
   output: "OutputPanel",
+  tests: "TestsPanel",
 }
 
 describe("every tool resolves to its own body", () => {

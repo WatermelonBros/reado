@@ -578,6 +578,7 @@ describe("running a command", () => {
       selectTool: vi.fn(),
       toggleSidebar: vi.fn(),
       toggleGraph: vi.fn(),
+      toggleGitGraph: vi.fn(),
       toggleDocs: vi.fn(),
       searchFor: vi.fn(),
     }
@@ -688,6 +689,7 @@ describe("running a command", () => {
       "symbols.gotoWorkspace": () => expect(usePalette.getState().mode).toBe("wsymbols"),
       "symbols.goto": () => expect(usePalette.getState().mode).toBe("symbols"),
       "graph.title": () => expect(ws.toggleGraph).toHaveBeenCalledWith(true),
+      "gitGraph.title": () => expect(ws.toggleGitGraph).toHaveBeenCalledWith(true),
       "kb.title": () => expect(ws.toggleDocs).toHaveBeenCalledWith(true),
       "finder.placeholder": () => expect(usePalette.getState().mode).toBe("files"),
       "search.placeholder": () => expect(usePalette.getState().mode).toBe("search"),

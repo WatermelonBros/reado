@@ -703,7 +703,8 @@
     "abort": "Merge abbrechen",
     "abortConfirm": "Abbrechen — den Merge verwerfen",
     "abortFailed": "Abbruch nicht möglich. Läuft wirklich ein Merge oder Rebase?",
-    "open": "Konflikte lösen"
+    "open": "Konflikte lösen",
+    "continue": "{op} fortsetzen"
   },
   "hunk": {
     "at": "Zeile {line}",
@@ -1010,7 +1011,11 @@
     "terminalProfiles": "Terminal-Profile",
     "terminalProfilesHint": "Einer pro Zeile, als `Name = Befehl Argumente`. Sie erscheinen neben dem +-Knopf im Terminal.",
     "defaultTerminalProfile": "Standardprofil",
-    "defaultTerminalProfileHint": "Das Profil, das ein neues Terminal ausführt. Leer bedeutet die Shell oben."
+    "defaultTerminalProfileHint": "Das Profil, das ein neues Terminal ausführt. Leer bedeutet die Shell oben.",
+    "screenReader": "Screenreader",
+    "screenReaderHint": "Reado kann nicht erkennen, ob ein Screenreader läuft — das ist daher eine Entscheidung und keine Vermutung. Aus bleibt die Live-Region stumm.",
+    "audioCues": "Akustische Signale",
+    "audioCuesHint": "Ein kurzer Ton für einen Fehler unter dem Cursor und für einen beendeten Testlauf."
   },
   "defaultApp": {
     "title": "Standard-App für Textdateien",
@@ -1239,7 +1244,55 @@
     "discardAllConfirm": "Alle Änderungen im Arbeitsbaum verwerfen (auch nicht versionierte Dateien)? Das lässt sich nicht rückgängig machen.",
     "stashDropConfirm": "Diesen Stash verwerfen? Das lässt sich nicht rückgängig machen.",
     "sync": "Synchronisieren (erst Pull, dann Push)",
-    "syncConflicts": "Synchronisierung gestoppt: {count} Datei(en) haben Konflikte. Löse sie, committe und synchronisiere erneut."
+    "syncConflicts": "Synchronisierung gestoppt: {count} Datei(en) haben Konflikte. Löse sie, committe und synchronisiere erneut.",
+    "merge": "Branch zusammenführen…",
+    "merged": "Branch „{branch}“ zusammengeführt.",
+    "mergeFailed": "„{branch}“ konnte nicht zusammengeführt werden.",
+    "rebase": "Rebase auf…",
+    "rebased": "Rebase auf „{branch}“ abgeschlossen.",
+    "rebaseFailed": "Rebase auf „{branch}“ war nicht möglich.",
+    "rebasePick": "Commit für Commit planen…",
+    "rebaseInteractive": "Interaktiver Rebase",
+    "rebasePlan": "Die Commits, die auf „{branch}“ neu angewendet werden — älteste zuerst.",
+    "rebaseNothing": "Nichts anzuwenden — dieser Branch ist nicht voraus.",
+    "rebaseAction": "Was mit diesem Commit geschehen soll",
+    "rebaseUp": "Nach vorn schieben",
+    "rebaseDown": "Nach hinten schieben",
+    "rebaseStart": "Rebase starten",
+    "rebaseFirstFolds": "Der erste Commit hat nichts, worin er aufgehen könnte.",
+    "rebaseAllDropped": "Ein Plan, der jeden Commit verwirft, lässt nichts übrig.",
+    "todo": {
+      "pick": "Behalten",
+      "squash": "Zusammenfassen",
+      "fixup": "Einverleiben",
+      "drop": "Verwerfen"
+    },
+    "noBranches": "Keine anderen Branches.",
+    "continued": "Fortgesetzt.",
+    "continueFailed": "Fortsetzen nicht möglich — prüfe ungelöste Dateien.",
+    "worktrees": "Worktrees…",
+    "worktreeAdd": "Neuer Worktree…",
+    "worktreeBranch": "Branch, der dort ausgecheckt wird",
+    "worktreePath": "Verzeichnis für den Worktree",
+    "worktreeAdded": "Worktree in {path} angelegt.",
+    "worktreeRemove": "Entfernen",
+    "worktreeRemoveAsk": "Den Worktree in {path} entfernen? Das Verzeichnis geht mit.",
+    "worktreeRemoved": "Worktree in {path} entfernt.",
+    "worktreeFailed": "Das hat bei den Worktrees nicht funktioniert.",
+    "detached": "losgelöst",
+    "submodules": "Submodule…",
+    "submodulesUpdate": "Alle Submodule aktualisieren",
+    "submodulesUpdated": "Submodule aktualisiert.",
+    "submoduleFailed": "Die Submodule konnten nicht aktualisiert werden.",
+    "submoduleModified": "geändert",
+    "submoduleMissing": "nicht geklont",
+    "noSubmodules": "Keine Submodule.",
+    "signingEnable": "Commits und Tags signieren",
+    "signingDisable": "Commits und Tags nicht mehr signieren",
+    "signingOn": "Commits und Tags in diesem Repository werden jetzt signiert.",
+    "signingOff": "Signieren für dieses Repository ausgeschaltet.",
+    "signingFailed": "Das Signieren konnte nicht geändert werden.",
+    "rebaseDirty": "Committe oder stashe deine Änderungen zuerst — git rebaset nicht darüber hinweg."
   },
   "lsp": {
     "createTask": "Aufgabe erstellen",
@@ -1571,5 +1624,36 @@
     "empty": "Für diesen Filter gibt es noch nichts.",
     "loggingOff": "Das Logging ist in den Einstellungen aus, daher wird nichts gesammelt.",
     "revealLog": "Die Logdatei zeigen — sie behält alles, was hier durchrutscht"
+  },
+  "gitGraph": {
+    "title": "Commit-Graph",
+    "count": "{n} Commits",
+    "empty": "Noch keine Historie.",
+    "more": "Mehr anzeigen",
+    "diff": "Mit diesem Commit vergleichen"
+  },
+  "tests": {
+    "panel": "Tests",
+    "empty": "Keine Tests gefunden. Reado sucht nach den Formen der üblichen Frameworks: `it(…)`, `#[test]`, `def test_…`, `func TestX`.",
+    "filter": "Tests filtern",
+    "runAll": "Alle Tests ausführen",
+    "runFile": "Tests dieser Datei ausführen",
+    "runOne": "Diesen Test ausführen",
+    "refresh": "Erneut nach Tests suchen",
+    "count": "{n} Tests in {files} Dateien",
+    "finished": "{passed} bestanden, {failed} fehlgeschlagen.",
+    "stale": "Lief, bevor die Datei geändert wurde — kann veraltet sein.",
+    "staleShort": "veraltet"
+  },
+  "a11y": {
+    "line": "Zeile {n}",
+    "blankLine": "leer",
+    "diffSummary": "Diff mit {count} geänderten Bereichen geöffnet. Alt+Runter für den nächsten.",
+    "diffChunk": "Änderung {n} von {total}, {added} Zeilen hinzugefügt, {removed} entfernt, in Zeile {line}."
+  },
+  "notebook": {
+    "unreadable": "Diese Datei ist kein lesbares Notebook. Öffne sie als Quelltext, um zu sehen, was darin steht.",
+    "summary": "{cells} Zellen, davon {code} mit Code",
+    "runAll": "Alles ausführen"
   }
 }
