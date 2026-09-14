@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.20.0] — 2026-09-14
+
 ### Added
 
 - **Tasks a project already describes, without writing them down.** Reado now
@@ -2170,7 +2172,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.19.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.20.0...HEAD
+[1.20.0]: https://github.com/WatermelonBros/reado/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/WatermelonBros/reado/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/WatermelonBros/reado/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/WatermelonBros/reado/compare/v1.16.1...v1.17.0
