@@ -28,8 +28,8 @@ describe("useLayout store", () => {
     useLayout.getState().move("browser", "bottom") // onto the terminal group
     const l = useLayout.getState().layout
     expect(l.areas.bottom.groups).toHaveLength(1)
-    // Output ships in that group too — see `defaultLayout`.
-    expect(l.areas.bottom.groups[0].tabs).toEqual(["terminal", "output", "browser"])
+    // Output and Problems ship in that group too — see `defaultLayout`.
+    expect(l.areas.bottom.groups[0].tabs).toEqual(["terminal", "output", "problems", "browser"])
   })
 
   it("clamps area size to a sane minimum", () => {

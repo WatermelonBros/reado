@@ -77,6 +77,9 @@ export function readoSearchPanel(view: EditorView): Panel {
     spellcheck: false,
     value: scoped ? "" : initial.search,
   })
+  // CodeMirror finds the panel's query field by this attribute (`getSearchInput`),
+  // which is how a second ⌘F while the panel is open puts the caret back in it.
+  searchInput.setAttribute("main-field", "")
   const replaceInput = el("textarea", FIELD, {
     rows: 1,
     placeholder: t("search.replacePlaceholder"),

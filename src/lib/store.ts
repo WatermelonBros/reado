@@ -609,8 +609,13 @@ export const useWorkspace = create<WorkspaceState>()(
       lastTool: "files",
       selectTool: (tool) => {
         // A tool the user has docked lives there now: bring it forward in its
-        // dock group instead of a second copy appearing in the sidebar.
-        if (findPanel(useLayout.getState().layout, tool)) {
+        // dock group instead of a second copy appearing in the sidebar. Unhide
+        // the region first — a docked tool whose region is collapsed would
+        // otherwise make the activity-bar button look dead. Its neighbours keep
+        // running: a dock group shows one tab and closes none of them.
+        const at = findPanel(useLayout.getState().layout, tool)
+        if (at) {
+          useLayout.getState().toggleArea(at.area, false)
           useLayout.getState().activate(tool)
           return
         }
@@ -705,7 +710,6 @@ export interface EditorGroup {
 export type PaletteMode =
   | "commands"
   | "files"
-  | "search"
   | "symbols"
   | "wsymbols"
   | "recents"

@@ -682,6 +682,12 @@ describe("running a command", () => {
         expect(
           useLayout.getState().layout.areas.bottom.groups.some((g) => g.active === "output"),
         ).toBe(true),
+      "problems.panel": () =>
+        // Problems is a tab of the bottom dock too — it left the activity bar,
+        // so this command is the way back to it.
+        expect(
+          useLayout.getState().layout.areas.bottom.groups.some((g) => g.active === "problems"),
+        ).toBe(true),
       "terminal.runSelection": () => expect(agents.runSelectionInTerminal).toHaveBeenCalled(),
       "terminal.clear": () => expect(agents.clearTerminal).toHaveBeenCalled(),
       "terminal.restart": () => expect(agents.restartTerminal).toHaveBeenCalled(),
@@ -692,7 +698,8 @@ describe("running a command", () => {
       "gitGraph.title": () => expect(ws.toggleGitGraph).toHaveBeenCalledWith(true),
       "kb.title": () => expect(ws.toggleDocs).toHaveBeenCalledWith(true),
       "finder.placeholder": () => expect(usePalette.getState().mode).toBe("files"),
-      "search.placeholder": () => expect(usePalette.getState().mode).toBe("search"),
+      // Project search and project replace are one panel, not a palette mode.
+      "search.placeholder": () => expect(ws.searchFor).toHaveBeenCalled(),
       "semantic.search": async () => {
         expect(promptDialog).toHaveBeenCalled()
         await vi.waitFor(() => expect(semanticRun).toHaveBeenCalledWith("where is the parser"))
@@ -849,42 +856,6 @@ describe("the other modes", () => {
     render(<Palette />)
     await userEvent.click(await screen.findByText("const x"))
     expect(project.open).toHaveBeenCalledWith("/repo/src/a.ts", 3)
-  })
-
-  it("searches the project once you've typed enough, and counts the results", async () => {
-    searchText.mockResolvedValue([
-      { path: "/repo/src/a.ts", line: 4, column: 1, text: "  const needle = 1" },
-    ])
-    usePalette.setState({ mode: "search" })
-    render(<Palette />)
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "needle" } })
-    // The search is debounced by 160ms, so wait for the row rather than a tick.
-    expect(await screen.findByText("const needle = 1")).toBeInTheDocument()
-    expect(screen.getByText("search.results")).toBeInTheDocument()
-  })
-
-  it("won't search on a single character, but will on the second", async () => {
-    vi.useFakeTimers()
-    usePalette.setState({ mode: "search" })
-    render(<Palette />)
-    const box = screen.getByRole("textbox")
-    fireEvent.change(box, { target: { value: "n" } })
-    await vi.advanceTimersByTimeAsync(300)
-    expect(searchText).not.toHaveBeenCalled()
-    // The positive half: without it the test also passes when the input never
-    // reached the component at all.
-    fireEvent.change(box, { target: { value: "ne" } })
-    await vi.advanceTimersByTimeAsync(300)
-    expect(searchText).toHaveBeenCalledWith(expect.anything(), "ne")
-    vi.useRealTimers()
-  })
-
-  it("explains a missing ripgrep rather than showing a raw error", async () => {
-    searchText.mockRejectedValue(new Error("ripgrep not found"))
-    usePalette.setState({ mode: "search" })
-    render(<Palette />)
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "needle" } })
-    expect(await screen.findByText("search.ripgrepMissing")).toBeInTheDocument()
   })
 
   it("guides each empty list instead of showing a blank box", () => {

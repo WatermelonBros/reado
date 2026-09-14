@@ -11,6 +11,94 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Tasks a project already describes, without writing them down.** Reado now
+  reads the manifests: every `package.json` script (run with the manager the
+  lockfile names — pnpm, yarn, bun or npm), `cargo build/test/check/clippy/run`,
+  `go build/test/vet`, and `tsc` build and watch. They appear in Run Task marked
+  with where they came from, and a `tasks.json` entry with the same label
+  overrides one instead of duplicating it.
+- **`tasks.json` entries with a `type` resolve through their provider.** A
+  `{ "type": "npm", "script": "build" }` has no command written down — the npm
+  provider is what knows a script is run with `run`. `npm`, `cargo`,
+  `typescript`, `gulp`/`grunt`/`jake`, and `shell`/`process` are understood,
+  along with `options.cwd`, `options.env`, and the `${…}` variables these files
+  are full of (`${workspaceFolder}`, `${file}`, `${relativeFile}`, `${env:VAR}`,
+  and the rest), resolved when the task runs.
+- **Problem matchers by name.** `"problemMatcher": "$tsc"` now gets tsc's parse
+  instead of a guess — `$tsc`, `$tsc-watch`, `$msCompile`, `$gcc`, `$go`,
+  `$python`, `$eslint-compact`, `$eslint-stylish`, `$jshint`, `$rustc` and
+  `$cargo`. An empty list means "this output is not diagnostics" and is
+  respected; no matcher at all still tries everything, as before. eslint's
+  stylish format (the file on its own line) is read too.
+- **Problems is a tab in the bottom panel**, beside Terminal and Output, where
+  VS Code puts it. It leaves the activity bar — the count rides on the tab
+  instead, and counts what the panel lists: the servers' diagnostics *and* what
+  a task's problem matcher found. Switching tabs closes nothing: the terminal
+  keeps its shell and whatever is running in it. "Problems" in the View menu and
+  the command palette brings the tab back if it was closed.
+- **The default build task.** `"group": { "kind": "build", "isDefault": true }`
+  is what Run Build Task runs when a project has several build tasks.
+
+### Changed
+
+- **One place to find and replace across the project.** ⌘⇧F opened a search-only
+  overlay, so replacing meant closing it and reopening the Search panel from the
+  sidebar to type the query a second time. It now opens that panel directly —
+  seeded with the selection, caret in the field — and the redundant overlay is
+  gone. Find in Files, Replace in Files and the palette's Search command all land
+  in the same place.
+
+### Fixed
+
+- **The browser pane loads a dev server reached by name again** — an
+  `/etc/hosts` alias, a `.test`/`.local` host, anything that isn't loopback or a
+  bare IP. macOS ignores the blanket `NSAllowsArbitraryLoads` whenever a granular
+  App Transport Security key sits beside it, so the pair Reado shipped left only
+  loopback allowed: every http *hostname* was refused before a request was made,
+  and the pane just sat on the previous page with no error. It now declares the
+  key that applies to web views.
+
+- **A bare hostname in the address bar goes there instead of to a search.**
+  `myapp` and `myapp:3000` — what an `/etc/hosts` alias looks like — were treated
+  as search terms, because nothing in the webview can read `/etc/hosts`. Reado
+  now asks the machine's own resolver (briefly, and only for that one ambiguous
+  shape), so an alias navigates and `time:30` still searches.
+
+- **Rust projects no longer flicker their problems once a second.** Reado's
+  watcher reported rust-analyzer's own build output back to it (`target/`, which
+  only a `.gitignore` had been excluding): the server re-ran its check, the check
+  rewrote `target/`, and round it went — clearing and republishing the file's
+  diagnostics about once a second, and re-anchoring, re-indexing and running
+  `git status` on every one of the hundreds of events a second it produced.
+  Cargo's build directory is now always ignored where a `Cargo.toml` says the
+  directory is Cargo's.
+
+- **A docked panel fills its dock.** The shown tab was a `contents` box, which
+  dissolves the element — the panel then sized itself to its own content, so a
+  Problems header occupied a third of a wide bottom dock with the rest of the
+  row empty. Every docked panel now fills the group it is in.
+
+- **A task's first error is no longer invisible.** Two escapes stood between a
+  command's output and the Problems panel: the window title a shell writes in
+  front of the first output line, and the carriage return a progress bar uses to
+  draw over itself — cargo prints `Building […]`, returns to column 0 and writes
+  `error[E0308]: …` over it, all on one line. Both hid exactly the first
+  diagnostic of a run, from the problem matchers and from the test explorer's
+  verdicts alike.
+
+- **⌘F puts the caret in the search field.** Find opened the panel and then handed
+  focus straight back to the document, so the first thing typed went into the file
+  instead of the query — and a second ⌘F while the panel was open did nothing at
+  all. Focus now lands (and lands again) where you are about to type.
+
+- **Dialogs no longer disappear behind the browser preview.** The preview pane is
+  a native webview that paints above every bit of Reado's own UI, and only a
+  hand-listed set of overlays knew to hide it — so the update prompt (and any
+  other dialog not on that list) opened underneath it. Every `Modal`/`Drawer` now
+  registers itself, so the preview steps aside for all of them.
+
 ## [1.19.0] — 2026-09-12
 
 ### Added

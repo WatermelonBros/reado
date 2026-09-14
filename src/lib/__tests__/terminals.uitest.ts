@@ -12,7 +12,14 @@ vi.mock("../logger", () => ({
 import { findPanel, useLayout } from "@/lib/layout"
 import { tracedInvoke } from "@/lib/logger"
 import { useSettings } from "@/lib/store"
-import { dropPathsIntoTerminal, shellQuote, terminalLinks, useTerminals } from "@/lib/terminals"
+import {
+  dropPathsIntoTerminal,
+  framePtyLines,
+  plainText,
+  shellQuote,
+  terminalLinks,
+  useTerminals,
+} from "@/lib/terminals"
 
 const T = () => useTerminals.getState()
 
@@ -422,5 +429,37 @@ describe("dropPathsIntoTerminal", () => {
     expect(tracedInvoke).not.toHaveBeenCalled()
     host.remove()
     vi.restoreAllMocks()
+  })
+})
+
+describe("reading a pane's output as lines", () => {
+  const ESC = String.fromCharCode(27)
+  const BEL = String.fromCharCode(7)
+
+  it("holds a line that the chunk boundary split in two", () => {
+    const first = framePtyLines("", "done: 3 pass\nrunning ")
+    expect(first.lines).toEqual(["done: 3 pass"])
+    expect(first.tail).toBe("running ")
+    expect(framePtyLines(first.tail, "the rest\n").lines).toEqual(["running the rest"])
+  })
+
+  it("breaks on a bare carriage return — a redraw is a new line, not a join", () => {
+    // cargo draws its progress bar, returns to column 0 and writes the error
+    // over it, all inside one newline-terminated line. Glued together, every
+    // pattern anchored at the start of a line misses the error.
+    const { lines } = framePtyLines("", "   Building [===] 1/2\rerror[E0308]: mismatched types\n")
+    expect(lines).toEqual(["   Building [===] 1/2", "error[E0308]: mismatched types"])
+    // A CRLF is still one line ending, not an empty line in between.
+    expect(framePtyLines("", "a\r\nb\r\n").lines).toEqual(["a", "b"])
+  })
+
+  it("strips the escapes a program writes into a real terminal", () => {
+    // The window title a shell sets rides in front of the command's first
+    // output line, which is where a build's first error lands.
+    expect(
+      plainText(`${ESC}]2;cargo check${BEL}${ESC}[1m${ESC}[92m    Checking${ESC}[0m demo2`),
+    ).toBe("    Checking demo2")
+    // Private modes carry a `?`, which a digits-only pattern let through.
+    expect(plainText(`${ESC}[?2004lsrc/a.ts:1:1: error: x`)).toBe("src/a.ts:1:1: error: x")
   })
 })

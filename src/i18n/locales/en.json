@@ -782,7 +782,6 @@
     "replaceAll": "Replace all",
     "replaceConfirm": "Confirm replace",
     "replaced": "Replaced in {count} file(s).",
-    "results": "{count} matches",
     "truncated": "Showing {shown} of {total} — refine your search.",
     "ripgrepMissing": "Search needs ripgrep (rg), which isn't installed or on your PATH. Install it, then try again.",
     "searching": "Searching…",
@@ -1331,7 +1330,8 @@
     "badFile": "{file} didn't parse — the tasks it had are still in use.",
     "createFailed": "Couldn't write the tasks file.",
     "panel": "Tasks",
-    "from": "from {task}"
+    "from": "from {task}",
+    "detected": "detected from {provider}"
   },
   "profile": {
     "status": "Profile",

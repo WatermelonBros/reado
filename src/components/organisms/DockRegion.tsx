@@ -17,10 +17,12 @@
  */
 import { Fragment, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Badge } from "@/components/atoms/Badge"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import { MoreVerticalIcon } from "@/components/atoms/icons"
 import type { MessageKey } from "@/i18n"
+import { useDiagnostics } from "@/lib/diagnostics"
 import {
   type DockArea,
   type DropTarget,
@@ -32,6 +34,7 @@ import {
 import { usePreview } from "@/lib/preview"
 import { useReasoning } from "@/lib/reasoning"
 import { useSettings } from "@/lib/store"
+import { useTasks } from "@/lib/tasks"
 import { useTerminals } from "@/lib/terminals"
 import { BrowserInspector } from "./BrowserInspector"
 import { BrowserPanel } from "./BrowserPanel"
@@ -104,6 +107,16 @@ const MIN_EDITOR_W = 240
 
 export function DockRegion({ area }: { area: DockArea }) {
   const { t } = useTranslation()
+  // The Problems tab carries the count the panel would show — diagnostics from
+  // the servers plus whatever the tasks' matchers found. It sits on the tab
+  // because Problems is a dock panel now, not an activity-bar tool.
+  const diagCount = useDiagnostics((s) =>
+    Object.values(s.byFile).reduce((n, items) => n + items.length, 0),
+  )
+  const taskCount = useTasks((s) =>
+    Object.values(s.byTask).reduce((n, items) => n + items.length, 0),
+  )
+  const problemCount = diagCount + taskCount
   const layout = useLayout((s) => s.layout)
   const setAreaSize = useLayout((s) => s.setAreaSize)
   const setGroupSize = useLayout((s) => s.setGroupSize)
@@ -406,6 +419,14 @@ export function DockRegion({ area }: { area: DockArea }) {
                       }`}
                     >
                       {labelOf(id)}
+                      {id === "problems" && problemCount > 0 && (
+                        <Badge
+                          tone="marker"
+                          className="ml-1.5 h-3.5 min-w-3.5 text-[9px] font-bold"
+                        >
+                          {problemCount}
+                        </Badge>
+                      )}
                     </button>
                   )
                 })}
@@ -429,9 +450,21 @@ export function DockRegion({ area }: { area: DockArea }) {
                     and a <Terminal> kills its PTY on unmount — so switching the
                     bottom dock from Terminal to Output threw away the shell and
                     whatever was running in it. Same reason the collapsed region
-                    above hides rather than returns null. */}
+                    above hides rather than returns null.
+
+                    The shown tab is a real flex child that fills the group. It
+                    used to be `contents`, which dissolves the box — the panel
+                    then sized itself to its content, so a Problems header sat in
+                    306px of a 900px dock with the rest of the row empty. */}
                 {g.tabs.map((id) => (
-                  <div key={id} className={id === g.active ? "contents" : "hidden"}>
+                  <div
+                    key={id}
+                    className={
+                      id === g.active
+                        ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                        : "hidden"
+                    }
+                  >
                     {renderPanel(id)}
                   </div>
                 ))}

@@ -1,6 +1,7 @@
 // Per-document info and the editor commands the status bar / native menu drive.
 // A real EditorView backs the commands, so the CodeMirror dispatches are real.
 import { lintGutter, setDiagnostics } from "@codemirror/lint"
+import { search } from "@codemirror/search"
 import { EditorSelection, EditorState, type Extension } from "@codemirror/state"
 import { EditorView } from "@codemirror/view"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -122,6 +123,7 @@ import {
   lspTypes,
 } from "@/lib/lsp"
 import { prompt } from "@/lib/prompt"
+import { readoSearchPanel } from "@/lib/searchPanel"
 import { useUntitled } from "@/lib/untitled"
 
 let view: EditorView
@@ -700,10 +702,15 @@ describe("the CodeMirror command wrappers", () => {
     expect(view.state.doc.toString().startsWith("alpha\nalpha")).toBe(true)
   })
 
-  it("openFind opens the search panel", () => {
-    mount("alpha")
+  it("openFind opens the search panel and leaves the caret in it", () => {
+    // With the panel the app actually configures — its focus is the point here.
+    mount("alpha", [search({ top: true, createPanel: readoSearchPanel })])
     openFind()
-    expect(view.dom.querySelector(".cm-panels .cm-search")).toBeTruthy()
+    const panel = view.dom.querySelector(".cm-reado-search")
+    expect(panel).toBeTruthy()
+    // ⌘F means "type a query": focus stays in the panel's field rather than
+    // bouncing straight back into the document.
+    expect(panel?.contains(document.activeElement)).toBe(true)
   })
 
   it("openReplace opens the same panel — CM's search includes replace", () => {

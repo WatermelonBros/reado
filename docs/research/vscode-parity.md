@@ -30,6 +30,15 @@ aperti. Cosa è stato chiuso sta nel [CHANGELOG](../../CHANGELOG.md).
 
 ---
 
+## Gap aperti minori
+
+| Cosa | A che serve esattamente | Compl. |
+|---|---|:---:|
+| **`dependsOn` / `isBackground` nei task** | Incatenare i task (`dependsOrder: sequence`) e dichiarare un watcher come "di sfondo" con un matcher che sa quando un giro è finito. Reado esegue un task alla volta in un pane e smette di leggere dopo 4s di silenzio: niente catene, e un watch lungo va riavviato per rileggere i problemi. | 2 |
+| **Problem matcher inline** | `"problemMatcher": { "owner": …, "pattern": { "regexp": … } }` — definire un matcher nel file per uno strumento che nessun nome copre. Oggi Reado accetta i nomi (`$tsc`, `$rustc`, …) e `base`, e per tutto il resto ripiega sull'euristica. | 1 |
+
+---
+
 ## Non sono gap
 
 - **Minimap** — sostituita deliberatamente dalla `StructureRibbon`.
@@ -38,4 +47,4 @@ aperti. Cosa è stato chiuso sta nel [CHANGELOG](../../CHANGELOG.md).
   viewer. I notebook si leggono con gli output salvati nel file e si eseguono
   interi via `nbconvert`.
 - **Read-first, commenti durevoli, vault, Anywhere, agent, guided review, knowledge graph, semantic search** — superset: non hanno equivalente in VS Code.
-- **Già a parità**: multi-cursore, folding, sticky scroll, bracket pair colors, indent guides, Emmet, snippet utente, breadcrumb, outline, problems, ricerca con regex/case/whole-word e risultati editabili, tab preview + pin + riordino drag, multi-selezione nell'explorer, `.editorconfig`, rilevamento EOL/encoding/indentazione, settings UI + JSON + editor dei keybinding, zen mode e centered layout, temi/icon theme/grammatiche/linguaggi da OpenVSX, multi-root, notebook `.ipynb` come celle con output, live region per screen reader con annunci di riga/diff/esiti e audio cue, test explorer (scoperta dal sorgente, run per test/file/progetto, esito nel gutter, vitest/jest/cargo/pytest/go), git completo (merge, rebase anche interattivo, worktree, sottomoduli, commit firmati, grafo della history), gruppi di editor in griglia, buffer untitled, profili di settings, keybinding con `when`, task di progetto con problem matcher, pannello Output, local file history, file di workspace portabile, profili di terminale, column selection, wrap column, find in selection, e un LSP molto completo (hover, completion, diagnostics, definition/type/implementation, references, rename, signature help, inlay hints, code action, formatting, document symbol, call/type hierarchy, semantic tokens, code lens, prepareRename, linked editing, folding range, document link, `workspace/symbol`).
+- **Già a parità**: multi-cursore, folding, sticky scroll, bracket pair colors, indent guides, Emmet, snippet utente, breadcrumb, outline, problems, ricerca con regex/case/whole-word e risultati editabili, tab preview + pin + riordino drag, multi-selezione nell'explorer, `.editorconfig`, rilevamento EOL/encoding/indentazione, settings UI + JSON + editor dei keybinding, zen mode e centered layout, temi/icon theme/grammatiche/linguaggi da OpenVSX, multi-root, notebook `.ipynb` come celle con output, live region per screen reader con annunci di riga/diff/esiti e audio cue, test explorer (scoperta dal sorgente, run per test/file/progetto, esito nel gutter, vitest/jest/cargo/pytest/go), git completo (merge, rebase anche interattivo, worktree, sottomoduli, commit firmati, grafo della history), gruppi di editor in griglia, buffer untitled, profili di settings, keybinding con `when`, task di progetto (auto-detection dai manifest, provider `type`, problem matcher per nome, variabili `${…}`), pannello Output, local file history, file di workspace portabile, profili di terminale, column selection, wrap column, find in selection, e un LSP molto completo (hover, completion, diagnostics, definition/type/implementation, references, rename, signature help, inlay hints, code action, formatting, document symbol, call/type hierarchy, semantic tokens, code lens, prepareRename, linked editing, folding range, document link, `workspace/symbol`).

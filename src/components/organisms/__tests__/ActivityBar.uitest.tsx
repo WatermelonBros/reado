@@ -192,13 +192,6 @@ describe("every gated tool appears with its own condition", () => {
     ],
     ["orphans.panel", () => useComments.setState({ comments: [mkComment({ orphan: true })] })],
     [
-      "problems.panel",
-      () =>
-        useDiagnostics.setState({
-          byFile: { "a.ts": [{ line: 1, character: 0, severity: 1, message: "x" }] } as never,
-        }),
-    ],
-    [
       "bookmarks.panel",
       () => useBookmarks.setState({ bookmarks: [{ path: "a.ts", line: 1, snippet: "x" }] }),
     ],
@@ -225,13 +218,10 @@ describe("every gated tool appears with its own condition", () => {
 })
 
 describe("the badges", () => {
-  it("counts changed files, open comments, orphans, problems and proposals", () => {
+  it("counts changed files, open comments, orphans and proposals", () => {
     useProject.setState({ git: { isRepo: true, changedFiles: 4 } as never })
     useComments.setState({
       comments: [mkComment({ orphan: true }), mkComment({ id: "c2" }), mkComment({ id: "c3" })],
-    })
-    useDiagnostics.setState({
-      byFile: { "a.ts": [{ line: 1, character: 0, severity: 1, message: "x" }] } as never,
     })
     usePreReview.setState({ drafts: [{ id: "p1" }, { id: "p2" }] as never })
     render(<ActivityBar />)
@@ -239,8 +229,15 @@ describe("the badges", () => {
     expect(screen.getByLabelText("git.panel").textContent).toContain("4")
     expect(screen.getByLabelText("comments.panel").textContent).toContain("3")
     expect(screen.getByLabelText("orphans.panel").textContent).toContain("1")
-    expect(screen.getByLabelText("problems.panel").textContent).toContain("1")
     expect(screen.getByLabelText("prereview.panel").textContent).toContain("2")
+  })
+
+  it("keeps Problems off the rail — it is a bottom-panel tab, with the count on it", () => {
+    useDiagnostics.setState({
+      byFile: { "a.ts": [{ line: 1, character: 0, severity: 1, message: "x" }] } as never,
+    })
+    render(<ActivityBar />)
+    expect(screen.queryByLabelText("problems.panel")).toBeNull()
   })
 
   it("shows no badge on a tool that carries no count", () => {

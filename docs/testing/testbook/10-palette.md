@@ -1,6 +1,7 @@
 # 10 — Command Palette
 
-Cmd+P files, Cmd+K commands, Cmd+Shift+F search. Entry: `Palette.tsx`, `usePalette`.
+Cmd+P files, Cmd+K commands. (Cmd+Shift+F opens the Search panel, not the palette.)
+Entry: `Palette.tsx`, `usePalette`.
 
 **Cases: 30.**
 
@@ -34,8 +35,8 @@ Cmd+P files, Cmd+K commands, Cmd+Shift+F search. Entry: `Palette.tsx`, `usePalet
 **As a** user, **when I** pick a command, **I expect** it executed, palette closed.
 - **Result:** TODO
 
-### TC-PAL-0008 — Search mode
-**As a** user, **when I** open search from the palette, **I expect** the project search.
+### TC-PAL-0008 — Search command
+**As a** user, **when I** pick Search from the palette, **I expect** the Search panel (find *and* replace), focused and ready to type.
 - **Result:** TODO
 
 ### TC-PAL-0009 — Escape closes

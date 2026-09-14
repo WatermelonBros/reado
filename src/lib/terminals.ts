@@ -491,22 +491,52 @@ export function decodePtyOutput(payload: unknown): string {
   return bytes ? new TextDecoder().decode(bytes) : String(payload)
 }
 
-/** Strip the ANSI a program writes when it thinks it has a terminal — and it
- *  does, because Reado gives it a real one. Shared, so the day this has to learn
- *  about OSC sequences it learns once. */
+/**
+ * Strip the ANSI a program writes when it thinks it has a terminal — and it
+ * does, because Reado gives it a real one.
+ *
+ * Three families, and the first one is why this exists: a shell sets the window
+ * title with an **OSC** sequence (`ESC ] 2 ; … BEL`) and writes it *in front of*
+ * the first line the command prints. Every reader here anchors its pattern at
+ * the start of the line — the problem matchers, the test verdicts — so that
+ * invisible prefix is the difference between a build's first error being
+ * clickable and being missed. **CSI** covers colour and the private modes
+ * (`ESC [ ? 2004 l`) a prompt toggles, whose `?` is part of the sequence.
+ */
 export const plainText = (line: string): string =>
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escapes are control characters by definition.
-  line.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "").replace(/\r/g, "")
+  line
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escapes are control characters by definition.
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escapes are control characters by definition.
+    .replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "")
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: a backspace is a control character by definition.
+    .replace(/.\u0008/g, "")
+    .replace(/\r/g, "")
 
 /**
- * Subscribe to a pane's output as **complete lines**.
+ * Cut a PTY chunk into the lines a reader should see, and keep what isn't a line
+ * yet.
  *
  * The backend reads the PTY in 8 KB blocks, so a chunk boundary lands mid-line
  * routinely in any long run. A consumer that splits each chunk on its own sees
  * the two halves of a verdict line and matches neither — silently, leaving a
- * test that passed showing as still running. The partial tail is held here, in
- * the one place that knows the framing, so no reader has to.
+ * test that passed showing as still running. The partial tail is carried across
+ * chunks here, in the one place that knows the framing, so no reader has to.
  */
+export function framePtyLines(tail: string, text: string): { lines: string[]; tail: string } {
+  const parts = (tail + text).split("\n")
+  // The last piece has no newline after it yet: it is the start of the next
+  // line, not a line.
+  const rest = parts.pop() ?? ""
+  // A bare carriage return is a *redraw*, not a separator to delete: cargo draws
+  // its progress bar, returns to column 0 and writes the first error over it, all
+  // inside one newline-terminated line. Splitting there is the difference between
+  // a reader seeing `error[E0308]: …` at the start of a line and seeing it glued
+  // behind `Building [===]`, where every anchored pattern misses it.
+  return { lines: parts.flatMap((l) => l.split("\r")).filter((l) => l !== ""), tail: rest }
+}
+
+/** Subscribe to a pane's output as complete lines — `framePtyLines` per chunk. */
 export async function listenPtyLines(
   id: string,
   onLine: (line: string) => void,
@@ -520,10 +550,8 @@ export async function listenPtyLines(
   return listen<string>(`pty-output-${id}`, (e) => {
     const bytes = frameBytes(e.payload)
     const text = bytes ? decoder.decode(bytes, { stream: true }) : String(e.payload)
-    const lines = (tail + text).split("\n")
-    // The last piece has no newline after it yet: it is the start of the next
-    // line, not a line.
-    tail = lines.pop() ?? ""
-    for (const line of lines) onLine(line)
+    const framed = framePtyLines(tail, text)
+    tail = framed.tail
+    for (const line of framed.lines) onLine(line)
   })
 }

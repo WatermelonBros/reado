@@ -44,6 +44,7 @@ const h = vi.hoisted(() => {
       "saveAs",
       "saveDocument",
       "selectAllOccurrences",
+      "selectionText",
       "showCallHierarchy",
       "showTypeHierarchy",
       "shrinkSelectionCmd",
@@ -227,11 +228,17 @@ describe("edit and selection commands", () => {
     })
   }
 
-  it("both find-in-files entries open the workspace search", () => {
+  it("find, replace and Search in Project all open the one search panel", () => {
     runMenuCommand("edit:findInFiles")
     runMenuCommand("edit:replaceInFiles")
-    expect(workspace.searchFor).toHaveBeenCalledTimes(2)
-    expect(workspace.searchFor).toHaveBeenCalledWith("")
+    // ⌘⇧F too: project search and project replace are the same panel, not two.
+    runMenuCommand("palette:search")
+    expect(workspace.searchFor).toHaveBeenCalledTimes(3)
+    // Seeded with the editor selection, so ⌘⇧F on a word searches for that word.
+    vi.mocked(docInfo.selectionText).mockReturnValue("needle")
+    runMenuCommand("palette:search")
+    expect(workspace.searchFor).toHaveBeenLastCalledWith("needle")
+    expect(palette.open).not.toHaveBeenCalled()
   })
 
   it("sel:explain and sel:ask need a selection, so they're gated, not run", () => {
@@ -250,7 +257,6 @@ describe("go commands", () => {
     for (const [id, mode] of [
       ["palette:files", "files"],
       ["palette:commands", "commands"],
-      ["palette:search", "search"],
       ["palette:symbols", "symbols"],
       ["palette:wsymbols", "wsymbols"],
     ]) {

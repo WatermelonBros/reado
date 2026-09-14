@@ -73,7 +73,7 @@ export function defaultLayout(): Layout {
         groups: [
           {
             id: "g-terminal",
-            tabs: ["terminal", "output"],
+            tabs: ["terminal", "output", "problems"],
             active: "terminal",
             size: 1,
           },
@@ -85,25 +85,19 @@ export function defaultLayout(): Layout {
 }
 
 /**
- * Put Output beside the terminal in a layout that predates it.
+ * Put a panel beside the terminal in a layout that predates it.
  *
  * The arrangement is persisted, so a new default reaches nobody who has already
- * used the app: without this, the panel exists and is unreachable. Runs once —
- * a layout that already places Output (including one where the user moved it
+ * used the app: without this, the panel exists and is unreachable. Runs once per
+ * panel — a layout that already places it (including one where the user moved it
  * elsewhere, or closed it) is left exactly as it is.
  */
-export function withOutputPanel(layout: Layout): Layout {
-  if (findPanel(layout, "output")) return layout
+export function withBottomPanel(layout: Layout, panel: PanelId, groupId: string): Layout {
+  if (findPanel(layout, panel)) return layout
   const next = cloneLayout(layout)
   const beside = next.areas.bottom.groups.find((g) => g.tabs.includes("terminal"))
-  if (beside) beside.tabs.push("output")
-  else
-    next.areas.bottom.groups.push({
-      id: "g-output",
-      tabs: ["output"],
-      active: "output",
-      size: 1,
-    })
+  if (beside) beside.tabs.push(panel)
+  else next.areas.bottom.groups.push({ id: groupId, tabs: [panel], active: panel, size: 1 })
   return next
 }
 
@@ -272,10 +266,14 @@ export const useLayout = create<LayoutStore>()(
       partialize: (s) => ({ layout: s.layout, seq: s.seq, hidden: s.hidden }),
       // v1 added the Output panel. A persisted layout is the whole reason a new
       // panel needs a migration: the default only reaches a fresh install.
-      version: 1,
+      version: 2,
       migrate: (persisted, from) => {
         const state = persisted as { layout?: Layout } | null
-        if (from < 1 && state?.layout) state.layout = withOutputPanel(state.layout)
+        if (!state?.layout) return state as never
+        // v1 added Output, v2 Problems — both beside the terminal, where the
+        // default puts them.
+        if (from < 1) state.layout = withBottomPanel(state.layout, "output", "g-output")
+        if (from < 2) state.layout = withBottomPanel(state.layout, "problems", "g-problems")
         return state as never
       },
     },

@@ -63,6 +63,17 @@ fn ignore_matchers(root: &Path) -> Vec<Gitignore> {
     for pat in [".git/", ".reado/", "node_modules/"] {
         let _ = builder.add_line(None, pat);
     }
+    // Cargo's build directory, on the same grounds — but only where a
+    // `Cargo.toml` says the directory really is Cargo's, since `target` is an
+    // ordinary name for a source folder anywhere else. A Rust project without a
+    // `.gitignore` used to feed rust-analyzer its own build output through
+    // `didChangeWatchedFiles`: the server re-ran its check, the check rewrote
+    // `target/`, and the watcher reported that — a loop that cleared and
+    // republished the file's diagnostics about once a second, which is what it
+    // looked like from the Problems panel.
+    if root.join("Cargo.toml").is_file() {
+        let _ = builder.add_line(None, "target/");
+    }
     let mut matchers = vec![builder.build().unwrap_or_else(|_| Gitignore::empty())];
 
     // The walk honours what it has found so far, so it never descends into an
@@ -79,6 +90,9 @@ fn ignore_matchers(root: &Path) -> Vec<Gitignore> {
         }
         let mut nested = GitignoreBuilder::new(dir);
         let _ = nested.add(entry.path());
+        if dir.join("Cargo.toml").is_file() {
+            let _ = nested.add_line(None, "target/");
+        }
         if let Ok(g) = nested.build() {
             matchers.push(g);
         }
@@ -428,6 +442,43 @@ mod tests {
         assert!(!is_ignored(&m, &root.join("app/src/main.ts")));
         // `build/` came from app's file: it must not reach a root-level build dir.
         assert!(!is_ignored(&m, &root.join("build/keep.ts")));
+    }
+
+    #[test]
+    fn cargos_build_output_is_ignored_even_with_no_gitignore() {
+        // rust-analyzer writes `target/` while it checks. Reporting those writes
+        // back to it made it check again — a loop that cleared and republished
+        // the file's diagnostics about once a second. A Rust project usually has
+        // `/target` in its `.gitignore`; one that does not must not melt.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("target/debug/incremental")).unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+        std::fs::write(root.join("target/debug/incremental/dep-graph.bin"), "").unwrap();
+        std::fs::write(root.join("src/main.rs"), "").unwrap();
+
+        let m = ignore_matchers(root);
+        assert!(is_ignored(
+            &m,
+            &root.join("target/debug/incremental/dep-graph.bin")
+        ));
+        assert!(!is_ignored(&m, &root.join("src/main.rs")));
+    }
+
+    #[test]
+    fn a_target_directory_that_is_not_cargos_is_left_alone() {
+        // `target` is an ordinary name for a source folder; only a `Cargo.toml`
+        // beside it says the directory is a build output.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("target")).unwrap();
+        std::fs::write(root.join("target/index.ts"), "").unwrap();
+
+        assert!(!is_ignored(
+            &ignore_matchers(root),
+            &root.join("target/index.ts")
+        ));
     }
 
     #[test]

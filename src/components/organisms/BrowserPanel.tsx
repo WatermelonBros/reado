@@ -38,6 +38,7 @@ import {
   type CommentKind,
   type CommentPatch,
   type CommentType,
+  hostResolves,
   previewBack,
   previewCaptureFrame,
   previewClearState,
@@ -63,6 +64,7 @@ import {
   isOriginAllowed,
   type LogEntry,
   type NetEntry,
+  useDialogs,
   usePreview,
 } from "@/lib/preview"
 import { usePalette, useProject, useSettings, useWorkspace } from "@/lib/store"
@@ -117,15 +119,38 @@ const SEARCH = "https://duckduckgo.com/?q="
  *  when it looks local — loopback, a dev TLD, or an explicit port — https otherwise,
  *  since plain http to a public host is blocked by the platform), and anything that
  *  isn't host-shaped is a web search, like every other browser's address bar. */
-function normalizeUrl(s: string): string {
+export function normalizeUrl(s: string, hostKnown = false): string {
   const v = s.trim()
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return v
   const host = v.split(/[/?#]/)[0]
   const name = host.replace(/:\d+$/, "")
-  if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host) || !(name.includes(".") || isLoopbackHost(name)))
+  if (
+    !/^[a-z0-9.-]+(:\d+)?$/i.test(host) ||
+    !(name.includes(".") || isLoopbackHost(name) || hostKnown)
+  )
     return `${SEARCH}${encodeURIComponent(v)}`
-  const local = isLoopbackHost(name) || /\.(local|test|localdomain)$/i.test(name) || host !== name
+  const local =
+    isLoopbackHost(name) || hostKnown || /\.(local|test|localdomain)$/i.test(name) || host !== name
   return `${local ? "http" : "https"}://${v}`
+}
+
+/**
+ * The bare name in what was typed, when that is all it is — `myapp`, or
+ * `myapp/path`, but not `myapp.com`, `myapp:3000` or a search phrase.
+ *
+ * This is the one case the address bar cannot decide on its own: a single label
+ * is both a plausible search term and exactly what an `/etc/hosts` alias looks
+ * like, so it is the only case worth a round trip to the resolver.
+ */
+export function singleLabelHost(s: string): string | null {
+  const v = s.trim()
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return null
+  const host = v.split(/[/?#]/)[0]
+  // The port comes off first: `myapp:3000` is the same question as `myapp` — and
+  // asking is what keeps `time:30` a search instead of a navigation.
+  const name = host.replace(/:\d+$/, "")
+  if (!/^[a-z0-9-]+$/i.test(name) || isLoopbackHost(name)) return null
+  return name
 }
 
 export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
@@ -175,7 +200,10 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   )
   const workspaceOverlay = useWorkspace((s) => s.graphOpen || s.docsOpen)
   const layoutOverlay = useLayout((s) => s.dragging !== null || s.menuOpen)
-  const overlayOpen = paletteOverlay || workspaceOverlay || layoutOverlay
+  // Every Modal/Drawer registers itself (see `useDialogOverlay`), so a new dialog
+  // — the updater's, for one — hides the preview without being listed here.
+  const dialogOverlay = useDialogs((s) => s.count > 0)
+  const overlayOpen = paletteOverlay || workspaceOverlay || layoutOverlay || dialogOverlay
   // Re-park the webview when the dock layout changes (a splitter drag resizes the
   // pane; the ResizeObserver can miss the settled size mid-drag).
   const dockLayout = useLayout((s) => s.layout)
@@ -768,8 +796,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     }
   }
 
-  const go = (next: string) => {
-    const u = normalizeUrl(next)
+  const go = async (next: string) => {
+    // A single label could be a hosts alias or a search. Ask the machine, which
+    // is the only thing that can tell — bounded, so a search stays instant.
+    const bare = singleLabelHost(next)
+    const known = bare ? await hostResolves(bare).catch(() => false) : false
+    const u = normalizeUrl(next, known)
     manualUrl.current = true // the user chose this URL — stop auto-switching
     wasLive.current = false // let a dead→live reload fire for the new URL
     setUrl(u)
@@ -836,7 +868,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
             urlFocused.current = false
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") go((e.target as HTMLInputElement).value)
+            if (e.key === "Enter") void go((e.target as HTMLInputElement).value)
           }}
           spellCheck={false}
           aria-label={t("preview.url")}

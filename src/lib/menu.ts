@@ -62,6 +62,7 @@ import {
   saveAs,
   saveDocument,
   selectAllOccurrences,
+  selectionText,
   showCallHierarchy,
   showTypeHierarchy,
   shrinkSelectionCmd,
@@ -396,9 +397,13 @@ export function runMenuCommand(id: string): void {
     case "edit:replace":
       openReplace()
       break
+    // One place to search *and* replace across the project: the Search panel,
+    // which has both. Find, Replace and ⌘⇧F all land in it, seeded with whatever
+    // is selected in the editor.
     case "edit:findInFiles":
     case "edit:replaceInFiles":
-      workspace.searchFor("")
+    case "palette:search":
+      workspace.searchFor(selectionText())
       break
     case "edit:toggleComment":
       toggleLineComment()
@@ -505,9 +510,6 @@ export function runMenuCommand(id: string): void {
       break
     case "palette:commands":
       palette.open("commands")
-      break
-    case "palette:search":
-      palette.open("search")
       break
     case "palette:symbols":
       palette.open("symbols")
@@ -690,6 +692,11 @@ export function runMenuCommand(id: string): void {
       break
     case "view:output":
       revealPanel("output")
+      break
+    // Problems lives in the bottom dock, not on the activity bar, so this is how
+    // it comes back if its tab was closed.
+    case "view:problems":
+      revealPanel("problems")
       break
     case "terminal:runSelection":
       void runSelectionInTerminal()

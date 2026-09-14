@@ -326,6 +326,7 @@ pub fn run() {
             preview::preview_open,
             preview::preview_set_bounds,
             preview::preview_navigate,
+            preview::host_resolves,
             preview::preview_close,
             preview::preview_eval,
             preview::preview_detect_urls,

@@ -248,6 +248,7 @@ export const APP_MENUS: Menu[] = [
       { id: "view:breadcrumbs", label: "Toggle Breadcrumbs" },
       { id: "terminal", label: "Toggle Terminal" },
       { id: "view:output", label: "Output" },
+      { id: "view:problems", label: "Problems" },
       { id: "terminal:runSelection", label: "Run Selected Text in Terminal" },
       { id: "view:splitToggle", label: "Split Editor" },
       { id: "group:split", label: "Split Editor into a New Group" },

@@ -47,6 +47,17 @@ describe("the panel", () => {
     expect(fields(panel)).toHaveLength(2)
   })
 
+  it("focuses the query field on open, and again on a second Cmd+F", () => {
+    const panel = openPanel()
+    const query = fields(panel)[0]
+    expect(document.activeElement).toBe(query)
+    // Clicking into the document moves focus away; ⌘F again must bring it back.
+    // CodeMirror finds the field by its `main-field` attribute.
+    view.focus()
+    openSearchPanel(view)
+    expect(document.activeElement).toBe(query)
+  })
+
   it("labels every button, so it is usable without seeing the icons", () => {
     const panel = openPanel()
     const buttons = [...panel.querySelectorAll("button")]

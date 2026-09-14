@@ -4,7 +4,6 @@
  * One overlay serves three modes, each on its own shortcut:
  *   - commands (Cmd/Ctrl+K) — run an action
  *   - files    (Cmd/Ctrl+P) — fuzzy-open a file
- *   - search   (Cmd/Ctrl+Shift+F) — full-text project search via ripgrep
  *
  * Keyboard-first: ↑/↓ move, Enter runs, Esc closes.
  */
@@ -16,13 +15,7 @@ import { useTranslation } from "react-i18next"
 import { Input } from "@/components/atoms/Input"
 import { Kbd } from "@/components/atoms/Kbd"
 import type { MessageKey } from "@/i18n"
-import {
-  listFiles,
-  listSymbols,
-  type SearchMatch,
-  searchText,
-  type Symbol as WorkspaceSymbol,
-} from "@/lib/api"
+import { listFiles, listSymbols, type Symbol as WorkspaceSymbol } from "@/lib/api"
 import { useBookmarks } from "@/lib/bookmarks"
 import { toRelative } from "@/lib/comments"
 import { goToLine, toggleBookmarkAtCursor, useDocInfo } from "@/lib/docInfo"
@@ -78,15 +71,6 @@ interface Row {
 
 const basename = (p: string) => p.split(/[\\/]/).pop() ?? p
 
-/** The active editor's selected text, trimmed to a single line, or "". */
-function selectionText(): string {
-  const view = useDocInfo.getState().view
-  if (!view) return ""
-  const { from, to } = view.state.selection.main
-  if (from === to) return ""
-  return view.state.sliceDoc(from, to).split("\n")[0].trim()
-}
-
 export function Palette() {
   const mode = usePalette((s) => s.mode)
   const close = usePalette((s) => s.close)
@@ -99,19 +83,14 @@ export function Palette() {
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState(0)
   const [files, setFiles] = useState<string[]>([])
-  const [matches, setMatches] = useState<SearchMatch[]>([])
   const [wsymbols, setWsymbols] = useState<WorkspaceSymbol[]>([])
   const [fsymbols, setFsymbols] = useState<OutlineSymbol[]>([])
-  const [searchError, setSearchError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Reset transient state whenever the palette opens or changes mode.
-  // Entering search with an active editor selection seeds it as the query.
   useEffect(() => {
-    setQuery(mode === "search" ? selectionText() : "")
+    setQuery("")
     setSelected(0)
-    setMatches([])
-    setSearchError(null)
     if (mode) {
       const el = inputRef.current
       el?.focus()
@@ -183,23 +162,6 @@ export function Palette() {
     }
   }, [mode])
 
-  // Debounced full-text search.
-  useEffect(() => {
-    if (mode !== "search" || query.trim().length < 2) {
-      setMatches([])
-      return
-    }
-    const id = setTimeout(() => {
-      searchText(project.root, query)
-        .then((m) => {
-          setMatches(m)
-          setSearchError(null)
-        })
-        .catch((e) => setSearchError(String(e)))
-    }, 160)
-    return () => clearTimeout(id)
-  }, [mode, query, project.root])
-
   /** The list of rows for the current mode and query. */
   const rows: Row[] = useMemo(() => {
     if (mode === "commands") {
@@ -223,16 +185,6 @@ export function Palette() {
           },
         }
       })
-    }
-    if (mode === "search") {
-      return matches.map((m) => ({
-        label: m.text.trim() || basename(m.path),
-        detail: `${relative(project.root, m.path)}:${m.line}`,
-        run: () => {
-          project.open(m.path, m.line)
-          close()
-        },
-      }))
     }
     if (mode === "symbols") {
       const filtered = query
@@ -285,7 +237,11 @@ export function Palette() {
     if (mode === "tasks") {
       return useTasks.getState().tasks.map((task) => ({
         label: task.label,
-        detail: commandLine(task),
+        // Detected tasks say where they came from: a row nobody wrote is worth
+        // distinguishing from one the project committed to.
+        detail: task.detected
+          ? `${commandLine(task)} · ${t("tasks.detected", { provider: task.detected })}`
+          : commandLine(task),
         run: () => {
           void runTask(task)
           close()
@@ -319,20 +275,7 @@ export function Palette() {
       }))
     }
     return []
-  }, [
-    mode,
-    query,
-    files,
-    matches,
-    wsymbols,
-    fsymbols,
-    project,
-    settings,
-    t,
-    open,
-    toggleSettings,
-    close,
-  ])
+  }, [mode, query, files, wsymbols, fsymbols, project, settings, t, open, toggleSettings, close])
 
   // Keep the selection in range as rows change.
   useEffect(() => {
@@ -356,30 +299,26 @@ export function Palette() {
                 ? "profile.switch"
                 : mode === "tasks"
                   ? "tasks.run"
-                  : "search.placeholder"
+                  : "palette.placeholder"
 
   // What to show when there are no rows: a per-mode empty state instead of a
-  // blank box. `search`/`commands` only speak up once you've typed (an empty
-  // query isn't "no results", it's "start typing"); the list modes always guide.
-  const typed = query.trim().length >= (mode === "search" ? 2 : 1)
+  // blank box. `commands` only speaks up once you've typed (an empty query isn't
+  // "no results", it's "start typing"); the list modes always guide.
+  const typed = query.trim().length >= 1
   const emptyMessage: string | null =
-    mode === "search"
+    mode === "commands"
       ? typed
-        ? t("search.noResults")
+        ? t("palette.noResults")
         : null
-      : mode === "commands"
-        ? typed
-          ? t("palette.noResults")
-          : null
-        : mode === "files"
-          ? t("finder.empty")
-          : mode === "symbols" || mode === "wsymbols"
-            ? t("symbols.empty")
-            : mode === "recents"
-              ? t("recents.empty")
-              : mode === "bookmarks"
-                ? t("bookmarks.empty")
-                : null
+      : mode === "files"
+        ? t("finder.empty")
+        : mode === "symbols" || mode === "wsymbols"
+          ? t("symbols.empty")
+          : mode === "recents"
+            ? t("recents.empty")
+            : mode === "bookmarks"
+              ? t("bookmarks.empty")
+              : null
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -421,11 +360,7 @@ export function Palette() {
           spellCheck={false}
           className="rounded-none border-b border-line px-5 py-4 text-lg"
         />
-        {searchError ? (
-          <div className="px-5 py-4 text-sm text-marker">
-            {searchError.includes("ripgrep") ? t("search.ripgrepMissing") : searchError}
-          </div>
-        ) : rows.length === 0 ? (
+        {rows.length === 0 ? (
           <div className="px-5 py-4 text-sm text-faint">{emptyMessage}</div>
         ) : (
           <div role="listbox" className="overflow-y-auto p-2">
@@ -454,11 +389,6 @@ export function Palette() {
                 {row.hint && <Kbd className="ml-auto">{row.hint}</Kbd>}
               </div>
             ))}
-          </div>
-        )}
-        {mode === "search" && matches.length > 0 && (
-          <div className="border-t border-line px-5 py-2 text-xs text-faint">
-            {t("search.results", { count: matches.length })}
           </div>
         )}
       </div>
@@ -749,14 +679,17 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
     cmd("edit:cursorRedo", t("editor.cursorRedo"), { when: hasFile }),
     cmd("compareSaved", t("diff.compareWithSaved"), { when: hasFile }),
     cmd("view:output", t("output.panel")),
+    cmd("view:problems", t("problems.panel")),
     cmd("terminal:runSelection", t("terminal.runSelection"), { when: hasFile }),
     cmd("terminal:clear", t("terminal.clear"), { when: hasTerminal, stayOpen: true }),
     cmd("terminal:restart", t("terminal.restart"), { when: hasTerminal, stayOpen: true }),
-    // These four hand the palette to another mode rather than dismissing it.
+    // These three hand the palette to another mode rather than dismissing it.
     cmd("palette:symbols", t("symbols.goto"), { when: hasFile, stayOpen: true }),
     cmd("palette:wsymbols", t("symbols.gotoWorkspace"), { stayOpen: true }),
     cmd("palette:files", t("finder.placeholder"), { stayOpen: true }),
-    cmd("palette:search", t("search.placeholder"), { stayOpen: true }),
+    // Search opens the Search panel — find *and* replace in one place — so the
+    // palette gets out of the way like every other command that leaves it.
+    cmd("palette:search", t("search.placeholder")),
     cmd("graph", t("graph.title")),
     cmd("docs", t("kb.title")),
     {

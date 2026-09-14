@@ -1,6 +1,7 @@
 // Core Zustand stores — pure state logic (tabs, history, workspace, palette,
 // editor actions, recents). No backend, no mocks. Runs on all 3 OSes.
 import { beforeEach, describe, expect, it } from "vitest"
+import { defaultLayout, useLayout } from "@/lib/layout"
 import {
   clampRange,
   FONT_SIZE_RANGE,
@@ -267,6 +268,23 @@ describe("useWorkspace", () => {
     W().selectTool("git")
     expect(W().tool).toBeNull()
   })
+  it("brings a docked tool forward instead of copying it into the sidebar", () => {
+    // Problems ships as a tab beside the terminal, and the region may be hidden.
+    useLayout.setState({
+      layout: defaultLayout(),
+      hidden: { left: false, right: false, bottom: true },
+    })
+    W().selectTool("problems")
+    // Not in the sidebar — it is already on screen, in its dock group.
+    expect(W().tool).not.toBe("problems")
+    const bottom = useLayout.getState().layout.areas.bottom.groups[0]
+    expect(bottom.active).toBe("problems")
+    // The region is shown (a dead-looking button was the whole bug) and the
+    // neighbours are still there: a tab switch closes nothing.
+    expect(useLayout.getState().hidden.bottom).toBe(false)
+    expect(bottom.tabs).toEqual(["terminal", "output", "problems"])
+  })
+
   it("toggleSidebar hides then restores the last tool", () => {
     W().selectTool("search")
     W().toggleSidebar()

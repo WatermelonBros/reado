@@ -5,6 +5,7 @@
  * created/parked/closed by `BrowserPanel`, which measures its placeholder and
  * calls the `preview_*` commands. Kept tiny on purpose.
  */
+import { useEffect } from "react"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { VaultPick } from "./vault"
@@ -221,3 +222,17 @@ export const usePreview = create<PreviewState>()(
     },
   ),
 )
+
+/** Open DOM dialog count (Modal/Drawer). The preview is a native child webview and
+ *  paints above *all* DOM, so BrowserPanel hides it while any dialog is up. Counted
+ *  here rather than allowlisted per-store, so a new dialog can't forget to hide it. */
+export const useDialogs = create<{ count: number }>()(() => ({ count: 0 }))
+
+/** Register an open dialog for as long as `open` is true. */
+export function useDialogOverlay(open: boolean): void {
+  useEffect(() => {
+    if (!open) return
+    useDialogs.setState((s) => ({ count: s.count + 1 }))
+    return () => useDialogs.setState((s) => ({ count: Math.max(0, s.count - 1) }))
+  }, [open])
+}

@@ -782,7 +782,6 @@
     "replaceAll": "Reemplazar todo",
     "replaceConfirm": "Confirmar el reemplazo",
     "replaced": "Reemplazado en {count} archivo(s).",
-    "results": "{count} coincidencias",
     "truncated": "Mostrando {shown} de {total}: afina la búsqueda.",
     "ripgrepMissing": "La búsqueda necesita ripgrep (rg), que no está instalado ni en tu PATH. Instálalo y vuelve a intentarlo.",
     "searching": "Buscando…",
@@ -1331,7 +1330,8 @@
     "badFile": "{file} no se pudo leer — siguen en uso las tareas anteriores.",
     "createFailed": "No se pudo escribir el archivo de tareas.",
     "panel": "Tareas",
-    "from": "de {task}"
+    "from": "de {task}",
+    "detected": "detectado desde {provider}"
   },
   "profile": {
     "status": "Perfil",

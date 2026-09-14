@@ -12,7 +12,7 @@
  *  - `filled`   — quiet filled field, no border (inline edit, commit box)
  *  - `plain`    — transparent, for a textarea inside an already-bordered container
  */
-import type { TextareaHTMLAttributes } from "react"
+import type { Ref, TextareaHTMLAttributes } from "react"
 import { cn } from "@/lib/cn"
 
 export type TextareaVariant = "bordered" | "filled" | "plain"
@@ -32,6 +32,8 @@ interface Props extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   onSubmit?: () => void
   /** Escape handler (the standard "cancel this composer"). */
   onCancel?: () => void
+  /** Forwarded to the underlying element (React 19 ref-as-prop). */
+  ref?: Ref<HTMLTextAreaElement>
 }
 
 export function Textarea({

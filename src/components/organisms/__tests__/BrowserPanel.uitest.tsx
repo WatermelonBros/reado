@@ -24,6 +24,7 @@ const api = {
   previewTakeCmd: vi.fn<(r: string) => Promise<string | null>>(async () => null),
   previewDetectUrls: vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => []),
   previewEval: vi.fn<(script: string) => Promise<string>>(async () => ""),
+  hostResolves: vi.fn<(name: string) => Promise<boolean>>(async () => false),
 }
 vi.mock("../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../lib/api")>()),
@@ -44,6 +45,7 @@ vi.mock("../../../lib/api", async (orig) => ({
   previewTakeCmd: (r: string) => api.previewTakeCmd(r),
   previewDetectUrls: (...a: unknown[]) => api.previewDetectUrls(...a),
   previewEval: (s: string) => api.previewEval(s),
+  hostResolves: (n: string) => api.hostResolves(n),
 }))
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
@@ -53,13 +55,30 @@ vi.mock("@tauri-apps/api/window", () => ({
 }))
 vi.mock("../BrowserInspector", () => ({ BrowserInspector: () => <div>inspector-body</div> }))
 
-import { BrowserPanel } from "@/components/organisms/BrowserPanel"
+import { useState } from "react"
+import { Modal } from "@/components/atoms/Modal"
+import { BrowserPanel, normalizeUrl, singleLabelHost } from "@/components/organisms/BrowserPanel"
 import { useComments } from "@/lib/comments"
 import { useLayout } from "@/lib/layout"
-import { usePreview } from "@/lib/preview"
+import { useDialogs, usePreview } from "@/lib/preview"
 import { usePalette, useProject, useSettings, useWorkspace } from "@/lib/store"
 
 const ROOT = "/repo"
+
+/** Any shared `Modal` — stands in for the updater's, settings', anyone's. */
+function ModalProbe() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        open
+      </button>
+      <Modal open={open} onOpenChange={setOpen} ariaLabel="probe">
+        body
+      </Modal>
+    </>
+  )
+}
 
 /** What the page bridge hands back on the next drain. */
 function bridgeReturns(payload: unknown) {
@@ -73,6 +92,7 @@ beforeEach(() => {
   api.previewEval.mockResolvedValue("")
   api.previewTakeCmd.mockResolvedValue(null)
   api.previewDetectUrls.mockResolvedValue([])
+  api.hostResolves.mockResolvedValue(false)
   // happy-dom measures every box as 0×0, and the pane's whole job is parking a
   // native window over its placeholder — give it a real rect.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
@@ -116,6 +136,7 @@ beforeEach(() => {
   })
   useWorkspace.setState({ graphOpen: false, docsOpen: false })
   useLayout.setState({ dragging: null, menuOpen: false })
+  useDialogs.setState({ count: 0 })
 })
 afterEach(() => vi.restoreAllMocks())
 
@@ -149,6 +170,18 @@ describe("parking the native webview", () => {
     await waitFor(() => expect(api.previewSetVisible).toHaveBeenCalledWith(true))
     usePalette.setState({ settingsOpen: true })
     rerender(<BrowserPanel />)
+    await waitFor(() => expect(api.previewSetVisible).toHaveBeenLastCalledWith(false))
+  })
+
+  it("hides while any Modal is open — the updater's included", async () => {
+    render(
+      <>
+        <BrowserPanel />
+        <ModalProbe />
+      </>,
+    )
+    await waitFor(() => expect(api.previewSetVisible).toHaveBeenLastCalledWith(true))
+    await userEvent.click(screen.getByText("open"))
     await waitFor(() => expect(api.previewSetVisible).toHaveBeenLastCalledWith(false))
   })
 
@@ -977,5 +1010,100 @@ describe("a page holding a credential", () => {
     expect(consoleJson).not.toContain("s3cr3t!")
     // The store the inspector renders keeps the real page, as DevTools would.
     expect(JSON.stringify(usePreview.getState().logs)).toContain("s3cr3t!")
+  })
+})
+
+describe("typing an address and pressing Enter", () => {
+  it("navigates the pane to what was typed", async () => {
+    render(<BrowserPanel />)
+    await waitFor(() => expect(api.previewOpen).toHaveBeenCalled())
+    vi.mocked(api.previewOpen).mockClear()
+    const bar = screen.getByLabelText("preview.url")
+    fireEvent.change(bar, { target: { value: "127.0.0.1:9000/app" } })
+    fireEvent.keyDown(bar, { key: "Enter" })
+    await waitFor(() =>
+      expect(api.previewOpen).toHaveBeenCalledWith("http://127.0.0.1:9000/app", 100, 50, 800, 600),
+    )
+    expect(usePreview.getState().url).toBe("http://127.0.0.1:9000/app")
+  })
+
+  it("asks the machine about a bare name, and goes there when it resolves", async () => {
+    // The /etc/hosts case: nothing in the webview can see the file, so the bar
+    // asks the backend before deciding between a host and a search.
+    api.hostResolves.mockResolvedValue(true)
+    render(<BrowserPanel />)
+    await waitFor(() => expect(api.previewOpen).toHaveBeenCalled())
+    vi.mocked(api.previewOpen).mockClear()
+    const bar = screen.getByLabelText("preview.url")
+    fireEvent.change(bar, { target: { value: "readodev" } })
+    fireEvent.keyDown(bar, { key: "Enter" })
+    await waitFor(() => expect(api.hostResolves).toHaveBeenCalledWith("readodev"))
+    await waitFor(() =>
+      expect(api.previewOpen).toHaveBeenCalledWith("http://readodev", 100, 50, 800, 600),
+    )
+  })
+
+  it("searches for a bare word that resolves to nothing", async () => {
+    api.hostResolves.mockResolvedValue(false)
+    render(<BrowserPanel />)
+    await waitFor(() => expect(api.previewOpen).toHaveBeenCalled())
+    vi.mocked(api.previewOpen).mockClear()
+    const bar = screen.getByLabelText("preview.url")
+    fireEvent.change(bar, { target: { value: "nonesuch" } })
+    fireEvent.keyDown(bar, { key: "Enter" })
+    await waitFor(() =>
+      expect(api.previewOpen).toHaveBeenCalledWith(
+        expect.stringContaining("duckduckgo.com"),
+        100,
+        50,
+        800,
+        600,
+      ),
+    )
+  })
+})
+
+describe("what the address bar makes of what you type", () => {
+  it("keeps a scheme, and picks one for a bare host", () => {
+    expect(normalizeUrl("http://localhost:5173/x")).toBe("http://localhost:5173/x")
+    // Local names get http: plain http to a public host is refused by the
+    // platform, and a dev server rarely has a certificate.
+    expect(normalizeUrl("localhost:5173")).toBe("http://localhost:5173")
+    expect(normalizeUrl("127.0.0.1:8080/a")).toBe("http://127.0.0.1:8080/a")
+    expect(normalizeUrl("app.test")).toBe("http://app.test")
+    expect(normalizeUrl("myapp.local")).toBe("http://myapp.local")
+    // A port is a dev server by any other name.
+    expect(normalizeUrl("dev.example.com:3000")).toBe("http://dev.example.com:3000")
+    expect(normalizeUrl("example.com")).toBe("https://example.com")
+  })
+
+  it("searches for what is not host-shaped", () => {
+    expect(normalizeUrl("how do i center a div")).toContain("duckduckgo.com")
+    expect(normalizeUrl("")).toContain("duckduckgo.com")
+  })
+
+  it("treats a single label as a host once the machine says it resolves", () => {
+    // `myapp` is both a plausible search and exactly what an /etc/hosts alias
+    // looks like. Only the resolver knows, so the answer is a parameter.
+    expect(normalizeUrl("myapp")).toContain("duckduckgo.com")
+    expect(normalizeUrl("myapp", true)).toBe("http://myapp")
+    expect(normalizeUrl("myapp:3000", true)).toBe("http://myapp:3000")
+    expect(normalizeUrl("time:30")).toContain("duckduckgo.com")
+    expect(normalizeUrl("myapp/admin", true)).toBe("http://myapp/admin")
+  })
+
+  it("only asks the resolver about the case it cannot decide", () => {
+    // Worth a round trip: a bare label.
+    expect(singleLabelHost("myapp")).toBe("myapp")
+    expect(singleLabelHost("myapp/admin")).toBe("myapp")
+    // Not worth one: already decidable, or not a name at all.
+    expect(singleLabelHost("myapp.test")).toBeNull()
+    // A port does not settle it: `myapp:3000` is a dev server, `time:30` is a
+    // search, and only the resolver can say which.
+    expect(singleLabelHost("myapp:3000")).toBe("myapp")
+    expect(singleLabelHost("myapp:3000/admin")).toBe("myapp")
+    expect(singleLabelHost("http://myapp")).toBeNull()
+    expect(singleLabelHost("localhost")).toBeNull()
+    expect(singleLabelHost("how do i center a div")).toBeNull()
   })
 })

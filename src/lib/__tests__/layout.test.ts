@@ -9,7 +9,7 @@ import {
   movePanel,
   panelsInArea,
   removePanel,
-  withOutputPanel,
+  withBottomPanel,
 } from "@/lib/layout"
 
 /** The reducer fixture: one panel per area, so a test says what it means about
@@ -43,29 +43,40 @@ describe("defaultLayout", () => {
     expect(findPanel(l, "nope")).toBeNull()
   })
 
-  it("keeps Output as a tab beside the terminal, where VS Code puts it", () => {
+  it("keeps Output and Problems as tabs beside the terminal, where VS Code puts them", () => {
     const g = defaultLayout().areas.bottom.groups[0]
-    expect(g.tabs).toEqual(["terminal", "output"])
-    // The terminal is what you look at when you open the bottom dock.
+    expect(g.tabs).toEqual(["terminal", "output", "problems"])
+    // The terminal is what you look at when you open the bottom dock, and
+    // switching to another tab leaves the other two in the group — a tab is not
+    // a replacement for the panel beside it.
     expect(g.active).toBe("terminal")
+    expect(activatePanel(defaultLayout(), "problems").areas.bottom.groups[0]).toMatchObject({
+      tabs: ["terminal", "output", "problems"],
+      active: "problems",
+    })
   })
 })
 
-describe("withOutputPanel", () => {
-  it("adds Output beside the terminal in a layout that predates it", () => {
-    const l = withOutputPanel(base())
-    expect(l.areas.bottom.groups[0].tabs).toEqual(["terminal", "output"])
+describe("withBottomPanel", () => {
+  const add = (l: Layout, p: string) => withBottomPanel(l, p, `g-${p}`)
+
+  it("adds the panel beside the terminal in a layout that predates it", () => {
+    const l = add(add(base(), "output"), "problems")
+    expect(l.areas.bottom.groups[0].tabs).toEqual(["terminal", "output", "problems"])
     // The active tab is left alone: the migration must not change what you see.
     expect(l.areas.bottom.groups[0].active).toBe("terminal")
   })
 
-  it("leaves a layout that already places Output exactly as it is", () => {
-    const moved = mv(withOutputPanel(base()), "output", "right")
-    expect(withOutputPanel(moved)).toEqual(moved)
+  it("leaves a layout that already places the panel exactly as it is", () => {
+    const moved = mv(add(base(), "output"), "output", "right")
+    expect(add(moved, "output")).toEqual(moved)
+    // Including one where the user closed it out of the layout for good.
+    const closed = removePanel(add(base(), "problems"), "problems")
+    expect(add(closed, "problems").areas.bottom.groups[0].tabs).toEqual(["terminal", "problems"])
   })
 
-  it("gives Output its own bottom group when there is no terminal to sit beside", () => {
-    const l = withOutputPanel(removePanel(base(), "terminal"))
+  it("gives the panel its own bottom group when there is no terminal to sit beside", () => {
+    const l = add(removePanel(base(), "terminal"), "output")
     expect(panelsInArea(l, "bottom")).toEqual(["output"])
   })
 })

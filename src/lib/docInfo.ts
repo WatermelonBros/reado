@@ -516,13 +516,22 @@ export function compareWithSaved(): void {
   actions.setDiffing(true)
 }
 
-/** Open the editor's find panel (native menu Edit ▸ Find). */
+/** The active editor's selected text, trimmed to a single line, or "" — what a
+ *  find command seeds its query with. */
+export function selectionText(): string {
+  const view = useDocInfo.getState().view
+  if (!view) return ""
+  const { from, to } = view.state.selection.main
+  if (from === to) return ""
+  return view.state.sliceDoc(from, to).split("\n")[0].trim()
+}
+
+/** Open the editor's find panel (⌘F, via the native menu Edit ▸ Find). */
 export function openFind(): void {
   const { view } = useDocInfo.getState()
-  if (view) {
-    openSearchPanel(view)
-    view.focus()
-  }
+  // No `view.focus()` after: pressing ⌘F means "type a query", and the panel puts
+  // the caret in its own field — focusing the editor here would snatch it back.
+  if (view) openSearchPanel(view)
 }
 
 /** Jump to the definition of the symbol at the cursor (native menu Go ▸ …). */

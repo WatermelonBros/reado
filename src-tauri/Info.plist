@@ -8,11 +8,19 @@
        with our own modal where possible — see the app's permission priming.) -->
   <!-- The browser pane is a WKWebView, and macOS App Transport Security blocks
        plain http:// to anything but loopback — which silently breaks previewing a
-       dev server reached by name (an /etc/hosts alias, a LAN IP, a .local host).
-       The pane is a developer tool pointed at the user's own machine, so allow it. -->
+       dev server reached by name (an /etc/hosts alias, a .local host). The pane is
+       a developer tool pointed at the user's own machine, so allow it.
+
+       The key here must be `NSAllowsArbitraryLoadsInWebContent`, not
+       `NSAllowsArbitraryLoads`: macOS *ignores* the blanket key whenever one of
+       the granular keys is also present, so the pair we used to ship left only
+       `NSAllowsLocalNetworking` in force. Loopback and IP literals still loaded
+       (ATS doesn't police IP literals), which is why it looked like it worked —
+       but every http *hostname* was refused before a request was ever made, and
+       the pane just sat on the old page. -->
   <key>NSAppTransportSecurity</key>
   <dict>
-    <key>NSAllowsArbitraryLoads</key>
+    <key>NSAllowsArbitraryLoadsInWebContent</key>
     <true/>
     <key>NSAllowsLocalNetworking</key>
     <true/>

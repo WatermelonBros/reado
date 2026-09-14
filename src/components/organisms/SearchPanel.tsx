@@ -60,12 +60,17 @@ export function SearchPanel() {
     useWorkspace.getState().setSearchQuery(query)
   }, [query])
 
-  // Seed the query when something requests a search (e.g. Find references).
+  const queryRef = useRef<HTMLTextAreaElement>(null)
+  // Seed the query when something requests a search (⌘⇧F, Find references, Find in
+  // Folder) and put the caret in the field — the request *is* "I want to type here".
+  // An empty request keeps the last query and selects it, the way every editor's
+  // find does, so reopening the panel doesn't throw the query away.
   useEffect(() => {
-    if (pendingSearch !== null) {
-      setQuery(pendingSearch)
-      clearPendingSearch()
-    }
+    if (pendingSearch === null) return
+    if (pendingSearch) setQuery(pendingSearch)
+    clearPendingSearch()
+    queryRef.current?.focus()
+    queryRef.current?.select()
   }, [pendingSearch, clearPendingSearch])
   const [matches, setMatches] = useState<SearchMatch[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -260,6 +265,7 @@ export function SearchPanel() {
         <div className="relative">
           <Textarea
             mono
+            ref={queryRef}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)

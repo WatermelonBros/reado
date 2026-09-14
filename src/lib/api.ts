@@ -1496,6 +1496,11 @@ export const previewSetBounds = (x: number, y: number, w: number, h: number) =>
 /** Navigate the open preview to a new URL (URL bar / agent). */
 export const previewNavigate = (url: string) => invoke<void>("preview_navigate", { url })
 
+/** Does this bare name resolve on this machine? The address bar asks before
+ *  treating a single-label word as a host — that is what an `/etc/hosts` alias
+ *  looks like, and nothing in the webview can see `/etc/hosts`. */
+export const hostResolves = (name: string) => invoke<boolean>("host_resolves", { name })
+
 /** Close the preview pane (remove its webview). */
 export const previewClose = () => invoke<void>("preview_close")
 

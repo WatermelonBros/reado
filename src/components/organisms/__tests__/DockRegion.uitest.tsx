@@ -16,9 +16,11 @@ vi.mock("../ToolPanelBody", async (orig) => ({
 }))
 
 import { DockRegion } from "@/components/organisms/DockRegion"
+import { useDiagnostics } from "@/lib/diagnostics"
 import { defaultLayout, type Layout, useLayout } from "@/lib/layout"
 import { usePreview } from "@/lib/preview"
 import { useReasoning } from "@/lib/reasoning"
+import { useTasks } from "@/lib/tasks"
 import { useTerminals } from "@/lib/terminals"
 
 /** A layout with the given groups in one area, everything else empty. */
@@ -45,6 +47,8 @@ beforeEach(() => {
   useTerminals.setState({ open: true })
   usePreview.setState({ open: false, inspector: false, inspectorDetached: false })
   useReasoning.setState({ open: false })
+  useDiagnostics.setState({ byFile: {}, errors: {} })
+  useTasks.setState({ byTask: {} })
 })
 
 describe("what the area renders", () => {
@@ -82,6 +86,36 @@ describe("what the area renders", () => {
     expect(screen.getByText("inspector-body")).toBeInTheDocument()
   })
 
+  it("carries the problem count on the Problems tab, where the rail used to", () => {
+    useDiagnostics.setState({
+      byFile: { "a.ts": [{ line: 1, character: 0, severity: 1, message: "x" }] },
+    })
+    useTasks.setState({
+      byTask: { build: [{ path: "b.ts", line: 2, character: 0, severity: 1, message: "y" }] },
+    })
+    useLayout.setState({ layout: layoutWith("bottom", [group("g1", ["problems"])]) })
+    render(<DockRegion area="bottom" />)
+    // Both sources, because both are what the panel lists.
+    expect(screen.getByText("problems.panel").parentElement?.textContent).toContain("2")
+  })
+
+  it("gives the shown tab the whole group to fill", () => {
+    useLayout.setState({
+      layout: layoutWith("bottom", [
+        { id: "g1", tabs: ["terminal", "output", "problems"], active: "problems", size: 1 },
+      ]),
+    })
+    render(<DockRegion area="bottom" />)
+    // A real flex child, not a `contents` box: `contents` dissolves the element,
+    // so the panel became an auto-width flex item and a Problems header sat in
+    // a third of a wide bottom dock with the rest of the row empty.
+    const shown = screen.getByText("tool-body:problems").parentElement as HTMLElement
+    expect(shown).toHaveClass("flex-1")
+    expect(shown).toHaveClass("min-w-0")
+    // Its neighbours are still mounted, just not laid out.
+    expect(screen.getByText("terminal-body").parentElement).toHaveClass("hidden")
+  })
+
   it("treats a docked tool panel as open by virtue of being placed", () => {
     useLayout.setState({ layout: layoutWith("right", [group("g1", ["search"])]) })
     render(<DockRegion area="right" />)
@@ -96,7 +130,7 @@ describe("what the area renders", () => {
       ]),
     })
     render(<DockRegion area="bottom" />)
-    expect(screen.getByText("browser-body").parentElement).toHaveClass("contents")
+    expect(screen.getByText("browser-body").parentElement).toHaveClass("flex-1")
     // Mounted — unmounting it would kill the terminal's shell — but out of layout.
     expect(screen.getByText("terminal-body").parentElement).toHaveClass("hidden")
     expect(screen.getByText("dock.terminal")).toBeInTheDocument()

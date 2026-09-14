@@ -578,10 +578,56 @@ pub fn preview_close<R: Runtime>(window: Window<R>) -> Result<(), String> {
     Ok(())
 }
 
+/// Does this bare name resolve on this machine?
+///
+/// The address bar has to decide between a host and a search term, and a
+/// single-label name (`myapp`, with no dot and no port) is ambiguous: it is both
+/// a plausible search and exactly what an `/etc/hosts` alias looks like. Nothing
+/// in the frontend can tell them apart — the system resolver can, because it is
+/// the thing that reads `/etc/hosts` (and the search domains).
+///
+/// Bounded, because a name that is *not* a host goes out to DNS and can take
+/// seconds with search domains appended: past the budget the answer is "no", and
+/// the user gets the search they probably meant.
+#[tauri::command]
+pub async fn host_resolves(name: String) -> bool {
+    use std::net::ToSocketAddrs;
+    // A name is all this answers about; anything with a slash, a scheme or a
+    // space is not one, and resolving it would be a waste of the budget.
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return false;
+    }
+    let lookup = tokio::task::spawn_blocking(move || {
+        (name.as_str(), 80u16)
+            .to_socket_addrs()
+            .is_ok_and(|mut a| a.next().is_some())
+    });
+    matches!(
+        tokio::time::timeout(std::time::Duration::from_millis(400), lookup).await,
+        Ok(Ok(true))
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::net::TcpListener;
+
+    #[tokio::test]
+    async fn a_name_that_resolves_is_a_host_and_one_that_does_not_is_a_search() {
+        // `localhost` is a host on every machine; the random one is not, and the
+        // address bar must not send the user to a page that cannot exist.
+        assert!(host_resolves("localhost".into()).await);
+        assert!(!host_resolves("nx-e3f1c0de-not-a-host".into()).await);
+        // Not a bare name at all: never worth a lookup.
+        assert!(!host_resolves("has space".into()).await);
+        assert!(!host_resolves("http://x".into()).await);
+        assert!(!host_resolves(String::new()).await);
+    }
 
     #[test]
     fn explicit_port_parses_every_flag_shape() {

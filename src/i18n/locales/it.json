@@ -782,7 +782,6 @@
     "replaceAll": "Sostituisci tutto",
     "replaceConfirm": "Conferma sostituzione",
     "replaced": "Sostituito in {count} file.",
-    "results": "{count} risultati",
     "truncated": "Mostrati {shown} di {total} — affina la ricerca.",
     "ripgrepMissing": "La ricerca richiede ripgrep (rg), che non è installato o non è nel PATH. Installalo e riprova.",
     "searching": "Ricerca in corso…",
@@ -1331,7 +1330,8 @@
     "badFile": "{file} non si legge — restano in uso i task di prima.",
     "createFailed": "Non sono riuscito a scrivere il file dei task.",
     "panel": "Task",
-    "from": "da {task}"
+    "from": "da {task}",
+    "detected": "rilevato da {provider}"
   },
   "profile": {
     "status": "Profilo",

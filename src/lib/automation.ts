@@ -27,9 +27,12 @@ import { useHierarchy } from "./hierarchy"
 import { useLayout } from "./layout"
 import { log } from "./logger"
 import { lspAttached, lspSupport } from "./lsp"
+// The macOS menu bar is the system's, so a driver cannot click it. This is the
+// same handler it dispatches to — the only way to drive a menu command here.
+import { runMenuCommand } from "./menu"
 import { useOnboarding } from "./onboarding"
 import { usePreReview } from "./preReview"
-import { usePreview } from "./preview"
+import { useDialogs, usePreview } from "./preview"
 import { useQa } from "./qa"
 import { useReadProgress } from "./readProgress"
 import { useSemanticSearch } from "./semanticSearch"
@@ -38,6 +41,7 @@ import { useSpecs } from "./specs"
 // window.__reado, so the driver can read state and edit the buffer reliably
 // (synthetic input events don't reach CM6). Dev only, same as this whole module.
 import * as store from "./store"
+import { useTasks } from "./tasks"
 import { useTerminals } from "./terminals"
 import { useTourGuide } from "./tour"
 import { useTours } from "./tours"
@@ -52,6 +56,8 @@ import { useUpdate } from "./update"
   useComments,
   useGuidedReview,
   useTerminals,
+  useTasks,
+  runMenuCommand,
   useQa,
   useForge,
   useDiagnostics,
@@ -64,6 +70,7 @@ import { useUpdate } from "./update"
   useHierarchy,
   useLayout,
   useOnboarding,
+  useDialogs,
   usePreview,
   useUpdate,
   useExtensions,

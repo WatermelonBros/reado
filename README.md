@@ -135,7 +135,7 @@ the `reado` CLI is installed.
 | -------------------- | ------------------------ |
 | `Cmd/Ctrl + P`       | Go to file (fuzzy)       |
 | `Cmd/Ctrl + K`       | Command palette          |
-| `Cmd/Ctrl + Shift+F` | Full-text project search |
+| `Cmd/Ctrl + Shift+F` | Search & replace in project |
 | `Cmd/Ctrl + ,`       | Settings                 |
 
 ## Development

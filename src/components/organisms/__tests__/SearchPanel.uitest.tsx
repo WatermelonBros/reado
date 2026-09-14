@@ -75,6 +75,25 @@ describe("SearchPanel", () => {
     })
   })
 
+  it("a requested search seeds the query and puts the caret in the field", async () => {
+    seed()
+    useWorkspace.setState({ pendingSearch: "needle" })
+    render(<SearchPanel />)
+    const field = screen.getByPlaceholderText("search.placeholder")
+    expect(field).toHaveValue("needle")
+    // ⌘⇧F lands here now, so it has to be typeable straight away.
+    expect(document.activeElement).toBe(field)
+  })
+
+  it("an empty request keeps the last query, selected and ready to retype", async () => {
+    seed()
+    useWorkspace.setState({ searchQuery: "previous", pendingSearch: "" })
+    render(<SearchPanel />)
+    const field = screen.getByPlaceholderText("search.placeholder")
+    expect(field).toHaveValue("previous")
+    expect(document.activeElement).toBe(field)
+  })
+
   it("clicking a result previews it at its path and line", async () => {
     const { open } = seed()
     render(<SearchPanel />)

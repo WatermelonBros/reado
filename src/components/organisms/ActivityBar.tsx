@@ -23,7 +23,6 @@ import {
   HierarchyIcon,
   MessageIcon,
   OutlineIcon,
-  ProblemsIcon,
   RouteIcon,
   SearchIcon,
   SettingsIcon,
@@ -36,7 +35,6 @@ import {
 import type { MessageKey } from "@/i18n"
 import { useBookmarks } from "@/lib/bookmarks"
 import { openCount, useComments } from "@/lib/comments"
-import { useDiagnostics } from "@/lib/diagnostics"
 import { openProposals, useGuidedReview } from "@/lib/guidedReview"
 import { useHierarchy } from "@/lib/hierarchy"
 import { useFlip, usePointerReorder } from "@/lib/pointerReorder"
@@ -74,9 +72,6 @@ export function ActivityBar() {
   const openComments = useComments((s) => openCount(s.comments))
   const orphanCount = useComments((s) => s.comments.filter((c) => c.orphan).length)
   const hasSpecs = useSpecs((s) => s.groups.length > 0)
-  const problemCount = useDiagnostics((s) =>
-    Object.values(s.byFile).reduce((n, items) => n + items.length, 0),
-  )
   const bookmarkCount = useBookmarks((s) => s.bookmarks.length)
   const hasHierarchy = useHierarchy((s) => s.root !== null || s.loading || s.unsupported)
   const qaCount = useQa((s) => s.notes.length)
@@ -111,9 +106,6 @@ export function ActivityBar() {
     ...(orphanCount > 0
       ? [{ id: "orphans" as Tool, labelKey: "orphans.panel" as MessageKey, Icon: UnlinkIcon }]
       : []),
-    ...(problemCount > 0
-      ? [{ id: "problems" as Tool, labelKey: "problems.panel" as MessageKey, Icon: ProblemsIcon }]
-      : []),
     ...(bookmarkCount > 0
       ? [{ id: "bookmarks" as Tool, labelKey: "bookmarks.panel" as MessageKey, Icon: BookmarkIcon }]
       : []),
@@ -140,13 +132,11 @@ export function ActivityBar() {
         ? openComments
         : id === "orphans"
           ? orphanCount
-          : id === "problems"
-            ? problemCount
-            : id === "prereview"
-              ? preReviewCount
-              : id === "guidedreview"
-                ? guidedOpen
-                : 0
+          : id === "prereview"
+            ? preReviewCount
+            : id === "guidedreview"
+              ? guidedOpen
+              : 0
 
   // Apply the user's custom order: listed tools first (in that order), the rest
   // keep their natural order after (sort is stable). Drag reorders the list.
