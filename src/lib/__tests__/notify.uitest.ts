@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const settings = { completionSound: false }
 vi.mock("../store", () => ({ useSettings: { getState: () => settings } }))
 
-import { notifyResolved } from "@/lib/notify"
+import { notifyAgentDone, notifyResolved } from "@/lib/notify"
 
 const created: Array<{ title: string; body?: string }> = []
 let requestPermission: ReturnType<typeof vi.fn>
@@ -101,5 +101,32 @@ describe("notifyResolved", () => {
     )
     await expect(notifyResolved(0)).resolves.toBeUndefined()
     expect(created).toHaveLength(1)
+  })
+})
+
+describe("notifyAgentDone", () => {
+  it("rings once for a burst of handoffs, with the last summary", async () => {
+    vi.useFakeTimers()
+    stubNotification("granted")
+    // An agent that says "done" after every command it runs: the user wants the
+    // end of that, not a notification per step.
+    notifyAgentDone("done", "ran the tests")
+    await vi.advanceTimersByTimeAsync(3_000)
+    notifyAgentDone("done", "fixed the failure")
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(created).toHaveLength(0)
+    notifyAgentDone("blocked", "needs a token")
+    await vi.advanceTimersByTimeAsync(11_000)
+    expect(created).toEqual([{ title: "Reado", body: "needs a token" }])
+    vi.useRealTimers()
+  })
+
+  it("falls back to the status when the agent said nothing", async () => {
+    vi.useFakeTimers()
+    stubNotification("granted")
+    notifyAgentDone("failed", "")
+    await vi.advanceTimersByTimeAsync(11_000)
+    expect(created[0].body).toBe("The agent stopped without finishing.")
+    vi.useRealTimers()
   })
 })

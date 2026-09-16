@@ -27,6 +27,7 @@ import { useHierarchy } from "./hierarchy"
 import { useLayout } from "./layout"
 import { log } from "./logger"
 import { lspAttached, lspSupport } from "./lsp"
+import { useMascot } from "./mascot"
 // The macOS menu bar is the system's, so a driver cannot click it. This is the
 // same handler it dispatches to — the only way to drive a menu command here.
 import { runMenuCommand } from "./menu"
@@ -57,6 +58,7 @@ import { useUpdate } from "./update"
   useGuidedReview,
   useTerminals,
   useTasks,
+  useMascot,
   runMenuCommand,
   useQa,
   useForge,

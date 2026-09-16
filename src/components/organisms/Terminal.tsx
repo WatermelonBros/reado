@@ -38,6 +38,7 @@ import {
   ptyWrite,
   resolvePath,
 } from "@/lib/api"
+import { agentIsBusy } from "@/lib/mascot"
 import { nextPaint } from "@/lib/nextPaint"
 import { notify, notifyError } from "@/lib/notice"
 import { useProject, useSettings } from "@/lib/store"
@@ -274,7 +275,13 @@ export function Terminal({ id, cwd, active, profile }: Props) {
           // Mirror an agent pane to any paired phone. Best-effort and rate-limited
           // by the tail buffer below: Anywhere may be off, and a phone watching an
           // agent work wants the recent output, not every byte re-sent.
-          if (useTerminals.getState().agentTerminals.includes(id)) mirrorToPhone(id, text)
+          if (useTerminals.getState().agentTerminals.includes(id)) {
+            mirrorToPhone(id, text)
+            // An agent pane that is painting is an agent that is working. It is
+            // the only "it started" Reado gets for a session the user drives by
+            // hand — `session_done` reports the end, never the beginning.
+            agentIsBusy()
+          }
         }),
       )
       unlisten.push(

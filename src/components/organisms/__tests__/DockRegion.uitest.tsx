@@ -63,8 +63,28 @@ describe("what the area renders", () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it("renders nothing when the only placed panel is closed", () => {
+  it("keeps the terminal tab when the terminal is closed, with no body", () => {
     useTerminals.setState({ open: false })
+    render(<DockRegion area="bottom" />)
+    expect(screen.getByText("dock.terminal")).toBeInTheDocument()
+    expect(screen.queryByText("terminal-body")).not.toBeInTheDocument()
+  })
+
+  it("hands the selection to an open sibling when the terminal closes", () => {
+    // The terminal's tab stays on the strip, but a *selected* tab is the one
+    // being shown — so it must not be the closed one while something else in the
+    // group has content.
+    useLayout.setState({ layout: layoutWith("bottom", [group("g1", ["terminal", "output"])]) })
+    useTerminals.setState({ open: false })
+    render(<DockRegion area="bottom" />)
+    expect(screen.getByText("dock.terminal")).toBeInTheDocument()
+    expect(screen.getByText("tool-body:output")).toBeInTheDocument()
+    expect(screen.queryByText("terminal-body")).not.toBeInTheDocument()
+  })
+
+  it("renders nothing when the only placed panel is a closed non-terminal one", () => {
+    useLayout.setState({ layout: layoutWith("bottom", [group("g1", ["browser"])]) })
+    usePreview.setState({ open: false })
     const { container } = render(<DockRegion area="bottom" />)
     expect(container).toBeEmptyDOMElement()
   })

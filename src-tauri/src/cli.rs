@@ -34,25 +34,32 @@ fn bundled_cli() -> Result<PathBuf> {
     }
 }
 
-/// The directory we install the CLI into — chosen because it's already on PATH,
-/// so the agent can run `reado` with no extra setup. On Windows that's
+/// The directory we install the CLI into. On Windows that's
 /// `%LOCALAPPDATA%\Microsoft\WindowsApps` (a user-writable dir on the default
 /// PATH since Win10); elsewhere it's `~/.local/bin`. The old Windows target,
 /// `~/.local/bin`, is NOT on PATH there — hence "installed but not found".
-fn install_dir() -> Result<PathBuf> {
+///
+/// `~/.local/bin` is *conventionally* on PATH, not reliably: a profile that never
+/// adds it leaves `reado` installed and unreachable — and the MCP server the agent
+/// talks to never starts. `proc::login_shell_path` puts this directory on the PATH
+/// of everything the app spawns so that hope isn't load-bearing.
+pub fn cli_dir() -> Option<PathBuf> {
     #[cfg(windows)]
     let dir = {
-        let local = std::env::var_os("LOCALAPPDATA")
-            .ok_or_else(|| Error::Other("no LOCALAPPDATA directory".into()))?;
+        let local = std::env::var_os("LOCALAPPDATA")?;
         PathBuf::from(local).join("Microsoft").join("WindowsApps")
     };
     #[cfg(not(windows))]
     let dir = {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .ok_or_else(|| Error::Other("no HOME directory".into()))?;
+        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
         PathBuf::from(home).join(".local").join("bin")
     };
+    Some(dir)
+}
+
+/// [`cli_dir`], created on demand — the form installing needs.
+fn install_dir() -> Result<PathBuf> {
+    let dir = cli_dir().ok_or_else(|| Error::Other("no HOME directory".into()))?;
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -85,7 +92,5 @@ pub fn install_cli() -> Result<String> {
 /// Whether the CLI is already installed in our PATH-visible install dir.
 #[tauri::command]
 pub fn cli_installed() -> bool {
-    install_dir()
-        .map(|b| b.join(CLI_NAME).exists())
-        .unwrap_or(false)
+    cli_dir().is_some_and(|b| b.join(CLI_NAME).exists())
 }

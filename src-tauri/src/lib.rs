@@ -22,6 +22,7 @@ mod history;
 mod index;
 mod log;
 mod lsp;
+mod mascot;
 mod menu;
 mod ovsx;
 mod pairing;
@@ -93,6 +94,9 @@ pub fn run() {
                 );
             }
             menu::init(app)?;
+            // Watches the cursor so the companion window can let clicks through
+            // everywhere except the character. Harmless while it doesn't exist.
+            mascot::watch_cursor(app.handle().clone());
             anywhere::dev_autostart(app.handle());
             // Files passed on the command line (Windows/Linux cold launch). macOS
             // delivers them via RunEvent::Opened instead.
@@ -100,6 +104,7 @@ pub fn run() {
             Ok(())
         })
         .manage(pty::PtyState::default())
+        .manage(mascot::HitRect::default())
         .manage(fileopen::OpenQueue::default())
         .manage(anywhere::AnywhereState::default())
         .manage(lsp::LspState::default())
@@ -242,6 +247,9 @@ pub fn run() {
             ovsx::ext_asset,
             cli::install_cli,
             cli::cli_installed,
+            mascot::mascot_show,
+            mascot::mascot_hit_rect,
+            mascot::mascot_raise,
             annotations::create_comment,
             annotations::list_comments,
             annotations::list_archived,

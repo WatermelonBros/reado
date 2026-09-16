@@ -130,6 +130,14 @@ fn is_reasoning_store(path: &Path) -> bool {
     s.ends_with("/.reado/reasoning.jsonl")
 }
 
+/// True if `path` is something the agent asked the companion to say
+/// (`mascot_say` over MCP). Same channel as the handoff below, one file per
+/// saying, most recent wins.
+fn is_mascot_say(path: &Path) -> bool {
+    let s = path.to_string_lossy().replace('\\', "/");
+    s.ends_with("/.reado/mascot.json")
+}
+
 /// True if `path` is the agent's end-of-turn handoff (`session_done` over MCP).
 /// A change means the agent said it is done, blocked or stuck — the moment to
 /// get the attention of a user who walked away.
@@ -286,6 +294,7 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                     let mut sessions_dirty = false;
                     let mut reasoning_dirty = false;
                     let mut agent_done_dirty = false;
+                    let mut mascot_dirty = false;
                     let mut git_dirty = false;
 
                     // Reunite a delete+create into a rename: if exactly one removed
@@ -356,6 +365,10 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                             reasoning_dirty = true;
                             continue;
                         }
+                        if is_mascot_say(&path) {
+                            mascot_dirty = true;
+                            continue;
+                        }
                         // The agent handed the turn back via `session_done`.
                         if is_agent_done(&path) {
                             agent_done_dirty = true;
@@ -393,6 +406,9 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
                     }
                     if agent_done_dirty {
                         let _ = app.emit("agent-done", ());
+                    }
+                    if mascot_dirty {
+                        let _ = app.emit("mascot-say", ());
                     }
                     if git_dirty {
                         let _ = app.emit("git-changed", ());
@@ -485,6 +501,9 @@ mod tests {
     fn the_agents_handoff_is_its_own_event() {
         // It must not be mistaken for a comment or session write: those reload a
         // panel, this one gets the user's attention.
+        assert!(is_mascot_say(Path::new("/p/.reado/mascot.json")));
+        assert!(!is_mascot_say(Path::new("/p/.reado/done.json")));
+        assert!(!is_mascot_say(Path::new("/p/src/mascot.json")));
         assert!(is_agent_done(Path::new("/p/.reado/done.json")));
         assert!(!is_agent_done(Path::new("/p/.reado/sessions/s1.json")));
         assert!(!is_comment_store(Path::new("/p/.reado/done.json")));

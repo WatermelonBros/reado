@@ -60,6 +60,7 @@ import { useGuidedReview } from "@/lib/guidedReview"
 import { type DockArea, findPanel, useLayout } from "@/lib/layout"
 import { createLogger, safeError } from "@/lib/logger"
 import { notifyWatchedFileChanged } from "@/lib/lsp"
+import { moodOf, useMascot } from "@/lib/mascot"
 import { ensureMcp } from "@/lib/mcp"
 import { notifyError } from "@/lib/notice"
 import { notifyAgentDone, notifyResolved } from "@/lib/notify"
@@ -380,7 +381,19 @@ export function ProjectView({ root }: { root: string }) {
         if (c?.kind !== "text") return
         try {
           const { status, summary } = JSON.parse(c.text) as { status: string; summary: string }
-          await notifyAgentDone(status, summary)
+          notifyAgentDone(status, summary)
+        } catch {
+          /* a half-written file: the next write brings the whole one */
+        }
+      }),
+      // The agent asked the mascot to say something (`mascot_say` over MCP).
+      // Same channel as the handoff: one file, most recent wins.
+      listen("mascot-say", async () => {
+        const c = await readFile(root, `${root}/.reado/mascot.json`, true).catch(() => null)
+        if (c?.kind !== "text") return
+        try {
+          const { text, mood } = JSON.parse(c.text) as { text: string; mood?: string }
+          if (text) useMascot.getState().say(text, moodOf(mood))
         } catch {
           /* a half-written file: the next write brings the whole one */
         }

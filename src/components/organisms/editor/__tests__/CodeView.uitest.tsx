@@ -120,6 +120,9 @@ beforeEach(() => {
   gitBlame.mockResolvedValue([])
   readFile.mockResolvedValue({ kind: "text", text: "def target() {}\n" })
   useProject.setState({ root: ROOT, active: PATH, git: { isRepo: true } as never, open: vi.fn() })
+  // Per-file scroll/caret memory is written by a debounce, so a test that leaves
+  // one behind decides the next test's answer.
+  useSessions.setState({ byRoot: {} })
   useComments.setState({ comments: [], activeId: null, reanchoringId: null })
   useBookmarks.setState({ bookmarks: [] })
   useReadProgress.setState({ read: new Set(), changed: new Set() })
@@ -481,6 +484,21 @@ describe("what typing does", () => {
     view().dispatch({ selection: { anchor: view().state.doc.line(3).from } })
     await vi.advanceTimersByTimeAsync(400)
     expect(useSessions.getState().byRoot[ROOT]?.cursor?.[REL]).toMatchObject({ line: 3 })
+    vi.useRealTimers()
+  })
+
+  it("drops a pending caret save when the file is closed", async () => {
+    vi.useFakeTimers()
+    const { unmount } = mount()
+    view().dispatch({ selection: { anchor: view().state.doc.line(3).from } })
+    // The debounce outlived the view: it fired into a destroyed editor, and read
+    // the project root at *that* moment — so closing a file and switching project
+    // inside 300ms filed its caret under the new root. In the tests it was worse:
+    // every mount left a live timer, and one landing mid-assertion is what made
+    // the caret test flaky under load.
+    unmount()
+    await vi.advanceTimersByTimeAsync(400)
+    expect(useSessions.getState().byRoot[ROOT]?.cursor?.[REL]).toBeUndefined()
     vi.useRealTimers()
   })
 

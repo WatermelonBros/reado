@@ -36,7 +36,7 @@ const INSTRUCTIONS: &str = "You are a terminal agent working inside Reado, a rea
 WORK FROM THEIR ANNOTATIONS: before and while you work, read the user's open tasks and comments via the `reado://tasks` and `reado://comments` resources (plus `reado://reading-progress` and `reado://bookmarks` for context). They carry file/line anchors and are the source of truth for what to do — prefer them over guessing.\n\n\
 LIVE BROWSER PREVIEW: when the user asks about their running app, a page, console errors, network, or the DOM, use the `browser_*` tools to inspect and drive Reado's in-app preview — what the user actually sees. Do NOT launch your own browser (Playwright, Chrome, headless) for it; that opens a different, disconnected page. If a browser tool reports 'no preview pane running', ask the user to open the preview and enable agent access.\n\n\
 GUIDED REVIEW: when the user starts a Guided Pair Review, Reado sends you a READO GUIDED REVIEW prompt carrying a session id. Drive that session with the `session_show`, `review_context`, `review_plan`, `review_propose_route_change`, `review_propose_comment`, `review_propose`, `review_summarize_file` and `session_summarize` tools rather than composing shell commands — a route is structured data, and a quoting accident in a terminal loses it silently. The loop is: you propose, the human disposes. Never accept your own proposal, never edit code during a review, and never replace a route the human is already walking — propose the change and let them accept it. If the answer to `review_plan` lists uncovered files, they are files the scope contains and your route left out: route them with a proposed change, or mark each one out of scope. Saying a file needs no review is an answer; leaving it out in silence is not.\n\n\
-SAY WHEN YOU ARE DONE: the moment you finish a turn and are handing control back — the work is complete, or you are blocked, or you need an answer — call `session_done` with a one-line summary. The user has usually walked away from the desk; this is what tells Reado to get their attention. Call it exactly once per turn, as the last thing you do, and call it even when the answer is 'I could not do it'.\n\n\
+SAY WHEN YOU ARE DONE — AND ONLY THEN: call `session_done` with a one-line summary when your very next act is to *wait for the user*, because the whole request is finished, or you are blocked, or you need an answer. Not when a command returns, not when a step or a tool call finishes, not at a good stopping point in the middle: if you intend to run anything, edit anything or check anything after this call, it is too early, and the user gets pulled back to their desk for nothing. Once per request, not once per action — and do call it when the answer is 'I could not do it', or when the whole answer was one line.\n\n\
 Per-tool and per-resource details are in their descriptions. Prefer all of these — they act on the user's real session.";
 
 /// Run the stdio server loop until stdin closes.
@@ -282,7 +282,8 @@ fn tool_list() -> serde_json::Value {
         { "name": "task_fail", "description": "Record a failed attempt on a task, with a note. Past the attempt budget the task blocks itself.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "note": { "type": "string" } }, "required": ["id"] }) },
         { "name": "task_block", "description": "Block a task: you cannot proceed without a human answering first.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "reason": { "type": "string" } }, "required": ["id", "reason"] }) },
         { "name": "comment_add", "description": "Add a comment anchored to a file and line. `kind` is task (sent to the AI batch) or note.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "file": { "type": "string" }, "line": { "type": "number" }, "end": { "type": "number" }, "type": { "type": "string" }, "kind": { "type": "string" }, "body": { "type": "string" } }, "required": ["file", "line", "body"] }) },
-        { "name": "session_done", "description": "Call this as the LAST thing in every turn, when you are handing control back to the user — finished, blocked, or out of questions. Reado uses it to alert a user who has walked away. `summary` is one line on what happened; `status` is done (default), blocked or failed.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "summary": { "type": "string" }, "status": { "type": "string" } } }) },
+        { "name": "mascot_say", "description": "Say one line through Reado's mascot — the small companion in the corner of the user's screen. For the moment the user must know about while they are away from the desk: what you need from them, or what just landed. Not narration, not progress, not a running commentary: it interrupts a human, and a companion that chatters gets turned off. `mood` is done, ask, think or talk (default talk); use `ask` only when you are actually waiting for them.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "text": { "type": "string" }, "mood": { "type": "string" } }, "required": ["text"] }) },
+        { "name": "session_done", "description": "Call this when your next act is to wait for the user — the request is finished, you are blocked, or you need an answer. NOT after a command returns or a step completes: if you will do anything else before stopping, it is too early. Reado alerts a user who has walked away, so a premature call fetches them back for nothing. `summary` is one line on what happened; `status` is done (default), blocked or failed.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "summary": { "type": "string" }, "status": { "type": "string" } } }) },
         { "name": "comment_reply", "description": "Reply in a comment's thread.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "body": { "type": "string" } }, "required": ["id", "body"] }) },
         // Guided Pair Review: the session verbs, typed. The CLI carries the same
         // ones for agents without MCP, but a route is an array of objects and a
@@ -511,6 +512,14 @@ fn call_tool(
             }
             let c = core::fail_attempt(root, &sarg("id")).map_err(|e| (-32603, e.to_string()))?;
             mutation_result(&c, "task_fail")
+        }
+        "mascot_say" => {
+            let mood = sarg("mood");
+            // A refusal (empty, or too long for a bubble) comes back as the
+            // agent's own error to read and act on, not as a server fault.
+            let said = core::mark_mascot_say(root, &sarg("text"), &mood)
+                .map_err(|e| (-32602, e.to_string()))?;
+            Ok(format!("said: {}", said.text))
         }
         "session_done" => {
             let status = match sarg("status").as_str() {
@@ -846,6 +855,8 @@ mod tests {
             // The end-of-turn handoff: without it Reado can't tell a user who
             // walked away that the agent is back.
             "session_done",
+            // The one way words reach the companion's bubble.
+            "mascot_say",
             "task_done",
             "task_fail",
             "task_block",
@@ -1159,6 +1170,37 @@ mod tests {
         assert_eq!(res["content"][0]["type"], "image");
         assert_eq!(res["content"][0]["data"], "AAAA");
         assert_eq!(res["content"][0]["mimeType"], "image/png");
+    }
+
+    #[test]
+    fn mascot_say_refuses_what_a_bubble_cannot_carry() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        // Empty and over-long are refused, not silently trimmed: the agent has to
+        // know its message did not arrive whole.
+        for bad in ["", "   ", &"x".repeat(core::MASCOT_MAX + 1)] {
+            let res = handle(
+                &root,
+                "tools/call",
+                Some(&serde_json::json!({ "name": "mascot_say", "arguments": { "text": bad } })),
+            );
+            // A refusal reaches the agent as an error it can read and act on.
+            assert!(res.is_err(), "{bad:?} should have been refused");
+        }
+        assert!(!dir.path().join(".reado/mascot.json").exists());
+
+        handle_call(
+            &root,
+            &serde_json::json!({
+                "name": "mascot_say",
+                "arguments": { "text": "  ready when you are  ", "mood": "ask" }
+            }),
+        );
+        let said: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join(".reado/mascot.json")).unwrap())
+                .unwrap();
+        assert_eq!(said["text"], "ready when you are");
+        assert_eq!(said["mood"], "ask");
     }
 
     #[test]

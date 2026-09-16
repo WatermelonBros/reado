@@ -34,6 +34,7 @@ import { t } from "@/i18n"
 import { announce, cue } from "./a11y"
 import { discoverTests, ptyKill, ptySpawn, submitToTerminal, type TestFile } from "./api"
 import { createLogger, safeError } from "./logger"
+import { useMascot } from "./mascot"
 import { useProject } from "./store"
 import { listenPtyLines, plainText, shellQuote } from "./terminals"
 
@@ -382,6 +383,9 @@ export async function runTests(scope: Scope): Promise<void> {
 
   const id = `tests-${++runSeq}`
   useTesting.setState({ running: true })
+  // A run in flight is the agent's other kind of work: the companion shows it
+  // thinking, and its verdict below.
+  useMascot.getState().working()
 
   // The tests this run is about are pending until the output says otherwise, so
   // a rerun clears the last verdict instead of showing it as current.
@@ -446,6 +450,7 @@ export async function runTests(scope: Scope): Promise<void> {
     const passed = seen.filter((v) => v === "pass").length
     if (failed > 0 || failed + passed === 0) log.warn("run output", { command, output: tail })
     if (failed + passed === 0) return
+    useMascot.getState().tested(failed)
     cue(failed > 0 ? "error" : "success")
     announce(t("tests.finished", { passed, failed }), { assertive: failed > 0 })
   }

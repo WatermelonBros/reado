@@ -125,6 +125,9 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ...group("system", "notifications", "settings.notifications", [
     "settings.notifications",
     "settings.completionSound",
+    "settings.mascot",
+    "settings.mascotCorner",
+    "settings.mascotSize",
   ]),
   ...group("system", "terminal", "settings.terminal", [
     "settings.terminalFontSize",

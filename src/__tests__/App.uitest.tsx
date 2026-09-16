@@ -7,6 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 type Listener = (e: { payload: unknown }) => void
 const listeners = new Map<string, Listener>()
 vi.mock("@tauri-apps/api/event", () => ({
+  // The companion window is told where to sit by a broadcast; App does it on
+  // mount, so the mock has to answer for `emit` as well as `listen`.
+  emit: vi.fn(async () => {}),
   listen: vi.fn(async (event: string, cb: Listener) => {
     listeners.set(event, cb)
     return () => listeners.delete(event)

@@ -765,6 +765,11 @@ export function CodeView({
       // A pending debounced auto-save would fire into a destroyed view and drop
       // the edits on the floor: write them now instead.
       clearTimeout(autoSaveTimer.current)
+      // The caret save is the opposite case — there is nothing to rescue, and
+      // letting it fire is the bug: it reads the project root at *that* moment,
+      // so closing a file and switching project inside the debounce filed this
+      // file's caret under the new root.
+      clearTimeout(cursorSaveTimer.current)
       if (!pinned && useEditorActions.getState().isDirty(relPath)) flushOnClose(view, rootAtOpen)
       unregister()
       parkHistory(path, view.state)

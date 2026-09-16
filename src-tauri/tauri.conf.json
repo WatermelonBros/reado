@@ -26,7 +26,8 @@
         "enable": true,
         "scope": []
       }
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,
@@ -125,7 +126,9 @@
         "role": "Editor"
       },
       {
-        "ext": ["reado-workspace"],
+        "ext": [
+          "reado-workspace"
+        ],
         "name": "Reado workspace",
         "description": "A set of folders worked on together",
         "role": "Editor"

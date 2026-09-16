@@ -25,7 +25,7 @@ import { TitleBar } from "./components/organisms/TitleBar"
 import { UpdatePrompt } from "./components/organisms/UpdatePrompt"
 import { ProjectView } from "./components/pages/ProjectView"
 import { RecentProjects } from "./components/pages/RecentProjects"
-import { anywhereSetRecents, drainOpenTargets } from "./lib/api"
+import { anywhereSetRecents, drainOpenTargets, mascotShow } from "./lib/api"
 import {
   useApplyColorVision,
   useApplyIconTheme,
@@ -36,7 +36,8 @@ import {
   useCrossWindowSync,
   useGlobalShortcuts,
 } from "./lib/hooks"
-import { applyLogConfig, log } from "./lib/logger"
+import { applyLogConfig, log, safeError } from "./lib/logger"
+import { publishMascotConfig, publishMascotState } from "./lib/mascot"
 import { listenForMenu } from "./lib/menu"
 import { listenToServerOutput } from "./lib/outputLog"
 import { runStartupChecks } from "./lib/startup"
@@ -44,6 +45,24 @@ import { useRecents, useSettings } from "./lib/store"
 import { currentProjectPath, openInNewWindow, openPathTarget } from "./lib/window"
 
 export default function App() {
+  // The companion window belongs to the backend; the app only says whether it
+  // should be there and where. Kept out of the companion's own webview, which
+  // would otherwise ask for itself.
+  const mascot = useSettings((s) => s.mascot)
+  const mascotCorner = useSettings((s) => s.mascotCorner)
+  const mascotSize = useSettings((s) => s.mascotSize)
+  useEffect(() => {
+    void mascotShow(mascot, mascotCorner, mascotSize).catch((e: unknown) =>
+      log.warn("mascot window failed", { error: safeError(e) }),
+    )
+    // The backend moves the window; this is what tells the page inside it which
+    // corner of itself the character belongs in, and how big to draw it.
+    publishMascotConfig({ corner: mascotCorner, size: mascotSize })
+  }, [mascot, mascotCorner, mascotSize])
+  // This window is where the facts arrive, so this window is what tells the
+  // companion — which has its own JavaScript and cannot see this store.
+  useEffect(() => publishMascotState(), [])
+
   useApplyTheme()
   useApplyZoom()
   useApplyReduceMotion()

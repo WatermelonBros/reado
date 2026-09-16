@@ -181,6 +181,14 @@ export interface SettingsState {
   gitignoreDontAsk: boolean
   /** Play a soft chime when the agent finishes resolving tasks. */
   completionSound: boolean
+  /** Show the mascot in its own always-on-top window. */
+  mascot: boolean
+  /** Which corner of the display it is parked in. Everything positional — which
+   *  way its bubble opens, where the tail points — is derived from this one
+   *  value, so all four corners work or none does. */
+  mascotCorner: "bottom-right" | "bottom-left" | "top-right" | "top-left"
+  /** Its height in CSS pixels. */
+  mascotSize: number
   /** Automatically write edits to disk: never / after a short pause / on blur. */
   autoSave: "off" | "afterDelay" | "onFocusChange"
   /** How long "after a short pause" waits, in milliseconds. */
@@ -324,6 +332,9 @@ export const DEFAULTS = {
   keybindings: [],
   gitignoreDontAsk: false,
   completionSound: false,
+  mascot: false,
+  mascotCorner: "bottom-right",
+  mascotSize: 160,
   autoSave: "afterDelay",
   autoSaveDelay: 1000,
   suggestOnTyping: true,

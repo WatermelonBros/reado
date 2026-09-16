@@ -7,6 +7,7 @@ import { listen } from "@tauri-apps/api/event"
 import { agentInstalled, ptyDefaultShell, ptyWrite, submitToTerminal } from "./api"
 import { syncClaudeTheme } from "./claudeTheme"
 import { useDocInfo } from "./docInfo"
+import { useMascot } from "./mascot"
 import { useNotice } from "./notice"
 import { useProject } from "./store"
 import { useTerminals } from "./terminals"
@@ -42,10 +43,12 @@ function shellFamily(shell: string | null): ShellFamily {
  * cannot miss. Single line, single-quoted below, so no shell quoting surprises.
  */
 const HANDOFF_RULE =
-  "You are running inside Reado. At the end of EVERY turn, as the very last " +
-  "thing you do before handing control back, call the `session_done` MCP tool " +
-  "with a one-line summary — whether you finished, are blocked, or failed. " +
-  "The user has usually walked away; this is what tells them you are back."
+  "You are running inside Reado. When your next act is to wait for the user — " +
+  "the request is finished, or you are blocked, or you need an answer — call the " +
+  "`session_done` MCP tool with a one-line summary. Not when a command returns or " +
+  "a step finishes: if you will run, edit or check anything else before stopping, " +
+  "it is too early. The user has walked away, and a premature call fetches them " +
+  "back for nothing."
 
 /** Flags that inject `HANDOFF_RULE` into that session's system prompt.
  *
@@ -297,6 +300,9 @@ async function pasteAndSubmit(id: string, prompt: string): Promise<void> {
  *  installed), so a caller waiting on the result — a review loop, say — can say
  *  it failed instead of waiting out a timeout for an answer nobody is writing. */
 export async function dispatchToAgent(prompt: string): Promise<boolean> {
+  // Reado just gave the agent something to do: this is the only moment it knows
+  // work has *started*. Nothing else tells it — `session_done` reports the end.
+  useMascot.getState().working()
   const term = useTerminals.getState()
   const id = term.activeId ?? term.add()
   if (term.agentTerminals.includes(id)) {

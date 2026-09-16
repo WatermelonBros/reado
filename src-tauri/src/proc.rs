@@ -11,6 +11,9 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::OnceLock;
 
+/// The separator between PATH entries on this platform.
+const PATH_SEP: char = if cfg!(windows) { ';' } else { ':' };
+
 /// `CREATE_NO_WINDOW` — run the child with no console window.
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -21,9 +24,34 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// `biome`, `rg`, … would not be found even though the terminal runs them fine.
 /// Resolved once with a *raw* spawn (not `command()`, which injects this value —
 /// that would recurse).
+///
+/// The CLI's install directory is prepended to whatever the shell reports. It is
+/// `~/.local/bin` — on PATH by convention, not by guarantee — and when a profile
+/// doesn't add it the bundled `reado` is installed and still unreachable, so the
+/// MCP server the agent talks to never starts: the agent is told to call
+/// `session_done` and has no such tool.
 pub fn login_shell_path() -> &'static str {
     static PATH: OnceLock<String> = OnceLock::new();
     PATH.get_or_init(|| {
+        let dir = crate::cli::cli_dir().unwrap_or_default();
+        with_dir(&shell_path(), &dir.to_string_lossy())
+    })
+}
+
+/// Put `dir` at the front of `path`, unless it's already somewhere in it.
+fn with_dir(path: &str, dir: &str) -> String {
+    if dir.is_empty() || path.split(PATH_SEP).any(|p| p == dir) {
+        path.to_string()
+    } else if path.is_empty() {
+        dir.to_string()
+    } else {
+        format!("{dir}{PATH_SEP}{path}")
+    }
+}
+
+/// The PATH the user's own shell reports, before we add anything to it.
+fn shell_path() -> String {
+    {
         #[cfg(not(windows))]
         {
             let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
@@ -39,7 +67,7 @@ pub fn login_shell_path() -> &'static str {
             }
         }
         std::env::var("PATH").unwrap_or_default()
-    })
+    }
 }
 
 /// Whether `bin` resolves to a file in any directory of the login-shell PATH.
@@ -58,7 +86,6 @@ pub fn on_path(bin: &str) -> bool {
 /// server sometimes needs to look *at* the binary (a global TypeScript 7 has no
 /// `tsserver.js` beside it, and so needs a different server than a TS 5 one).
 pub fn which(bin: &str) -> Option<std::path::PathBuf> {
-    let sep = if cfg!(windows) { ';' } else { ':' };
     let exts: Vec<String> = if cfg!(windows) {
         let raw = std::env::var("PATHEXT").unwrap_or_else(|_| ".EXE;.CMD;.BAT;.COM".into());
         std::iter::once(String::new())
@@ -71,7 +98,7 @@ pub fn which(bin: &str) -> Option<std::path::PathBuf> {
     } else {
         vec![String::new()]
     };
-    login_shell_path().split(sep).find_map(|dir| {
+    login_shell_path().split(PATH_SEP).find_map(|dir| {
         if dir.is_empty() {
             return None;
         }
@@ -109,5 +136,29 @@ pub fn no_window(cmd: &mut Command) {
     #[cfg(not(windows))]
     {
         let _ = cmd;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_cli_dir_goes_in_front_once() {
+        let sep = PATH_SEP;
+        assert_eq!(
+            with_dir(&format!("/usr/bin{sep}/bin"), "/home/u/.local/bin"),
+            format!("/home/u/.local/bin{sep}/usr/bin{sep}/bin")
+        );
+        // Already there (anywhere): left alone, so we never grow a PATH per call.
+        let have = format!("/usr/bin{sep}/home/u/.local/bin");
+        assert_eq!(with_dir(&have, "/home/u/.local/bin"), have);
+        // A near-miss is not a match.
+        assert!(
+            with_dir("/home/u/.local/bin2", "/home/u/.local/bin").starts_with("/home/u/.local/bin")
+        );
+        // Nothing to add, or nothing to add to.
+        assert_eq!(with_dir("/usr/bin", ""), "/usr/bin");
+        assert_eq!(with_dir("", "/home/u/.local/bin"), "/home/u/.local/bin");
     }
 }

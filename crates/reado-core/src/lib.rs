@@ -1997,6 +1997,50 @@ pub struct SessionDone {
     pub at: u64,
 }
 
+/// What the agent asked the mascot to say.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MascotSay {
+    pub text: String,
+    /// One of the companion's states; empty means "just say it".
+    pub mood: String,
+    pub at: u64,
+}
+
+/// The most words the companion will carry. A bubble is a line or two read from
+/// across the room, not a report: longer than this is refused rather than
+/// truncated, so the agent knows its message did not arrive whole.
+pub const MASCOT_MAX: usize = 280;
+
+/// Record something for the companion to say.
+///
+/// Whole-file like the handoff below, and for the same reason: only the most
+/// recent one matters, and the timestamp is what makes two identical sayings
+/// distinguishable so the second one still shows.
+pub fn mark_mascot_say(root: &str, text: &str, mood: &str) -> Result<MascotSay> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(Error::Rejected("nothing to say: `text` is empty".into()));
+    }
+    if text.chars().count() > MASCOT_MAX {
+        return Err(Error::Rejected(format!(
+            "too long for a speech bubble: {} characters, the limit is {MASCOT_MAX}",
+            text.chars().count()
+        )));
+    }
+    let _lock = ReadoLock::acquire(root)?;
+    let say = MascotSay {
+        text: text.to_string(),
+        mood: mood.trim().to_string(),
+        at: now_millis(),
+    };
+    let dir = reado_dir(root);
+    std::fs::create_dir_all(&dir)?;
+    let json = serde_json::to_vec_pretty(&say).map_err(|e| Error::Json(e.to_string()))?;
+    std::fs::write(dir.join("mascot.json"), json)?;
+    Ok(say)
+}
+
 /// Record that the agent finished a turn.
 ///
 /// Written as a whole file rather than appended: the desktop only ever cares

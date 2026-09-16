@@ -148,6 +148,11 @@ pub fn pty_spawn(
     }
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    // The shell re-derives PATH from the user's profile, but it *keeps* what it
+    // inherits — which is how the bundled `reado` stays reachable in a terminal
+    // whose profile never adds `~/.local/bin`. Without it an agent launched here
+    // can't start the MCP server it is told to call.
+    cmd.env("PATH", crate::proc::login_shell_path());
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| {
         crate::log::error(

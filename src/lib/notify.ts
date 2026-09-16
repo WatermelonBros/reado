@@ -5,6 +5,7 @@
  * notification, plus an optional soft WebAudio chime. Called when the open-task
  * count drops — i.e. the agent (or the user) resolved something.
  */
+import { useMascot } from "./mascot"
 import { useSettings } from "./store"
 
 let permissionAsked = false
@@ -59,11 +60,44 @@ export async function notifyResolved(remaining: number): Promise<void> {
 }
 
 /**
+ * How long a handoff waits to see whether another one is right behind it.
+ *
+ * Agents say they are done far more often than they are: one `session_done` per
+ * command that returns, not one per request — whatever their instructions say.
+ * The end of that burst is the handoff the user wants, and the last summary is
+ * the one that describes where the agent actually stopped.
+ *
+ * ponytail: a burst is only "handoffs close together", so a premature one
+ * followed by two minutes of quiet work still rings early. The exact signal is
+ * the agent's own pane falling silent, which the terminal does not publish yet.
+ */
+const HANDOFF_QUIET_MS = 10_000
+
+let handoffTimer: number | undefined
+let handoff: { status: string; summary: string } | null = null
+
+/**
  * The agent handed the turn back — it called `session_done` over MCP. This is
  * what the "play a sound when the agent finishes" setting actually means; a
  * task being resolved (above) is a different event.
+ *
+ * Coalesced: one alert for a run of handoffs, carrying the last of them.
  */
-export async function notifyAgentDone(status: string, summary: string): Promise<void> {
+export function notifyAgentDone(status: string, summary: string): void {
+  handoff = { status, summary }
+  clearTimeout(handoffTimer)
+  handoffTimer = window.setTimeout(() => {
+    const last = handoff
+    handoff = null
+    if (!last) return
+    // The companion takes the same signal, not its own: what it shows and what
+    // the notification says come from one place.
+    useMascot.getState().handoff(last.status, last.summary)
+    void announceAgentDone(last.status, last.summary)
+  }, HANDOFF_QUIET_MS)
+}
+
+async function announceAgentDone(status: string, summary: string): Promise<void> {
   const body =
     summary ||
     (status === "blocked"

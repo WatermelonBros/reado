@@ -894,6 +894,50 @@ function SystemTab() {
           label={t("settings.completionSound")}
           className="text-sm text-muted"
         />
+        <ToggleField
+          settingKey="mascot"
+          checked={settings.mascot}
+          onChange={(v) => settings.set({ mascot: v })}
+          label={t("settings.mascot")}
+          hint={t("settings.mascotHint")}
+        />
+        {settings.mascot && (
+          <>
+            <Field label={t("settings.mascotCorner")} settingKey="mascotCorner">
+              <Select
+                value={settings.mascotCorner}
+                onChange={(v) => settings.set({ mascotCorner: v as typeof DEFAULTS.mascotCorner })}
+                options={[
+                  { value: "bottom-right", label: t("settings.cornerBottomRight") },
+                  { value: "bottom-left", label: t("settings.cornerBottomLeft") },
+                  { value: "top-right", label: t("settings.cornerTopRight") },
+                  { value: "top-left", label: t("settings.cornerTopLeft") },
+                ]}
+                ariaLabel={t("settings.mascotCorner")}
+              />
+            </Field>
+            <Field label={t("settings.mascotSize")} settingKey="mascotSize">
+              {/* A native range: dragging a size and watching it change is the
+                  whole interaction, and the platform's own control does it with
+                  keyboard support and a11y for free. */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min={90}
+                  max={240}
+                  step={10}
+                  value={settings.mascotSize}
+                  aria-label={t("settings.mascotSize")}
+                  onChange={(e) => settings.set({ mascotSize: Number(e.target.value) })}
+                  className="flex-1 accent-accent"
+                />
+                <span className="w-12 text-right text-xs tabular-nums text-faint">
+                  {settings.mascotSize}px
+                </span>
+              </div>
+            </Field>
+          </>
+        )}
       </Section>
 
       <TerminalSettings />

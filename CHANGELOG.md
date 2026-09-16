@@ -11,6 +11,49 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **A mascot that shows what the agent is doing.** A small owl in a corner of the
+  screen — its own always-on-top window, click-through everywhere except the
+  character and its bubble, never taking focus. It thinks while an agent works,
+  settles when the turn is handed back, and puts on the face of someone about to
+  ask a question when the agent is blocked. Off by default; *Settings → System →
+  Notifications* turns it on and picks its corner and size. A tab on its side
+  sends it off the edge of the screen, leaving a thin bar that brings it back;
+  right-click sends it away for good.
+- **`mascot_say`, for the agent.** One MCP verb, one line of plain text, an
+  optional mood. It is the only way words reach the bubble — which is what keeps
+  the bubble honest: the companion never writes its own advice, and never speaks
+  on a timer. Bounded and refused rather than truncated, so an agent knows when
+  its message did not arrive whole.
+
+### Fixed
+
+- **One alert per handoff, not one per command.** Agents call `session_done` far
+  more often than they finish — once for every command that returns — so the
+  "agent is back" notification fired all through a task. The instruction now says
+  the moment plainly (call it when your next act is to *wait for the user*), and
+  Reado coalesces a run of handoffs into a single alert carrying the last summary,
+  for the agents that say it anyway.
+- **A closed file no longer saves its caret afterwards.** The per-file caret
+  position is written on a 300ms debounce, and closing the file inside it let the
+  write land anyway — reading the project root at *that* moment, so closing a file
+  and switching project within the debounce filed its caret under the new root.
+- **The bundled `reado` CLI is reachable even when `~/.local/bin` isn't on your
+  PATH.** The app installs the CLI there and used to assume the shell's profile
+  added it; where it doesn't, `reado` was installed and unreachable — so the MCP
+  server an agent is told to call (`session_done` and the rest) never started. The
+  install directory is now prepended to the PATH of everything the app spawns, the
+  integrated terminal included.
+
+### Changed
+
+- **The Terminal tab is always there.** Closing the terminal no longer removes its
+  tab from the bottom dock — the tab stays on the strip, and clicking it starts a
+  shell in the project folder when none is running. Closing it hands the
+  selection to a sibling tab, so a selected tab is never a tab with nothing
+  behind it.
+
 ## [1.21.0] — 2026-09-16
 
 ### Added

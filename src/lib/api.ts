@@ -1593,3 +1593,16 @@ export const vaultOtp = (id: string) => invoke<string>("vault_otp", { id })
 /** Save a new login for `url`, and return the generated password to fill with. */
 export const vaultCreate = (url: string, title: string, username: string) =>
   invoke<string>("vault_create", { url, title, username })
+
+/** Show or hide the companion window. The backend owns the window itself, so
+ *  the setting flipping is the only thing the app has to say. */
+export const mascotShow = (show: boolean, corner: string, size: number) =>
+  invoke<void>("mascot_show", { show, corner, size })
+
+/** Which rectangle of the companion window is solid, in CSS pixels relative to
+ *  its own top-left. Everything outside it lets the pointer through. */
+export const mascotHitRect = (x: number, y: number, w: number, h: number) =>
+  invoke<void>("mascot_hit_rect", { x, y, w, h })
+
+/** The companion was clicked: bring Reado forward. */
+export const mascotRaise = () => invoke<void>("mascot_raise")

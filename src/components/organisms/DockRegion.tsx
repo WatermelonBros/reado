@@ -31,6 +31,7 @@ import {
   type PanelId,
   useLayout,
 } from "@/lib/layout"
+import { openPanel } from "@/lib/panels"
 import { usePreview } from "@/lib/preview"
 import { useReasoning } from "@/lib/reasoning"
 import { useSettings } from "@/lib/store"
@@ -181,10 +182,22 @@ export function DockRegion({ area }: { area: DockArea }) {
   // Only render groups that have at least one *open* panel; keep their real ids so
   // resize/move act on the model, but hide closed tabs — and re-point `active` to a
   // still-open tab so we never render a panel that's actually closed.
+  // The terminal keeps its tab even when closed: it is the one panel you reach
+  // for constantly, and clicking the tab starts a shell in the project folder.
+  const keepTab = (id: PanelId) => isOpen(id) || id === "terminal"
   const groups = areaState.groups
     .map((g) => {
-      const tabs = g.tabs.filter(isOpen)
-      const active = tabs.includes(g.active) ? g.active : tabs[0]
+      const tabs = g.tabs.filter(keepTab)
+      // The selected tab is the one being shown, so it has to be one that *has*
+      // something to show: closing the terminal hands the selection to a
+      // sibling rather than leaving its own tab selected above an empty box.
+      // With nothing else open the tab keeps the selection and waits to be
+      // clicked — which is what starts a shell.
+      const open = tabs.filter(isOpen)
+      const active =
+        tabs.includes(g.active) && (isOpen(g.active) || open.length === 0)
+          ? g.active
+          : (open[0] ?? tabs[0])
       return { ...g, tabs, active }
     })
     .filter((g) => g.tabs.length > 0)
@@ -211,6 +224,9 @@ export function DockRegion({ area }: { area: DockArea }) {
       window.removeEventListener("pointerup", onUp)
       if (!active) {
         activate(id)
+        // Clicking a closed tab (the terminal's, which stays on the strip) opens
+        // it — a tab that shows nothing when pressed reads as broken.
+        openPanel(id)
         return
       }
       const target = dropTargetAt(ev.clientX, ev.clientY)
@@ -465,7 +481,7 @@ export function DockRegion({ area }: { area: DockArea }) {
                         : "hidden"
                     }
                   >
-                    {renderPanel(id)}
+                    {isOpen(id) && renderPanel(id)}
                   </div>
                 ))}
                 {/* Split target: a thick accent frame over the body, shown only while

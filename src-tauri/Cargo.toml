@@ -30,7 +30,7 @@ mdns = ["dep:mdns-sd"]
 [dependencies]
 # `protocol-asset` serves project files (markdown-preview images) to the webview
 # through `asset:`; the scope stays empty until a project grants its own root.
-tauri = { version = "2", features = ["unstable", "protocol-asset"] }
+tauri = { version = "2", features = ["unstable", "protocol-asset", "macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 # Signed auto-updates (checks an update endpoint, verifies the signature).
