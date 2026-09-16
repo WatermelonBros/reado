@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.22.0] — 2026-09-16
+
 ### Added
 
 - **A mascot that shows what the agent is doing.** A small owl in a corner of the
@@ -2353,6 +2355,7 @@ Initial public releases (0.1.0 – 0.1.19).
 - Persist terminal dock position and size across restarts.
 
 [Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.21.0...HEAD
+[1.22.0]: https://github.com/WatermelonBros/reado/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/WatermelonBros/reado/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/WatermelonBros/reado/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/WatermelonBros/reado/compare/v1.18.0...v1.19.0
