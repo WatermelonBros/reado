@@ -4,8 +4,18 @@
 // verdict regex leaves every test forever "not run".
 import { describe, expect, it } from "vitest"
 
+import type { TestFile } from "@/lib/api"
 import { decodePtyOutput } from "@/lib/terminals"
-import { idsFor, isStale, RUNNERS, testId } from "@/lib/testing"
+import {
+  commandFor,
+  type Dynamic,
+  idsFor,
+  isStale,
+  namePattern,
+  RUNNERS,
+  testId,
+  withoutRunning,
+} from "@/lib/testing"
 
 /** The verdict a framework prints on one line: its path, and its status. */
 const read = (framework: string, line: string) => RUNNERS[framework].read(line)
@@ -120,7 +130,13 @@ describe("test identity", () => {
 })
 
 describe("a remembered verdict", () => {
-  const file = { path: "src/a.test.ts", framework: "vitest", tests: [], modified: 2_000 }
+  const file = {
+    path: "src/a.test.ts",
+    framework: "vitest",
+    project: "",
+    tests: [],
+    modified: 2_000,
+  }
   const ran = (at: number) => ({ status: "pass" as const, at })
 
   it("still counts while the file has not moved on", () => {
@@ -218,5 +234,120 @@ describe("choosing which tests a verdict is about", () => {
 
   it("answers nothing for a name no test in the run has", () => {
     expect(idsFor(byLeaf, ["src/c.test.ts", "unknown"])).toEqual([])
+  })
+})
+
+describe("the directory a framework is run from", () => {
+  const file = (path: string, framework: string, project: string): TestFile => ({
+    path,
+    framework,
+    project,
+    tests: [],
+  })
+
+  it("runs from the project root when the manifest is there", () => {
+    expect(
+      commandFor(RUNNERS.vitest, "/repo", [file("src/a.test.ts", "vitest", "")], {
+        framework: "vitest",
+      }),
+    ).toBe("npx vitest run --reporter=verbose")
+  })
+
+  it("cds into each project, with paths relative to it", () => {
+    // The bug this exists for: `cargo test` at the root of a repo whose crates
+    // live in `crates/*` fails with "could not find Cargo.toml" — and `npx
+    // vitest`, `go test` and `pytest` fail the same way, one directory out.
+    expect(
+      commandFor(
+        RUNNERS.cargo,
+        "/repo",
+        [
+          file("crates/core/src/git.rs", "cargo", "crates/core"),
+          file("crates/core/src/fs.rs", "cargo", "crates/core"),
+          file("src-tauri/src/lib.rs", "cargo", "src-tauri"),
+        ],
+        { framework: "cargo", name: "reads_tags" },
+      ),
+      // `;`, so a failing crate does not hide the next one.
+    ).toBe(
+      "cd /repo/crates/core && cargo test reads_tags; cd /repo/src-tauri && cargo test reads_tags",
+    )
+
+    expect(
+      commandFor(RUNNERS.vitest, "/repo", [file("web/src/a.test.ts", "vitest", "web")], {
+        framework: "vitest",
+        file: "web/src/a.test.ts",
+      }),
+    ).toBe("cd /repo/web && npx vitest run --reporter=verbose src/a.test.ts")
+
+    expect(
+      commandFor(RUNNERS.go, "/repo", [file("svc/pkg/a_test.go", "go", "svc")], {
+        framework: "go",
+        file: "svc/pkg/a_test.go",
+      }),
+    ).toBe("cd /repo/svc && go test ./pkg/")
+
+    expect(
+      commandFor(RUNNERS.pytest, "/repo", [file("api/tests/test_a.py", "pytest", "api")], {
+        framework: "pytest",
+        file: "api/tests/test_a.py",
+      }),
+    ).toBe("cd /repo/api && pytest -v tests/test_a.py")
+  })
+
+  it("still runs, from the root, when nothing was discovered", () => {
+    expect(commandFor(RUNNERS.pytest, "/repo", [], { framework: "pytest" })).toBe("pytest -v")
+  })
+})
+
+describe("verdicts that outlive the window", () => {
+  it("forgets a run cut short by the window closing", () => {
+    // A reload mid-run used to leave every test it had started spinning for the
+    // rest of the project's life — the status is a claim about a process.
+    expect(
+      withoutRunning({
+        "/repo": {
+          "a \u203a one": { status: "pass", at: 1 },
+          "a \u203a two": { status: "running", at: 0 },
+          "a \u203a three": { status: "fail", at: 2 },
+        },
+      }),
+    ).toEqual({
+      "/repo": {
+        "a \u203a one": { status: "pass", at: 1 },
+        "a \u203a three": { status: "fail", at: 2 },
+      },
+    })
+  })
+})
+
+describe("tests whose name is built at runtime", () => {
+  it("reads what was written as the pattern it is", () => {
+    // Nine of this project's own tests are declared in a loop. They ran, they
+    // passed, and the tree said "not run" — because `${tool} renders …` is never
+    // what the framework prints.
+    const re = namePattern(`\${tool} renders \${EXPECTED[tool]}`)
+    expect(re?.test("files renders FileTree")).toBe(true)
+    expect(re?.test("renders")).toBe(false)
+    // Regex metacharacters in the literal halves are literal.
+    expect(namePattern(`\${id} runs (a.b) now`)?.test("menu.open runs (a.b) now")).toBe(true)
+    expect(namePattern(`\${id} runs (a.b) now`)?.test("menu.open runs axb now")).toBe(false)
+    // A plain name is a plain name.
+    expect(namePattern("does a thing")).toBeNull()
+    // Nothing but an interpolation would match every line printed — worse than
+    // leaving it unjudged.
+    expect(namePattern(`\${name}`)).toBeNull()
+  })
+
+  it("is the last resort, never a shortcut past a real match", () => {
+    const byLeaf = new Map([["does a thing", ["a.test.ts \u203a does a thing"]]])
+    const dynamic: Dynamic[] = [{ id: `b.test.ts \u203a \${x} a thing`, re: /^.+ a thing$/ }]
+    // A test that is actually called that wins outright.
+    expect(idsFor(byLeaf, ["does a thing"], dynamic)).toEqual(["a.test.ts \u203a does a thing"])
+    // Only a name no test carries falls through to the patterns.
+    expect(idsFor(byLeaf, ["something else a thing"], dynamic)).toEqual([
+      `b.test.ts \u203a \${x} a thing`,
+    ])
+    expect(idsFor(byLeaf, ["unrelated"], dynamic)).toEqual([])
   })
 })

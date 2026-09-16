@@ -673,6 +673,12 @@ export function runMenuCommand(id: string): void {
     case "graph":
       workspace.toggleGraph(true)
       break
+    // No menu item names this one: the graph is opened from the Git panel's
+    // menu and the palette. The id exists so it is rebindable like everything
+    // else — a command without one cannot be bound to a key at all.
+    case "git:graph":
+      workspace.toggleGitGraph(true)
+      break
     case "docs":
       workspace.toggleDocs(true)
       break
@@ -801,6 +807,7 @@ export function knownCommands(): Set<string> {
     "settings",
     "checkUpdates",
     "graph",
+    "git:graph",
     "docs",
     "terminal",
     "zoom:in",

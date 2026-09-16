@@ -115,6 +115,12 @@ function injectCommentBox(c: Comment): void {
 /** Where a non-URL address-bar entry goes. */
 const SEARCH = "https://duckduckgo.com/?q="
 
+/** How often to look for a dev server, while looking is still finding something. */
+const PROBE_MS = 2000
+/** …and the ceiling it backs off to while it is not. Each probe opens a socket
+ *  per candidate port, so the idle case has to be cheap. */
+const PROBE_MAX_MS = 30_000
+
 /** Turn whatever was typed into a navigable URL: a bare host gets a scheme (http
  *  when it looks local — loopback, a dev TLD, or an explicit port — https otherwise,
  *  since plain http to a public host is blocked by the platform), and anything that
@@ -736,8 +742,13 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
         return ""
       }
     }
-    const check = async () => {
-      if (!alive) return
+    // True when there is nothing left to look for — the page is talking, or a
+    // server answered. False means the probe found nothing and is worth slowing
+    // down: it opens a socket per candidate port, and a pane left pointed at a
+    // server that is not running would otherwise knock on every one of them
+    // every two seconds, for as long as the pane is open.
+    const check = async (): Promise<boolean> => {
+      if (!alive) return true
       // The page is up and talking: leave it alone. This check exists for a pane
       // pointed at a server that isn't running yet — not to drag a working page
       // back to the address Reado last wrote down. It used to do exactly that:
@@ -746,14 +757,14 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       // never changed and Back had nothing to go back to.
       if (pageAlive.current) {
         wasLive.current = true
-        return
+        return true
       }
       const curUrl = usePreview.getState().url
       let live: string[] = []
       try {
         live = await previewDetectUrls(root, curUrl)
       } catch {
-        return
+        return false
       }
       const curLive = live.some((u) => origin(u) === origin(curUrl))
       if (curLive) {
@@ -770,12 +781,21 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
           openAt(live[0])
         }
       }
+      return curLive || live.length > 0
     }
-    void check()
-    const id = window.setInterval(check, 2000)
+    // Two seconds while something is there to find, doubling to half a minute
+    // while nothing is: a dev server that starts later is still picked up, and a
+    // pane sitting on a dead address stops hammering the machine.
+    let delay = PROBE_MS
+    let timer = 0
+    const tick = async () => {
+      delay = (await check()) ? PROBE_MS : Math.min(delay * 2, PROBE_MAX_MS)
+      if (alive) timer = window.setTimeout(tick, delay)
+    }
+    timer = window.setTimeout(tick, 0)
     return () => {
       alive = false
-      window.clearInterval(id)
+      window.clearTimeout(timer)
     }
   }, [root, openAt])
 

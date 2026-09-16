@@ -14,6 +14,7 @@
 //! the list absolutely — running a test asks the framework by name, and the
 //! framework is the authority on what exists.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -46,6 +47,12 @@ pub struct TestFile {
     pub path: String,
     /// `vitest`, `jest`, `cargo`, `pytest` or `go`.
     pub framework: String,
+    /// The directory the framework has to be run from — the nearest manifest at
+    /// or above the file, project-relative, `""` for the project root. A test
+    /// runner invoked anywhere else is an error, not a slower run: `cargo test`
+    /// outside a crate, `npx vitest` outside the package that installed it, and
+    /// `go test` outside the module all fail before they look at a test.
+    pub project: String,
     pub tests: Vec<TestItem>,
     /// Last-modified time in ms since the epoch. A verdict remembered from a
     /// previous session is only worth showing while the file it judged has not
@@ -167,7 +174,22 @@ fn extract_rust(content: &str) -> Vec<TestItem> {
     // `mod` seen before the test is the one it is in.
     let mut module: Vec<String> = Vec::new();
     let mut attributed = false;
+    // Raw strings are skipped whole: a file that tests a *parser of Rust* keeps
+    // Rust in a `r#"…"#` fixture, and reading that as code invents tests nobody
+    // can run — this very module had two of them, forever "not run" in the panel
+    // because no framework ever reports a test that does not exist.
+    let mut in_raw = false;
     for (i, line) in content.lines().enumerate() {
+        if in_raw {
+            if line.contains("\"#") {
+                in_raw = false;
+            }
+            continue;
+        }
+        if line.contains("r#\"") && !line.contains("\"#") {
+            in_raw = true;
+            continue;
+        }
         if let Some(m) = p.rust_mod.captures(line) {
             module = vec![m[1].to_string()];
         }
@@ -245,6 +267,52 @@ pub fn extract(framework: &str, content: &str) -> Vec<TestItem> {
     }
 }
 
+/// The manifests that say "a project of this framework starts here".
+fn manifests(framework: &str) -> &'static [&'static str] {
+    match framework {
+        "cargo" => &["Cargo.toml"],
+        "vitest" | "jest" => &["package.json"],
+        "pytest" => &["pyproject.toml", "setup.py", "setup.cfg", "tox.ini"],
+        "go" => &["go.mod"],
+        _ => &[],
+    }
+}
+
+/// The directory a file's framework has to run from: the nearest ancestor (the
+/// file's own directory first, the project root last) holding one of the
+/// framework's manifests. `""` is the root, which is also the answer when there
+/// is no manifest anywhere — the runner is no worse off than it was.
+///
+/// `seen` caches per directory: a project has many test files and few
+/// directories, and the walk above visits them in bulk.
+fn project_of(
+    root: &Path,
+    rel: &str,
+    framework: &str,
+    seen: &mut HashMap<String, String>,
+) -> String {
+    let dir = rel.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+    let key = format!("{framework}\u{0}{dir}");
+    if let Some(hit) = seen.get(&key) {
+        return hit.clone();
+    }
+    let names = manifests(framework);
+    let mut at = dir;
+    let found = loop {
+        if names.iter().any(|n| root.join(at).join(n).is_file()) {
+            break at.to_string();
+        }
+        match at.rsplit_once('/') {
+            Some((up, _)) => at = up,
+            // "" is the root, and it was just checked.
+            None if at.is_empty() => break String::new(),
+            None => at = "",
+        }
+    };
+    seen.insert(key, found.clone());
+    found
+}
+
 /// Every test in the project, grouped by file.
 ///
 /// Gitignore-aware (so `node_modules` and `target` are not walked), bounded, and
@@ -258,6 +326,7 @@ pub fn discover_tests(root: String) -> Vec<TestFile> {
     let root_path = Path::new(&root);
     let mut out: Vec<TestFile> = Vec::new();
     let mut total = 0usize;
+    let mut projects: HashMap<String, String> = HashMap::new();
     // `require_git(false)`: without it the walker only honours `.gitignore`
     // inside a repository, and a project that is not one gets its whole
     // `node_modules` walked — which is both wrong (those tests are not the
@@ -294,6 +363,7 @@ pub fn discover_tests(root: String) -> Vec<TestFile> {
         }
         total += tests.len();
         out.push(TestFile {
+            project: project_of(root_path, &rel, framework, &mut projects),
             path: rel,
             framework: framework.to_string(),
             tests,
@@ -310,6 +380,32 @@ pub fn discover_tests(root: String) -> Vec<TestFile> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_is_owned_by_the_nearest_manifest_above_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("crates/core/src")).unwrap();
+        std::fs::write(root.join("crates/core/Cargo.toml"), "").unwrap();
+        std::fs::create_dir_all(root.join("web/src")).unwrap();
+        std::fs::write(root.join("web/package.json"), "{}").unwrap();
+        let mut seen = HashMap::new();
+        assert_eq!(
+            project_of(root, "crates/core/src/git.rs", "cargo", &mut seen),
+            "crates/core"
+        );
+        assert_eq!(
+            project_of(root, "web/src/a.test.ts", "vitest", &mut seen),
+            "web"
+        );
+        // No manifest anywhere above it: the root, which is where it ran before.
+        assert_eq!(project_of(root, "stray/a.test.ts", "vitest", &mut seen), "");
+        // The cache is per framework: the crate's directory is not the package's.
+        assert_eq!(
+            project_of(root, "crates/core/src/other.rs", "cargo", &mut seen),
+            "crates/core"
+        );
+    }
 
     #[test]
     fn reads_nested_suites_out_of_a_js_test_file() {
@@ -350,6 +446,17 @@ mod tests {
         let names: Vec<_> = items.iter().map(|i| i.name.as_str()).collect();
         assert_eq!(names, ["plain", "asynchronous"]);
         assert_eq!(items[0].suites, ["tests"]);
+    }
+
+    #[test]
+    fn does_not_invent_tests_out_of_a_raw_string_fixture() {
+        // The shape this module's own tests are written in: Rust inside a raw
+        // string. Those are data, not tests — counting them leaves the panel
+        // with tests that can never run.
+        let src = "fn make() -> &'static str {\n    r#\"\n#[test]\nfn phantom() {}\n\"#\n}\n#[test]\nfn real() {}\n";
+        let items = extract("cargo", src);
+        let names: Vec<_> = items.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, ["real"]);
     }
 
     #[test]

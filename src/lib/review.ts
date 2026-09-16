@@ -104,10 +104,14 @@ export function composeExplainPrompt(
 
 // ---- Guided Pair Review --------------------------------------------------
 //
-// The agent drives the session through the `reado session`/`reado review` CLI:
-// it plans a route, reviews file by file and **proposes** artifacts the human
-// disposes of. Reado never calls an LLM directly — these single-line prompts
-// (TUI submit) hand the session id to the agent and tell it which verb to run.
+// The agent drives the session through Reado's MCP tools, with the
+// `reado session`/`reado review` CLI as the fallback for agents that have no
+// MCP: it plans a route, reviews file by file and **proposes** artifacts the
+// human disposes of. Reado never calls an LLM directly — these single-line
+// prompts (TUI submit, so no embedded newlines) hand over the session id and
+// name the verbs; the contract itself is carried by the MCP server's
+// instructions, which reach every agent rather than one vendor's system-prompt
+// flag.
 
 /** A PR fetched in place — head/base git refs to read the change from without
  *  ever touching the working tree. Derivable from the PR number. */
@@ -116,30 +120,116 @@ export interface PrRefs {
   base: string
 }
 
-/** Kick off the planning pass: read the scope and emit a ranked route. When the
- *  scope is a PR, the change lives in git refs (not the working tree), so the
- *  agent is told to read it non-destructively via `git diff`/`git show`. */
-export function composeGuidedPlanPrompt(sessionId: string, scopeDesc: string, pr?: PrRefs): string {
+/** What the planner is told about the scope, when Reado can know it.
+ *
+ *  `files` is the scope's file set as git reports it (untracked included) — the
+ *  thing the agent would otherwise re-derive from a `git diff` that doesn't show
+ *  untracked files. Empty for the scopes Reado cannot enumerate: a PR lives in
+ *  refs, a free-text request has no set. */
+export interface PlanFacts {
+  objective?: string
+  files?: string[]
+  pr?: PrRefs
+}
+
+/** How the agent reaches the session. Every verb exists twice — as an MCP tool
+ *  with typed arguments and as a CLI command — because not every agent speaks
+ *  MCP, and the one that does should not be composing shell quoting around a
+ *  JSON array. Named in that order so the structured channel is the default. */
+const TOOLS =
+  "Use Reado's MCP tools if you have them (session_show, review_context, review_plan, " +
+  "review_propose_route_change, review_propose_comment, review_propose, review_summarize_file); " +
+  "otherwise use the equivalent `reado session` / `reado review` commands."
+
+/** How many of the scope's files the planning prompt names before deferring to
+ *  the session. The prompt is typed into a terminal, so its length is a real
+ *  cost; the session is where the complete list lives. */
+const PLAN_FILES_NAMED = 60
+
+/** Kick off the planning pass: read the scope and emit a ranked route.
+ *
+ *  The objective is stated here, not only in the per-file prompt: it is what the
+ *  ranking is *for*, and a route ordered by generic risk is the wrong route for a
+ *  security pass. The known file set is stated too — Reado already read it from
+ *  git, and asking the agent to rediscover it invites a plain `git diff` that
+ *  silently omits untracked files. */
+export function composeGuidedPlanPrompt(
+  sessionId: string,
+  scopeDesc: string,
+  facts: PlanFacts = {},
+): string {
+  const { objective, files, pr } = facts
   const inspect = pr
     ? `This PR is fetched locally as git refs — the working tree is NOT the PR, so do NOT check anything out or edit it. ` +
       `Inspect the change with \`git diff ${pr.base}...${pr.head}\` and read file versions with \`git show ${pr.head}:<path>\`, `
     : "inspect the changed files (git diff, the tree, symbols, existing comments), "
+  // A 200-file diff would otherwise put 200 paths into a line the pane types
+  // character by character. The named few orient the ranking; the session holds
+  // the whole set, and the answer to review_plan names every file left out — so
+  // capping the prompt costs nothing the agent needs.
+  const named = (files ?? []).slice(0, PLAN_FILES_NAMED)
+  const rest = (files?.length ?? 0) - named.length
+  // The coverage contract only exists where Reado knows the file set; without
+  // one, asserting anything about completeness would be inventing it.
+  const coverage = files?.length
+    ? `Reado already read the scope from git — these ${files.length} files changed (untracked included): ${named.join(", ")}` +
+      (rest > 0
+        ? ` (+${rest} more — read the full set from the session's expectedFiles). `
+        : ". ") +
+      "Every one must end up in your route or be marked out of scope; the answer to review_plan lists the ones you left out. " +
+      "Leaving a file out because it needs no review is an answer — leaving it out in silence is not. "
+    : ""
   return (
     `READO GUIDED REVIEW — planning pass for session ${sessionId} (scope: ${scopeDesc}). ` +
-    `Run \`reado session show ${sessionId} --json\` for context, ${inspect}then propose an ordered review route. ` +
+    (objective
+      ? `Objective: ${objective} — let it shape what you look for and where you go deep. `
+      : "") +
+    `${TOOLS} Read the session for context, ${inspect}then propose an ordered review route. ` +
+    coverage +
     // The route is only as good as what informed it: the project states its own
     // intent in its specs and docs, and a file that contradicts the spec it
     // implements is exactly what a route should surface early.
     "Before ranking, read what the project says about itself: any `openspec/` or " +
     "`.specify/` change proposals and capability specs that cover this scope, the " +
-    "README and `docs/**`, and the existing Reado comments (`reado comment list --json`). " +
+    "README and `docs/**`, and the existing Reado comments. " +
     "Weigh a file higher when it implements a documented capability, when it " +
     "contradicts one, or when it is referenced from several of those documents. " +
-    `Emit the route with \`reado review plan ${sessionId} --route '<json>'\` where <json> is an array of ` +
-    '{"file","priority","reason","suggestedReviewMode":"quick|normal|deep","relatedFiles":[...]} ' +
-    "ranked by risk (diff size, role, dependents, files with comments, documented intent). " +
-    "Cite which document moved a file up in its `reason`. Do NOT review deeply yet " +
-    "and do NOT change any code — just plan the route."
+    "Each route entry is " +
+    '{"file","priority","reason","suggestedReviewMode":"quick|normal|deep","relatedFiles":[...]}. ' +
+    // The route is a reading order, not a triage queue. Ranking by risk alone
+    // drops the reviewer into the middle of a change with no context — and a
+    // reviewer who does not understand the change cannot judge it, however
+    // risky the file they were handed first.
+    "ORDER THE ROUTE SO THE CHANGE READS. " +
+    "1) Start where the change starts: the file that carries its intent, or the spec, doc or test that states it. " +
+    "2) Then go in the order that makes each next file make sense — definition before use, " +
+    "producer before consumer, the changed function before its callers. " +
+    "3) Keep together what has to be read together (a file and its test, a type and its implementation, " +
+    "a migration and the code that reads it) and name those in `relatedFiles`. " +
+    "4) Leave for last what carries no understanding: generated output, lockfiles, snapshots, mechanical renames. " +
+    "Risk orders files *within* that reading, it does not replace it: among files the reader is equally ready for, " +
+    "the riskiest first (diff size, role, dependents, files with comments, documented intent). " +
+    "Each `reason` says why the file sits *there* — what the reader already knows by the time they reach it — " +
+    "not only why it matters; cite which document moved a file up. " +
+    "Set `suggestedReviewMode` by how much judgement the file needs: `deep` for the logic the change turns on and " +
+    "for money, security, data and error paths; `normal` for ordinary edits; `quick` for mechanical or generated ones. " +
+    "Not every file needs reading: one whose change is purely mechanical is `quick`, or out of scope with a reason. " +
+    "Covering the scope means every file is accounted for, not that every file is read closely. " +
+    "Do NOT review deeply yet and do NOT change any code — just plan the route."
+  )
+}
+
+/** Ask the agent to close a coverage gap the human can see in the panel: files
+ *  the scope contains that the route never picked up. It answers with a route
+ *  *change*, which the human then accepts — the route is not edited behind them. */
+export function composeGuidedCoverPrompt(sessionId: string, files: string[]): string {
+  return (
+    `READO GUIDED REVIEW — session ${sessionId} has files in scope that your route left out: ${files.join(", ")}. ` +
+    `${TOOLS} Look at each one, then either propose a route change that includes it ` +
+    "(review_propose_route_change with the whole new route and a reason — the human accepts it, it does not apply by itself), " +
+    "or mark it out of scope (`reado session set-file " +
+    `${sessionId} --file <path> --state out-of-scope\`) and say why in a session decision. ` +
+    "Do NOT change any code."
   )
 }
 
@@ -159,17 +249,16 @@ export function composeGuidedWidenPrompt(sessionId: string, files: string[]): st
     ? `the subsystem around: ${files.slice(0, 12).join(", ")}`
     : "the whole reviewed scope"
   return (
-    `READO GUIDED REVIEW — WIDE PASS for session ${sessionId}. ` +
-    `Run \`reado session show ${sessionId} --json\` first to see what the narrow pass already found. ` +
-    `Now widen to ${scope} and look for what a file-by-file walk cannot see:\n` +
-    "1. Repeated patterns — the same mistake, workaround or duplication in several files.\n" +
-    "2. Drift from the documented intent — compare against the project's specs " +
-    "(`openspec/`, `.specify/`) and docs; a capability that says one thing while the code does another.\n" +
-    "3. Structural risk — a boundary crossed in one place only, state owned in two, a dependency going the wrong way.\n" +
-    "4. Evidence — run the project's tests and typecheck; report what actually fails rather than what might.\n" +
-    `Propose what you find as session artifacts (\`reado review propose-comment ${sessionId} …\`, ` +
-    `or \`reado review propose ${sessionId} --kind question …\`), and record the overall read with ` +
-    `\`reado session summarize ${sessionId} "<what the wide pass found>"\`. ` +
+    `READO GUIDED REVIEW — WIDE PASS for session ${sessionId}. ${TOOLS} ` +
+    "Read the session first to see what the narrow pass already found. " +
+    `Now widen to ${scope} and look for what a file-by-file walk cannot see: ` +
+    "(1) repeated patterns — the same mistake, workaround or duplication in several files; " +
+    "(2) drift from the documented intent — compare against the project's specs " +
+    "(`openspec/`, `.specify/`) and docs; a capability that says one thing while the code does another; " +
+    "(3) structural risk — a boundary crossed in one place only, state owned in two, a dependency going the wrong way; " +
+    "(4) evidence — run the project's tests and typecheck; report what actually fails rather than what might. " +
+    "Propose what you find as session artifacts (review_propose_comment / review_propose --kind question), " +
+    "and record the overall read as the session summary. " +
     "Do NOT change any code and do NOT accept anything — the human disposes of every proposal."
   )
 }
@@ -189,13 +278,17 @@ export function composeGuidedFilePrompt(
     : "Read the file and "
   return (
     `READO GUIDED REVIEW — review \`${file}\` for session ${sessionId} (${mode} pass).${focus} ` +
-    `Run \`reado review context ${sessionId} --file ${file} --json\` first. ${read}` +
-    "raise concrete, grounded observations — never broad generic remarks. For each, PROPOSE a " +
-    `comment: \`reado review propose-comment ${sessionId} --file ${file} --line <n> [--end <m>] ` +
-    '--type <bug|refactor|performance|question|note> "<body>"`. ' +
-    `Open questions → \`reado review propose ${sessionId} --kind question --file ${file} --line <n> "<q>"\`; ` +
-    "if you can't judge without more context, use `--kind needs-context` instead of guessing. " +
-    `When done, capture a mini-summary: \`reado review summarize-file ${sessionId} --file ${file} "<what you checked / risks / next>"\`. ` +
+    `${TOOLS} Read the file's session context first (review_context). ${read}` +
+    "raise concrete, grounded observations — never broad generic remarks. Propose each as an anchored " +
+    "comment (review_propose_comment, type bug|refactor|performance|question|note); open questions as " +
+    "review_propose --kind question; and if you can't judge without more context, --kind needs-context " +
+    "instead of guessing. " +
+    // The route is a plan made before the code was read; the file that turns out
+    // to matter is discovered here. Without naming this verb the agent's only
+    // options are to review off-route silently or to say nothing.
+    "If this file shows that another one must be reviewed (its only caller, the place the same bug repeats), " +
+    "propose a route change with your reason (review_propose_route_change) — it waits for the human, so keep reviewing. " +
+    "When done, capture a mini-summary of what you checked, the risks and what's next (review_summarize_file). " +
     "Do NOT change any code and do NOT accept anything — the human disposes of every proposal."
   )
 }
@@ -203,10 +296,10 @@ export function composeGuidedFilePrompt(
 /** Ask a second agent to challenge the current review (a contrarian pass). */
 export function composeGuidedChallengePrompt(sessionId: string, file: string): string {
   return (
-    `READO GUIDED REVIEW — second opinion for session ${sessionId} on \`${file}\`. ` +
-    `Run \`reado review context ${sessionId} --file ${file} --json\` to see the existing findings, ` +
+    `READO GUIDED REVIEW — second opinion for session ${sessionId} on \`${file}\`. ${TOOLS} ` +
+    "Read the existing findings for that file (review_context), " +
     "then challenge them: which are false positives, what was missed, what's over-stated? " +
-    `Record your challenges as proposals (\`reado review propose-comment\` / \`reado review propose ${sessionId} --kind question\`). ` +
+    "Record your challenges as proposals (review_propose_comment / review_propose --kind question). " +
     "Do NOT change any code; surface disagreements as proposals the human decides on."
   )
 }

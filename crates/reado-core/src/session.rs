@@ -161,6 +161,22 @@ fn default_mode() -> ReviewMode {
     ReviewMode::Normal
 }
 
+/// A routing change the agent proposed mid-session, held until the human
+/// disposes of it. The route is carried whole rather than as a patch: the agent
+/// decides the new order, and the human reads one list instead of a diff of
+/// operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteChange {
+    pub id: String,
+    pub route: Vec<RouteEntry>,
+    pub reason: String,
+    pub author: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    pub created_at: u64,
+}
+
 /// Per-file status plus its running mini-summary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -219,6 +235,17 @@ pub struct Session {
     pub files: Vec<FileEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub proposals: Vec<Proposal>,
+    /// The files this scope is known to contain, captured when the session was
+    /// created. Only the scopes Reado can enumerate without an LLM fill it (the
+    /// working tree's changes, a branch range); a PR lives in git refs and a
+    /// free-text request has no set, so for those it stays empty and nothing is
+    /// asserted about coverage.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub expected_files: Vec<String>,
+    /// A route change the agent proposed, pending the human's decision. The
+    /// current route keeps running until then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route_change: Option<RouteChange>,
     /// The session-level recap, set on summarize/close.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
@@ -236,6 +263,10 @@ pub struct NewSession {
     pub scope: ReviewScope,
     #[serde(default)]
     pub objective: Option<Objective>,
+    /// The scope's file set, when the caller can enumerate it (see
+    /// [`Session::expected_files`]).
+    #[serde(default)]
+    pub expected_files: Vec<String>,
 }
 
 /// Input for a proposed artifact (the agent's `propose-*` calls).
@@ -299,6 +330,8 @@ pub fn create_session(root: &str, input: NewSession, agent: Option<String>) -> R
         route: Vec::new(),
         files: Vec::new(),
         proposals: Vec::new(),
+        expected_files: input.expected_files,
+        route_change: None,
         summary: None,
         agent,
         created_at: now,
@@ -345,27 +378,105 @@ fn mutate(root: &str, id: &str, f: impl FnOnce(&mut Session)) -> Result<Session>
     Ok(session)
 }
 
-/// Replace the proposed route and seed per-file entries for any new files.
-/// Setting a route moves the session from planning to in-review.
+/// Install `route` on `s`, seeding a queued file entry for anything new and
+/// keeping the cursor in range. Shared by the planning pass and by accepting a
+/// route change, so both enter review the same way.
+fn apply_route(s: &mut Session, route: Vec<RouteEntry>) {
+    for entry in &route {
+        if !s.files.iter().any(|f| f.file == entry.file) {
+            s.files.push(FileEntry {
+                file: entry.file.clone(),
+                state: FileState::Queued,
+                summary: None,
+            });
+        }
+    }
+    s.route = route;
+    // Keep the cursor in range: a shorter new route must not leave position
+    // past the end, or `route[position]` panics in consumers (the UI/CLI).
+    s.position = s.position.min(s.route.len().saturating_sub(1));
+    if s.status == SessionStatus::Planning {
+        s.status = SessionStatus::InReview;
+    }
+}
+
+/// Set the planned route and seed per-file entries for any new files. Setting a
+/// route moves the session from planning to in-review.
+///
+/// A session that already has a route is refused: that route is the one the human
+/// is walking, and replacing it wholesale behind them is exactly what
+/// [`propose_route_change`] exists to prevent. The error names that verb, because
+/// its reader is an agent choosing what to call next.
 pub fn set_route(root: &str, id: &str, route: Vec<RouteEntry>) -> Result<Session> {
+    if !get_session(root, id)?.route.is_empty() {
+        return Err(Error::Rejected(format!(
+            "session {id} already has a route the human is reviewing — propose a change instead (`reado review propose-route-change {id} --route '<json>' --reason \"<why>\"`, or the review_propose_route_change tool)"
+        )));
+    }
+    mutate(root, id, |s| apply_route(s, route))
+}
+
+/// Expected files the route leaves out — the coverage gap.
+///
+/// A file counts as covered when the route names it, or when its per-file state
+/// says it was left out on purpose (`out_of_scope`, or the human skipped it).
+/// Declaring a file out of scope is an answer; omitting it silently is not.
+/// Empty when the scope had no knowable file set (a PR, a free-text request).
+///
+/// Mirrored in TypeScript by `uncoveredFiles` in `src/lib/guidedReview.ts` — the
+/// agent is told through the CLI/MCP answer, the human through the panel, and
+/// both readings must agree.
+pub fn uncovered_files(s: &Session) -> Vec<String> {
+    let routed = |f: &str| s.route.iter().any(|e| e.file == f);
+    let excused = |f: &str| {
+        s.files
+            .iter()
+            .any(|x| x.file == f && matches!(x.state, FileState::OutOfScope | FileState::Skipped))
+    };
+    s.expected_files
+        .iter()
+        .filter(|f| !routed(f) && !excused(f))
+        .cloned()
+        .collect()
+}
+
+/// Record a proposed route change. The current route keeps running: nothing
+/// moves until [`accept_route_change`].
+pub fn propose_route_change(
+    root: &str,
+    id: &str,
+    route: Vec<RouteEntry>,
+    reason: String,
+    author: &str,
+    agent: Option<String>,
+) -> Result<Session> {
+    let change = RouteChange {
+        id: gen_id("rc"),
+        route,
+        reason,
+        author: author.to_string(),
+        agent,
+        created_at: now_millis(),
+    };
+    mutate(root, id, |s| s.route_change = Some(change))
+}
+
+/// Accept the pending route change: it becomes the session's route.
+pub fn accept_route_change(root: &str, id: &str) -> Result<Session> {
+    let Some(change) = get_session(root, id)?.route_change else {
+        return Err(Error::Rejected(format!(
+            "session {id} has no pending route change"
+        )));
+    };
     mutate(root, id, |s| {
-        for entry in &route {
-            if !s.files.iter().any(|f| f.file == entry.file) {
-                s.files.push(FileEntry {
-                    file: entry.file.clone(),
-                    state: FileState::Queued,
-                    summary: None,
-                });
-            }
-        }
-        s.route = route;
-        // Keep the cursor in range: a shorter new route must not leave position
-        // past the end, or `route[position]` panics in consumers (the UI/CLI).
-        s.position = s.position.min(s.route.len().saturating_sub(1));
-        if s.status == SessionStatus::Planning {
-            s.status = SessionStatus::InReview;
-        }
+        apply_route(s, change.route);
+        s.route_change = None;
     })
+}
+
+/// Discard the pending route change, leaving the route as it is.
+pub fn discard_route_change(root: &str, id: &str) -> Result<Session> {
+    mutate(root, id, |s| s.route_change = None)
 }
 
 /// Move the cursor to a specific route index (clamped). Used when the human
@@ -611,16 +722,31 @@ mod tests {
     }
 
     fn start(root: &str) -> Session {
+        start_expecting(root, vec![])
+    }
+
+    fn start_expecting(root: &str, expected: Vec<&str>) -> Session {
         create_session(
             root,
             NewSession {
                 title: "Review the diff".into(),
                 scope: diff_scope(),
                 objective: Some(Objective::BugRisk),
+                expected_files: expected.into_iter().map(str::to_string).collect(),
             },
             Some("claude-code".into()),
         )
         .unwrap()
+    }
+
+    fn entry(file: &str) -> RouteEntry {
+        RouteEntry {
+            file: file.into(),
+            priority: 1,
+            reason: "changed".into(),
+            suggested_review_mode: ReviewMode::Normal,
+            related_files: vec![],
+        }
     }
 
     #[test]
@@ -642,6 +768,7 @@ mod tests {
                     request: Some("evaluate the test suite".into()),
                 },
                 objective: None,
+                expected_files: vec![],
             },
             Some("claude-code".into()),
         )
@@ -822,23 +949,134 @@ mod tests {
     }
 
     #[test]
-    fn set_route_clamps_position_when_route_shrinks() {
+    fn accepting_a_shorter_route_clamps_the_position() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().to_str().unwrap();
         let s = start(root);
-        let entry = |f: &str| RouteEntry {
-            file: f.into(),
-            priority: 1,
-            reason: String::new(),
-            suggested_review_mode: ReviewMode::Normal,
-            related_files: vec![],
-        };
         set_route(root, &s.id, vec![entry("a"), entry("b"), entry("c")]).unwrap();
         set_position(root, &s.id, 2).unwrap(); // point at "c"
-                                               // A shorter route must pull the cursor back in range, not leave it at 2.
-        let updated = set_route(root, &s.id, vec![entry("a")]).unwrap();
+        propose_route_change(
+            root,
+            &s.id,
+            vec![entry("a")],
+            "b and c are generated".into(),
+            "agent",
+            None,
+        )
+        .unwrap();
+        // A shorter route must pull the cursor back in range, not leave it at 2.
+        let updated = accept_route_change(root, &s.id).unwrap();
         assert_eq!(updated.route.len(), 1);
         assert_eq!(updated.position, 0);
+        assert!(updated.route_change.is_none());
+    }
+
+    #[test]
+    fn a_planned_route_is_not_replaced_without_the_human() {
+        // The human is walking the route the plan produced; a second `plan` must
+        // not overwrite it, and the refusal has to name the verb that would work.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        let s = start(root);
+        set_route(root, &s.id, vec![entry("a"), entry("b")]).unwrap();
+        let err = set_route(root, &s.id, vec![entry("z")]).unwrap_err();
+        assert!(
+            err.to_string().contains("propose-route-change"),
+            "refusal should point at the proposal verb, got: {err}"
+        );
+        let kept = get_session(root, &s.id).unwrap();
+        assert_eq!(kept.route.len(), 2);
+        assert_eq!(kept.route[0].file, "a");
+    }
+
+    #[test]
+    fn a_route_change_waits_for_the_human() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        let s = start(root);
+        set_route(root, &s.id, vec![entry("a")]).unwrap();
+        let proposed = propose_route_change(
+            root,
+            &s.id,
+            vec![entry("a"), entry("b")],
+            "b is the caller of a".into(),
+            "agent",
+            Some("claude-code".into()),
+        )
+        .unwrap();
+        // Proposed, not applied: the route under review is untouched.
+        assert_eq!(proposed.route.len(), 1);
+        let change = proposed.route_change.as_ref().unwrap();
+        assert_eq!(change.reason, "b is the caller of a");
+        assert_eq!(change.agent.as_deref(), Some("claude-code"));
+        // It survives a reload (it lives on the session, not in the UI).
+        let reloaded = get_session(root, &s.id).unwrap();
+        assert!(reloaded.route_change.is_some());
+
+        let discarded = discard_route_change(root, &s.id).unwrap();
+        assert!(discarded.route_change.is_none());
+        assert_eq!(discarded.route.len(), 1);
+        assert!(accept_route_change(root, &s.id).is_err());
+
+        propose_route_change(
+            root,
+            &s.id,
+            vec![entry("a"), entry("b")],
+            "again".into(),
+            "agent",
+            None,
+        )
+        .unwrap();
+        let accepted = accept_route_change(root, &s.id).unwrap();
+        assert_eq!(accepted.route.len(), 2);
+        // The newly routed file is queued, like any planned one.
+        let b = accepted.files.iter().find(|f| f.file == "b").unwrap();
+        assert_eq!(b.state, FileState::Queued);
+    }
+
+    #[test]
+    fn coverage_reports_what_the_route_left_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        let s = start_expecting(root, vec!["a.rs", "b.rs", "new.rs", "gen.rs"]);
+        set_route(root, &s.id, vec![entry("a.rs")]).unwrap();
+        let after_plan = get_session(root, &s.id).unwrap();
+        assert_eq!(
+            uncovered_files(&after_plan),
+            vec![
+                "b.rs".to_string(),
+                "new.rs".to_string(),
+                "gen.rs".to_string()
+            ]
+        );
+
+        // Declaring a file out of scope is an answer; it stops being a gap.
+        set_file_state(root, &s.id, "gen.rs", FileState::OutOfScope).unwrap();
+        // So is the human skipping one.
+        set_file_state(root, &s.id, "b.rs", FileState::Skipped).unwrap();
+        // Routing it covers it too.
+        propose_route_change(
+            root,
+            &s.id,
+            vec![entry("a.rs"), entry("new.rs")],
+            "missed it".into(),
+            "agent",
+            None,
+        )
+        .unwrap();
+        let done = accept_route_change(root, &s.id).unwrap();
+        assert!(uncovered_files(&done).is_empty());
+    }
+
+    #[test]
+    fn no_expected_set_asserts_no_gap() {
+        // A PR lives in git refs and a free-text request has no file set: Reado
+        // must not invent a coverage claim it cannot ground.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        let s = start(root);
+        set_route(root, &s.id, vec![entry("a.rs")]).unwrap();
+        assert!(uncovered_files(&get_session(root, &s.id).unwrap()).is_empty());
     }
 
     #[test]

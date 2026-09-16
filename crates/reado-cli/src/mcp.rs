@@ -35,6 +35,7 @@ const META_SERVER_INFO: &str = "io.modelcontextprotocol/serverInfo";
 const INSTRUCTIONS: &str = "You are a terminal agent working inside Reado, a read-first code IDE. In Reado's loop the user is the reviewer and you are the committer: they annotate the code with comments and tasks, and you resolve them.\n\n\
 WORK FROM THEIR ANNOTATIONS: before and while you work, read the user's open tasks and comments via the `reado://tasks` and `reado://comments` resources (plus `reado://reading-progress` and `reado://bookmarks` for context). They carry file/line anchors and are the source of truth for what to do — prefer them over guessing.\n\n\
 LIVE BROWSER PREVIEW: when the user asks about their running app, a page, console errors, network, or the DOM, use the `browser_*` tools to inspect and drive Reado's in-app preview — what the user actually sees. Do NOT launch your own browser (Playwright, Chrome, headless) for it; that opens a different, disconnected page. If a browser tool reports 'no preview pane running', ask the user to open the preview and enable agent access.\n\n\
+GUIDED REVIEW: when the user starts a Guided Pair Review, Reado sends you a READO GUIDED REVIEW prompt carrying a session id. Drive that session with the `session_show`, `review_context`, `review_plan`, `review_propose_route_change`, `review_propose_comment`, `review_propose`, `review_summarize_file` and `session_summarize` tools rather than composing shell commands — a route is structured data, and a quoting accident in a terminal loses it silently. The loop is: you propose, the human disposes. Never accept your own proposal, never edit code during a review, and never replace a route the human is already walking — propose the change and let them accept it. If the answer to `review_plan` lists uncovered files, they are files the scope contains and your route left out: route them with a proposed change, or mark each one out of scope. Saying a file needs no review is an answer; leaving it out in silence is not.\n\n\
 SAY WHEN YOU ARE DONE: the moment you finish a turn and are handing control back — the work is complete, or you are blocked, or you need an answer — call `session_done` with a one-line summary. The user has usually walked away from the desk; this is what tells Reado to get their attention. Call it exactly once per turn, as the last thing you do, and call it even when the answer is 'I could not do it'.\n\n\
 Per-tool and per-resource details are in their descriptions. Prefer all of these — they act on the user's real session.";
 
@@ -229,6 +230,36 @@ fn read_resource(root: &str, uri: &str) -> Result<String, (i64, String)> {
 fn tool_list() -> serde_json::Value {
     let empty = serde_json::json!({ "type": "object", "properties": {} });
     let sel = serde_json::json!({ "type": "object", "properties": { "selector": { "type": "string" } }, "required": ["selector"] });
+    // One route entry, spelled out so the agent does not have to guess the
+    // field names from a prose description of the JSON.
+    let route_entry = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "file": { "type": "string", "description": "Project-relative path." },
+            "priority": { "type": "number", "description": "Rank; lower comes first." },
+            "reason": { "type": "string", "description": "One line: why this file, and what moved it up." },
+            "suggestedReviewMode": { "type": "string", "enum": ["quick", "normal", "deep"] },
+            "relatedFiles": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["file", "reason"]
+    });
+    let route_schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "sessionId": { "type": "string" },
+            "route": { "type": "array", "items": route_entry.clone() }
+        },
+        "required": ["route"]
+    });
+    let route_change_schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "sessionId": { "type": "string" },
+            "route": { "type": "array", "items": route_entry, "description": "The whole proposed route, not just what changes." },
+            "reason": { "type": "string" }
+        },
+        "required": ["route", "reason"]
+    });
     serde_json::json!([
         // Perception (read the captured buffers mirrored to `.reado/`).
         { "name": "browser_console", "description": "The preview page's captured console output (log/info/warn/error, with source and stack).", "inputSchema": empty },
@@ -253,6 +284,17 @@ fn tool_list() -> serde_json::Value {
         { "name": "comment_add", "description": "Add a comment anchored to a file and line. `kind` is task (sent to the AI batch) or note.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "file": { "type": "string" }, "line": { "type": "number" }, "end": { "type": "number" }, "type": { "type": "string" }, "kind": { "type": "string" }, "body": { "type": "string" } }, "required": ["file", "line", "body"] }) },
         { "name": "session_done", "description": "Call this as the LAST thing in every turn, when you are handing control back to the user — finished, blocked, or out of questions. Reado uses it to alert a user who has walked away. `summary` is one line on what happened; `status` is done (default), blocked or failed.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "summary": { "type": "string" }, "status": { "type": "string" } } }) },
         { "name": "comment_reply", "description": "Reply in a comment's thread.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "body": { "type": "string" } }, "required": ["id", "body"] }) },
+        // Guided Pair Review: the session verbs, typed. The CLI carries the same
+        // ones for agents without MCP, but a route is an array of objects and a
+        // TUI prompt is a line of text — this is the channel where it survives.
+        { "name": "session_show", "description": "The guided-review session in full: scope, objective, route, per-file state, proposals, summaries, the files the scope is expected to contain, and any pending route change. Omit `sessionId` for the newest session still open.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" } } }) },
+        { "name": "review_context", "description": "One file's context inside a session: its route entry (why it was ranked, related files), its state, its running summary, and the proposals already on it. Read this before reviewing the file.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "file": { "type": "string" } }, "required": ["file"] }) },
+        { "name": "review_plan", "description": "Set the session's ranked review route (the planning pass). Answers with the expected files your route left out — route those or mark them out of scope. Refused if the session already has a route: propose a change instead.", "inputSchema": route_schema.clone() },
+        { "name": "review_propose_route_change", "description": "Propose a different route mid-session (a file you found that must be reviewed, a reorder). The current route keeps running until the human accepts your proposal in Reado. `reason` is what they read to decide.", "inputSchema": route_change_schema },
+        { "name": "review_propose_comment", "description": "Propose an anchored review comment. It is a proposal: the human accepts, edits or discards it. Never final on your own.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "file": { "type": "string" }, "line": { "type": "number" }, "end": { "type": "number" }, "type": { "type": "string", "enum": ["bug", "refactor", "performance", "question", "note"] }, "body": { "type": "string" } }, "required": ["file", "line", "body"] }) },
+        { "name": "review_propose", "description": "Propose a non-comment artifact: an open question, a follow-up, or a needs-context marker when you cannot judge the code without more context. Prefer this over guessing.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "kind": { "type": "string", "enum": ["question", "follow-up", "needs-context"] }, "file": { "type": "string" }, "line": { "type": "number" }, "body": { "type": "string" } }, "required": ["kind", "body"] }) },
+        { "name": "review_summarize_file", "description": "Record a file's mini-summary when you finish it: what you checked, what the risks are, what comes next.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "file": { "type": "string" }, "text": { "type": "string" } }, "required": ["file", "text"] }) },
+        { "name": "session_summarize", "description": "Record the session-level recap — what the review found overall.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "text": { "type": "string" } }, "required": ["text"] }) },
     ])
 }
 
@@ -332,6 +374,46 @@ fn send_command(root: &str, op: &str, arg: &str) -> Result<String, (i64, String)
 /// JS-quote a string for safe embedding in an eval expression.
 fn jsq(s: &str) -> String {
     serde_json::to_string(s).unwrap_or_else(|_| "\"\"".into())
+}
+
+/// The session a review tool acts on: the `sessionId` given, or the newest one
+/// still open. An agent that has just been handed a session id passes it; one
+/// resuming after a compaction should still land on the right session rather
+/// than failing on a missing argument.
+fn resolve_session(
+    root: &str,
+    args: Option<&serde_json::Value>,
+) -> Result<core::Session, (i64, String)> {
+    let id = args
+        .and_then(|a| a.get("sessionId"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if !id.is_empty() {
+        return core::get_session(root, &id).map_err(|e| (-32602, e.to_string()));
+    }
+    core::list_sessions(root)
+        .into_iter()
+        .find(|s| s.status != core::SessionStatus::Done)
+        .ok_or((
+            -32602,
+            "no open guided-review session — ask the user to start one in Reado".into(),
+        ))
+}
+
+/// The `route` argument as route entries, with the field names named in the
+/// error so a mis-shaped array is fixable without guessing.
+fn route_arg(args: Option<&serde_json::Value>) -> Result<Vec<core::RouteEntry>, (i64, String)> {
+    let raw = args
+        .and_then(|a| a.get("route"))
+        .cloned()
+        .ok_or((-32602, "missing `route`".to_string()))?;
+    serde_json::from_value(raw).map_err(|e| {
+        (
+            -32602,
+            format!("invalid route: {e} — expected an array of {{file, priority, reason, suggestedReviewMode, relatedFiles}}"),
+        )
+    })
 }
 
 fn call_tool(
@@ -485,6 +567,127 @@ fn call_tool(
             .map_err(|e| (-32603, e.to_string()))?;
             mutation_result(&c, "comment_reply")
         }
+        // ---- Guided Pair Review: the session verbs ----
+        "session_show" => {
+            let s = resolve_session(root, args)?;
+            serde_json::to_string_pretty(&s).map_err(|e| (-32603, e.to_string()))
+        }
+        "review_context" => {
+            let s = resolve_session(root, args)?;
+            let file = sarg("file");
+            let proposals: Vec<_> = s.proposals.iter().filter(|p| p.file == file).collect();
+            let fstate = s.files.iter().find(|f| f.file == file);
+            serde_json::to_string_pretty(&serde_json::json!({
+                "sessionId": s.id,
+                "file": file,
+                "objective": s.objective,
+                "entry": s.route.iter().find(|e| e.file == file),
+                "state": fstate.map(|f| f.state),
+                "summary": fstate.and_then(|f| f.summary.clone()),
+                "proposals": proposals,
+            }))
+            .map_err(|e| (-32603, e.to_string()))
+        }
+        "review_plan" => {
+            let s = resolve_session(root, args)?;
+            let route = route_arg(args)?;
+            let planned = core::set_route(root, &s.id, route).map_err(|e| (-32603, e.to_string()))?;
+            let uncovered = core::uncovered_files(&planned);
+            serde_json::to_string_pretty(&serde_json::json!({
+                "sessionId": planned.id,
+                "routed": planned.route.len(),
+                "uncovered": uncovered,
+                "note": if uncovered.is_empty() {
+                    "Route set. Review the files in order."
+                } else {
+                    "Route set, but these files are in the scope and not in your route. Propose a route change that includes them, or mark each out of scope with session_show's file states — leaving them out in silence is not an answer."
+                },
+            }))
+            .map_err(|e| (-32603, e.to_string()))
+        }
+        "review_propose_route_change" => {
+            let s = resolve_session(root, args)?;
+            let route = route_arg(args)?;
+            let reason = sarg("reason");
+            if reason.trim().is_empty() {
+                return Err((-32602, "a route change needs a reason — it is what the human reads to decide".into()));
+            }
+            let updated = core::propose_route_change(
+                root,
+                &s.id,
+                route,
+                reason,
+                "agent",
+                Some(agent_id()),
+            )
+            .map_err(|e| (-32603, e.to_string()))?;
+            Ok(format!(
+                "Proposed a {}-file route change on session {}. The current route is unchanged until the human accepts it in Reado — carry on with the file you were reviewing.",
+                updated.route_change.as_ref().map_or(0, |c| c.route.len()),
+                updated.id
+            ))
+        }
+        "review_propose_comment" => {
+            let s = resolve_session(root, args)?;
+            let line = (narg("line") as u32).max(1);
+            let end = narg("end") as u32;
+            let p = core::add_proposal(
+                root,
+                &s.id,
+                core::NewProposal {
+                    artifact_type: core::ArtifactType::Comment,
+                    file: sarg("file"),
+                    start_line: line,
+                    end_line: if end >= line { end } else { line },
+                    comment_type: Some(parse_type(&sarg("type"))),
+                    body: sarg("body"),
+                },
+                "agent",
+                Some(agent_id()),
+            )
+            .map_err(|e| (-32603, e.to_string()))?;
+            Ok(format!(
+                "Proposed {} on {}:{} — awaiting the human's decision.",
+                p.id, p.file, p.start_line
+            ))
+        }
+        "review_propose" => {
+            let s = resolve_session(root, args)?;
+            let artifact_type = match sarg("kind").as_str() {
+                "follow-up" | "follow_up" => core::ArtifactType::FollowUp,
+                "needs-context" | "needs_context" => core::ArtifactType::NeedsContext,
+                _ => core::ArtifactType::Question,
+            };
+            let line = narg("line") as u32;
+            let p = core::add_proposal(
+                root,
+                &s.id,
+                core::NewProposal {
+                    artifact_type,
+                    file: sarg("file"),
+                    start_line: line,
+                    end_line: line,
+                    comment_type: None,
+                    body: sarg("body"),
+                },
+                "agent",
+                Some(agent_id()),
+            )
+            .map_err(|e| (-32603, e.to_string()))?;
+            Ok(format!("Proposed {} ({:?}).", p.id, p.artifact_type))
+        }
+        "review_summarize_file" => {
+            let s = resolve_session(root, args)?;
+            core::set_file_summary(root, &s.id, &sarg("file"), sarg("text"))
+                .map_err(|e| (-32603, e.to_string()))?;
+            Ok(format!("Summary recorded for {}.", sarg("file")))
+        }
+        "session_summarize" => {
+            let s = resolve_session(root, args)?;
+            core::set_session_summary(root, &s.id, sarg("text"))
+                .map_err(|e| (-32603, e.to_string()))?;
+            Ok("Session summary recorded.".to_string())
+        }
         "browser_errors" => {
             if !Path::new(root).join(".reado").join("preview-console.json").exists() {
                 return Ok("No preview pane running — open the browser preview in Reado.".to_string());
@@ -581,7 +784,11 @@ mod tests {
         assert_eq!(result["cacheScope"], "public");
         assert!(result["ttlMs"].as_i64().unwrap() > 0);
         assert_eq!(result["_meta"][META_SERVER_INFO]["name"], "reado");
-        assert_eq!(result["tools"].as_array().unwrap().len(), 18);
+        // The whole list is served in one page — no truncation, whatever its size.
+        assert_eq!(
+            result["tools"].as_array().unwrap().len(),
+            tool_list().as_array().unwrap().len()
+        );
     }
 
     #[test]
@@ -650,7 +857,15 @@ mod tests {
                 "missing tool {expected} in {names:?}"
             );
         }
-        assert_eq!(names.len(), 18);
+        // Every name is distinct: a duplicate would shadow a tool silently.
+        let mut unique = names.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(
+            unique.len(),
+            names.len(),
+            "duplicate tool name in {names:?}"
+        );
     }
 
     #[test]
@@ -987,6 +1202,278 @@ mod tests {
     // Thin wrapper so the image-vs-text branch of `handle` is exercised directly.
     fn handle_call(root: &str, params: &serde_json::Value) -> serde_json::Value {
         handle(root, "tools/call", Some(params)).unwrap()
+    }
+
+    // ---- Guided Pair Review over MCP ----
+
+    /// A session with a known file set, as the desktop creates one for a diff.
+    fn guided_session(root: &str, expected: &[&str]) -> core::Session {
+        core::create_session(
+            root,
+            core::NewSession {
+                title: "Review the diff".into(),
+                scope: core::ReviewScope {
+                    kind: core::ScopeKind::Diff,
+                    base: None,
+                    paths: vec![],
+                    pr: None,
+                    request: None,
+                },
+                objective: Some(core::Objective::Security),
+                expected_files: expected.iter().map(|f| f.to_string()).collect(),
+            },
+            None,
+        )
+        .unwrap()
+    }
+
+    fn text_of(res: &serde_json::Value) -> String {
+        res["content"][0]["text"].as_str().unwrap_or("").to_string()
+    }
+
+    fn route_json(files: &[&str]) -> serde_json::Value {
+        serde_json::Value::Array(
+            files
+                .iter()
+                .enumerate()
+                .map(|(i, f)| {
+                    serde_json::json!({ "file": f, "priority": i + 1, "reason": "changed", "suggestedReviewMode": "normal" })
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn the_session_verbs_are_tools() {
+        let tools = tool_list();
+        let names: Vec<&str> = tools
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        for expected in [
+            "session_show",
+            "review_context",
+            "review_plan",
+            "review_propose_route_change",
+            "review_propose_comment",
+            "review_propose",
+            "review_summarize_file",
+            "session_summarize",
+        ] {
+            assert!(names.contains(&expected), "missing tool: {expected}");
+        }
+        // The route's field names are in the schema, not only in prose.
+        let plan = tools
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["name"] == "review_plan")
+            .cloned()
+            .unwrap();
+        let props = &plan["inputSchema"]["properties"]["route"]["items"]["properties"];
+        assert!(props.get("suggestedReviewMode").is_some());
+        assert!(props.get("relatedFiles").is_some());
+    }
+
+    #[test]
+    fn instructions_carry_the_guided_contract_for_every_vendor() {
+        // This is the only channel that reaches a non-Claude agent: the
+        // system-prompt flag Reado passes at launch exists for one CLI.
+        let instr = handle("/nope", "initialize", None).unwrap()["instructions"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(instr.contains("review_plan"));
+        assert!(instr.contains("propose"));
+        assert!(instr.contains("uncovered"));
+    }
+
+    #[test]
+    fn review_plan_sets_the_route_and_names_what_it_missed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        let s = guided_session(&root, &["a.rs", "b.rs", "untracked.rs"]);
+
+        let res = handle_call(
+            &root,
+            &serde_json::json!({
+                "name": "review_plan",
+                "arguments": { "sessionId": s.id, "route": route_json(&["a.rs"]) }
+            }),
+        );
+        let out: serde_json::Value = serde_json::from_str(&text_of(&res)).unwrap();
+        assert_eq!(out["routed"], 1);
+        let uncovered: Vec<String> = serde_json::from_value(out["uncovered"].clone()).unwrap();
+        assert_eq!(uncovered, vec!["b.rs", "untracked.rs"]);
+        assert!(out["note"].as_str().unwrap().contains("not in your route"));
+
+        // Planning again is refused — the human is walking that route.
+        let err = call_tool(
+            &root,
+            "review_plan",
+            Some(&serde_json::json!({ "sessionId": s.id, "route": route_json(&["z.rs"]) })),
+        )
+        .unwrap_err();
+        assert!(err.1.contains("propose"), "got: {}", err.1);
+        assert_eq!(core::get_session(&root, &s.id).unwrap().route.len(), 1);
+    }
+
+    #[test]
+    fn a_route_change_is_proposed_not_applied() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        let s = guided_session(&root, &["a.rs", "b.rs"]);
+        handle_call(
+            &root,
+            &serde_json::json!({
+                "name": "review_plan",
+                "arguments": { "sessionId": s.id, "route": route_json(&["a.rs"]) }
+            }),
+        );
+        let res = handle_call(
+            &root,
+            &serde_json::json!({
+                "name": "review_propose_route_change",
+                "arguments": { "sessionId": s.id, "route": route_json(&["a.rs", "b.rs"]),
+                               "reason": "b.rs is the only caller of the changed function" }
+            }),
+        );
+        assert!(text_of(&res).contains("unchanged until the human"));
+        let after = core::get_session(&root, &s.id).unwrap();
+        assert_eq!(after.route.len(), 1, "the route must not move on its own");
+        assert_eq!(after.route_change.unwrap().route.len(), 2);
+    }
+
+    #[test]
+    fn a_route_change_without_a_reason_is_refused() {
+        // The reason is the whole basis on which the human decides; a change
+        // without one is a change they cannot dispose of.
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        let s = guided_session(&root, &["a.rs"]);
+        let err = call_tool(
+            &root,
+            "review_propose_route_change",
+            Some(&serde_json::json!({ "sessionId": s.id, "route": route_json(&["a.rs"]), "reason": "  " })),
+        )
+        .unwrap_err();
+        assert_eq!(err.0, -32602);
+        assert!(err.1.contains("reason"));
+    }
+
+    #[test]
+    fn a_malformed_route_says_which_fields_it_wanted() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        let s = guided_session(&root, &[]);
+        let err = call_tool(
+            &root,
+            "review_plan",
+            Some(&serde_json::json!({ "sessionId": s.id, "route": ["a.rs"] })),
+        )
+        .unwrap_err();
+        assert_eq!(err.0, -32602);
+        assert!(err.1.contains("suggestedReviewMode"));
+    }
+
+    #[test]
+    fn session_tools_find_the_open_session_without_an_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        let s = guided_session(&root, &["a.rs"]);
+        let shown: serde_json::Value = serde_json::from_str(&text_of(&handle_call(
+            &root,
+            &serde_json::json!({ "name": "session_show", "arguments": {} }),
+        )))
+        .unwrap();
+        assert_eq!(shown["id"], s.id);
+        assert_eq!(shown["objective"], "security");
+        assert_eq!(shown["expectedFiles"][0], "a.rs");
+
+        // Closed sessions are not picked up.
+        core::close_session(&root, &s.id).unwrap();
+        let err = call_tool(&root, "session_show", None).unwrap_err();
+        assert!(err.1.contains("no open guided-review session"));
+    }
+
+    #[test]
+    fn proposals_and_summaries_land_on_the_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        std::fs::write(
+            dir.path().join("a.rs"),
+            "fn main() {}
+",
+        )
+        .unwrap();
+        let s = guided_session(&root, &["a.rs"]);
+        handle_call(
+            &root,
+            &serde_json::json!({
+                "name": "review_plan",
+                "arguments": { "sessionId": s.id, "route": route_json(&["a.rs"]) }
+            }),
+        );
+        handle_call(
+            &root,
+            &serde_json::json!({
+                "name": "review_propose_comment",
+                "arguments": { "sessionId": s.id, "file": "a.rs", "line": 1, "type": "bug", "body": "unwrap on a user path" }
+            }),
+        );
+        handle_call(
+            &root,
+            &serde_json::json!({
+                "name": "review_propose",
+                "arguments": { "sessionId": s.id, "kind": "needs-context", "file": "a.rs", "line": 1, "body": "who calls this?" }
+            }),
+        );
+        handle_call(
+            &root,
+            &serde_json::json!({
+                "name": "review_summarize_file",
+                "arguments": { "sessionId": s.id, "file": "a.rs", "text": "checked the error paths" }
+            }),
+        );
+        handle_call(
+            &root,
+            &serde_json::json!({ "name": "session_summarize", "arguments": { "sessionId": s.id, "text": "one real bug" } }),
+        );
+
+        let after = core::get_session(&root, &s.id).unwrap();
+        assert_eq!(after.proposals.len(), 2);
+        // Proposed, never accepted — the human disposes.
+        assert!(after
+            .proposals
+            .iter()
+            .all(|p| p.state == core::ArtifactState::Proposed));
+        assert!(after
+            .proposals
+            .iter()
+            .any(|p| p.artifact_type == core::ArtifactType::NeedsContext));
+        assert_eq!(after.summary.as_deref(), Some("one real bug"));
+        assert_eq!(
+            after
+                .files
+                .iter()
+                .find(|f| f.file == "a.rs")
+                .unwrap()
+                .summary
+                .as_deref(),
+            Some("checked the error paths")
+        );
+
+        // And the file's context comes back with the objective that shapes it.
+        let ctx: serde_json::Value = serde_json::from_str(&text_of(&handle_call(
+            &root,
+            &serde_json::json!({ "name": "review_context", "arguments": { "sessionId": s.id, "file": "a.rs" } }),
+        )))
+        .unwrap();
+        assert_eq!(ctx["objective"], "security");
+        assert_eq!(ctx["proposals"].as_array().unwrap().len(), 2);
+        assert_eq!(ctx["summary"], "checked the error paths");
     }
 
     #[test]

@@ -568,8 +568,26 @@ describe("finding the dev server", () => {
     await vi.advanceTimersByTimeAsync(50)
     api.previewOpen.mockClear()
     api.previewDetectUrls.mockResolvedValue(["http://localhost:5173"])
-    await vi.advanceTimersByTimeAsync(2100)
+    // Past the backed-off delay: one fruitless probe doubles the wait.
+    await vi.advanceTimersByTimeAsync(4100)
     expect(api.previewOpen).toHaveBeenCalledWith("http://localhost:5173", 100, 50, 800, 600)
+  })
+
+  it("backs off while it finds nothing, and speeds up again when it does", async () => {
+    // Each probe opens a socket per candidate port, so a pane left on a dead
+    // address must not knock on all of them every two seconds all afternoon.
+    api.previewDetectUrls.mockResolvedValue([])
+    render(<BrowserPanel />)
+    await vi.advanceTimersByTimeAsync(50)
+    expect(api.previewDetectUrls).toHaveBeenCalledTimes(1)
+    // 2s in, the second probe has not been due since the first found nothing.
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(api.previewDetectUrls).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(2100)
+    expect(api.previewDetectUrls).toHaveBeenCalledTimes(2)
+    // A minute of nothing costs a handful of probes, not thirty.
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(api.previewDetectUrls.mock.calls.length).toBeLessThan(8)
   })
 
   it("never overrides a URL the user typed", async () => {

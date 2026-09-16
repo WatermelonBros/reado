@@ -25,7 +25,7 @@ const start = vi.fn(async () => null)
 
 beforeEach(() => {
   start.mockClear()
-  useGuidedReview.setState({ sessions: [], currentId: null, busy: false, start })
+  useGuidedReview.setState({ sessions: [], currentId: null, busy: null, start })
   useProject.setState({
     root: "/repo",
     git: {
@@ -74,10 +74,24 @@ describe("GuidedReviewPanel", () => {
     )
   })
 
-  it("surfaces the busy indicator while the agent works", () => {
+  it("separates sending the prompt from waiting on the agent", () => {
+    // Two different truths, and the panel used to tell neither apart: the pane
+    // is still being typed into, or the agent has it and is working.
     render(<GuidedReviewPanel />)
-    expect(screen.queryByText("guided.busy")).not.toBeInTheDocument()
-    act(() => useGuidedReview.setState({ busy: true }))
-    expect(screen.getByText("guided.busy")).toBeInTheDocument()
+    expect(screen.queryByText("guided.sending")).not.toBeInTheDocument()
+    expect(screen.queryByText("guided.waiting")).not.toBeInTheDocument()
+    act(() => useGuidedReview.setState({ busy: "widen" }))
+    expect(screen.getByText("guided.sending")).toBeInTheDocument()
+    act(() => useGuidedReview.setState({ busy: null, pending: "widen" }))
+    expect(screen.getByText("guided.waiting")).toBeInTheDocument()
+  })
+
+  it("shows a failure instead of swallowing it, and lets it be dismissed", async () => {
+    render(<GuidedReviewPanel />)
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    act(() => useGuidedReview.setState({ error: "Could not accept the proposal — disk full" }))
+    expect(screen.getByRole("alert")).toHaveTextContent("disk full")
+    await userEvent.click(screen.getByRole("button", { name: "guided.err.dismiss" }))
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
   })
 })

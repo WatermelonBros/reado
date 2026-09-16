@@ -11,6 +11,141 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Guided review: the session as MCP tools.** `session_show`, `review_context`,
+  `review_plan`, `review_propose_route_change`, `review_propose_comment`,
+  `review_propose`, `review_summarize_file` and `session_summarize` are now MCP
+  tools with typed arguments, and the server's instructions carry the
+  guided-review contract — so every MCP-speaking agent gets it, not just the one
+  whose CLI takes a system-prompt flag. The `reado` CLI keeps the same verbs, and
+  now reads a route from stdin (`--route -`) or a file (`--route @path`), so an
+  apostrophe in a `reason` can no longer eat a plan.
+- **Route coverage.** A session started from the diff or a branch records the
+  files git reports for that scope — untracked ones included. Setting a route
+  answers with the ones it left out, and the panel shows the same gap next to the
+  progress (where "done" would otherwise be a lie), each file openable, with a
+  one-click ask to route them. A file may still be left out by marking it out of
+  scope; silence no longer passes for an answer.
+- **Route changes are proposed, not applied.** The agent proposes a new route
+  with a reason; the panel shows what it adds and what it drops, says in its own
+  words what a route change is and that nothing moves until you choose, and the
+  route under review does not move until you accept. Re-planning a session that already
+  has a route is refused and pointed at the proposal instead.
+
+### Changed
+
+- **The Review Guide says what it is doing.** A guided-review action hands a
+  prompt to the terminal agent, and the panel used to go silent: it now shows
+  sending, then waiting, against the action that started it, and stops waiting
+  when the session changes. A prompt that could not be delivered — no agent
+  running — says so instead of looking sent, and every session write that fails
+  reports what failed and why rather than being swallowed.
+- **A second press on the paths that cannot be undone**: deleting a review,
+  discarding every proposal on a file at once, abandoning an edit you typed, and
+  accepting a route change that drops files you already have findings on (which
+  now names those findings; a change that only adds files still takes one press).
+- **The panel reads as a panel again.** One card — the decision waiting on you —
+  and flat sections for everything else, with real space above each heading; the
+  current file's name is now the largest thing on screen; the occasional actions
+  (respond, wide pass, note/edit/false-positive) moved into overflow menus so the
+  two that advance the review stand out; every file path is written the same way.
+  The action cluster is one row at one height (a 36px primary over 32px chips
+  that share the width, and a 32px overflow square) instead of four controls at
+  four sizes, everything sits 16px off the panel's edges instead of 12, and no
+  control rests against a divider.
+- **The progress bar stopped lying and became visible.** Its track was drawn in
+  the same colour as the surface behind it, so at 0% it painted nothing. The plan
+  and the part of the change that was never planned are now two bars, not one
+  stacked one — the second hatched, because it is not progress — with
+  `role="progressbar"` and the numbers in its tooltip.
+- The session title, and the scope description in it, are in the user's language
+  (a review started from the Italian UI was titled "Review the current diff").
+- **The route is a reading order now, not a triage queue.** It was ranked by
+  risk, which is how you find a bug fast and how you drop a reviewer into the
+  middle of a change with no context. The planning pass is asked to start where
+  the change starts, carry on in the order that makes each next file make sense
+  (definition before use, the changed function before its callers), keep files
+  that must be read together adjacent, and leave generated output and lockfiles
+  for last — with risk ordering files inside that reading rather than replacing
+  it. Each reason now has to say what the reader knows by the time they arrive.
+- **Not every file needs reading.** `suggestedReviewMode` existed with nothing to
+  choose it by: the prompt now defines deep, normal and quick, and says outright
+  that a mechanical change can be `quick` or out of scope — covering a scope means
+  every file is accounted for, not that every file is read closely.
+- The planning prompt now carries the review objective (choosing "security" used
+  to rank the route by generic risk) and the file set Reado already read from
+  git, instead of asking the agent to rediscover it with a `git diff` that does
+  not list untracked files.
+- The per-file prompt tells the agent how to route a file it discovers matters
+  mid-review, instead of leaving it to review off-route or say nothing.
+
+- **Turning on commit signing says right away when the repository cannot sign.**
+  The switch wrote `commit.gpgsign` / `tag.gpgsign` and nothing else happened —
+  until the next commit, which git refused with gpg's own error. It now checks
+  what is actually missing (no gpg, no configured key, SSH signing without a key)
+  and names the config line that fixes it. The setting still applies: the answer
+  is advice, not a veto. Only the certain cases warn — a false alarm on a working
+  setup would teach you to ignore the real one.
+- The commit graph has a command id (`git:graph`), so it can be bound to a key
+  like any other command. Its ways in are unchanged: the Git panel's menu and the
+  command palette.
+
+- **The Test Explorer says what its buttons do.** Running a test is a play
+  button, not the two arrows that read as "refresh"; while a run is in flight the
+  header's play becomes a Stop that ends it, and a test the run never judged goes
+  back to having no verdict instead of spinning forever.
+- **The test list is windowed.** Only the rows near the scroll position are in
+  the DOM, so a project with tens of thousands of tests draws as fast as one with
+  ten. A row's run button is drawn for the row under the pointer only — measured
+  in the real app, three hundred of them cost ~90ms a scroll, which is five
+  frames of blank list.
+- **The Test Explorer counts what it found and what it knows.** A strip above the
+  tree says how many tests there are, how many passed and how many failed.
+- **Tests run out of sight.** Running a test no longer opens a terminal pane and
+  types a command into it: the run happens in a PTY the user never sees, and the
+  answer arrives where it was asked for — ticks and crosses in the Test Explorer.
+  What a failing run printed goes to the log.
+
+### Fixed
+
+- The wide-pass prompt contained newlines while the pane types prompts and then
+  presses Enter — it could submit as several fragments. All guided prompts are
+  single-line again, and a test holds them there.
+- **Tests declared in a loop get their verdict.** A test written
+  `` it(`${id} runs its action`) `` is printed by the framework with the name
+  expanded, so it never matched what Reado read out of the source — nine of
+  Reado's own ran, passed, and sat in the tree marked "not run" for good. What
+  was written is now read as the pattern it is, and a failure among the names one
+  declaration produces is what the row shows.
+- **The Test Explorer counts tests, not lines of source.** One `it()` in a loop
+  is one row and many tests — Reado's own API test is two hundred of them — so
+  the panel's total always read lower than the framework's. A row now counts for
+  as many tests as the last run reported it under, and says so (`×200`).
+- **The Test Explorer's numbers add up.** The strip counted passes and failures
+  and left the remainder unexplained — "3312 tests, 3301 passed, 0 failed" with
+  no word about the other eleven. It now names them: skipped, and never judged.
+- **Rust fixtures are no longer read as tests.** A `#[test]` inside a `r#"…"#`
+  string — how a parser's own tests are written — was discovered as a test that
+  no `cargo test` could ever run, so it sat in the tree forever unjudged.
+- **A run cut short no longer spins forever.** Closing the window mid-run left
+  every test it had started marked "running" — permanently, since the verdicts
+  are remembered per project. They are dropped on load, and a run that ends
+  without judging a test gives it back no verdict rather than a spinner.
+- **The browser pane stops knocking on every port.** While its page was not
+  answering, the pane probed a dozen candidate dev-server ports every two seconds
+  for as long as it was open — thousands of connections an hour, and on macOS a
+  permission prompt that kept coming back. It now backs off to half a minute
+  while it finds nothing and returns to two seconds as soon as it does.
+
+- **Tests run from their own project, whatever the language.** The Test Explorer
+  ran every framework from the Reado root, which fails the moment the code is not
+  there: `cargo test` outside a crate (`could not find Cargo.toml`), `npx vitest`
+  outside the package that installed it, `go test` outside the module, `pytest`
+  outside the package. Discovery now records the nearest manifest above each test
+  file, and a run `cd`s into it — one command per project, so a repo with several
+  crates or packages runs them all.
+
 ## [1.20.0] — 2026-09-14
 
 ### Added

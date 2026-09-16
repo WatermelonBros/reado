@@ -91,6 +91,18 @@ pub fn session_set_summary(root: String, id: String, text: String) -> Result<Ses
     Ok(core::set_session_summary(&root, &id, text)?)
 }
 
+/// Accept the agent's proposed route change — the disposal half of the
+/// propose/dispose split, authored by the user like every other acceptance here.
+#[tauri::command]
+pub fn session_accept_route_change(root: String, id: String) -> Result<Session> {
+    Ok(core::accept_route_change(&root, &id)?)
+}
+
+#[tauri::command]
+pub fn session_discard_route_change(root: String, id: String) -> Result<Session> {
+    Ok(core::discard_route_change(&root, &id)?)
+}
+
 #[tauri::command]
 pub fn session_close(root: String, id: String) -> Result<Session> {
     Ok(core::close_session(&root, &id)?)

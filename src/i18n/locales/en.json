@@ -313,7 +313,6 @@
       "start": "Start guided review (current changes)",
       "open": "Open guided review"
     },
-    "busy": "Agent working…",
     "empty": {
       "title": "Guided Pair Review",
       "body": "The agent proposes a route, reviews file by file and drafts comments; you decide. Pick a focus and start — nothing is final until you approve it."
@@ -337,6 +336,8 @@
       "branch": "Review this branch vs main"
     },
     "progress": "{reviewed}/{total} reviewed",
+    "outside_one": "{count} outside",
+    "outside_other": "{count} outside",
     "planning": "Planning the route — the agent is reading the change…",
     "noRoute": "No route yet. Review a file or restart the planning pass.",
     "current": "Current file",
@@ -367,6 +368,17 @@
     "falsePositive": "False positive",
     "fpNote": "Checked — not an issue.",
     "route": "Route",
+    "routeChange": "Proposed route change",
+    "routeChangeExplain": "The agent is proposing a different order to review in. Nothing moves until you choose.",
+    "routeChangeShape": "the route goes from {from} to {to} files",
+    "routeChangeAdds": "adds",
+    "routeChangeDrops": "drops",
+    "routeChangeAccept": "Use this route",
+    "routeChangeDiscard": "Keep the current one",
+    "uncovered_one": "{count} file in scope, not in the route",
+    "uncovered_other": "{count} files in scope, not in the route",
+    "uncoveredAsk": "Ask the agent about these",
+    "uncoveredAskHint": "Ask the agent to route these files, or to say why each one needs no review",
     "fileSummary": "File summary",
     "decisions": "Decisions",
     "summary": "Session summary",
@@ -412,7 +424,47 @@
     },
     "startReview": "Start review",
     "pickPr": "Choose a pull request…",
-    "branchBase": "Base branch"
+    "branchBase": "Base branch",
+    "err": {
+      "noAgent": "No agent is running, and none could be started — open a terminal and launch one, then try again.",
+      "start": "Could not start the review",
+      "load": "Could not read the session",
+      "focus": "Could not move to that file",
+      "fileState": "Could not change that file's state",
+      "accept": "Could not accept the proposal",
+      "proposal": "Could not update the proposal",
+      "summary": "Could not save the summary",
+      "decision": "Could not record the decision",
+      "routeChange": "Could not apply the route change",
+      "close": "Could not close the session",
+      "discardSession": "Could not discard the review",
+      "dismiss": "Dismiss"
+    },
+    "sending": "Sending…",
+    "waiting": "Agent working…",
+    "findings_one": "{count} finding",
+    "findings_other": "{count} findings",
+    "routeChangeConfirm_one": "Accept, losing {count} finding?",
+    "routeChangeConfirm_other": "Accept, losing {count} findings?",
+    "moreActions": "More actions",
+    "cancelConfirm": "Discard your edit?",
+    "discardAllConfirm_one": "Discard {count} proposal?",
+    "discardAllConfirm_other": "Discard {count} proposals?",
+    "resetConfirm": "Delete the whole review?",
+    "resetHint": "Deletes this session and everything decided in it. Accepted comments stay.",
+    "uncoveredMore": "+{count} more",
+    "sessionTitle": "Review {scope}",
+    "scopeOf": {
+      "diff": "the current diff",
+      "branch": "this branch vs its base",
+      "branchBase": "this branch vs {base}",
+      "folder": "a folder",
+      "files": "selected files",
+      "comments": "open comments",
+      "project": "the whole project",
+      "pr": "a pull/merge request",
+      "prompt": "the requested review"
+    }
   },
   "loop": {
     "running": "Resolving…",
@@ -1291,7 +1343,12 @@
     "signingOn": "Commits and tags in this repository are now signed.",
     "signingOff": "Signing turned off for this repository.",
     "signingFailed": "Couldn't change signing.",
-    "rebaseDirty": "Commit or stash your changes first — git will not rebase over them."
+    "rebaseDirty": "Commit or stash your changes first — git will not rebase over them.",
+    "signing": {
+      "no-gpg": "Signing is on, but gpg is not installed — the next commit will be refused. Install gpg, or switch to SSH signing (`git config gpg.format ssh`).",
+      "no-key": "Signing is on, but no signing key is configured — the next commit will be refused. Set one with `git config user.signingkey <id>`.",
+      "no-ssh-key": "SSH signing is on, but no key is configured — the next commit will be refused. Set one with `git config user.signingkey ~/.ssh/id_ed25519.pub`."
+    }
   },
   "lsp": {
     "createTask": "Create task",
@@ -1640,9 +1697,18 @@
     "runFile": "Run this file's tests",
     "runOne": "Run this test",
     "refresh": "Rescan for tests",
+    "collapseAll": "Collapse all files",
+    "expandAll": "Expand all files",
+    "stop": "Stop the run",
     "count": "{n} tests in {files} files",
+    "passed": "{n} passed",
+    "failed": "{n} failed",
+    "runningCount": "{n} running",
+    "skipped": "{n} skipped",
+    "notRun": "{n} not run",
     "finished": "{passed} passed, {failed} failed.",
     "stale": "This ran before the file changed — it may be out of date.",
+    "cases": "One declaration, {n} tests — its name is built at runtime.",
     "staleShort": "stale"
   },
   "a11y": {

@@ -313,7 +313,6 @@
       "start": "Geführte Review starten (aktuelle Änderungen)",
       "open": "Geführte Review öffnen"
     },
-    "busy": "Der Agent arbeitet…",
     "empty": {
       "title": "Geführte Pair-Review",
       "body": "Der Agent schlägt eine Route vor, prüft Datei für Datei und entwirft Kommentare; du entscheidest. Wähle einen Schwerpunkt und starte — nichts ist endgültig, bis du es freigibst."
@@ -337,6 +336,8 @@
       "branch": "Diesen Branch gegen main prüfen"
     },
     "progress": "{reviewed}/{total} geprüft",
+    "outside_one": "{count} außerhalb der Route",
+    "outside_other": "{count} außerhalb der Route",
     "planning": "Die Route wird geplant — der Agent liest die Änderung…",
     "noRoute": "Noch keine Route. Prüfe eine Datei oder starte die Planung neu.",
     "current": "Aktuelle Datei",
@@ -367,6 +368,17 @@
     "falsePositive": "Fehlalarm",
     "fpNote": "Geprüft — kein Problem.",
     "route": "Route",
+    "routeChange": "Vorgeschlagene Routenänderung",
+    "routeChangeExplain": "Der Agent schlägt eine andere Reihenfolge vor. Bis du wählst, bleibt die aktuelle.",
+    "routeChangeShape": "die Route geht von {from} auf {to} Dateien",
+    "routeChangeAdds": "fügt hinzu",
+    "routeChangeDrops": "entfernt",
+    "routeChangeAccept": "Diese Route nehmen",
+    "routeChangeDiscard": "Aktuelle behalten",
+    "uncovered_one": "{count} Datei im Umfang, nicht in der Route",
+    "uncovered_other": "{count} Dateien im Umfang, nicht in der Route",
+    "uncoveredAsk": "Den Agenten fragen",
+    "uncoveredAskHint": "Bitte den Agenten, sie in die Route aufzunehmen oder zu sagen, warum jede keine Review braucht",
     "fileSummary": "Datei-Zusammenfassung",
     "decisions": "Entscheidungen",
     "summary": "Sitzungs-Zusammenfassung",
@@ -412,7 +424,47 @@
     },
     "startReview": "Review starten",
     "pickPr": "Wähle einen Pull Request…",
-    "branchBase": "Basis-Branch"
+    "branchBase": "Basis-Branch",
+    "err": {
+      "noAgent": "Kein Agent läuft, und es ließ sich keiner starten — öffne ein Terminal, starte einen und versuche es erneut.",
+      "start": "Die Review konnte nicht gestartet werden",
+      "load": "Die Sitzung konnte nicht gelesen werden",
+      "focus": "Zu dieser Datei konnte nicht gewechselt werden",
+      "fileState": "Der Dateistatus konnte nicht geändert werden",
+      "accept": "Der Vorschlag konnte nicht übernommen werden",
+      "proposal": "Der Vorschlag konnte nicht aktualisiert werden",
+      "summary": "Die Zusammenfassung konnte nicht gespeichert werden",
+      "decision": "Die Entscheidung konnte nicht festgehalten werden",
+      "routeChange": "Die Routenänderung konnte nicht angewendet werden",
+      "close": "Die Sitzung konnte nicht geschlossen werden",
+      "discardSession": "Die Review konnte nicht verworfen werden",
+      "dismiss": "Schließen"
+    },
+    "sending": "Senden…",
+    "waiting": "Der Agent arbeitet…",
+    "findings_one": "{count} Befund",
+    "findings_other": "{count} Befunde",
+    "routeChangeConfirm_one": "Übernehmen und {count} Befund verlieren?",
+    "routeChangeConfirm_other": "Übernehmen und {count} Befunde verlieren?",
+    "moreActions": "Weitere Aktionen",
+    "cancelConfirm": "Deine Änderung verwerfen?",
+    "discardAllConfirm_one": "{count} Vorschlag verwerfen?",
+    "discardAllConfirm_other": "{count} Vorschläge verwerfen?",
+    "resetConfirm": "Die ganze Review löschen?",
+    "resetHint": "Löscht diese Sitzung und alles darin Entschiedene. Übernommene Kommentare bleiben.",
+    "uncoveredMore": "+{count} weitere",
+    "sessionTitle": "Review: {scope}",
+    "scopeOf": {
+      "diff": "die aktuellen Änderungen",
+      "branch": "dieser Branch gegen seine Basis",
+      "branchBase": "dieser Branch gegen {base}",
+      "folder": "ein Ordner",
+      "files": "ausgewählte Dateien",
+      "comments": "offene Kommentare",
+      "project": "das ganze Projekt",
+      "pr": "ein Pull-/Merge-Request",
+      "prompt": "die angefragte Review"
+    }
   },
   "loop": {
     "running": "Wird gelöst…",
@@ -1291,7 +1343,12 @@
     "signingOn": "Commits und Tags in diesem Repository werden jetzt signiert.",
     "signingOff": "Signieren für dieses Repository ausgeschaltet.",
     "signingFailed": "Das Signieren konnte nicht geändert werden.",
-    "rebaseDirty": "Committe oder stashe deine Änderungen zuerst — git rebaset nicht darüber hinweg."
+    "rebaseDirty": "Committe oder stashe deine Änderungen zuerst — git rebaset nicht darüber hinweg.",
+    "signing": {
+      "no-gpg": "Signieren ist an, aber gpg ist nicht installiert — der nächste Commit wird abgelehnt. Installiere gpg oder wechsle zu SSH-Signaturen (`git config gpg.format ssh`).",
+      "no-key": "Signieren ist an, aber es ist kein Schlüssel konfiguriert — der nächste Commit wird abgelehnt. Setze ihn mit `git config user.signingkey <id>`.",
+      "no-ssh-key": "SSH-Signieren ist an, aber es ist kein Schlüssel konfiguriert — der nächste Commit wird abgelehnt. Setze ihn mit `git config user.signingkey ~/.ssh/id_ed25519.pub`."
+    }
   },
   "lsp": {
     "createTask": "Aufgabe erstellen",
@@ -1640,9 +1697,18 @@
     "runFile": "Tests dieser Datei ausführen",
     "runOne": "Diesen Test ausführen",
     "refresh": "Erneut nach Tests suchen",
+    "collapseAll": "Alle Dateien einklappen",
+    "expandAll": "Alle Dateien ausklappen",
+    "stop": "Lauf stoppen",
     "count": "{n} Tests in {files} Dateien",
+    "passed": "{n} bestanden",
+    "failed": "{n} fehlgeschlagen",
+    "runningCount": "{n} laufen",
+    "skipped": "{n} übersprungen",
+    "notRun": "{n} nie gelaufen",
     "finished": "{passed} bestanden, {failed} fehlgeschlagen.",
     "stale": "Lief, bevor die Datei geändert wurde — kann veraltet sein.",
+    "cases": "Eine Deklaration, {n} Tests — der Name entsteht zur Laufzeit.",
     "staleShort": "veraltet"
   },
   "a11y": {

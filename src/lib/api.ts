@@ -427,6 +427,10 @@ export const gitSigning = (root: string) => invoke<boolean>("git_signing", { roo
 export const gitSetSigning = (root: string, on: boolean) =>
   invoke<void>("git_set_signing", { root, on })
 
+/** Why this repository could not sign — `""` when it can. The reasons are keys
+ *  (`no-gpg`, `no-key`, `no-ssh-key`), translated at the call site. */
+export const gitSigningCheck = (root: string) => invoke<string>("git_signing_check", { root })
+
 /** One commit as the graph draws it. */
 export interface GraphCommit {
   hash: string
@@ -454,6 +458,9 @@ export interface TestFile {
   /** Project-relative. */
   path: string
   framework: string
+  /** The directory the framework runs from — the nearest manifest at or above
+   *  the file, project-relative; `""` is the project root. */
+  project: string
   tests: TestItem[]
   /** Last-modified time, ms since the epoch — what a remembered verdict is
    *  checked against before it is shown as current. */
@@ -1100,6 +1107,17 @@ export interface FileEntry {
   summary?: string
 }
 
+/** A route change the agent proposed mid-session, pending the human's decision.
+ *  The session keeps running its current route until it is accepted. */
+export interface RouteChange {
+  id: string
+  route: RouteEntry[]
+  reason: string
+  author: string
+  agent?: string
+  createdAt: number
+}
+
 export interface Proposal {
   id: string
   artifactType: ArtifactType
@@ -1126,6 +1144,11 @@ export interface Session {
   route?: RouteEntry[]
   files?: FileEntry[]
   proposals?: Proposal[]
+  /** The files the scope is known to contain — set for the scopes Reado can
+   *  enumerate from git (the diff, a branch range), empty for a PR (which lives
+   *  in refs) or a free-text request. Route coverage is measured against it. */
+  expectedFiles?: string[]
+  routeChange?: RouteChange
   summary?: string
   agent?: string
   createdAt: number
@@ -1136,6 +1159,7 @@ export interface NewSession {
   title: string
   scope: ReviewScope
   objective?: Objective
+  expectedFiles?: string[]
 }
 
 /** Project-relative files changed for a scope (working tree, or `base...HEAD`). */
@@ -1191,6 +1215,13 @@ export const sessionSetFileSummary = (root: string, id: string, file: string, te
 
 export const sessionSetSummary = (root: string, id: string, text: string) =>
   invoke<Session>("session_set_summary", { root, id, text })
+
+/** Accept the agent's proposed route change — it becomes the session's route. */
+export const sessionAcceptRouteChange = (root: string, id: string) =>
+  invoke<Session>("session_accept_route_change", { root, id })
+
+export const sessionDiscardRouteChange = (root: string, id: string) =>
+  invoke<Session>("session_discard_route_change", { root, id })
 
 export const sessionClose = (root: string, id: string) =>
   invoke<Session>("session_close", { root, id })

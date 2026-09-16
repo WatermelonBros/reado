@@ -48,6 +48,10 @@ pub enum Error {
     Json(String),
     #[error("no such comment: {0}")]
     NotFound(String),
+    /// A well-formed call refused on purpose — the message names what to do
+    /// instead, because its reader is an agent deciding its next move.
+    #[error("{0}")]
+    Rejected(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

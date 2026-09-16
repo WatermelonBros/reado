@@ -103,6 +103,7 @@ import {
   SignpostIcon as Signpost,
   SparkleIcon as Sparkle,
   SquareSplitHorizontalIcon as SquareSplitHorizontal,
+  StopIcon as Stop,
   SwapIcon as Swap,
   TerminalIcon as Terminal,
   TrashIcon as Trash,
@@ -131,6 +132,8 @@ const wrap = (P: Icon) => {
 export const ChevronIcon = wrap(CaretRight)
 export const BeakerIcon = wrap(Flask)
 export const PlayIcon = wrap(Play)
+/** Halt something that is running — the counterpart to [`PlayIcon`]. */
+export const StopIcon = wrap(Stop)
 export const ArrowUpIcon = wrap(ArrowUp)
 export const ArrowDownIcon = wrap(ArrowDown)
 export const DeltaIcon = wrap(Triangle)

@@ -313,7 +313,6 @@
       "start": "Iniciar la revisión guiada (cambios actuales)",
       "open": "Abrir la revisión guiada"
     },
-    "busy": "El agente está trabajando…",
     "empty": {
       "title": "Revisión guiada en pareja",
       "body": "El agente propone un recorrido, revisa archivo a archivo y redacta comentarios; tú decides. Elige un enfoque y empieza: nada es definitivo hasta que lo apruebes."
@@ -337,6 +336,8 @@
       "branch": "Revisar esta rama frente a main"
     },
     "progress": "{reviewed}/{total} revisados",
+    "outside_one": "{count} fuera de la ruta",
+    "outside_other": "{count} fuera de la ruta",
     "planning": "Planificando el recorrido: el agente está leyendo el cambio…",
     "noRoute": "Todavía no hay recorrido. Revisa un archivo o reinicia la planificación.",
     "current": "Archivo actual",
@@ -367,6 +368,17 @@
     "falsePositive": "Falso positivo",
     "fpNote": "Comprobado: no es un problema.",
     "route": "Recorrido",
+    "routeChange": "Cambio de ruta propuesto",
+    "routeChangeExplain": "El agente propone otro orden de revisión. Hasta que elijas, se mantiene el actual.",
+    "routeChangeShape": "la ruta pasa de {from} a {to} archivos",
+    "routeChangeAdds": "añade",
+    "routeChangeDrops": "quita",
+    "routeChangeAccept": "Usar esta ruta",
+    "routeChangeDiscard": "Mantener el actual",
+    "uncovered_one": "{count} archivo en el alcance, fuera de la ruta",
+    "uncovered_other": "{count} archivos en el alcance, fuera de la ruta",
+    "uncoveredAsk": "Preguntar al agente",
+    "uncoveredAskHint": "Pide al agente que los añada a la ruta, o que explique por qué cada uno no necesita revisión",
     "fileSummary": "Resumen del archivo",
     "decisions": "Decisiones",
     "summary": "Resumen de la sesión",
@@ -412,7 +424,47 @@
     },
     "startReview": "Empezar la revisión",
     "pickPr": "Elige un pull request…",
-    "branchBase": "Rama base"
+    "branchBase": "Rama base",
+    "err": {
+      "noAgent": "No hay ningún agente en ejecución y no se pudo iniciar uno — abre un terminal y lánzalo, luego inténtalo de nuevo.",
+      "start": "No se pudo iniciar la revisión",
+      "load": "No se pudo leer la sesión",
+      "focus": "No se pudo ir a ese archivo",
+      "fileState": "No se pudo cambiar el estado del archivo",
+      "accept": "No se pudo aceptar la propuesta",
+      "proposal": "No se pudo actualizar la propuesta",
+      "summary": "No se pudo guardar el resumen",
+      "decision": "No se pudo registrar la decisión",
+      "routeChange": "No se pudo aplicar el cambio de ruta",
+      "close": "No se pudo cerrar la sesión",
+      "discardSession": "No se pudo descartar la revisión",
+      "dismiss": "Cerrar"
+    },
+    "sending": "Enviando…",
+    "waiting": "El agente está trabajando…",
+    "findings_one": "{count} hallazgo",
+    "findings_other": "{count} hallazgos",
+    "routeChangeConfirm_one": "¿Aceptar y perder {count} hallazgo?",
+    "routeChangeConfirm_other": "¿Aceptar y perder {count} hallazgos?",
+    "moreActions": "Más acciones",
+    "cancelConfirm": "¿Descartar tu edición?",
+    "discardAllConfirm_one": "¿Descartar {count} propuesta?",
+    "discardAllConfirm_other": "¿Descartar {count} propuestas?",
+    "resetConfirm": "¿Eliminar toda la revisión?",
+    "resetHint": "Elimina esta sesión y todo lo decidido en ella. Los comentarios aceptados se mantienen.",
+    "uncoveredMore": "+{count} más",
+    "sessionTitle": "Revisión: {scope}",
+    "scopeOf": {
+      "diff": "los cambios actuales",
+      "branch": "esta rama frente a su base",
+      "branchBase": "esta rama frente a {base}",
+      "folder": "una carpeta",
+      "files": "archivos seleccionados",
+      "comments": "comentarios abiertos",
+      "project": "todo el proyecto",
+      "pr": "una pull/merge request",
+      "prompt": "la revisión solicitada"
+    }
   },
   "loop": {
     "running": "Resolviendo…",
@@ -1291,7 +1343,12 @@
     "signingOn": "A partir de ahora los commits y las etiquetas de este repositorio van firmados.",
     "signingOff": "Firma desactivada para este repositorio.",
     "signingFailed": "No se pudo cambiar la firma.",
-    "rebaseDirty": "Primero haz commit o stash de tus cambios: git no hará rebase sobre ellos."
+    "rebaseDirty": "Primero haz commit o stash de tus cambios: git no hará rebase sobre ellos.",
+    "signing": {
+      "no-gpg": "La firma está activa, pero gpg no está instalado — el próximo commit será rechazado. Instala gpg o cambia a firma SSH (`git config gpg.format ssh`).",
+      "no-key": "La firma está activa, pero no hay ninguna clave configurada — el próximo commit será rechazado. Configúrala con `git config user.signingkey <id>`.",
+      "no-ssh-key": "La firma SSH está activa, pero no hay ninguna clave configurada — el próximo commit será rechazado. Configúrala con `git config user.signingkey ~/.ssh/id_ed25519.pub`."
+    }
   },
   "lsp": {
     "createTask": "Crear una tarea",
@@ -1640,9 +1697,18 @@
     "runFile": "Ejecutar las pruebas de este archivo",
     "runOne": "Ejecutar esta prueba",
     "refresh": "Volver a buscar pruebas",
+    "collapseAll": "Contraer todos los archivos",
+    "expandAll": "Expandir todos los archivos",
+    "stop": "Detener la ejecución",
     "count": "{n} pruebas en {files} archivos",
+    "passed": "{n} aprobados",
+    "failed": "{n} fallidos",
+    "runningCount": "{n} en curso",
+    "skipped": "{n} omitidos",
+    "notRun": "{n} nunca ejecutados",
     "finished": "{passed} pasaron, {failed} fallaron.",
     "stale": "Se ejecutó antes de que el archivo cambiara: puede estar desactualizado.",
+    "cases": "Una declaración, {n} pruebas — su nombre se construye en tiempo de ejecución.",
     "staleShort": "desactualizado"
   },
   "a11y": {

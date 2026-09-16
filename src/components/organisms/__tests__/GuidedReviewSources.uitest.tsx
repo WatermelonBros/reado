@@ -60,7 +60,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   useProject.setState({ root: ROOT, git: { isRepo: true } as never })
   useSettings.setState({ reviewObjective: "bug_risk" })
-  useGuidedReview.setState({ sessions: [], currentId: null, busy: false, start })
+  useGuidedReview.setState({ sessions: [], currentId: null, busy: null, start })
   useComments.setState({ comments: [] })
   useForge.setState(readyForge as never)
   gitBranches.mockResolvedValue({ local: ["main", "dev"], current: "dev", remote: [] })
@@ -217,7 +217,7 @@ describe("submitting a PR review back to the host", () => {
     }) as Session
 
   const mount = (s: Session) => {
-    useGuidedReview.setState({ sessions: [s], currentId: s.id, busy: false, start })
+    useGuidedReview.setState({ sessions: [s], currentId: s.id, busy: null, start })
     return render(<GuidedReviewPanel />)
   }
 
@@ -288,10 +288,10 @@ describe("submitting a PR review back to the host", () => {
 describe("while the agent is working", () => {
   it("says so in the header", () => {
     const { unmount } = render(<GuidedReviewPanel />)
-    expect(screen.queryByText("guided.busy")).not.toBeInTheDocument()
+    expect(screen.queryByText("guided.waiting")).not.toBeInTheDocument()
     unmount()
-    useGuidedReview.setState({ busy: true })
+    useGuidedReview.setState({ pending: "plan" })
     render(<GuidedReviewPanel />)
-    expect(screen.getByText("guided.busy")).toBeInTheDocument()
+    expect(screen.getByText("guided.waiting")).toBeInTheDocument()
   })
 })

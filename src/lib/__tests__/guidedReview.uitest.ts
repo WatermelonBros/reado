@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("../api", () => ({
   gitChangedFiles: vi.fn(() => Promise.resolve([])),
   sessionAcceptProposal: vi.fn(),
+  sessionAcceptRouteChange: vi.fn(),
+  sessionDiscardRouteChange: vi.fn(),
   sessionAddDecision: vi.fn(() => Promise.resolve()),
   sessionClose: vi.fn(),
   sessionCreate: vi.fn(),
@@ -18,9 +20,10 @@ vi.mock("../api", () => ({
   sessionSetProposalState: vi.fn(),
   sessionSetSummary: vi.fn(),
 }))
-vi.mock("../agents", () => ({ dispatchToAgent: vi.fn(() => Promise.resolve()) }))
+vi.mock("../agents", () => ({ dispatchToAgent: vi.fn(() => Promise.resolve(true)) }))
 vi.mock("../review", () => ({
   composeGuidedChallengePrompt: vi.fn(() => "challenge-prompt"),
+  composeGuidedCoverPrompt: vi.fn(() => "cover-prompt"),
   composeGuidedFilePrompt: vi.fn(() => "file-prompt"),
   composeGuidedPlanPrompt: vi.fn(() => "plan-prompt"),
   composeGuidedRespondPrompt: vi.fn(() => "respond-prompt"),
@@ -40,11 +43,12 @@ import {
   currentEntry,
   openProposals,
   progress,
-  scopeFromChanges,
+  uncoveredFiles,
   useGuidedReview,
 } from "@/lib/guidedReview"
 import {
   composeGuidedChallengePrompt,
+  composeGuidedCoverPrompt,
   composeGuidedFilePrompt,
   composeGuidedPlanPrompt,
   composeGuidedRespondPrompt,
@@ -89,7 +93,13 @@ const proposal = (p: Partial<Proposal> = {}): Proposal => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
-  useGuidedReview.setState({ sessions: [], currentId: null, busy: false })
+  useGuidedReview.setState({
+    sessions: [],
+    currentId: null,
+    busy: null,
+    pending: null,
+    error: null,
+  })
   vi.mocked(api.sessionList).mockResolvedValue([])
   vi.mocked(api.sessionCreate).mockResolvedValue(null as never)
   vi.mocked(api.sessionGet).mockResolvedValue(null as never)
@@ -203,6 +213,7 @@ describe("refresh / select", () => {
 describe("start", () => {
   it("creates a session, dispatches the plan prompt and clears busy", async () => {
     vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "new" }))
+    vi.mocked(api.gitChangedFiles).mockResolvedValue(["a.ts", "b.ts"])
     const scope: ReviewScope = { kind: "diff" }
     const result = await useGuidedReview.getState().start("/p", scope)
     expect(result?.id).toBe("new")
@@ -210,31 +221,85 @@ describe("start", () => {
       "/p",
       expect.objectContaining({ title: "Review the current diff", scope }),
     )
-    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("new", "the current diff", undefined)
+    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith(
+      "new",
+      "the current diff",
+      expect.objectContaining({ files: ["a.ts", "b.ts"] }),
+    )
     expect(useGuidedReview.getState().currentId).toBe("new")
     await flush()
-    expect(useGuidedReview.getState().busy).toBe(false)
+    expect(useGuidedReview.getState().busy).toBeNull()
   })
 
-  it("describes a branch scope with its base", async () => {
+  it("persists the scope's file set on the session, untracked files included", async () => {
+    // Reado reads it once here: it is what the planner is told, and what route
+    // coverage is measured against later. Re-deriving it agent-side is how an
+    // untracked file goes unreviewed.
     vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "n" }))
-    await useGuidedReview.getState().start("/p", { kind: "branch", base: "main" })
-    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "this branch vs main", undefined)
+    vi.mocked(api.gitChangedFiles).mockResolvedValue(["a.ts", "brand-new.ts"])
+    await useGuidedReview.getState().start("/p", { kind: "diff" }, "security")
+    expect(api.gitChangedFiles).toHaveBeenCalledWith("/p", undefined)
+    expect(api.sessionCreate).toHaveBeenCalledWith(
+      "/p",
+      expect.objectContaining({ expectedFiles: ["a.ts", "brand-new.ts"] }),
+    )
+    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "the current diff", {
+      objective: "security",
+      files: ["a.ts", "brand-new.ts"],
+      pr: undefined,
+    })
   })
 
-  it("describes a folder scope by its paths", async () => {
+  it("describes a branch scope with its base and asks git for that range", async () => {
+    vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "n" }))
+    vi.mocked(api.gitChangedFiles).mockResolvedValue(["x.ts"])
+    await useGuidedReview.getState().start("/p", { kind: "branch", base: "main" })
+    expect(api.gitChangedFiles).toHaveBeenCalledWith("/p", "main")
+    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith(
+      "n",
+      "this branch vs main",
+      expect.objectContaining({ files: ["x.ts"] }),
+    )
+  })
+
+  it("claims no file set for a scope git cannot enumerate", async () => {
+    // A folder/PR/free-text scope has no working-tree file list to speak of;
+    // asserting one would make the coverage gap a fiction.
     vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "n" }))
     await useGuidedReview.getState().start("/p", { kind: "folder", paths: ["src", "lib"] })
-    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "src, lib", undefined)
+    expect(api.gitChangedFiles).not.toHaveBeenCalled()
+    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "src, lib", {
+      objective: undefined,
+      files: [],
+      pr: undefined,
+    })
+    expect(api.sessionCreate).toHaveBeenCalledWith(
+      "/p",
+      expect.objectContaining({ expectedFiles: [] }),
+    )
   })
 
   it("passes the PR's derived git refs to the plan prompt (non-destructive)", async () => {
     vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "n" }))
     await useGuidedReview.getState().start("/p", { kind: "pr", pr: "#42" })
+    expect(api.gitChangedFiles).not.toHaveBeenCalled()
     expect(composeGuidedPlanPrompt).toHaveBeenCalledWith("n", "PR #42", {
-      head: "refs/reado/pr-42",
-      base: "refs/reado/pr-42-base",
+      objective: undefined,
+      files: [],
+      pr: { head: "refs/reado/pr-42", base: "refs/reado/pr-42-base" },
     })
+  })
+
+  it("starts anyway when git cannot answer", async () => {
+    vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "n" }))
+    vi.mocked(api.gitChangedFiles).mockRejectedValue(new Error("not a repo"))
+    const result = await useGuidedReview.getState().start("/p", { kind: "diff" })
+    expect(result?.id).toBe("n")
+    expect(composeGuidedPlanPrompt).toHaveBeenCalledWith(
+      "n",
+      "the current diff",
+      expect.objectContaining({ files: [] }),
+    )
   })
 
   it("returns null and dispatches nothing when creation fails", async () => {
@@ -281,7 +346,7 @@ describe("reviewFile / challenge / respond", () => {
     )
     expect(dispatchToAgent).toHaveBeenCalledWith("file-prompt")
     await flush()
-    expect(useGuidedReview.getState().busy).toBe(false)
+    expect(useGuidedReview.getState().busy).toBeNull()
   })
 
   it("challenge dispatches the challenge prompt", async () => {
@@ -289,7 +354,7 @@ describe("reviewFile / challenge / respond", () => {
     expect(composeGuidedChallengePrompt).toHaveBeenCalledWith("s1", "a.ts")
     expect(dispatchToAgent).toHaveBeenCalledWith("challenge-prompt")
     await flush()
-    expect(useGuidedReview.getState().busy).toBe(false)
+    expect(useGuidedReview.getState().busy).toBeNull()
   })
 
   it("respond dispatches the respond prompt", async () => {
@@ -297,7 +362,7 @@ describe("reviewFile / challenge / respond", () => {
     expect(composeGuidedRespondPrompt).toHaveBeenCalledWith("s1", "a.ts")
     expect(dispatchToAgent).toHaveBeenCalledWith("respond-prompt")
     await flush()
-    expect(useGuidedReview.getState().busy).toBe(false)
+    expect(useGuidedReview.getState().busy).toBeNull()
   })
 
   it("widen anchors the wide pass on the route's files", async () => {
@@ -308,7 +373,7 @@ describe("reviewFile / challenge / respond", () => {
     expect(composeGuidedWidenPrompt).toHaveBeenCalledWith("s1", ["a.ts", "b.ts"])
     expect(dispatchToAgent).toHaveBeenCalledWith("widen-prompt")
     await flush()
-    expect(useGuidedReview.getState().busy).toBe(false)
+    expect(useGuidedReview.getState().busy).toBeNull()
   })
 
   it("widen still runs for an unknown session, with no files to anchor on", async () => {
@@ -486,16 +551,124 @@ describe("close / discardSession", () => {
   })
 })
 
-describe("scopeFromChanges", () => {
-  it("probes changed files and returns the scope descriptor", async () => {
-    const scope = await scopeFromChanges("/p", "branch", "main")
-    expect(api.gitChangedFiles).toHaveBeenCalledWith("/p", "main")
-    expect(scope).toEqual({ kind: "branch", base: "main" })
+describe("uncoveredFiles", () => {
+  it("names the expected files the route never picked up", () => {
+    const s = session({
+      expectedFiles: ["a.ts", "b.ts", "untracked.ts"],
+      route: [entry("a.ts")],
+    })
+    expect(uncoveredFiles(s)).toEqual(["b.ts", "untracked.ts"])
   })
 
-  it("tolerates a failing probe", async () => {
-    vi.mocked(api.gitChangedFiles).mockRejectedValue(new Error("no git"))
-    const scope = await scopeFromChanges("/p", "diff")
-    expect(scope).toEqual({ kind: "diff", base: undefined })
+  it("treats a deliberate omission as an answer, not a gap", () => {
+    // Saying a file needs no review closes it; saying nothing does not.
+    const s = session({
+      expectedFiles: ["a.ts", "gen.ts", "vendor.ts"],
+      route: [entry("a.ts")],
+      files: [fileEntry("gen.ts", "out_of_scope"), fileEntry("vendor.ts", "skipped")],
+    })
+    expect(uncoveredFiles(s)).toEqual([])
+  })
+
+  it("claims no gap without an expected set, and none for no session", () => {
+    expect(uncoveredFiles(session({ route: [entry("a.ts")] }))).toEqual([])
+    expect(uncoveredFiles(null)).toEqual([])
+  })
+})
+
+describe("coverage and route changes", () => {
+  it("cover asks the agent about exactly the files that are missing", async () => {
+    await useGuidedReview.getState().cover("/p", "s1", ["b.ts", "c.ts"])
+    expect(composeGuidedCoverPrompt).toHaveBeenCalledWith("s1", ["b.ts", "c.ts"])
+    expect(dispatchToAgent).toHaveBeenCalledWith("cover-prompt")
+    await flush()
+    expect(useGuidedReview.getState().busy).toBeNull()
+  })
+
+  it("accepting a route change replaces the session it belongs to", async () => {
+    const applied = session({ id: "s1", route: [entry("a.ts"), entry("b.ts")] })
+    vi.mocked(api.sessionAcceptRouteChange).mockResolvedValue(applied)
+    useGuidedReview.setState({ sessions: [session({ id: "s1" })], currentId: "s1" })
+    await useGuidedReview.getState().acceptRouteChange("/p", "s1")
+    expect(api.sessionAcceptRouteChange).toHaveBeenCalledWith("/p", "s1")
+    expect(useGuidedReview.getState().sessions[0].route).toHaveLength(2)
+  })
+
+  it("discarding leaves the route alone", async () => {
+    const kept = session({ id: "s1", route: [entry("a.ts")] })
+    vi.mocked(api.sessionDiscardRouteChange).mockResolvedValue(kept)
+    useGuidedReview.setState({ sessions: [session({ id: "s1" })], currentId: "s1" })
+    await useGuidedReview.getState().discardRouteChange("/p", "s1")
+    expect(useGuidedReview.getState().sessions[0].route).toEqual([entry("a.ts")])
+    expect(useGuidedReview.getState().sessions[0].routeChange).toBeUndefined()
+  })
+
+  it("a failing disposal leaves the store as it was", async () => {
+    vi.mocked(api.sessionAcceptRouteChange).mockRejectedValue(new Error("gone"))
+    const before = session({ id: "s1", route: [entry("a.ts")] })
+    useGuidedReview.setState({ sessions: [before], currentId: "s1" })
+    await useGuidedReview.getState().acceptRouteChange("/p", "s1")
+    expect(useGuidedReview.getState().sessions[0]).toBe(before)
+  })
+})
+
+describe("handing work to the agent", () => {
+  beforeEach(() => {
+    vi.mocked(dispatchToAgent).mockResolvedValue(true)
+  })
+
+  it("says it is waiting once the prompt has gone, and stops when the session moves", async () => {
+    // Reado does not run the model: the only honest end of "waiting" is the
+    // session file changing under the agent's hands.
+    vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "s1", updatedAt: 1 }))
+    await useGuidedReview.getState().start("/p", { kind: "diff" })
+    await flush()
+    expect(useGuidedReview.getState().pending).toBe("plan")
+
+    vi.mocked(api.sessionList).mockResolvedValue([session({ id: "s1", updatedAt: 2 })])
+    await useGuidedReview.getState().load("/p")
+    expect(useGuidedReview.getState().pending).toBeNull()
+  })
+
+  it("keeps waiting while the session has not moved", async () => {
+    vi.mocked(api.sessionCreate).mockResolvedValue(session({ id: "s1", updatedAt: 1 }))
+    await useGuidedReview.getState().start("/p", { kind: "diff" })
+    await flush()
+    vi.mocked(api.sessionList).mockResolvedValue([session({ id: "s1", updatedAt: 1 })])
+    await useGuidedReview.getState().load("/p")
+    expect(useGuidedReview.getState().pending).toBe("plan")
+  })
+
+  it("reports a dispatch that went nowhere instead of doing nothing", async () => {
+    // `dispatchToAgent` answers false when there is no agent to send to. Every
+    // call site used to ignore it: the click did nothing and said nothing.
+    vi.mocked(dispatchToAgent).mockResolvedValue(false)
+    await useGuidedReview.getState().widen("/p", "s1")
+    await flush()
+    expect(useGuidedReview.getState().pending).toBeNull()
+    expect(useGuidedReview.getState().error).toContain("No agent is running")
+    useGuidedReview.getState().dismissError()
+    expect(useGuidedReview.getState().error).toBeNull()
+  })
+
+  it("names the action that failed, and what the backend said", async () => {
+    vi.mocked(api.sessionAcceptProposal).mockRejectedValue(new Error("disk full"))
+    useGuidedReview.setState({ sessions: [session({ id: "s1" })], currentId: "s1" })
+    await useGuidedReview.getState().accept("/p", "s1", "p1")
+    expect(useGuidedReview.getState().error).toContain("disk full")
+  })
+
+  it("marks each action with its own key, so one control does not blank the panel", async () => {
+    // A single global flag made every button in the panel look busy because one
+    // of them was.
+    const keys: (string | null)[] = []
+    vi.mocked(dispatchToAgent).mockImplementation(async () => {
+      keys.push(useGuidedReview.getState().busy)
+      return true
+    })
+    await useGuidedReview.getState().respond("/p", "s1", "src/a.ts")
+    await useGuidedReview.getState().widen("/p", "s1")
+    await flush()
+    expect(keys).toEqual(["respond:src/a.ts", "widen"])
   })
 })

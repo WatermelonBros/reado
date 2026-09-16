@@ -313,7 +313,6 @@
       "start": "Démarrer la revue guidée (modifications en cours)",
       "open": "Ouvrir la revue guidée"
     },
-    "busy": "L'agent travaille…",
     "empty": {
       "title": "Revue guidée en binôme",
       "body": "L'agent propose un parcours, relit fichier par fichier et rédige des commentaires ; vous décidez. Choisissez un axe et lancez-vous — rien n'est définitif tant que vous n'avez pas approuvé."
@@ -337,6 +336,8 @@
       "branch": "Comparer cette branche à main"
     },
     "progress": "{reviewed}/{total} relus",
+    "outside_one": "{count} hors itinéraire",
+    "outside_other": "{count} hors itinéraire",
     "planning": "Planification du parcours — l'agent lit la modification…",
     "noRoute": "Pas encore de parcours. Relisez un fichier ou relancez la planification.",
     "current": "Fichier courant",
@@ -367,6 +368,17 @@
     "falsePositive": "Faux positif",
     "fpNote": "Vérifié — ce n'est pas un problème.",
     "route": "Parcours",
+    "routeChange": "Changement d'itinéraire proposé",
+    "routeChangeExplain": "L'agent propose un autre ordre de revue. Rien ne bouge tant que tu n'as pas choisi.",
+    "routeChangeShape": "l'itinéraire passe de {from} à {to} fichiers",
+    "routeChangeAdds": "ajoute",
+    "routeChangeDrops": "retire",
+    "routeChangeAccept": "Utiliser cet itinéraire",
+    "routeChangeDiscard": "Garder l'actuel",
+    "uncovered_one": "{count} fichier dans le périmètre, hors itinéraire",
+    "uncovered_other": "{count} fichiers dans le périmètre, hors itinéraire",
+    "uncoveredAsk": "Demander à l'agent",
+    "uncoveredAskHint": "Demandez à l'agent de les ajouter à l'itinéraire, ou de dire pourquoi chacun n'a pas besoin d'être relu",
     "fileSummary": "Résumé du fichier",
     "decisions": "Décisions",
     "summary": "Résumé de la session",
@@ -412,7 +424,47 @@
     },
     "startReview": "Lancer la revue",
     "pickPr": "Choisissez une pull request…",
-    "branchBase": "Branche de base"
+    "branchBase": "Branche de base",
+    "err": {
+      "noAgent": "Aucun agent en cours d'exécution, et impossible d'en démarrer un — ouvre un terminal et lance-le, puis réessaie.",
+      "start": "Impossible de démarrer la revue",
+      "load": "Impossible de lire la session",
+      "focus": "Impossible d'aller à ce fichier",
+      "fileState": "Impossible de changer l'état de ce fichier",
+      "accept": "Impossible d'accepter la proposition",
+      "proposal": "Impossible de mettre à jour la proposition",
+      "summary": "Impossible d'enregistrer le résumé",
+      "decision": "Impossible d'enregistrer la décision",
+      "routeChange": "Impossible d'appliquer le changement d'itinéraire",
+      "close": "Impossible de fermer la session",
+      "discardSession": "Impossible de supprimer la revue",
+      "dismiss": "Fermer"
+    },
+    "sending": "Envoi…",
+    "waiting": "L'agent travaille…",
+    "findings_one": "{count} constat",
+    "findings_other": "{count} constats",
+    "routeChangeConfirm_one": "Accepter en perdant {count} constat ?",
+    "routeChangeConfirm_other": "Accepter en perdant {count} constats ?",
+    "moreActions": "Autres actions",
+    "cancelConfirm": "Abandonner ta modification ?",
+    "discardAllConfirm_one": "Rejeter {count} proposition ?",
+    "discardAllConfirm_other": "Rejeter {count} propositions ?",
+    "resetConfirm": "Supprimer toute la revue ?",
+    "resetHint": "Supprime cette session et tout ce qui y a été décidé. Les commentaires acceptés restent.",
+    "uncoveredMore": "+{count} autres",
+    "sessionTitle": "Revue : {scope}",
+    "scopeOf": {
+      "diff": "les modifications actuelles",
+      "branch": "cette branche face à sa base",
+      "branchBase": "cette branche face à {base}",
+      "folder": "un dossier",
+      "files": "fichiers sélectionnés",
+      "comments": "commentaires ouverts",
+      "project": "tout le projet",
+      "pr": "une pull/merge request",
+      "prompt": "la revue demandée"
+    }
   },
   "loop": {
     "running": "Résolution…",
@@ -1291,7 +1343,12 @@
     "signingOn": "Les commits et les tags de ce dépôt sont désormais signés.",
     "signingOff": "Signature désactivée pour ce dépôt.",
     "signingFailed": "Impossible de modifier la signature.",
-    "rebaseDirty": "Committez ou remisez d'abord vos modifications : git ne rebase pas par-dessus."
+    "rebaseDirty": "Committez ou remisez d'abord vos modifications : git ne rebase pas par-dessus.",
+    "signing": {
+      "no-gpg": "La signature est active, mais gpg n'est pas installé — le prochain commit sera refusé. Installe gpg, ou passe à la signature SSH (`git config gpg.format ssh`).",
+      "no-key": "La signature est active, mais aucune clé n'est configurée — le prochain commit sera refusé. Définis-la avec `git config user.signingkey <id>`.",
+      "no-ssh-key": "La signature SSH est active, mais aucune clé n'est configurée — le prochain commit sera refusé. Définis-la avec `git config user.signingkey ~/.ssh/id_ed25519.pub`."
+    }
   },
   "lsp": {
     "createTask": "Créer une tâche",
@@ -1640,9 +1697,18 @@
     "runFile": "Lancer les tests de ce fichier",
     "runOne": "Lancer ce test",
     "refresh": "Rechercher les tests à nouveau",
+    "collapseAll": "Tout replier",
+    "expandAll": "Tout déplier",
+    "stop": "Arrêter l'exécution",
     "count": "{n} tests dans {files} fichiers",
+    "passed": "{n} réussis",
+    "failed": "{n} échoués",
+    "runningCount": "{n} en cours",
+    "skipped": "{n} ignorés",
+    "notRun": "{n} jamais exécutés",
     "finished": "{passed} réussis, {failed} échoués.",
     "stale": "Exécuté avant la modification du fichier : peut être obsolète.",
+    "cases": "Une déclaration, {n} tests — son nom est construit à l'exécution.",
     "staleShort": "obsolète"
   },
   "a11y": {

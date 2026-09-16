@@ -53,3 +53,38 @@ new comments are attributed to you automatically.
   the intent of each task precisely.
 - If `reado` is not found, tell the user to run `pnpm cli:install` in the Reado
   repo (or otherwise put the `reado` binary on PATH).
+
+## Guided Pair Review
+
+A `READO GUIDED REVIEW` prompt carries a **session id**: the user is reviewing
+with you, one file at a time, and everything you produce is a **proposal** they
+accept, edit or discard. Use the MCP tools when they are available
+(`session_show`, `review_context`, `review_plan`, `review_propose_route_change`,
+`review_propose_comment`, `review_propose`, `review_summarize_file`,
+`session_summarize`) — they take typed arguments, so a route survives that a
+shell-quoted JSON argument would not. The CLI carries the same verbs:
+
+```
+reado session show <id> --json               # the whole session
+reado review plan <id> --route @route.json   # or `-` for stdin, or inline JSON
+reado review context <id> --file F --json    # before reviewing a file
+reado review propose-comment <id> --file F --line N [--end M] --type T "<body>"
+reado review propose <id> --kind question|follow-up|needs-context --file F --line N "<body>"
+reado review propose-route-change <id> --route @new.json --reason "<why>"
+reado review summarize-file <id> --file F "<what you checked / risks / next>"
+reado session set-file <id> --file F --state out-of-scope
+reado session summarize <id> "<the overall read>"
+```
+
+### Rules for a review
+
+- **Propose, never accept.** The human disposes of every comment, question and
+  route change. Do not edit code during a review.
+- **The route belongs to the human.** Once planned, it is theirs: `plan` refuses
+  to overwrite it. A file you discover matters mid-review is a
+  `propose-route-change` with a reason — it waits for them, so keep reviewing.
+- **Cover the scope or say why not.** `plan` answers with the files the scope
+  contains that your route left out. Route them, or mark each `out-of-scope`.
+  Saying a file needs no review is an answer; silence is not.
+- **Prefer a question to a guess.** `--kind needs-context` when you cannot judge
+  the code without more of it.

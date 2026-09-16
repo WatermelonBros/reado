@@ -9,7 +9,7 @@
  * saying "failed" would send the reader looking for a problem that isn't there.
  */
 import { ask } from "@tauri-apps/plugin-dialog"
-import { t } from "@/i18n"
+import { type MessageKey, t } from "@/i18n"
 import {
   gitAmend,
   gitCherryPick,
@@ -25,6 +25,7 @@ import {
   gitSequencerContinue,
   gitSetSigning,
   gitSigning,
+  gitSigningCheck,
   gitSubmodules,
   gitSubmoduleUpdate,
   gitTagCreate,
@@ -289,6 +290,15 @@ export async function setSigning(on: boolean): Promise<void> {
   if (!r) return
   try {
     await gitSetSigning(r, on)
+    // Turning it on writes two config keys and nothing else happens — until the
+    // next commit, which git refuses with gpg's own error. Ask now, while the
+    // switch is still the thing on screen, and say what is missing. The setting
+    // stands either way: the user asked for it, and the answer here is advice.
+    const missing = on ? await gitSigningCheck(r).catch(() => "") : ""
+    if (missing) {
+      notify("error", t(`git.signing.${missing}` as MessageKey))
+      return
+    }
     notify("info", on ? t("git.signingOn") : t("git.signingOff"))
   } catch (e) {
     notifyError("gitOps", t("git.signingFailed"), e)
