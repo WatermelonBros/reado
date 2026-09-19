@@ -38,7 +38,7 @@ import {
   ptyWrite,
   resolvePath,
 } from "@/lib/api"
-import { agentIsBusy } from "@/lib/mascot"
+import { agentAsked, agentIsBusy } from "@/lib/mascot"
 import { nextPaint } from "@/lib/nextPaint"
 import { notify, notifyError } from "@/lib/notice"
 import { useProject, useSettings } from "@/lib/store"
@@ -339,7 +339,14 @@ export function Terminal({ id, cwd, active, profile }: Props) {
         }
         return true
       })
-      term.onData((data) => ptyWrite(id, data))
+      term.onData((data) => {
+        // Answering the agent in its own pane starts a turn Reado never
+        // dispatched. Without this the companion stays settled through the whole
+        // of it, because every paint that follows looks like the last one
+        // tidying up.
+        if (useTerminals.getState().agentTerminals.includes(id)) agentAsked()
+        void ptyWrite(id, data)
+      })
 
       document.fonts?.ready.then(() => !disposed && syncSize())
     }

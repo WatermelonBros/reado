@@ -28,6 +28,13 @@ pub struct DirEntry {
     pub modified: Option<u64>,
 }
 
+/// Nanoseconds since the epoch, or 0 if the clock is before it.
+pub(crate) fn now_nanos() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos())
+}
+
 /// Milliseconds since the epoch for a directory entry's mtime, if available.
 fn modified_ms(path: &Path) -> Option<u64> {
     std::fs::metadata(path)
@@ -189,7 +196,10 @@ const MAX_INDEXED_FILES: usize = 50_000;
 
 /// Walk the whole project (gitignore-aware) and return every file's path, for
 /// the fuzzy file finder. Directories and ignored paths are excluded.
-#[tauri::command]
+/// `async` for the same reason as `git_info`: a full recursive walk of a large
+/// project on the main thread freezes the window, and the file tree re-runs it
+/// on every save.
+#[tauri::command(async)]
 pub fn list_files(root: String, exclude: Vec<String>) -> Result<Vec<String>> {
     let root = PathBuf::from(&root);
     let mut walk = WalkBuilder::new(&root);
@@ -341,18 +351,7 @@ pub fn write_file(
 pub fn create_file(root: String, path: String) -> Result<String> {
     let root = PathBuf::from(&root);
     let target = root.join(&path);
-    // Confine *before* creating any directories: canonicalize the nearest
-    // existing ancestor of the target and reject anything that resolves outside
-    // root, so a `..`-escaping path can't leave directories behind outside the
-    // project as a side effect of the create_dir_all below.
-    let canon_root = root.canonicalize()?;
-    let anchor = target
-        .ancestors()
-        .find(|p| p.exists())
-        .ok_or(Error::PathEscapesRoot)?;
-    if !anchor.canonicalize()?.starts_with(&canon_root) {
-        return Err(Error::PathEscapesRoot);
-    }
+    ensure_ancestor_within(&root, &target)?;
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -486,6 +485,23 @@ pub fn read_file(
     }
 }
 
+/// Confine a destination whose parent may not exist yet, *before* anything is
+/// created: canonicalize the nearest existing ancestor of `target` and reject
+/// anything resolving outside `root`. Without this, a `..`-escaping path would
+/// leave directories behind outside the project as a side effect of the
+/// `create_dir_all` that has to run before `ensure_dest_within` can work.
+fn ensure_ancestor_within(root: &Path, target: &Path) -> Result<()> {
+    let canon_root = root.canonicalize()?;
+    let anchor = target
+        .ancestors()
+        .find(|p| p.exists())
+        .ok_or(Error::PathEscapesRoot)?;
+    if !anchor.canonicalize()?.starts_with(&canon_root) {
+        return Err(Error::PathEscapesRoot);
+    }
+    Ok(())
+}
+
 /// Resolve a destination whose final component may not exist yet: the parent
 /// directory must canonicalize inside `root`.
 fn ensure_dest_within(root: &Path, target: &Path) -> Result<PathBuf> {
@@ -541,17 +557,7 @@ fn copy_path(src: &Path, dest: &Path) -> Result<()> {
 pub fn create_dir(root: String, path: String) -> Result<String> {
     let root = PathBuf::from(&root);
     let target = root.join(&path);
-    // Same order as create_file: confine against the nearest existing ancestor
-    // *before* creating anything, so a `..`-escaping path can't leave
-    // directories behind outside the project.
-    let canon_root = root.canonicalize()?;
-    let anchor = target
-        .ancestors()
-        .find(|p| p.exists())
-        .ok_or(Error::PathEscapesRoot)?;
-    if !anchor.canonicalize()?.starts_with(&canon_root) {
-        return Err(Error::PathEscapesRoot);
-    }
+    ensure_ancestor_within(&root, &target)?;
     // `ensure_dest_within` canonicalizes the parent, so the parent has to exist
     // first — same order as create_file, and safe because the ancestor guard
     // above already refused anything resolving outside the root.
@@ -609,10 +615,7 @@ pub fn trash_path(root: String, path: String) -> Result<String> {
     std::fs::create_dir_all(&trash)?;
     // A monotonic-ish prefix keeps same-named deletions from clashing; unique_dest
     // is the final guard.
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+    let stamp = now_nanos();
     let dest = unique_dest(&trash.join(format!("{stamp}__{}", name.to_string_lossy())));
     std::fs::rename(&src, &dest)?;
     crate::log::info(

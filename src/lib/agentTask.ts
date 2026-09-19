@@ -18,7 +18,6 @@ import { dispatchToAgent } from "./agents"
 import { notifyError } from "./notice"
 
 /** A task's state — deliberately distinct from "the result was empty". */
-export type TaskStatus = "running" | "done" | "failed" | "cancelled" | "timedOut"
 
 /** A finished task: a value only ever accompanies `done`. */
 export type Outcome<T> =

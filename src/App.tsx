@@ -51,14 +51,15 @@ export default function App() {
   const mascot = useSettings((s) => s.mascot)
   const mascotCorner = useSettings((s) => s.mascotCorner)
   const mascotSize = useSettings((s) => s.mascotSize)
+  const mascotMonitor = useSettings((s) => s.mascotMonitor)
   useEffect(() => {
-    void mascotShow(mascot, mascotCorner, mascotSize).catch((e: unknown) =>
+    void mascotShow(mascot, mascotCorner, mascotSize, mascotMonitor).catch((e: unknown) =>
       log.warn("mascot window failed", { error: safeError(e) }),
     )
     // The backend moves the window; this is what tells the page inside it which
     // corner of itself the character belongs in, and how big to draw it.
     publishMascotConfig({ corner: mascotCorner, size: mascotSize })
-  }, [mascot, mascotCorner, mascotSize])
+  }, [mascot, mascotCorner, mascotSize, mascotMonitor])
   // This window is where the facts arrive, so this window is what tells the
   // companion — which has its own JavaScript and cannot see this store.
   useEffect(() => publishMascotState(), [])

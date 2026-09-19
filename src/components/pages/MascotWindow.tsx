@@ -75,7 +75,12 @@ export function MascotWindow() {
       const boxes = [
         ...el.querySelectorAll("[data-mascot-hit],[data-mascot-bubble],[data-mascot-tuck]"),
       ].map((n) => (n as HTMLElement).getBoundingClientRect())
-      if (boxes.length === 0) return
+      // Nothing solid left — the window is a sheet of glass, and saying so is
+      // what stops it swallowing clicks meant for what is behind it.
+      if (boxes.length === 0) {
+        void mascotHitRect(0, 0, 0, 0).catch(() => {})
+        return
+      }
       // A few pixels of grace around it: the pass-through is toggled by a poll,
       // so a pointer arriving fast at a three-pixel bar would otherwise reach it
       // before the window has started accepting clicks.

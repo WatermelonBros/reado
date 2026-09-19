@@ -994,6 +994,8 @@
     "mascot": "Mostra la mascotte",
     "mascotCorner": "Angolo",
     "mascotHint": "Una piccola compagna in un angolo dello schermo: mostra cosa sta facendo l'agente e dice quando serve il tuo intervento.",
+    "mascotMonitor": "Schermo",
+    "mascotMonitorAuto": "Schermo di Reado",
     "mascotSize": "Dimensione",
     "mode": {
       "manual": "Manuale",
@@ -1258,7 +1260,6 @@
     "remoteAdd": "Nome del remote",
     "remoteUrl": "URL del remote",
     "remoteAdded": "Remote “{name}” aggiunto.",
-    "remoteRename": "Rinomina remote",
     "remoteRemove": "Rimuovi remote",
     "remoteRemoveAsk": "Rimuovere il remote “{name}”?",
     "remoteFailed": "Non ha funzionato sui remote.",
@@ -1733,6 +1734,7 @@
   "mascot": {
     "label": "La mascotte di Reado",
     "show": "Richiama la mascotte",
+    "toggle": "Mostra o nascondi la mascotte",
     "tuck": "Mandala al bordo"
   }
 }

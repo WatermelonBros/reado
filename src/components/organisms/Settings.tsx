@@ -18,7 +18,7 @@ import { Textarea } from "@/components/atoms/Textarea"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { SettingsJson } from "@/components/organisms/SettingsJson"
 import { LOCALES, type Locale, type MessageKey, useLocale } from "@/i18n"
-import { cliInstalled, installCli } from "@/lib/api"
+import { cliInstalled, installCli, mascotMonitors } from "@/lib/api"
 import { makeDefaultApp } from "@/lib/defaults"
 import { allIconThemes } from "@/lib/extIcons"
 import { type ExtThemePreview, loadExtThemePreviews } from "@/lib/extThemes"
@@ -916,6 +916,7 @@ function SystemTab() {
                 ariaLabel={t("settings.mascotCorner")}
               />
             </Field>
+            <MascotMonitorField />
             <Field label={t("settings.mascotSize")} settingKey="mascotSize">
               {/* A native range: dragging a size and watching it change is the
                   whole interaction, and the platform's own control does it with
@@ -945,6 +946,36 @@ function SystemTab() {
       <LoggingSettings />
       <CliInstall />
     </>
+  )
+}
+
+/** Which display the companion is parked on. The list comes from the OS, so a
+ *  screen unplugged since the choice was made simply isn't offered — the stored
+ *  name stays, and the backend falls back to the main window's screen until it
+ *  comes back. */
+function MascotMonitorField() {
+  const monitor = useSettings((s) => s.mascotMonitor)
+  const { t } = useTranslation()
+  const [monitors, setMonitors] = useState<string[]>([])
+  useEffect(() => {
+    mascotMonitors()
+      .then(setMonitors)
+      .catch(() => setMonitors([]))
+  }, [])
+  // One screen is not a choice.
+  if (monitors.length < 2) return null
+  return (
+    <Field label={t("settings.mascotMonitor")} settingKey="mascotMonitor">
+      <Select
+        value={monitor}
+        onChange={(v) => useSettings.getState().set({ mascotMonitor: v })}
+        options={[
+          { value: "", label: t("settings.mascotMonitorAuto") },
+          ...monitors.map((m) => ({ value: m, label: m })),
+        ]}
+        ariaLabel={t("settings.mascotMonitor")}
+      />
+    </Field>
   )
 }
 

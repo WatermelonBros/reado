@@ -994,6 +994,8 @@
     "mascot": "Show the mascot",
     "mascotCorner": "Corner",
     "mascotHint": "A small companion in a corner of the screen: it shows what the agent is doing, and says when it needs you.",
+    "mascotMonitor": "Display",
+    "mascotMonitorAuto": "Reado's screen",
     "mascotSize": "Size",
     "mode": {
       "manual": "Manual",
@@ -1258,7 +1260,6 @@
     "remoteAdd": "Remote name",
     "remoteUrl": "Remote URL",
     "remoteAdded": "Remote “{name}” added.",
-    "remoteRename": "Rename remote",
     "remoteRemove": "Remove remote",
     "remoteRemoveAsk": "Remove the remote “{name}”?",
     "remoteFailed": "That didn't work on the remotes.",
@@ -1733,6 +1734,7 @@
   "mascot": {
     "label": "Reado's mascot",
     "show": "Bring the mascot back",
+    "toggle": "Show or hide the mascot",
     "tuck": "Send it to the edge"
   }
 }

@@ -994,6 +994,8 @@
     "mascot": "Afficher la mascotte",
     "mascotCorner": "Coin",
     "mascotHint": "Une petite compagne dans un coin de l'écran : elle montre ce que fait l'agent et prévient quand elle a besoin de vous.",
+    "mascotMonitor": "Écran",
+    "mascotMonitorAuto": "Écran de Reado",
     "mascotSize": "Taille",
     "mode": {
       "manual": "Manuel",
@@ -1258,7 +1260,6 @@
     "remoteAdd": "Nom du dépôt distant",
     "remoteUrl": "URL du dépôt distant",
     "remoteAdded": "Dépôt distant « {name} » ajouté.",
-    "remoteRename": "Renommer le dépôt distant",
     "remoteRemove": "Supprimer le dépôt distant",
     "remoteRemoveAsk": "Supprimer le dépôt distant « {name} » ?",
     "remoteFailed": "Cela n'a pas marché sur les dépôts distants.",
@@ -1733,6 +1734,7 @@
   "mascot": {
     "label": "La mascotte de Reado",
     "show": "Rappeler la mascotte",
+    "toggle": "Afficher ou masquer la mascotte",
     "tuck": "L'envoyer sur le bord"
   }
 }

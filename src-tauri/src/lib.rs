@@ -105,12 +105,14 @@ pub fn run() {
         })
         .manage(pty::PtyState::default())
         .manage(mascot::HitRect::default())
+        .manage(mascot::Park::default())
         .manage(fileopen::OpenQueue::default())
         .manage(anywhere::AnywhereState::default())
         .manage(lsp::LspState::default())
         .manage(git::BlameCache::default())
         .manage(symbols::SymbolCache::default())
         .manage(menu::LastFocused::default())
+        .manage(watcher::WatcherState::default())
         .on_window_event(|window, event| {
             use tauri::Manager;
             // Remember the focused window so menu actions target it (the menu is
@@ -192,10 +194,8 @@ pub fn run() {
             git::git_tags,
             git::git_tag_create,
             git::git_tag_delete,
-            git::git_tag_push,
             git::git_remotes,
             git::git_remote_add,
-            git::git_remote_rename,
             git::git_remote_remove,
             git::git_merge,
             git::git_rebase,
@@ -248,6 +248,7 @@ pub fn run() {
             cli::install_cli,
             cli::cli_installed,
             mascot::mascot_show,
+            mascot::mascot_monitors,
             mascot::mascot_hit_rect,
             mascot::mascot_raise,
             annotations::create_comment,
@@ -349,9 +350,6 @@ pub fn run() {
             preview::preview_set_zoom,
             preview::preview_set_visible,
             preview::preview_detach,
-            preview::preview_back,
-            preview::preview_forward,
-            preview::preview_reload,
             vault::vault_status,
             vault::vault_unlock,
             vault::vault_lookup,

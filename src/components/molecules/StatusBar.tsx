@@ -15,6 +15,7 @@ import {
   BrowserIcon,
   DeviceIcon,
   GitBranchIcon,
+  MascotIcon,
   MessageIcon,
   TerminalIcon,
 } from "@/components/atoms/icons"
@@ -60,6 +61,7 @@ const STATUS_ITEMS: Array<{ id: string; labelKey: MessageKey }> = [
   { id: "comments", labelKey: "status.openComments" },
   { id: "agent", labelKey: "status.agentIdle" },
   { id: "anywhere", labelKey: "anywhere.title" },
+  { id: "mascot", labelKey: "settings.mascot" },
   { id: "terminal", labelKey: "terminal.toggle" },
   { id: "column", labelKey: "editor.columnSelection" },
   { id: "profile", labelKey: "profile.status" },
@@ -149,6 +151,9 @@ export function StatusBar() {
   // position are not in here: they are what a status bar is *for*.
   const hidden = useSettings((s) => s.hiddenStatusItems)
   const columnSelection = useSettings((s) => s.columnSelection)
+  // Right-clicking the companion sends it away; without this the only way back
+  // is the settings dialog.
+  const mascotOn = useSettings((s) => s.mascot)
   const show = (id: string) => !hidden.includes(id)
   const toggleItem = (id: string) =>
     useSettings.getState().set({
@@ -433,6 +438,18 @@ export function StatusBar() {
               className="h-1.5 w-1.5 rounded-full"
               style={{ background: anywhereOn ? "var(--syn-string)" : "var(--border-strong)" }}
             />
+          </button>
+        )}
+        {show("mascot") && (
+          <button
+            type="button"
+            onClick={() => useSettings.getState().set({ mascot: !mascotOn })}
+            title={t("mascot.toggle")}
+            aria-label={t("mascot.toggle")}
+            aria-pressed={mascotOn}
+            className={`${ITEM} ${mascotOn ? "text-accent" : "text-faint"}`}
+          >
+            <MascotIcon className="h-[13px] w-[13px]" />
           </button>
         )}
         {/* Only while it is on: a mode you cannot see is a mode that confuses

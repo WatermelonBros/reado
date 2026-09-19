@@ -181,6 +181,21 @@ describe("sending it to the edge", () => {
     expect(tuck.hasAttribute("data-mascot-tuck")).toBe(true)
   })
 
+  it("leaves nothing solid but the bar once it is gone", async () => {
+    // Tucked, the only thing anyone can press is the bar at the screen's edge.
+    // The way-out button sits a character's width inside the screen: still
+    // marked, it would keep the whole transparent window swallowing clicks
+    // meant for whatever is behind it.
+    const user = userEvent.setup()
+    const { container } = render(<MascotCompanion state="idle" corner="bottom-right" />)
+    await user.click(screen.getByRole("button", { name: "mascot.tuck" }))
+    const solid = container.querySelectorAll(
+      "[data-mascot-hit],[data-mascot-bubble],[data-mascot-tuck]",
+    )
+    expect(solid).toHaveLength(1)
+    expect(solid[0]).toBe(screen.getByRole("button", { name: "mascot.show" }))
+  })
+
   it("rounds the side that is inside the screen", async () => {
     const user = userEvent.setup()
     const { unmount } = render(<MascotCompanion state="idle" corner="bottom-right" />)

@@ -36,13 +36,6 @@ pub struct HistoryEntry {
     pub size: u64,
 }
 
-/// Nanoseconds since the epoch, or 0 if the clock is before it.
-fn now_nanos() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos())
-}
-
 /// The directory holding one file's copies.
 ///
 /// The relative path becomes one directory name: `/` and `%` are escaped, so
@@ -72,7 +65,7 @@ fn entries(dir: &Path) -> Vec<(u128, u64)> {
 /// Drop what no reader can reach: everything past `MAX_ENTRIES`, and everything
 /// older than `MAX_AGE_NANOS`.
 fn prune(dir: &Path) {
-    let now = now_nanos();
+    let now = crate::fs::now_nanos();
     for (i, (stamp, _)) in entries(dir).into_iter().enumerate() {
         if i >= MAX_ENTRIES || now.saturating_sub(stamp) > MAX_AGE_NANOS {
             let _ = std::fs::remove_file(dir.join(stamp.to_string()));
@@ -99,7 +92,7 @@ pub fn snapshot(root: &Path, rel: &str, target: &Path) {
     if std::fs::create_dir_all(&dir).is_err() {
         return;
     }
-    let _ = std::fs::write(dir.join(now_nanos().to_string()), current);
+    let _ = std::fs::write(dir.join(crate::fs::now_nanos().to_string()), current);
     prune(&dir);
 }
 
@@ -188,7 +181,7 @@ mod tests {
         let root = dir.path();
         let hist = dir_for(root, "src/a.ts");
         std::fs::create_dir_all(&hist).unwrap();
-        let now = now_nanos();
+        let now = crate::fs::now_nanos();
         // Sixty recent copies and one from last year.
         for i in 0..60u128 {
             std::fs::write(hist.join((now - i).to_string()), "x").unwrap();

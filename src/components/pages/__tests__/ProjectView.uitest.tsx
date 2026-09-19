@@ -32,6 +32,7 @@ const api = {
   startWatching: vi.fn(async (..._a: unknown[]) => {}),
   reanchorFile: vi.fn(async (..._a: unknown[]) => []),
   readFile: vi.fn(async (..._a: unknown[]) => ({ kind: "text", text: "" })),
+  resolvePath: vi.fn(async (..._a: unknown[]): Promise<string | null> => "/abs/path"),
   anywhereSetProject: vi.fn(async (..._a: unknown[]) => {}),
   anywhereClearProject: vi.fn(async (..._a: unknown[]) => {}),
   previewClose: vi.fn(async () => {}),
@@ -47,6 +48,7 @@ vi.mock("../../../lib/api", async (orig) => ({
   startWatching: (...a: unknown[]) => api.startWatching(...(a as [])),
   reanchorFile: (...a: unknown[]) => api.reanchorFile(...(a as [])),
   readFile: (...a: unknown[]) => api.readFile(...(a as [])),
+  resolvePath: (...a: unknown[]) => api.resolvePath(...(a as [])),
   anywhereSetProject: (...a: unknown[]) => api.anywhereSetProject(...(a as [])),
   anywhereClearProject: (...a: unknown[]) => api.anywhereClearProject(...(a as [])),
   previewClose: () => api.previewClose(),
@@ -186,7 +188,8 @@ describe("reacting to the backend", () => {
     useSessions.setState({
       byRoot: { [ROOT]: { tabs: [`${ROOT}/src/gone.ts`], active: `${ROOT}/src/gone.ts` } },
     })
-    api.readFile.mockRejectedValue(new Error("ENOENT"))
+    // `null` is how resolve_path reports "no such file inside the project".
+    api.resolvePath.mockResolvedValue(null)
     render(<ProjectView root={ROOT} />)
     await waitFor(() => expect(listeners.has("file-changed")).toBe(true))
     emit("file-changed", { file: "src/gone.ts" })

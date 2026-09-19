@@ -994,6 +994,8 @@
     "mascot": "Maskottchen anzeigen",
     "mascotCorner": "Ecke",
     "mascotHint": "Ein kleiner Begleiter in einer Bildschirmecke: zeigt, was der Agent tut, und meldet sich, wenn er dich braucht.",
+    "mascotMonitor": "Bildschirm",
+    "mascotMonitorAuto": "Reados Bildschirm",
     "mascotSize": "Größe",
     "mode": {
       "manual": "Manuell",
@@ -1258,7 +1260,6 @@
     "remoteAdd": "Name des Remotes",
     "remoteUrl": "URL des Remotes",
     "remoteAdded": "Remote „{name}“ hinzugefügt.",
-    "remoteRename": "Remote umbenennen",
     "remoteRemove": "Remote entfernen",
     "remoteRemoveAsk": "Das Remote „{name}“ entfernen?",
     "remoteFailed": "Mit den Remotes hat das nicht geklappt.",
@@ -1733,6 +1734,7 @@
   "mascot": {
     "label": "Reados Maskottchen",
     "show": "Maskottchen zurückholen",
+    "toggle": "Maskottchen ein- oder ausblenden",
     "tuck": "An den Rand schicken"
   }
 }

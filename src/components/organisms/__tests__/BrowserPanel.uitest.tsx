@@ -10,9 +10,6 @@ const api = {
   previewOpen: vi.fn<(...a: unknown[]) => Promise<void>>(async () => {}),
   previewClose: vi.fn(async () => {}),
   previewNavigate: vi.fn<(u: string) => Promise<void>>(async () => {}),
-  previewBack: vi.fn(async () => {}),
-  previewForward: vi.fn(async () => {}),
-  previewReload: vi.fn(async () => {}),
   previewDetach: vi.fn<(u: string) => Promise<void>>(async () => {}),
   previewSetBounds: vi.fn<(...a: unknown[]) => Promise<void>>(async () => {}),
   previewSetVisible: vi.fn<(v: boolean) => Promise<void>>(async () => {}),
@@ -31,9 +28,6 @@ vi.mock("../../../lib/api", async (orig) => ({
   previewOpen: (...a: unknown[]) => api.previewOpen(...a),
   previewClose: () => api.previewClose(),
   previewNavigate: (u: string) => api.previewNavigate(u),
-  previewBack: () => api.previewBack(),
-  previewForward: () => api.previewForward(),
-  previewReload: () => api.previewReload(),
   previewDetach: (u: string) => api.previewDetach(u),
   previewSetBounds: (...a: unknown[]) => api.previewSetBounds(...a),
   previewSetVisible: (v: boolean) => api.previewSetVisible(v),
@@ -204,9 +198,9 @@ describe("the toolbar", () => {
     await userEvent.click(screen.getByLabelText("preview.back"))
     await userEvent.click(screen.getByLabelText("preview.forward"))
     await userEvent.click(screen.getByLabelText("preview.reload"))
-    expect(api.previewBack).toHaveBeenCalled()
-    expect(api.previewForward).toHaveBeenCalled()
-    expect(api.previewReload).toHaveBeenCalled()
+    expect(api.previewEval).toHaveBeenCalledWith("history.back()")
+    expect(api.previewEval).toHaveBeenCalledWith("history.forward()")
+    expect(api.previewEval).toHaveBeenCalledWith("location.reload()")
   })
 
   it("navigates to a typed URL, adding the scheme for a bare host", async () => {

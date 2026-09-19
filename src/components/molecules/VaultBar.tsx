@@ -10,7 +10,7 @@
  * `AccessRequest` is the agent asking the user for this page — the refusal has
  * already been sent, so this prompt decides only what happens next.
  */
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
@@ -69,8 +69,23 @@ export function VaultBar({
   const [chip, setChip] = useState(false)
   const pick = usePreview((s) => s.vaultPick)
 
-  // Ask the backend what it is and what it has for this page. Re-runs when the
-  // page changes, so the list is never about the previous origin.
+  // The vault answers by *host*: `vault_lookup` resolves the URL to its host and
+  // ranks stored logins against that, so every URL on one site asks the same
+  // question and gets the same answer. Keyed on the full URL, this re-ran at each
+  // step of a sign-in (email → password → 2FA) — and each run spawns one password
+  // manager CLI process per stored login, every one of which makes macOS ask
+  // "Reado would like to access data from other apps". That is how one login
+  // turned into a stream of system dialogs.
+  const origin = useMemo(() => {
+    try {
+      return new URL(url).origin
+    } catch {
+      return url // not a URL we can reduce — ask about it as given
+    }
+  }, [url])
+
+  // Ask the backend what it is and what it has for this site. Re-runs when the
+  // site changes, so the list is never about the previous origin.
   useEffect(() => {
     let alive = true
     void (async () => {
@@ -79,7 +94,7 @@ export function VaultBar({
       setStatus(s)
       if (!s.backend || s.locked) return setItems(null)
       try {
-        const found = await vaultLookup(url)
+        const found = await vaultLookup(origin)
         if (alive) setItems(found)
       } catch (e) {
         if (alive) setNote(String(e))
@@ -88,7 +103,7 @@ export function VaultBar({
     return () => {
       alive = false
     }
-  }, [url])
+  }, [origin])
 
   const guard = async (run: () => Promise<void>) => {
     setBusy(true)
@@ -195,7 +210,7 @@ export function VaultBar({
                 await vaultUnlock(password)
                 setPassword("")
                 setStatus(await vaultStatus())
-                setItems(await vaultLookup(url))
+                setItems(await vaultLookup(origin))
               })
             }}
             aria-label={t("vault.masterPassword")}

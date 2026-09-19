@@ -8,9 +8,10 @@
 //! The frontend listens for `file-changed` and calls `reanchor_file` for the
 //! reported path.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, RecvTimeoutError};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
@@ -18,7 +19,7 @@ use ignore::WalkBuilder;
 use notify::event::{ModifyKind, RenameMode};
 use notify::{EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, State};
 
 /// Debounce window: changes are coalesced over this quiet period before firing.
 const DEBOUNCE: Duration = Duration::from_millis(250);
@@ -174,12 +175,40 @@ fn relative(root: &Path, path: &Path) -> Option<String> {
     Some(rel.to_string_lossy().replace('\\', "/"))
 }
 
-/// Start watching `root`. Spawns a background watcher that emits `file-changed`
-/// for each non-ignored file that changes. Safe to leave running for the
-/// window's lifetime; the watcher is owned by the spawned thread.
+/// The live watchers, keyed by the root each one watches.
+///
+/// The handles live here rather than inside their threads so they can be
+/// dropped: each thread's loop exits on `Disconnected`, which is what dropping
+/// the watcher (and with it the event sender) produces. Without somewhere to
+/// hold them, a watcher could never be stopped.
+#[derive(Default)]
+pub struct WatcherState(Mutex<HashMap<PathBuf, notify::RecommendedWatcher>>);
+
+/// Start watching `root`, and stop watching anything else.
+///
+/// The window shows one project at a time and remounts its view on a switch, so
+/// this is called again for each project opened. It is idempotent per root, and
+/// retires the previous project's watcher: left running, that thread would go on
+/// emitting `file-changed` with paths relative to the *old* root, which the new
+/// project's listener would take for its own — on top of leaking a thread and a
+/// recursive filesystem registration per project opened.
 #[tauri::command]
-pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
+pub fn start_watching(
+    app: AppHandle,
+    watchers: State<'_, WatcherState>,
+    root: String,
+) -> Result<(), String> {
     let root = PathBuf::from(&root);
+
+    {
+        // Dropping the stale watchers ends their threads. Done before the new
+        // one is registered so a re-entry for the same root is a no-op.
+        let mut live = watchers.0.lock().map_err(|e| e.to_string())?;
+        live.retain(|watched, _| watched == &root);
+        if live.contains_key(&root) {
+            return Ok(());
+        }
+    }
 
     let (tx, rx) = channel();
     let mut watcher = notify::recommended_watcher(move |res| {
@@ -194,10 +223,13 @@ pub fn start_watching(app: AppHandle, root: String) -> Result<(), String> {
         "watching",
         serde_json::json!({ "root": root.to_string_lossy() }),
     );
+    watchers
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(root.clone(), watcher);
 
     std::thread::spawn(move || {
-        // Keep the watcher alive for the lifetime of this loop.
-        let _watcher = watcher;
         // Built here, not in the command: collecting the ignore files walks the
         // project, and `start_watching` is a blocking command — on the UI thread.
         let matchers = ignore_matchers(&root);

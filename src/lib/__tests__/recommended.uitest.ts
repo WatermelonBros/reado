@@ -1,27 +1,47 @@
-// `.reado/extensions.json` — what a repository says a reader of it needs. The
-// file is written by the project, so parsing is defensive; the offer is made
-// once per project per session and never installs anything.
+// `.reado/extensions.json` (and VS Code's own) — what a repository says a reader
+// of it needs. The file is written by the project, so parsing is defensive; the
+// offer is made once per project per session and never installs anything.
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@/lib/api", () => ({ readReadoFile: vi.fn(async () => null as string | null) }))
+vi.mock("@/lib/api", () => ({
+  readFile: vi.fn(async () => null),
+  lspInstalledAll: vi.fn(async () => [] as Array<[string, boolean]>),
+  formatterStatus: vi.fn(async () => [] as Array<{ id: string; installed: boolean }>),
+}))
 vi.mock("@/lib/notice", () => ({ notify: vi.fn() }))
 vi.mock("@/i18n", () => ({ t: (k: string) => k }))
 
-import { readReadoFile } from "@/lib/api"
+import { formatterStatus, lspInstalledAll, readFile } from "@/lib/api"
+import { FORMATTERS, LANG_SERVERS, VAULTS } from "@/lib/extensions"
 import { useMarketplace } from "@/lib/marketplace"
 import { notify } from "@/lib/notice"
 import {
+  CURATED_EQUIVALENTS,
   missingRecommendations,
   offerRecommendations,
   parseRecommendations,
+  RECOMMENDED_FILES,
   resetRecommendations,
 } from "@/lib/recommended"
 import { useWorkspace } from "@/lib/store"
 
-const withFile = (obj: unknown) => vi.mocked(readReadoFile).mockResolvedValue(JSON.stringify(obj))
+/** Put a file at one of the paths recommendations are read from; every other
+ *  path reads as absent, which is how precedence gets tested at all. */
+const at = (rel: string, obj: unknown) =>
+  vi
+    .mocked(readFile)
+    .mockImplementation(
+      async (_root: string, path: string) =>
+        (path.endsWith(rel) ? { kind: "text", text: JSON.stringify(obj) } : null) as never,
+    )
+
+const withFile = (obj: unknown) => at(RECOMMENDED_FILES[0], obj)
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(readFile).mockResolvedValue(null as never)
+  vi.mocked(lspInstalledAll).mockResolvedValue([])
+  vi.mocked(formatterStatus).mockResolvedValue([])
   resetRecommendations()
   useMarketplace.setState({ installed: [] })
   useWorkspace.setState({ recommended: [] })
@@ -57,8 +77,67 @@ describe("missingRecommendations", () => {
   })
 
   it("is empty when the project says nothing", async () => {
-    vi.mocked(readReadoFile).mockResolvedValue(null)
     await expect(missingRecommendations("/repo")).resolves.toEqual([])
+  })
+
+  it("reads VS Code's own file when the project keeps no Reado one", async () => {
+    // A repository that already ships `.vscode/extensions.json` should not have
+    // to keep a second copy of the same list.
+    at(".vscode/extensions.json", { recommendations: ["Pub.one"] })
+    await expect(missingRecommendations("/repo")).resolves.toEqual(["Pub.one"])
+  })
+
+  it("prefers the Reado file when a project keeps both", async () => {
+    vi.mocked(readFile).mockImplementation(
+      async (_root: string, path: string) =>
+        ({
+          kind: "text",
+          text: JSON.stringify({
+            recommendations: [path.includes(".reado") ? "Reado.wins" : "Vscode.loses"],
+          }),
+        }) as never,
+    )
+    await expect(missingRecommendations("/repo")).resolves.toEqual(["Reado.wins"])
+  })
+
+  it("counts a curated tool as satisfying the extension that installs it", async () => {
+    // `rust-lang.rust-analyzer` means "install rust-analyzer", and the curated
+    // Rust entry installs exactly that. Nagging for it on a machine that has it
+    // is how a prompt earns being dismissed unread.
+    at(RECOMMENDED_FILES[0], {
+      recommendations: ["rust-lang.rust-analyzer", "esbenp.prettier-vscode"],
+    })
+    vi.mocked(lspInstalledAll).mockResolvedValue([["rust", true]])
+    await expect(missingRecommendations("/repo")).resolves.toEqual(["esbenp.prettier-vscode"])
+  })
+
+  it("still asks for a curated tool that is not installed here", async () => {
+    at(RECOMMENDED_FILES[0], { recommendations: ["rust-lang.rust-analyzer"] })
+    vi.mocked(lspInstalledAll).mockResolvedValue([["rust", false]])
+    await expect(missingRecommendations("/repo")).resolves.toEqual(["rust-lang.rust-analyzer"])
+  })
+
+  it("does not probe the machine when nothing recommended maps to a curated tool", async () => {
+    // Two IPC calls on every project open, for the common project that names
+    // none of them, is a cost with nothing on the other side.
+    withFile({ recommendations: ["Pub.one"] })
+    await missingRecommendations("/repo")
+    expect(lspInstalledAll).not.toHaveBeenCalled()
+    expect(formatterStatus).not.toHaveBeenCalled()
+  })
+})
+
+describe("the curated equivalence map", () => {
+  it("names only curated tools that exist", () => {
+    // The map is written by hand against the manifests; a renamed or removed
+    // entry would otherwise make a recommendation silently un-satisfiable.
+    const ids = new Set([...LANG_SERVERS, ...FORMATTERS, ...VAULTS].map((e) => e.id))
+    for (const [vscodeId, curated] of Object.entries(CURATED_EQUIVALENTS))
+      expect(ids, `${vscodeId} points at a tool that is not in the catalogue`).toContain(curated)
+  })
+
+  it("is keyed by lower-case ids, since that is how it is looked up", () => {
+    for (const id of Object.keys(CURATED_EQUIVALENTS)) expect(id).toBe(id.toLowerCase())
   })
 })
 

@@ -502,31 +502,6 @@ pub fn preview_set_zoom<R: Runtime>(window: Window<R>, factor: f64) -> Result<()
     Ok(())
 }
 
-/// History/reload driven in-page (no data-back needed).
-#[tauri::command]
-pub fn preview_back<R: Runtime>(window: Window<R>) -> Result<(), String> {
-    if let Some(wv) = find_preview(&window) {
-        wv.eval("history.back()").map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub fn preview_forward<R: Runtime>(window: Window<R>) -> Result<(), String> {
-    if let Some(wv) = find_preview(&window) {
-        wv.eval("history.forward()").map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub fn preview_reload<R: Runtime>(window: Window<R>) -> Result<(), String> {
-    if let Some(wv) = find_preview(&window) {
-        wv.eval("location.reload()").map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
 /// Keep the preview parked over the pane region as the layout resizes.
 #[tauri::command]
 pub fn preview_set_bounds<R: Runtime>(

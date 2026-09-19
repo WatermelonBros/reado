@@ -281,13 +281,15 @@ fn with_devices<T>(
     Ok(out)
 }
 
-/// Join a project-relative path to its root, rejecting traversal (`..`). An
-/// empty `rel` is allowed (it means the root itself).
+/// Join a project-relative path to its root, confirming the result stays inside
+/// it. An empty `rel` is allowed (it means the root itself).
+///
+/// Delegates to `fs::ensure_within` rather than checking for `..` itself: a bare
+/// `..` check misses both absolute paths — `root.join("/etc/passwd")` discards
+/// the base — and symlinks pointing out of the project. These routes are served
+/// over the LAN, so this is the copy that can least afford to be the weak one.
 fn safe_join(root: &str, rel: &str) -> Option<PathBuf> {
-    if rel.split(['/', '\\']).any(|c| c == "..") {
-        return None;
-    }
-    Some(Path::new(root).join(rel))
+    crate::fs::ensure_within(Path::new(root), Path::new(rel)).ok()
 }
 
 // ---- The mobile client (a self-contained PWA, served at `/`) ---------------
@@ -1952,10 +1954,27 @@ mod tests {
     }
 
     #[test]
-    fn safe_join_rejects_traversal() {
-        assert!(safe_join("/root", "../etc/passwd").is_none());
-        assert!(safe_join("/root", "src/main.rs").is_some());
-        assert!(safe_join("/root", "").is_some());
+    fn safe_join_confines_to_the_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        std::fs::create_dir(root.join("src")).unwrap();
+        std::fs::write(root.join("src/main.rs"), "fn main() {}").unwrap();
+
+        // What the route is for.
+        assert!(safe_join(root.to_str().unwrap(), "src/main.rs").is_some());
+        assert!(safe_join(root.to_str().unwrap(), "").is_some());
+
+        // Traversal, in each of the three shapes that reach these handlers.
+        assert!(safe_join(root.to_str().unwrap(), "../etc/passwd").is_none());
+        // An absolute path: `join` discards the root, so a `..`-only check
+        // waves this through.
+        assert!(safe_join(root.to_str().unwrap(), "/etc/hosts").is_none());
+        // A symlink pointing out of the project resolves outside it.
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("/etc/hosts", root.join("escape")).unwrap();
+            assert!(safe_join(root.to_str().unwrap(), "escape").is_none());
+        }
     }
 
     #[test]

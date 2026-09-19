@@ -15,6 +15,7 @@ import type { UnlistenFn } from "@tauri-apps/api/event"
 import { create } from "zustand"
 import { t } from "@/i18n"
 import { createFile, ptyWrite, readFile, writeFile } from "./api"
+import { toRelative } from "./comments"
 import { useDocInfo } from "./docInfo"
 import { createLogger, safeError } from "./logger"
 import { notify, notifyError } from "./notice"
@@ -395,7 +396,7 @@ export async function loadTasks(root: string): Promise<Task[]> {
  * says what happened, where an empty string would silently run the wrong thing.
  */
 export function resolveVars(text: string, root: string, file: string | null): string {
-  const rel = file?.startsWith(`${root}/`) ? file.slice(root.length + 1) : file
+  const rel = file ? toRelative(root, file) : file
   const base = file?.split("/").pop() ?? ""
   const dot = base.lastIndexOf(".")
   const view = useDocInfo.getState().view

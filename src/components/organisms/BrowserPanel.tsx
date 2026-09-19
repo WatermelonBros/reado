@@ -39,19 +39,16 @@ import {
   type CommentPatch,
   type CommentType,
   hostResolves,
-  previewBack,
   previewCaptureFrame,
   previewClearState,
   previewClose,
   previewDetach,
   previewDetectUrls,
   previewEval,
-  previewForward,
   previewNavigate,
   previewOpen,
   previewPersistState,
   previewPutResult,
-  previewReload,
   previewSetBounds,
   previewSetVisible,
   previewSetZoom,
@@ -864,19 +861,19 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
           size="sm"
           label={t("preview.back")}
           icon={<ChevronIcon className="h-3.5 w-3.5 rotate-180" />}
-          onClick={() => void previewBack()}
+          onClick={() => void previewEval("history.back()").catch(() => {})}
         />
         <IconButton
           size="sm"
           label={t("preview.forward")}
           icon={<ChevronIcon className="h-3.5 w-3.5" />}
-          onClick={() => void previewForward()}
+          onClick={() => void previewEval("history.forward()").catch(() => {})}
         />
         <IconButton
           size="sm"
           label={t("preview.reload")}
           icon={<FetchIcon className="h-3.5 w-3.5" />}
-          onClick={() => void previewReload()}
+          onClick={() => void previewEval("location.reload()").catch(() => {})}
         />
         <input
           key={url}

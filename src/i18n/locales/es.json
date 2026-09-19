@@ -994,6 +994,8 @@
     "mascot": "Mostrar la mascota",
     "mascotCorner": "Esquina",
     "mascotHint": "Una pequeña compañera en una esquina de la pantalla: muestra qué está haciendo el agente y avisa cuando te necesita.",
+    "mascotMonitor": "Pantalla",
+    "mascotMonitorAuto": "Pantalla de Reado",
     "mascotSize": "Tamaño",
     "mode": {
       "manual": "Manual",
@@ -1258,7 +1260,6 @@
     "remoteAdd": "Nombre del remoto",
     "remoteUrl": "URL del remoto",
     "remoteAdded": "Remoto «{name}» añadido.",
-    "remoteRename": "Renombrar remoto",
     "remoteRemove": "Quitar remoto",
     "remoteRemoveAsk": "¿Quitar el remoto «{name}»?",
     "remoteFailed": "No funcionó con los remotos.",
@@ -1733,6 +1734,7 @@
   "mascot": {
     "label": "La mascota de Reado",
     "show": "Traer de vuelta la mascota",
+    "toggle": "Mostrar u ocultar la mascota",
     "tuck": "Enviarla al borde"
   }
 }

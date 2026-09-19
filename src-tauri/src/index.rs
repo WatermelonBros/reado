@@ -96,7 +96,8 @@ fn rebuild(root: &str) -> Result<usize> {
 /// Build the index on project open if missing, then keep it fresh; returns the
 /// number of indexed comments. Always rebuilds from the `.md` files, so it is
 /// correct even after the index was deleted or comments changed externally.
-#[tauri::command]
+/// `async`: opens SQLite and reindexes every comment file, and it runs at boot.
+#[tauri::command(async)]
 pub fn rebuild_index(root: String) -> Result<usize> {
     let started = std::time::Instant::now();
     let result = rebuild(&root);

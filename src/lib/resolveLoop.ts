@@ -17,6 +17,7 @@ import { dispatchToAgent } from "./agents"
 import { anywhereNotify, anywherePublishLoop, createFile, readFile, writeFile } from "./api"
 import { useComments } from "./comments"
 import { log, safeError } from "./logger"
+import { notifyError } from "./notice"
 import { notifyResolved } from "./notify"
 import { composeReviewPromptForIds } from "./review"
 
@@ -45,11 +46,15 @@ export interface LoopState {
 }
 
 async function persist(root: string, active: LoopState | null) {
+  // A dropped write loses the loop's progress across a restart, so it is reported
+  // rather than swallowed. (`createFile` still is: on an existing file it fails
+  // by design.)
+  const failed = (e: unknown) => notifyError("resolveLoop", t("notice.saveFailed"), e)
   if (active) {
     await createFile(root, STORE).catch(() => {})
-    await writeFile(root, STORE, JSON.stringify(active, null, 2)).catch(() => {})
+    await writeFile(root, STORE, JSON.stringify(active, null, 2)).catch(failed)
   } else {
-    await writeFile(root, STORE, "null").catch(() => {})
+    await writeFile(root, STORE, "null").catch(failed)
   }
   // Mirror to the Anywhere channel (best-effort; the server may be off).
   void anywherePublishLoop(active ? JSON.stringify(active) : null).catch(() => {})

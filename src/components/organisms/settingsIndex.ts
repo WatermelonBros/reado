@@ -128,6 +128,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     "settings.mascot",
     "settings.mascotCorner",
     "settings.mascotSize",
+    "settings.mascotMonitor",
   ]),
   ...group("system", "terminal", "settings.terminal", [
     "settings.terminalFontSize",

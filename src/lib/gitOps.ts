@@ -19,7 +19,6 @@ import {
   gitRefs,
   gitRemoteAdd,
   gitRemoteRemove,
-  gitRemoteRename,
   gitRemotes,
   gitRevert,
   gitSequencerContinue,
@@ -147,18 +146,6 @@ export async function addRemote(): Promise<void> {
   try {
     await gitRemoteAdd(r, name, url)
     notify("success", t("git.remoteAdded", { name }))
-  } catch (e) {
-    notifyError("gitOps", t("git.remoteFailed"), e)
-  }
-}
-
-export async function renameRemote(from: string): Promise<void> {
-  const r = root()
-  if (!r) return
-  const to = await prompt({ title: t("git.remoteRename"), value: from })
-  if (!to || to === from) return
-  try {
-    await gitRemoteRename(r, from, to)
   } catch (e) {
     notifyError("gitOps", t("git.remoteFailed"), e)
   }

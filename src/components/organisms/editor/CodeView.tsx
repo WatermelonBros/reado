@@ -1005,8 +1005,10 @@ export function CodeView({
     }
   }, [blame, inlineBlameOn, relPath, blameComp])
 
-  // Mark the lines this working tree changes since HEAD. Refreshed when the file
-  // is saved or changes on disk (`revision`), so the marks track real edits.
+  // Mark the lines this working tree changes since HEAD. Keyed on `text`, which
+  // is what a save or an on-disk change produces (the file is re-read and the
+  // prop replaced) — this component is keyed by path, so it does not remount on
+  // a save and nothing else here would refresh the marks.
   useEffect(() => {
     if (!diffGutterOn) {
       viewRef.current?.dispatch({ effects: diffComp.reconfigure([]) })
@@ -1023,7 +1025,7 @@ export function CodeView({
     return () => {
       cancelled = true
     }
-  }, [diffGutterOn, relPath, diffComp])
+  }, [diffGutterOn, relPath, diffComp, text])
 
   // Highlight the anchored block while its thread is open.
   useEffect(() => {
@@ -1049,7 +1051,9 @@ export function CodeView({
     const markRead = () => {
       if (autoMarked) return
       autoMarked = true
-      useReadProgress.getState().mark(fileRoot, relPath, true)
+      // Pass the text we already hold: without it `mark` re-reads the file from
+      // disk over IPC, once per file opened, to snapshot what is on screen.
+      useReadProgress.getState().mark(fileRoot, relPath, true, text)
     }
     const fits = () => !!scroller && scroller.scrollHeight <= scroller.clientHeight + 24
     const maybeMarkRead = () => {
@@ -1069,10 +1073,19 @@ export function CodeView({
       }
       if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 24) markRead()
     }
+    // Coalesce to one frame: scroll fires far faster than the screen repaints, and
+    // each run re-renders this whole component and sets sticky state on top. The
+    // trailing scroll-position save stays on its own debounce, outside the frame.
+    let frame: number | undefined
     const bump = () => {
-      setTick((n) => n + 1)
-      computeSticky()
-      maybeMarkRead()
+      if (frame === undefined) {
+        frame = window.requestAnimationFrame(() => {
+          frame = undefined
+          setTick((n) => n + 1)
+          computeSticky()
+          maybeMarkRead()
+        })
+      }
       window.clearTimeout(timer)
       timer = window.setTimeout(() => {
         useSessions.getState().saveScroll(fileRoot, relPath, scroller?.scrollTop ?? 0)
@@ -1087,6 +1100,7 @@ export function CodeView({
       window.clearTimeout(timer)
       window.clearTimeout(dwell)
       window.clearTimeout(initial)
+      if (frame !== undefined) window.cancelAnimationFrame(frame)
       scroller?.removeEventListener("scroll", bump)
       window.removeEventListener("resize", bump)
     }

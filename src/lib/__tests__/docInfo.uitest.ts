@@ -174,8 +174,20 @@ describe("detectEol", () => {
 })
 
 describe("detectIndent", () => {
-  it("finds the smallest space indent in use", () => {
+  it("reads the step between levels, not the smallest indent in the file", () => {
     expect(detectIndent("a\n    b\n  c\n")).toEqual({ kind: "spaces", size: 2 })
+  })
+
+  it("is not dragged to one space by a block comment", () => {
+    // ` * continues here` is indented by one, and reading the smallest indent
+    // made one the answer for every file in this repository.
+    const src = "/**\n * What this does.\n * And why.\n */\nfunction f() {\n  return 1\n}\n"
+    expect(detectIndent(src)).toEqual({ kind: "spaces", size: 2 })
+  })
+
+  it("takes the most common step when a file mixes them", () => {
+    const src = "a\n    b\n        c\n    d\ne\n    f\n        g\n"
+    expect(detectIndent(src)).toEqual({ kind: "spaces", size: 4 })
   })
 
   it("reports tabs when they dominate", () => {

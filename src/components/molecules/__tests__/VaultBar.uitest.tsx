@@ -64,6 +64,29 @@ describe("the credential strip", () => {
     expect(useWorkspace.getState().tool).toBe("extensions")
   })
 
+  it("asks the vault once per site, not once per page of a sign-in", async () => {
+    // A sign-in walks email → password → 2FA on one host. The vault matches by
+    // host, so each of those asks the same question — and every ask spawns one
+    // password-manager CLI process per stored login, each of which makes macOS
+    // ask whether Reado may read another app's data.
+    const { rerender } = render(
+      <VaultBar url="https://example.com/login" evalInPage={page()} onClose={() => {}} />,
+    )
+    await waitFor(() => expect(api.vaultLookup).toHaveBeenCalledTimes(1))
+    rerender(<VaultBar url="https://example.com/password" evalInPage={page()} onClose={() => {}} />)
+    rerender(
+      <VaultBar url="https://example.com/2fa?step=3" evalInPage={page()} onClose={() => {}} />,
+    )
+    await waitFor(() => expect(screen.getByText("Example")).toBeTruthy())
+    expect(api.vaultLookup).toHaveBeenCalledTimes(1)
+    // It is asked about the site, not the page that happened to be open.
+    expect(api.vaultLookup).toHaveBeenCalledWith("https://example.com")
+
+    // A genuinely different site is a different question, and is asked.
+    rerender(<VaultBar url="https://other.example/login" evalInPage={page()} onClose={() => {}} />)
+    await waitFor(() => expect(api.vaultLookup).toHaveBeenCalledTimes(2))
+  })
+
   it("fetches the password only when the user picks the item, and fills it", async () => {
     const evalInPage = page()
     render(<VaultBar url={URL_} evalInPage={evalInPage} onClose={() => {}} />)
@@ -182,6 +205,7 @@ describe("the credential strip", () => {
     api.vaultStatus.mockResolvedValue({ backend: "bw", locked: false })
     await userEvent.type(field, "master{Enter}")
     await waitFor(() => expect(api.vaultUnlock).toHaveBeenCalledWith("master"))
-    await waitFor(() => expect(api.vaultLookup).toHaveBeenCalledWith(URL_))
+    // The site, not the page — same as the initial lookup (see "once per site").
+    await waitFor(() => expect(api.vaultLookup).toHaveBeenCalledWith("https://example.com"))
   })
 })

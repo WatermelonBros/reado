@@ -15,10 +15,12 @@ const {
   makeDefaultApp,
   revealItemInDir,
   tourRun,
+  mascotMonitors,
 } = vi.hoisted(() => ({
   getVersion: vi.fn(async () => "1.2.3"),
   installCli: vi.fn(async () => "/home/u/.local/bin/reado"),
   cliInstalled: vi.fn(async () => false),
+  mascotMonitors: vi.fn(async () => [] as string[]),
   checkForUpdates: vi.fn(async () => {}),
   logPath: vi.fn(async () => "/tmp/reado.log" as string | null),
   makeDefaultApp: vi.fn(async () => {}),
@@ -27,7 +29,7 @@ const {
 }))
 vi.mock("@tauri-apps/api/app", () => ({ getVersion }))
 vi.mock("@tauri-apps/plugin-opener", () => ({ revealItemInDir }))
-vi.mock("../../../lib/api", () => ({ installCli, cliInstalled }))
+vi.mock("../../../lib/api", () => ({ installCli, cliInstalled, mascotMonitors }))
 vi.mock("../../../lib/updater", () => ({ checkForUpdates }))
 // Settings now reaches the marketplace (contributed themes in the picker),
 // which logs through the shared logger.

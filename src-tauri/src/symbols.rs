@@ -175,8 +175,13 @@ fn valid_identifier(name: &str) -> bool {
 }
 
 /// Find where `name` is defined across the project, best matches first.
-#[tauri::command]
-pub fn find_definition(cache: State<SymbolCache>, root: String, name: String) -> Vec<Definition> {
+/// `async`: walks and parses the project on a cache miss — see `list_symbols`.
+#[tauri::command(async)]
+pub fn find_definition(
+    cache: State<'_, SymbolCache>,
+    root: String,
+    name: String,
+) -> Vec<Definition> {
     find_definition_in(&cache, &root, &name)
 }
 
@@ -225,8 +230,10 @@ pub struct Symbol {
 
 /// List declared symbols across the project (gitignore-aware), for fuzzy
 /// jump-to-definition by name. Heuristic and capped, backed by the symbol index.
-#[tauri::command]
-pub fn list_symbols(cache: State<SymbolCache>, root: String) -> Vec<Symbol> {
+/// `async`: a full-project walk and parse, so on the main thread it freezes the
+/// window for as long as the symbol palette takes to open.
+#[tauri::command(async)]
+pub fn list_symbols(cache: State<'_, SymbolCache>, root: String) -> Vec<Symbol> {
     list_symbols_in(&cache, &root)
 }
 

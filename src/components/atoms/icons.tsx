@@ -22,6 +22,7 @@ import {
   ArrowsDownUpIcon as ArrowsDownUp,
   ArrowsInLineVerticalIcon as ArrowsInLineVertical,
   ArrowUpIcon as ArrowUp,
+  BirdIcon as Bird,
   BookmarkSimpleIcon as BookmarkSimple,
   BookOpenIcon as BookOpen,
   BrowserIcon as Browser,
@@ -87,7 +88,6 @@ import {
   LayoutIcon as Layout,
   LinkBreakIcon as LinkBreak,
   ListBulletsIcon as ListBullets,
-  ListDashesIcon as ListDashes,
   MagnifyingGlassIcon as MagnifyingGlass,
   MinusIcon as Minus,
   PaintBrushIcon as PaintBrush,
@@ -99,7 +99,6 @@ import {
   PuzzlePieceIcon as PuzzlePiece,
   RobotIcon as Robot,
   SealCheckIcon as SealCheck,
-  SidebarSimpleIcon as SidebarSimple,
   SignpostIcon as Signpost,
   SparkleIcon as Sparkle,
   SquareSplitHorizontalIcon as SquareSplitHorizontal,
@@ -138,6 +137,8 @@ export const ArrowUpIcon = wrap(ArrowUp)
 export const ArrowDownIcon = wrap(ArrowDown)
 export const DeltaIcon = wrap(Triangle)
 export const DeviceIcon = wrap(DeviceMobile)
+/** The companion. An owl at 13px is a smudge; a bird is the same idea, legible. */
+export const MascotIcon = wrap(Bird)
 export const CollapseAllIcon = wrap(ArrowsInLineVertical)
 export const ExtensionsIcon = wrap(PuzzlePiece)
 export const PullIcon = wrap(ArrowLineDown)
@@ -167,7 +168,6 @@ export const CheckIcon = wrap(Check)
 export const InfoIcon = wrap(Info)
 export const TerminalIcon = wrap(Terminal)
 /** The Output panel: the app's own log, by channel. */
-export const OutputIcon = wrap(ListDashes)
 export const PaintBrushIcon = wrap(PaintBrush)
 /** Verified publisher (Open VSX namespace ownership). */
 export const SealCheckIcon = wrap(SealCheck)
@@ -176,7 +176,6 @@ export const RouteIcon = wrap(Signpost)
 export const SwapIcon = wrap(Swap)
 export const SplitIcon = wrap(SquareSplitHorizontal)
 /** The panel glyph, for anywhere a region is named rather than placed. */
-export const PanelIcon = wrap(SidebarSimple)
 
 /** A layout region: the window as an outline with one edge filled — the way
  *  VS Code says *which* region a control means, and whether it is on screen.

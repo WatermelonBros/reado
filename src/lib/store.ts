@@ -189,6 +189,9 @@ export interface SettingsState {
   mascotCorner: "bottom-right" | "bottom-left" | "top-right" | "top-left"
   /** Its height in CSS pixels. */
   mascotSize: number
+  /** Which display it is parked on, by the name the OS gives it. Empty: the one
+   *  the main window is on, which is what someone who never opened this means. */
+  mascotMonitor: string
   /** Automatically write edits to disk: never / after a short pause / on blur. */
   autoSave: "off" | "afterDelay" | "onFocusChange"
   /** How long "after a short pause" waits, in milliseconds. */
@@ -335,6 +338,7 @@ export const DEFAULTS = {
   mascot: false,
   mascotCorner: "bottom-right",
   mascotSize: 160,
+  mascotMonitor: "",
   autoSave: "afterDelay",
   autoSaveDelay: 1000,
   suggestOnTyping: true,

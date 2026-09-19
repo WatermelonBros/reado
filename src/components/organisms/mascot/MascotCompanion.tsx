@@ -130,9 +130,13 @@ export function MascotCompanion({
           />
         </button>
 
+        {/* Solid only while it can be pressed. Left marked once tucked, this
+            button — which sits a character's width inside the screen — would
+            keep the whole transparent box swallowing clicks meant for whatever
+            is under it. */}
         <button
           type="button"
-          data-mascot-tuck
+          {...(tucked ? {} : { "data-mascot-tuck": true })}
           onClick={() => tuck(true)}
           onPointerEnter={() => setDomHover(true)}
           onPointerLeave={() => setDomHover(false)}

@@ -72,10 +72,32 @@ const useProjectFiles = create<{ files: string[]; load: (root: string) => void }
       .catch(() => {}),
 }))
 
-/** How many of `items` (a file list or read-set) sit under `prefix` ("dir/"). */
-const countPrefix = (items: Iterable<string>, prefix: string) => {
+/** Per-collection memo for `countPrefix`, keyed on the collection itself.
+ *
+ * Safe because both backing collections are *replaced* on every change (the file
+ * list is a fresh array per load, the read-set a fresh `Set` per mark) — never
+ * mutated in place, so a given object's counts can never go stale. If that ever
+ * stops holding, this cache is the thing that breaks.
+ */
+const prefixCounts = new WeakMap<object, Map<string, number>>()
+
+/** How many of `items` (a file list or read-set) sit under `prefix` ("dir/").
+ *
+ * Memoized because the callers are zustand selectors on an unvirtualized tree:
+ * uncached, every visible folder row rescans the whole project (up to 50 000
+ * paths) on every render *and* on every write to either store.
+ */
+const countPrefix = (items: Iterable<string> & object, prefix: string) => {
+  let cache = prefixCounts.get(items)
+  if (!cache) {
+    cache = new Map()
+    prefixCounts.set(items, cache)
+  }
+  const cached = cache.get(prefix)
+  if (cached !== undefined) return cached
   let n = 0
   for (const p of items) if (p.startsWith(prefix)) n++
+  cache.set(prefix, n)
   return n
 }
 

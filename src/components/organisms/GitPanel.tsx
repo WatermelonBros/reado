@@ -59,6 +59,7 @@ import {
   submitToTerminal,
   type Worktree,
 } from "@/lib/api"
+import { baseName } from "@/lib/comments"
 import {
   addRemote,
   addWorktree,
@@ -87,7 +88,6 @@ import { useTerminals } from "@/lib/terminals"
 import { openProjectHere } from "@/lib/window"
 import { RebaseDialog } from "./RebaseDialog"
 
-const basename = (p: string) => p.split("/").pop() ?? p
 const dirname = (p: string) => {
   const i = p.lastIndexOf("/")
   return i > 0 ? p.slice(0, i) : ""
@@ -349,7 +349,7 @@ export function GitPanel() {
             title={c.path}
             className="flex min-w-0 flex-1 items-center gap-2 text-left"
           >
-            <span className="truncate text-ink">{basename(c.path)}</span>
+            <span className="truncate text-ink">{baseName(c.path)}</span>
             <span className="truncate text-xs text-faint">{dirname(c.path)}</span>
           </button>
           {confirmDiscard === c.path ? (

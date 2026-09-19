@@ -17,7 +17,7 @@ import { Kbd } from "@/components/atoms/Kbd"
 import type { MessageKey } from "@/i18n"
 import { listFiles, listSymbols, type Symbol as WorkspaceSymbol } from "@/lib/api"
 import { useBookmarks } from "@/lib/bookmarks"
-import { toRelative } from "@/lib/comments"
+import { baseName, toRelative } from "@/lib/comments"
 import { goToLine, toggleBookmarkAtCursor, useDocInfo } from "@/lib/docInfo"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { shortcutFor } from "@/lib/keybindings"
@@ -68,8 +68,6 @@ interface Row {
   when?: boolean
   run: () => void
 }
-
-const basename = (p: string) => p.split(/[\\/]/).pop() ?? p
 
 export function Palette() {
   const mode = usePalette((s) => s.mode)
@@ -171,13 +169,13 @@ export function Palette() {
     }
     if (mode === "files") {
       const results = query
-        ? fuzzysort.go(query, files, { limit: 200, key: (f: string) => basename(f) })
+        ? fuzzysort.go(query, files, { limit: 200, key: (f: string) => baseName(f) })
         : files.slice(0, 200).map((f) => ({ target: f, highlight: () => f }))
       return results.map((r) => {
         const path = "obj" in r ? (r.obj as string) : (r.target as string)
         return {
-          label: basename(path),
-          detail: relative(project.root, path),
+          label: baseName(path),
+          detail: toRelative(project.root, path),
           run: () => {
             // list_files returns project-relative paths; open expects absolute.
             project.open(`${project.root}/${path}`)
@@ -213,7 +211,7 @@ export function Palette() {
         : all.slice(0, 300)
       return filtered.map((s) => ({
         label: s.name,
-        detail: `${s.kind} · ${relative(project.root, s.path)}:${s.line}`,
+        detail: `${s.kind} · ${toRelative(project.root, s.path)}:${s.line}`,
         run: () => {
           project.open(s.path, s.line)
           close()
@@ -226,7 +224,7 @@ export function Palette() {
         ? fuzzysort.go(query, recents, { limit: 100, key: (p) => p.path }).map((r) => r.obj)
         : recents
       return filtered.map((p) => ({
-        label: basename(p.path),
+        label: baseName(p.path),
         detail: p.path,
         run: () => {
           void openProjectHere(p.path)
@@ -394,11 +392,6 @@ export function Palette() {
       </div>
     </div>
   )
-}
-
-function relative(root: string, path: string): string {
-  const rel = path.startsWith(root) ? path.slice(root.length) : path
-  return rel.replace(/^[\\/]+/, "").replace(/\\/g, "/")
 }
 
 interface CommandCtx {

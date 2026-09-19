@@ -342,9 +342,6 @@ export const gitTagCreate = (root: string, name: string, message?: string) =>
 export const gitTagDelete = (root: string, name: string) =>
   invoke<void>("git_tag_delete", { root, name })
 
-export const gitTagPush = (root: string, name: string, remote: string) =>
-  invoke<void>("git_tag_push", { root, name, remote })
-
 /** A remote and where it points. */
 export interface Remote {
   name: string
@@ -355,9 +352,6 @@ export const gitRemotes = (root: string) => invoke<Remote[]>("git_remotes", { ro
 
 export const gitRemoteAdd = (root: string, name: string, url: string) =>
   invoke<void>("git_remote_add", { root, name, url })
-
-export const gitRemoteRename = (root: string, from: string, to: string) =>
-  invoke<void>("git_remote_rename", { root, from, to })
 
 export const gitRemoteRemove = (root: string, name: string) =>
   invoke<void>("git_remote_remove", { root, name })
@@ -1567,10 +1561,6 @@ export const previewSetZoom = (factor: number) => invoke<void>("preview_set_zoom
 export const previewSetVisible = (visible: boolean) =>
   invoke<void>("preview_set_visible", { visible })
 
-export const previewBack = () => invoke<void>("preview_back")
-export const previewForward = () => invoke<void>("preview_forward")
-export const previewReload = () => invoke<void>("preview_reload")
-
 // --- The user's password manager, through its own CLI (see `vault.rs`) ---------
 // Reado's own UI only: these are deliberately absent from the agent's control
 // channel and from the MCP tool surface.
@@ -1596,8 +1586,12 @@ export const vaultCreate = (url: string, title: string, username: string) =>
 
 /** Show or hide the companion window. The backend owns the window itself, so
  *  the setting flipping is the only thing the app has to say. */
-export const mascotShow = (show: boolean, corner: string, size: number) =>
-  invoke<void>("mascot_show", { show, corner, size })
+export const mascotShow = (show: boolean, corner: string, size: number, monitor: string) =>
+  invoke<void>("mascot_show", { show, corner, size, monitor })
+
+/** The displays it can be sent to, by name. Empty name is never one of them:
+ *  that is the app's own word for "wherever the main window is". */
+export const mascotMonitors = () => invoke<string[]>("mascot_monitors")
 
 /** Which rectangle of the companion window is solid, in CSS pixels relative to
  *  its own top-left. Everything outside it lets the pointer through. */

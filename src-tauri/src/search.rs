@@ -82,7 +82,9 @@ fn matcher(
 // The arguments are the search panel's own controls, one per toggle/field. A
 // struct would only move the same list behind a name the JS side would then have
 // to build, so they stay flat, as they are on the wire.
-#[tauri::command]
+// `async` for the same reason as `git_info`: this blocks on ripgrep, and every
+// keystroke in the search panel re-runs it.
+#[tauri::command(async)]
 #[allow(clippy::too_many_arguments)]
 pub fn search_text(
     root: String,
@@ -327,13 +329,6 @@ pub fn write_backed(
 /// that long in practice — so age is the safe axis.
 const UNDO_RETENTION_NANOS: u128 = 7 * 24 * 60 * 60 * 1_000_000_000;
 
-/// Nanoseconds since the epoch, or 0 if the clock is before it.
-fn now_nanos() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos())
-}
-
 /// Drop parked copies too old for any undo to still reach them.
 ///
 /// Nothing ever removed these: every Replace All, every language-server rename
@@ -345,7 +340,7 @@ fn prune_undo(dir: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
-    let cutoff = now_nanos().saturating_sub(UNDO_RETENTION_NANOS);
+    let cutoff = crate::fs::now_nanos().saturating_sub(UNDO_RETENTION_NANOS);
     for entry in entries.flatten() {
         let name = entry.file_name();
         // Only files this parked, and only ones we can date: the name is
@@ -374,7 +369,7 @@ fn park_backup(root: &Path, path: &Path) -> Result<Backup> {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "file".into());
-    let stamp = now_nanos();
+    let stamp = crate::fs::now_nanos();
     let dest = crate::fs::unique_dest(&dir.join(format!("{stamp}__{name}")));
     std::fs::copy(path, &dest)?;
     Ok(Backup {
@@ -645,7 +640,7 @@ mod tests {
     /// A parked copy named as `park_backup` names them, dated `age_days` ago.
     fn park(dir: &Path, age_days: u128, name: &str) -> std::path::PathBuf {
         std::fs::create_dir_all(dir).unwrap();
-        let stamp = now_nanos().saturating_sub(age_days * 24 * 60 * 60 * 1_000_000_000);
+        let stamp = crate::fs::now_nanos().saturating_sub(age_days * 24 * 60 * 60 * 1_000_000_000);
         let path = dir.join(format!("{stamp}__{name}"));
         std::fs::write(&path, "parked").unwrap();
         path

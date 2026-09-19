@@ -51,14 +51,12 @@ export function SearchPanel() {
   const setScope = useWorkspace((s) => s.setSearchScope)
   const { t } = useTranslation()
 
-  // Restore the last query so leaving and returning to the Search tool doesn't
-  // lose it (the debounced effect below re-runs the search from the seed).
-  const [query, setQuery] = useState(() => useWorkspace.getState().searchQuery)
-
-  // Persist the query so it survives a tool-switch / reopen.
-  useEffect(() => {
-    useWorkspace.getState().setSearchQuery(query)
-  }, [query])
+  // The store owns the query outright, exactly as it owns the scope/include/
+  // exclude above: it is what makes the query survive a tool-switch or reopen,
+  // and a local mirror synced back on every keystroke was a second source of
+  // truth for the same fact.
+  const query = useWorkspace((s) => s.searchQuery)
+  const setQuery = useWorkspace((s) => s.setSearchQuery)
 
   const queryRef = useRef<HTMLTextAreaElement>(null)
   // Seed the query when something requests a search (⌘⇧F, Find references, Find in

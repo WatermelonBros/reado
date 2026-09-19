@@ -49,6 +49,7 @@ import {
   readFile,
   reanchorFile,
   rebuildIndex,
+  resolvePath,
   semanticRebuild,
   semanticReindexFile,
   startWatching,
@@ -346,11 +347,19 @@ export function ProjectView({ root }: { root: string }) {
         // If a file open in a tab was deleted on disk, close the tab instead of
         // leaving a broken editor (VS Code behaviour).
         const { tabs, close } = useProject.getState()
-        // Tabs hold absolute paths; pass the absolute path so read_file resolves
+        // Tabs hold absolute paths; pass the absolute path so resolve_path checks
         // it against the project root (a relative path would fail to canonicalize
-        // and wrongly close the tab on every edit).
+        // and wrongly close the tab on every edit). `resolvePath` is the existence
+        // probe this needs — `readFile` would ship the whole file body across IPC
+        // on every save just to be thrown away.
         const tab = tabs.find((p) => toRelative(root, p) === file)
-        if (tab) readFile(root, tab).catch(() => close(tab))
+        if (tab) {
+          resolvePath(root, tab)
+            .then((found) => {
+              if (!found) close(tab)
+            })
+            .catch(() => close(tab))
+        }
       }),
       // An agent mutated comments via the `reado` CLI — reload the list so the
       // UI reflects done/reply/add without a manual refresh.

@@ -27,7 +27,7 @@ import {
   readFile,
   searchText,
 } from "@/lib/api"
-import { useComments } from "@/lib/comments"
+import { baseName, toRelative, useComments } from "@/lib/comments"
 import { type DocItem, listDocs } from "@/lib/knowledge"
 import { markdownRehypeFor, markdownUrlTransform } from "@/lib/markdown"
 import { useSpecs } from "@/lib/specs"
@@ -36,7 +36,6 @@ import { useProject, useWorkspace } from "@/lib/store"
 type Selection = { kind: "notes" } | { kind: "doc" | "spec"; path: string; label: string }
 
 const stripExt = (s: string) => s.replace(/\.(md|markdown|mdx)$/i, "")
-const basename = (p: string) => p.split("/").pop() ?? p
 
 export function DocsView() {
   const comments = useComments((s) => s.comments)
@@ -152,9 +151,7 @@ export function DocsView() {
           if (cancelled) return
           const hit = new Set<string>()
           for (const m of matches) {
-            const rel = (m.path.startsWith(root) ? m.path.slice(root.length) : m.path)
-              .replace(/^[\\/]+/, "")
-              .replace(/\\/g, "/")
+            const rel = toRelative(root, m.path)
             if (kbPaths.has(rel)) hit.add(rel)
           }
           setContentMatches(hit)
@@ -308,7 +305,7 @@ export function DocsView() {
                     items.map((d) =>
                       navButton(
                         d.path,
-                        basename(d.label),
+                        baseName(d.label),
                         <DocsIcon className="h-3.5 w-3.5 flex-none text-faint" />,
                         { kind: "doc", path: d.path, label: d.label },
                         true,

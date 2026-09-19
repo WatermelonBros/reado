@@ -22,13 +22,12 @@ import { TYPE_COLOR } from "@/components/atoms/commentMeta"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon } from "@/components/atoms/icons"
 import { docLinks, listFiles } from "@/lib/api"
-import { useComments } from "@/lib/comments"
+import { baseName, useComments } from "@/lib/comments"
 import { type DocItem, listDocs } from "@/lib/knowledge"
 import { useSpecs } from "@/lib/specs"
 import { useProject, useWorkspace } from "@/lib/store"
 
 const stripExt = (s: string) => s.replace(/\.(md|markdown|mdx)$/i, "")
-const basename = (p: string) => p.split("/").pop() ?? p
 /** The folder a document lives in, as its own grouping ("" for the root). */
 const dirname = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "")
 
@@ -157,7 +156,7 @@ export function KnowledgeGraph() {
           id: `f:${c.anchor.file}`,
           kind: "file",
           layer: "file",
-          label: basename(c.anchor.file),
+          label: baseName(c.anchor.file),
           color: "var(--accent)",
           file: c.anchor.file,
           line: 1,
@@ -225,7 +224,7 @@ export function KnowledgeGraph() {
         id: docId(d.path),
         kind: "doc",
         layer: "doc",
-        label: stripExt(basename(d.path)),
+        label: stripExt(baseName(d.path)),
         color: "var(--syn-string)",
         file: d.path,
         line: 1,

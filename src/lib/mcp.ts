@@ -15,6 +15,7 @@
 import { ask } from "@tauri-apps/plugin-dialog"
 import { t } from "@/i18n"
 import { agentInstalled, createFile, readFile, writeFile } from "./api"
+import { notifyError } from "./notice"
 
 /** One agent's MCP wiring: the binary to detect, its project-level config file,
  *  and how to merge Reado's server into that file's existing contents. */
@@ -130,7 +131,8 @@ async function writeMcpConfigs(root: string, targets: McpTarget[]): Promise<stri
     // Only to make the parent dirs and the file itself; on an existing config it
     // would just fail ("a file with that name already exists") into the log.
     if (existing == null) await createFile(root, path).catch(() => {})
-    await writeFile(root, path, next).catch(() => {})
+    // A dropped write means the agent silently never gets configured.
+    await writeFile(root, path, next).catch((e) => notifyError("mcp", t("notice.saveFailed"), e))
     written.push(tgt.label)
   }
   return written

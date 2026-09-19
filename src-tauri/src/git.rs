@@ -50,23 +50,9 @@ const STATUS_ARGS: [&str; 5] = [
     "-uall",
 ];
 
+/// Run git and return trimmed stdout, or `None` on failure.
 fn run_git(root: &Path, args: &[&str]) -> Option<String> {
-    let output = command("git")
-        // Reado polls `status`/`info` in the background. Without this, each poll
-        // may take `index.lock` to refresh the index — colliding with the git the
-        // user is running in the terminal (either side then fails), and with the
-        // other poll now that these commands run off the UI thread.
-        .arg("--no-optional-locks")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .ok()?;
-    if output.status.success() {
-        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        None
-    }
+    run_git_raw(root, args).map(|out| out.trim().to_string())
 }
 
 /// Project-relative paths changed for a guided-review scope. With no `base`,
@@ -319,7 +305,11 @@ pub fn git_status(root: String) -> Vec<GitChange> {
 /// Run git and return raw stdout (no trimming), or `None` on failure.
 fn run_git_raw(root: &Path, args: &[&str]) -> Option<String> {
     let output = command("git")
-        .arg("--no-optional-locks") // a read: see run_git
+        // Reado polls `status`/`info` in the background. Without this, each poll
+        // may take `index.lock` to refresh the index — colliding with the git the
+        // user is running in the terminal (either side then fails), and with the
+        // other poll now that these commands run off the UI thread.
+        .arg("--no-optional-locks")
         .arg("-C")
         .arg(root)
         .args(args)
@@ -909,9 +899,7 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].name, "origin");
         assert_eq!(listed[0].url, "https://example.com/x.git");
-        git_remote_rename(root.clone(), "origin".into(), "upstream".into()).unwrap();
-        assert_eq!(git_remotes(root.clone())[0].name, "upstream");
-        git_remote_remove(root.clone(), "upstream".into()).unwrap();
+        git_remote_remove(root.clone(), "origin".into()).unwrap();
         assert!(git_remotes(root).is_empty());
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -2095,12 +2083,6 @@ pub fn git_tag_delete(root: String, name: String) -> Result<(), String> {
     run_git_checked(&root, &["tag", "-d", name.trim()])
 }
 
-/// Push one tag to a remote.
-#[tauri::command]
-pub fn git_tag_push(root: String, name: String, remote: String) -> Result<(), String> {
-    run_git_checked(&root, &["push", remote.trim(), name.trim()])
-}
-
 /// A remote and where it points.
 #[derive(serde::Serialize)]
 pub struct Remote {
@@ -2142,12 +2124,6 @@ pub fn git_remote_add(root: String, name: String, url: String) -> Result<(), Str
         return Err("A remote needs a name and a URL".into());
     }
     run_git_checked(&root, &["remote", "add", name, url])
-}
-
-/// Rename a remote.
-#[tauri::command]
-pub fn git_remote_rename(root: String, from: String, to: String) -> Result<(), String> {
-    run_git_checked(&root, &["remote", "rename", from.trim(), to.trim()])
 }
 
 /// Remove a remote.

@@ -131,25 +131,54 @@ export function detectEol(text: string): Eol {
   return text.includes("\r\n") ? "CRLF" : "LF"
 }
 
-/** Best-guess indentation unit from a sample of the file's leading whitespace. */
+/**
+ * Best-guess indentation unit from a sample of the file's leading whitespace.
+ *
+ * The unit is the **step** between one line's indent and the next's — not the
+ * smallest indent in the file, which is what this used to read. Every file
+ * carrying a block comment came out at one space, because ` * continues here` is
+ * a line indented by one and one was then the answer for the whole document.
+ *
+ * So those continuation lines are skipped outright (they align a comment's
+ * stars; they are not a level of anything), and what remains is tallied: the
+ * most common step wins, and a tie goes to the smaller one, since the larger
+ * steps in a file are multiples of its unit. A file with nothing to go on keeps
+ * the two-space default rather than inventing a number from a single line.
+ *
+ * A guess, and only reached when the project does not say: `.editorconfig`
+ * outranks this wherever one applies (see `CodeView`).
+ */
 export function detectIndent(text: string): { kind: "spaces" | "tabs"; size: number } {
   const lines = text.split("\n").slice(0, 200)
   let tabs = 0
   let spaced = 0
-  let minSpace = Infinity
+  const steps = new Map<number, number>()
+  let prev = 0
   for (const line of lines) {
-    if (/^\t/.test(line)) {
+    // Nothing on it, or nothing but a comment's alignment star.
+    if (!line.trim() || /^\s*\*/.test(line)) continue
+    if (line.startsWith("\t")) {
       tabs++
-    } else {
-      const m = line.match(/^( +)\S/)
-      if (m) {
-        spaced++
-        minSpace = Math.min(minSpace, m[1].length)
-      }
+      continue
     }
+    const width = line.match(/^ */)?.[0].length ?? 0
+    // Both directions: going out a level and coming back in say the same thing
+    // about the unit, and a file that only ever unindents still has one.
+    const step = Math.abs(width - prev)
+    if (step > 0) steps.set(step, (steps.get(step) ?? 0) + 1)
+    if (width > 0) spaced++
+    prev = width
   }
   if (tabs > spaced) return { kind: "tabs", size: 4 }
-  return { kind: "spaces", size: Number.isFinite(minSpace) ? minSpace : 2 }
+  let size = 0
+  let best = 0
+  for (const [step, count] of steps) {
+    if (count > best || (count === best && step < size)) {
+      size = step
+      best = count
+    }
+  }
+  return { kind: "spaces", size: size || 2 }
 }
 
 /** Move the editor cursor to (and reveal) a 1-based line number. */

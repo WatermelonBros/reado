@@ -12,6 +12,11 @@
 //! - **The window is sized once**, big enough for the character plus the longest
 //!   bubble. Resizing it per bubble makes it flicker above other applications,
 //!   and the corner it is parked in is what decides which way the bubble opens.
+//! - **Nothing tells us the displays changed.** A laptop plugged into an
+//!   external screen resizes the work area under a window already placed against
+//!   the old one, stranding the companion mid-screen. The same poll that watches
+//!   the cursor compares the target work area against the one it last parked
+//!   against, once a second, and puts it back.
 
 use std::sync::Mutex;
 
@@ -47,6 +52,26 @@ const POLL_MS: u64 = 60;
 #[derive(Default)]
 pub struct HitRect(pub Mutex<Option<(f64, f64, f64, f64)>>);
 
+/// What the companion was last told to be. Kept because the window has to be
+/// put back on its own: a laptop plugged into a screen changes the work area
+/// under a window that has already been placed, and nothing asks it to move.
+#[derive(Default)]
+pub struct Park(pub Mutex<ParkState>);
+
+#[derive(Default)]
+pub struct ParkState {
+    corner: String,
+    /// The character's height; the window is this plus the bubble's room.
+    size: f64,
+    /// The display the user picked, by name. Empty means "wherever the main
+    /// window is" — which is what someone who never opened the setting means.
+    monitor: String,
+    /// The work area it is currently parked against. A display arriving,
+    /// leaving or changing resolution *is* this value changing, so comparing it
+    /// is the whole observer.
+    area: Option<(f64, f64, f64, f64)>,
+}
+
 /// Where the window sits for a corner, given the work area it must stay inside.
 fn place(corner: &str, area: (f64, f64, f64, f64), size: (f64, f64)) -> (f64, f64) {
     let (ax, ay, aw, ah) = area;
@@ -64,9 +89,84 @@ fn place(corner: &str, area: (f64, f64, f64, f64), size: (f64, f64)) -> (f64, f6
     (x, y)
 }
 
+/// The work area the companion belongs in: the display the user named, or the
+/// one the main window is on. The WORK AREA, not the monitor — the menu bar and
+/// the Dock are not screen a companion may sit under, and using the full size
+/// put the top corners behind the menu bar, where they are not corners at all.
+fn target_area(app: &AppHandle, monitor: &str) -> Option<(f64, f64, f64, f64)> {
+    let mon = app
+        .available_monitors()
+        .ok()
+        .and_then(|all| {
+            all.into_iter()
+                .find(|m| m.name().is_some_and(|n| n == monitor))
+        })
+        .or_else(|| {
+            app.get_webview_window("main")
+                .and_then(|m| m.current_monitor().ok().flatten())
+        })
+        .or_else(|| app.primary_monitor().ok().flatten())?;
+    let scale = mon.scale_factor();
+    let area = mon.work_area();
+    let pos = area.position.to_logical::<f64>(scale);
+    let size = area.size.to_logical::<f64>(scale);
+    Some((pos.x, pos.y, size.width, size.height))
+}
+
+/// Size the window and put it in its corner of its display.
+fn park(app: &AppHandle) {
+    let Some(win) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    let park = app.state::<Park>();
+    let mut st = park.0.lock().unwrap();
+    let Some(area) = target_area(app, &st.monitor) else {
+        return;
+    };
+    let size = (st.size + BUBBLE_W, st.size + BUBBLE_H);
+    let _ = win.set_size(LogicalSize::new(size.0, size.1));
+    let (x, y) = place(&st.corner, area, size);
+    crate::log::info(
+        "mascot",
+        "parked",
+        serde_json::json!({
+            "corner": st.corner, "monitor": st.monitor, "x": x, "y": y,
+            "work": [area.0, area.1, area.2, area.3],
+            "window": [size.0, size.1],
+        }),
+    );
+    let _ = win.set_position(LogicalPosition::new(x, y));
+    st.area = Some(area);
+}
+
+/// The displays the companion can be sent to, by name.
+#[tauri::command]
+pub fn mascot_monitors(app: AppHandle) -> Result<Vec<String>, String> {
+    Ok(app
+        .available_monitors()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter_map(|m| m.name().cloned())
+        .collect())
+}
+
 /// Show the companion (creating it the first time) or hide it.
 #[tauri::command]
-pub fn mascot_show(app: AppHandle, show: bool, corner: String, size: f64) -> Result<(), String> {
+pub fn mascot_show(
+    app: AppHandle,
+    show: bool,
+    corner: String,
+    size: f64,
+    monitor: String,
+) -> Result<(), String> {
+    {
+        let park = app.state::<Park>();
+        let mut st = park.0.lock().unwrap();
+        st.corner = corner;
+        st.size = size;
+        st.monitor = monitor;
+        st.area = None;
+    }
     if !show {
         if let Some(w) = app.get_webview_window(LABEL) {
             let _ = w.hide();
@@ -74,9 +174,8 @@ pub fn mascot_show(app: AppHandle, show: bool, corner: String, size: f64) -> Res
         return Ok(());
     }
 
-    let win = match app.get_webview_window(LABEL) {
-        Some(w) => w,
-        None => WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("index.html#mascot".into()))
+    if app.get_webview_window(LABEL).is_none() {
+        WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("index.html#mascot".into()))
             .title("Reado")
             .inner_size(size + BUBBLE_W, size + BUBBLE_H)
             .decorations(false)
@@ -88,41 +187,10 @@ pub fn mascot_show(app: AppHandle, show: bool, corner: String, size: f64) -> Res
             .resizable(false)
             .visible(false)
             .build()
-            .map_err(|e| e.to_string())?,
-    };
-
-    let _ = win.set_size(LogicalSize::new(size + BUBBLE_W, size + BUBBLE_H));
-    // Park it on the screen the user is working on — the main window's — not on
-    // whichever one this window happens to have been created on.
-    let monitor = app
-        .get_webview_window("main")
-        .and_then(|m| m.current_monitor().ok().flatten())
-        .or_else(|| win.current_monitor().ok().flatten())
-        .or_else(|| app.primary_monitor().ok().flatten());
-    if let Some(mon) = monitor {
-        let scale = mon.scale_factor();
-        // The WORK AREA, not the monitor: the menu bar and the Dock are not
-        // screen the companion may sit under. Using the full size put the top
-        // corners behind the menu bar, where they are not corners at all.
-        let area = mon.work_area();
-        let pos = area.position.to_logical::<f64>(scale);
-        let asize = area.size.to_logical::<f64>(scale);
-        let (x, y) = place(
-            &corner,
-            (pos.x, pos.y, asize.width, asize.height),
-            (size + BUBBLE_W, size + BUBBLE_H),
-        );
-        crate::log::info(
-            "mascot",
-            "parked",
-            serde_json::json!({
-                "corner": corner, "x": x, "y": y,
-                "work": [pos.x, pos.y, asize.width, asize.height],
-                "window": [size + BUBBLE_W, size + BUBBLE_H],
-            }),
-        );
-        let _ = win.set_position(LogicalPosition::new(x, y));
+            .map_err(|e| e.to_string())?;
     }
+    park(&app);
+    let win = app.get_webview_window(LABEL).ok_or("no mascot window")?;
     // It never steals focus: showing it must not take the caret out of whatever
     // the user is typing in.
     let _ = win.set_ignore_cursor_events(true);
@@ -153,6 +221,7 @@ pub fn mascot_raise(app: AppHandle) -> Result<(), String> {
 pub fn watch_cursor(app: AppHandle) {
     std::thread::spawn(move || {
         let mut passing_through = true;
+        let mut ticks: u64 = 0;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
             let Some(win) = app.get_webview_window(LABEL) else {
@@ -160,6 +229,22 @@ pub fn watch_cursor(app: AppHandle) {
             };
             if !win.is_visible().unwrap_or(false) {
                 continue;
+            }
+            // Once a second: has the display it is parked on changed shape? A
+            // laptop plugged into an external screen resizes the work area under
+            // a window that was placed against the old one, which is how the
+            // companion ends up stranded mid-screen. Nothing tells us — so we
+            // look.
+            ticks += 1;
+            if ticks.is_multiple_of(1000 / POLL_MS) {
+                let (monitor, area) = {
+                    let park = app.state::<Park>();
+                    let st = park.0.lock().unwrap();
+                    (st.monitor.clone(), st.area)
+                };
+                if target_area(&app, &monitor) != area {
+                    park(&app);
+                }
             }
             let inside = cursor_inside(&app, &win).unwrap_or(false);
             // Only speak to the window when the answer changes: setting this on
