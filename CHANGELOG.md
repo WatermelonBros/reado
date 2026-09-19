@@ -11,6 +11,74 @@ commit.
 
 ## [Unreleased]
 
+## [1.23.0] — 2026-09-19
+
+### Added
+
+- **The companion can be parked on a display of your choosing**, not only in a
+  corner of the one Reado is on. *Settings ▸ System ▸ Notifications* lists the
+  screens the OS reports; the default still follows Reado's own window, and the
+  picker stays out of the way on a single-screen machine.
+- **A mascot button in the status bar** turns the companion on and off. Sending
+  it away with a right-click used to mean a trip through Settings to get it back.
+- **A project's `.vscode/extensions.json` is read** for recommended extensions,
+  alongside `.reado/extensions.json` — Reado's own wins where a repository keeps
+  both. A project that already lists what it needs for VS Code no longer has to
+  keep a second copy, the same call Reado already makes for `.vscode/tasks.json`.
+
+### Fixed
+
+- **Reado Anywhere confined a phone to the project again.** The LAN file and
+  directory routes rejected `..` but not an absolute path — `join` discards the
+  root, so `/etc/passwd` was read straight through — nor a symlink pointing out
+  of the project. They now canonicalize and compare against the root, the check
+  the local filesystem commands were already using.
+- **The editor no longer decides your file is indented by one space.** The
+  indentation guess read the *smallest* indent in the file, and a block comment's
+  ` * continues here` is a line indented by one — so any file carrying one came
+  out at a single space (271 of this repository's own 512 source files did). It
+  now reads the step between indent levels, ignoring comment alignment. A
+  project's `.editorconfig` still outranks the guess wherever one applies.
+- **The companion stops claiming the agent is working when it isn't.** "Working"
+  was entered on any sign of activity and left only by a handoff, so an agent
+  that finished without sending one left the owl thinking for the rest of the
+  day. It now goes back to idle when the signs of work stop arriving — and once
+  an agent has handed the turn back, its pane repainting no longer counts as work
+  at all, until Reado dispatches again or you type into that pane yourself.
+- **The companion finds its corner again when you plug in a screen.** Nothing
+  reports a display change, so a window parked against the laptop's work area
+  stayed where it was and ended up stranded mid-screen. It now notices the work
+  area has moved under it and re-parks itself.
+- **A tucked companion lets clicks through.** Sent to the edge, its way-out
+  button — a character's width inside the screen — stayed marked as solid, so the
+  transparent window kept swallowing clicks meant for whatever was behind it.
+- **Recommendations Reado already satisfies stop being offered.** A project
+  recommending `rust-lang.rust-analyzer` means "install rust-analyzer", which is
+  what Reado's curated Rust entry installs — but the check only looked at Open
+  VSX, so the notice came back on every project open with nothing to do about it.
+  Twenty-five well-known ids are now recognised as the curated tool they name.
+- **Switching projects no longer leaves the old project's watcher running.** Each
+  project opened in a window started a filesystem watcher and never stopped one,
+  so the retired watcher kept reporting *its* files as changes for the newly
+  opened project — on top of leaking a thread and a recursive watch per switch.
+- **Failed writes of the resolve-loop state and of an agent's MCP config are
+  reported** instead of being discarded silently.
+- **The diff gutter now follows your edits.** Its change marks were computed once
+  when the file opened and never again, so every mark went stale the moment you
+  saved — the refresh it documented was keyed on a value that did not exist.
+
+### Changed
+
+- **The window stops locking up on whole-project work.** Listing files, indexing,
+  the symbol palette and search each walked the project on the UI thread; they
+  now run on a worker, as the git commands already did.
+- **Scrolling a file is smoother.** The editor coalesced nothing, re-rendering on
+  every scroll event rather than once per frame, and the file tree rescanned the
+  whole project for every folder row it drew.
+- **Fewer round trips to the backend.** Marking a file read re-read it from disk
+  while its text was already on screen, and saving a file fetched the whole body
+  of every open tab only to check it still existed.
+
 ## [1.22.0] — 2026-09-16
 
 ### Added
@@ -2354,7 +2422,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.21.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.23.0...HEAD
+[1.23.0]: https://github.com/WatermelonBros/reado/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/WatermelonBros/reado/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/WatermelonBros/reado/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/WatermelonBros/reado/compare/v1.19.0...v1.20.0
