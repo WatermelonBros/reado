@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.23.1] — 2026-09-21
+
 ### Fixed
 
 - **The title bar's search pill advertises a key that works.** It printed `⌘K`,
@@ -2556,7 +2558,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.23.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.23.1...HEAD
+[1.23.1]: https://github.com/WatermelonBros/reado/compare/v1.23.0...v1.23.1
 [1.23.0]: https://github.com/WatermelonBros/reado/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/WatermelonBros/reado/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/WatermelonBros/reado/compare/v1.20.0...v1.21.0
