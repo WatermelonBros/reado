@@ -63,6 +63,11 @@ const PALETTES: Record<Exclude<ColorVision, "normal">, Palette> = {
 export function tokensFor(mode: ColorVision): Palette {
   if (mode === "normal") return {}
   const base = PALETTES[mode]
+  // A mode with no palette is a stored value that is not one of ours. The store
+  // now refuses those at every door, but this table is the place the damage
+  // used to happen — reading a token off `undefined` here blanked the whole
+  // window — so it says no rather than trusting the type.
+  if (!base) return {}
   const out: Palette = { ...base }
   for (const name of ["diff-add", "diff-del"]) {
     out[`${name}-soft`] = base[name].replace(/\)$/, " / 0.16)")

@@ -18,7 +18,10 @@ const DOC = "export function X() {\n  const v = useSta\n}\n"
 function plugin(request: ReturnType<typeof vi.fn>) {
   return {
     uri: "file:///x.tsx",
-    client: { request },
+    // The resolve round trip is gated on the capability: a server that never
+    // advertised `resolveProvider` used to be asked anyway, and answered
+    // "Method not implemented" on its own stderr, once per item.
+    client: { request, serverCapabilities: { completionProvider: { resolveProvider: true } } },
     fromPosition: (p: { line: number; character: number }, doc: EditorState["doc"]) =>
       doc.line(p.line + 1).from + p.character,
   } as never
@@ -36,6 +39,29 @@ const mount = () => {
 }
 /** Where "useSta" sits in the document. */
 const WORD = { from: DOC.indexOf("useSta"), to: DOC.indexOf("useSta") + 6 }
+
+describe("a server that never offered to resolve", () => {
+  it('is not asked, so it cannot answer "Method not implemented"', async () => {
+    const request = vi.fn()
+    const view = mount()
+    const noResolve = {
+      uri: "file:///x.tsx",
+      client: { request, serverCapabilities: { completionProvider: {} } },
+      fromPosition: (p: { line: number; character: number }, doc: EditorState["doc"]) =>
+        doc.line(p.line + 1).from + p.character,
+    } as never
+    applyCompletion(
+      noResolve,
+      view,
+      { label: "useState", data: { entryName: "useState" } },
+      WORD.from,
+      WORD.to,
+    )
+    await Promise.resolve()
+    expect(request).not.toHaveBeenCalled()
+    view.destroy()
+  })
+})
 
 describe("the completion source the server contributes", () => {
   it("is one function, not a fresh one per lookup", async () => {

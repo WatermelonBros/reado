@@ -11,7 +11,6 @@
  * in. The tree re-lists itself when files change on disk (`treeNonce`).
  */
 
-import { getCurrentWebview } from "@tauri-apps/api/webview"
 import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
 import { revealItemInDir } from "@tauri-apps/plugin-opener"
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
@@ -52,10 +51,10 @@ import { notifyError } from "@/lib/notice"
 import { prompt } from "@/lib/prompt"
 import { LAST_READ_BASE, useReadProgress } from "@/lib/readProgress"
 import { FILE_BASE, useEditorActions, useProject, useSettings, useWorkspace } from "@/lib/store"
-import { dropPathsIntoTerminal, useTerminals } from "@/lib/terminals"
+import { dropPathsIntoTerminal, offSafe, useTerminals } from "@/lib/terminals"
 import { useTextView } from "@/lib/textView"
 import { filterEntries, sortEntries } from "@/lib/treeSort"
-import { revealAppName } from "@/lib/window"
+import { onFileDrop, revealAppName } from "@/lib/window"
 import { removeWorkspaceFolder, rootFor } from "@/lib/workspace"
 
 type Ctx = (entry: DirEntry | null, e: React.MouseEvent) => void
@@ -344,24 +343,20 @@ export function FileTree() {
   // with a physical-pixel position. Resolve the folder under the cursor and copy
   // the dropped paths into it; ignore drops outside the tree.
   useEffect(() => {
-    const un = getCurrentWebview().onDragDropEvent((event) => {
-      if (event.payload.type !== "drop") return
+    const un = onFileDrop((paths, position) => {
       const tree = containerRef.current
       if (!tree) return
       const dpr = window.devicePixelRatio || 1
-      const { x, y } = event.payload.position
-      const el = document.elementFromPoint(x / dpr, y / dpr)
+      const el = document.elementFromPoint(position.x / dpr, position.y / dpr)
       if (!el || !tree.contains(el)) return
       const destDir = el.closest("[data-dir]")?.getAttribute("data-dir") || root
-      importPaths(rootFor(destDir), event.payload.paths, destDir)
+      importPaths(rootFor(destDir), paths, destDir)
         .then(() => useProject.getState().bumpTree())
         .catch(() => {})
     })
-    return () => {
-      // FileTree unmounts on every tool switch; swallow a rejecting unlisten so
-      // it doesn't surface as an unhandled rejection.
-      void un.then((f) => f()).catch(() => {})
-    }
+    // FileTree unmounts on every tool switch, so the unlisten regularly finds a
+    // listener map that is already gone.
+    return () => offSafe(un)
   }, [root])
 
   // Keyboard on the tree, like VS Code's explorer: F2 renames, Delete (⌘⌫ on

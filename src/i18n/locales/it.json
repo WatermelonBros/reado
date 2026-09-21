@@ -786,6 +786,8 @@
     "branch": "ramo",
     "comments": "{count} aperti",
     "agentIdle": "Agente inattivo",
+    "agentWorking": "Agente al lavoro",
+    "agentAsking": "L'agente attende una risposta",
     "notGit": "Non è un repository git",
     "goToLine": "Vai alla riga",
     "goToLinePlaceholder": "Numero di riga…",
@@ -821,6 +823,7 @@
     "inFolder": "in",
     "clearScope": "Cerca in tutto il progetto",
     "placeholder": "Cerca nel progetto…",
+    "placeholderFile": "Cerca nel file…",
     "count": "{current} di {total}",
     "countCapped": "oltre {cap} risultati",
     "noResults": "Nessun risultato.",
@@ -1531,7 +1534,7 @@
       "link": "Collegato"
     },
     "empty": "Ancora niente da mappare. Commenti, spec e doc appaiono qui come nodi collegati man mano che li aggiungi.",
-    "count": "{{nodes}} nodi · {{links}} collegamenti",
+    "count": "{nodes} nodi · {links} collegamenti",
     "reset": "Reimposta vista"
   },
   "docs": {

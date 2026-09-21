@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }))
 vi.mock("@tauri-apps/plugin-updater", () => ({}))
 
-import { UpdatePrompt } from "@/components/organisms/UpdatePrompt"
+import { UpdateIndicator, UpdatePrompt } from "@/components/organisms/UpdatePrompt"
 import { useUpdate } from "@/lib/update"
 
 // A minimal stand-in for the Tauri `Update` handle.
@@ -34,7 +34,12 @@ afterEach(() => {
 
 describe("UpdatePrompt", () => {
   it("renders nothing when there is no update", () => {
-    render(<UpdatePrompt />)
+    render(
+      <>
+        <UpdatePrompt />
+        <UpdateIndicator />
+      </>,
+    )
     expect(screen.queryByText("update.title")).not.toBeInTheDocument()
     expect(screen.queryByText("update.indicator")).not.toBeInTheDocument()
   })
@@ -55,7 +60,14 @@ describe("UpdatePrompt", () => {
 
   it("the Later button dismisses the modal and leaves the indicator", async () => {
     useUpdate.setState({ update: fakeUpdate, version: "1.2.3", open: true })
-    render(<UpdatePrompt />)
+    // The indicator is laid out by the title bar, not floated over it — it used
+    // to be `fixed top-0 right-3`, covering the very controls that live there.
+    render(
+      <>
+        <UpdatePrompt />
+        <UpdateIndicator />
+      </>,
+    )
     // Both the header X (aria-label) and the footer button carry "update.later".
     const [closeBtn] = screen.getAllByRole("button", { name: "update.later" })
     await userEvent.click(closeBtn)
@@ -75,9 +87,19 @@ describe("UpdatePrompt", () => {
 
   it("clicking the dismissed indicator reopens the modal", async () => {
     useUpdate.setState({ update: fakeUpdate, version: "1.2.3", open: false, dismissed: true })
-    render(<UpdatePrompt />)
+    render(<UpdateIndicator />)
     await userEvent.click(screen.getByRole("button", { name: "update.indicator" }))
     expect(useUpdate.getState().open).toBe(true)
+  })
+
+  it("the indicator takes part in the layout instead of floating over it", () => {
+    // The regression: `fixed top-0 right-3 z-[105]` put the pill on top of the
+    // title bar's trailing controls — Discord and the sidebar / panel /
+    // secondary-sidebar / layout toggles all sit in that strip. Postponing an
+    // update cost you those four buttons until you took it.
+    useUpdate.setState({ update: fakeUpdate, version: "1.2.3", open: false, dismissed: true })
+    const { container } = render(<UpdateIndicator />)
+    expect(container.querySelector(".fixed")).toBeNull()
   })
 
   it("renders a status toast and auto-dismisses it after the timeout", () => {

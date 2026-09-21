@@ -3,7 +3,7 @@
 // or a value of the wrong shape is reported and skipped, never applied.
 import { beforeEach, describe, expect, it } from "vitest"
 import { applySettingsJson, parseSettingsJson, settingsToJson } from "@/lib/settingsJson"
-import { useSettings } from "@/lib/store"
+import { ENUM_VALUES, NUMBER_RANGES, useSettings } from "@/lib/store"
 
 beforeEach(() => {
   useSettings.getState().reset()
@@ -74,6 +74,63 @@ describe("parseSettingsJson", () => {
     const parsed = parseSettingsJson('{"zenMode": true, "defaultAppsDismissed": true}')
     expect(parsed?.patch).toEqual({})
     expect(parsed?.rejected.sort()).toEqual(["defaultAppsDismissed", "zenMode"])
+  })
+})
+
+describe("numeric settings out of range", () => {
+  // Right type, wrong magnitude used to sail through: `shapeMatches` compared
+  // `typeof` and nothing else, so `terminalScrollback: -5` was accepted, stored,
+  // and then thrown by xterm inside <Terminal>'s render — which took the whole
+  // window to the root error boundary, not just the pane. The limits the UI
+  // controls have always shown now live next to the defaults and apply here too.
+  it("clamps a negative value instead of accepting it", () => {
+    const parsed = parseSettingsJson('{"terminalScrollback": -5}')
+    expect(parsed?.rejected).toEqual([])
+    expect(parsed?.patch.terminalScrollback).toBe(NUMBER_RANGES.terminalScrollback.min)
+  })
+
+  it("clamps every numeric setting, not just the one that crashed", () => {
+    const parsed = parseSettingsJson(
+      '{"fontSize": -99, "autoSaveDelay": -1, "largeFileGuardMb": -3, "rulerColumn": -10, "zoom": 99}',
+    )
+    expect(parsed?.patch).toEqual({
+      fontSize: NUMBER_RANGES.fontSize.min,
+      autoSaveDelay: NUMBER_RANGES.autoSaveDelay.min,
+      largeFileGuardMb: NUMBER_RANGES.largeFileGuardMb.min,
+      rulerColumn: NUMBER_RANGES.rulerColumn.min,
+      zoom: NUMBER_RANGES.zoom.max,
+    })
+  })
+
+  it("leaves a value inside its range exactly as written", () => {
+    const parsed = parseSettingsJson('{"fontSize": 14, "terminalScrollback": 5000}')
+    expect(parsed?.patch).toEqual({ fontSize: 14, terminalScrollback: 5000 })
+  })
+})
+
+describe("a value that is not one of the shipped words", () => {
+  // `shapeMatches` compares `typeof`, so a wrong word is a string like any
+  // other. `colorVision: "protanopia"` was accepted, stored, and then looked up
+  // in a palette table that has no such mode — reading a token off `undefined`
+  // took the whole window to the root error boundary, and the value survived a
+  // restart because it had been persisted.
+  it("is rejected, not stored", () => {
+    const parsed = parseSettingsJson('{"colorVision": "protanopia"}')
+    expect(parsed?.rejected).toEqual(["colorVision"])
+    expect(parsed?.patch).toEqual({})
+  })
+
+  it("still accepts the words that are shipped", () => {
+    const parsed = parseSettingsJson('{"colorVision": "red-green", "cursorStyle": "block"}')
+    expect(parsed?.rejected).toEqual([])
+    expect(parsed?.patch).toEqual({ colorVision: "red-green", cursorStyle: "block" })
+  })
+
+  it("covers every enum-valued setting, not just the one that crashed", () => {
+    const wrong = Object.fromEntries(Object.keys(ENUM_VALUES).map((k) => [k, "nonsense"]))
+    const parsed = parseSettingsJson(JSON.stringify(wrong))
+    expect(parsed?.patch).toEqual({})
+    expect(parsed?.rejected.sort()).toEqual(Object.keys(ENUM_VALUES).sort())
   })
 })
 

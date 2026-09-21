@@ -51,6 +51,22 @@ const STATUS_ARGS: [&str; 5] = [
 ];
 
 /// Run git and return trimmed stdout, or `None` on failure.
+/// Reado's own files inside the project: `.reado/` (local history, index,
+/// bookmarks, reading progress) and the `.mcp.json` it writes to register its
+/// MCP server with the agent.
+///
+/// They are never a change the user made, so no git-derived view may count them.
+/// `.gitignore` was meant to cover this — the rest of the code says so out loud
+/// ("gitignored like the rest of `.reado/`") — but the entry is only *offered*,
+/// and only when the user creates their first comment, while `.reado/.history/`
+/// starts filling on the first save. In that gap the Source Control view showed
+/// 110 changes for a project with four, more than half of them Reado's own
+/// snapshots, and a guided review planned a reading route over them.
+fn is_reado_own(path: &str) -> bool {
+    let p = path.trim_start_matches("./");
+    p == ".mcp.json" || p == ".reado" || p.starts_with(".reado/")
+}
+
 fn run_git(root: &Path, args: &[&str]) -> Option<String> {
     run_git_raw(root, args).map(|out| out.trim().to_string())
 }
@@ -67,7 +83,7 @@ pub fn git_changed_files(root: String, base: Option<String>) -> Vec<String> {
         if let Some(out) = s {
             for line in out.lines() {
                 let p = line.trim();
-                if !p.is_empty() && !files.iter().any(|f| f == p) {
+                if !p.is_empty() && !is_reado_own(p) && !files.iter().any(|f| f == p) {
                     files.push(p.to_string());
                 }
             }
@@ -146,7 +162,11 @@ pub fn git_info(root: String) -> GitInfo {
     let changed_files = is_repo
         .then(|| run_git_raw(root, &STATUS_ARGS))
         .flatten()
-        .map(|out| out.lines().count() as u32)
+        .map(|out| {
+            out.lines()
+                .filter(|l| !is_reado_own(&status_line_path(l)))
+                .count() as u32
+        })
         .unwrap_or(0);
 
     GitInfo {
@@ -242,18 +262,28 @@ fn categorize_char(c: char) -> &'static str {
 /// Expand one `git status --porcelain` line into its staged/unstaged entries.
 /// The two status chars are X (index) and Y (working tree); "MM path" yields
 /// both a staged and an unstaged change, mirroring how SCM UIs present it.
+/// The path a porcelain status line names — rename target, unquoted — or empty
+/// for a line too short to carry one. Shared so the badge count and the change
+/// list read the same path out of the same line.
+fn status_line_path(line: &str) -> String {
+    if line.len() <= 3 {
+        return String::new();
+    }
+    let mut path = line[3..].to_string();
+    // Renames are "old -> new"; keep the new path.
+    if let Some(idx) = path.find(" -> ") {
+        path = path[idx + 4..].to_string();
+    }
+    path.trim_matches('"').to_string()
+}
+
 fn expand_status_line(line: &str) -> Vec<GitChange> {
     if line.len() <= 3 {
         return Vec::new();
     }
     let bytes = line.as_bytes();
     let (x, y) = (bytes[0] as char, bytes[1] as char);
-    let mut path = line[3..].to_string();
-    // Renames are "old -> new"; keep the new path.
-    if let Some(idx) = path.find(" -> ") {
-        path = path[idx + 4..].to_string();
-    }
-    let path = path.trim_matches('"').to_string();
+    let path = status_line_path(line);
 
     if x == '?' {
         return vec![GitChange {
@@ -299,7 +329,10 @@ pub fn git_status(root: String) -> Vec<GitChange> {
     let Some(out) = run_git_raw(Path::new(&root), &STATUS_ARGS) else {
         return Vec::new();
     };
-    out.lines().flat_map(expand_status_line).collect()
+    out.lines()
+        .flat_map(expand_status_line)
+        .filter(|c| !is_reado_own(&c.path))
+        .collect()
 }
 
 /// Run git and return raw stdout (no trimming), or `None` on failure.
@@ -766,6 +799,52 @@ mod tests {
         run_git_checked(&root, &["add", "."]).unwrap();
         run_git_checked(&root, &["commit", "-qm", "first"]).unwrap();
         dir
+    }
+
+    #[test]
+    fn reados_own_files_never_count_as_the_users_changes() {
+        let dir = repo("reado-own");
+        let root = dir.to_string_lossy().into_owned();
+        // What the user did.
+        std::fs::write(dir.join("a.txt"), "two\n").unwrap();
+        std::fs::write(dir.join("new.txt"), "mine\n").unwrap();
+        // What Reado did to the same project, unasked: local history snapshots
+        // and the MCP registration. `.gitignore` is not offered until the first
+        // comment, so without a filter these land in every git-derived view —
+        // 110 "changes" for a project with two.
+        std::fs::create_dir_all(dir.join(".reado/.history/a.txt")).unwrap();
+        std::fs::write(
+            dir.join(".reado/.history/a.txt/1789780987010143000"),
+            "one\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join(".reado/bookmarks.json"), "[]\n").unwrap();
+        std::fs::write(dir.join(".mcp.json"), "{}\n").unwrap();
+
+        let paths: Vec<String> = git_status(root.clone())
+            .into_iter()
+            .map(|c| c.path)
+            .collect();
+        assert!(paths.contains(&"a.txt".to_string()), "{paths:?}");
+        assert!(paths.contains(&"new.txt".to_string()), "{paths:?}");
+        assert!(
+            !paths
+                .iter()
+                .any(|p| p.starts_with(".reado") || p == ".mcp.json"),
+            "Reado's own files reached the Source Control view: {paths:?}"
+        );
+
+        let scope = git_changed_files(root.clone(), None);
+        assert!(
+            !scope
+                .iter()
+                .any(|p| p.starts_with(".reado") || p == ".mcp.json"),
+            "Reado's own files reached a review scope: {scope:?}"
+        );
+
+        // …and the badge counts the same two files the list shows.
+        assert_eq!(git_info(root).changed_files, 2);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// The subject lines of the history, newest first.

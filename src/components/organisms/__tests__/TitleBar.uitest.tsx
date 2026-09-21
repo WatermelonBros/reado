@@ -27,6 +27,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }))
 vi.mock("../../molecules/MenuBar", () => ({ MenuBar: () => <div data-testid="menu-bar" /> }))
 
 import { TitleBar } from "@/components/organisms/TitleBar"
+import { shortcutFor } from "@/lib/keybindings"
 
 beforeEach(() => {
   win.minimize.mockClear()
@@ -43,6 +44,16 @@ describe("TitleBar", () => {
   it("falls back to the Reado label when no project name is given", () => {
     render(<TitleBar projectName={null} />)
     expect(screen.getByText("Reado")).toBeInTheDocument()
+  })
+
+  it("advertises a key that actually opens the palette", () => {
+    // It used to print ⌘K, which by then had become a chord prefix: pressing it
+    // armed the prefix and the pill did nothing. The label is asked for now, so
+    // it cannot drift from the binding again.
+    render(<TitleBar projectName="my-project" />)
+    const key = screen.getByText(shortcutFor("palette:commands") as string)
+    expect(key.tagName).toBe("KBD")
+    expect(key).not.toHaveTextContent(/^.K$/)
   })
 
   it("the minimize button minimizes the window", async () => {

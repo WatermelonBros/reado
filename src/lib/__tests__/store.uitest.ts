@@ -262,6 +262,24 @@ describe("useProject — history & split", () => {
 
 describe("useWorkspace", () => {
   const W = () => useWorkspace.getState()
+  it("openTool shows a tool and keeps showing it", () => {
+    // "Open View ▸ Files" and ⌘⇧E used to route through `selectTool`, so using
+    // them while that view was already up collapsed the sidebar — a menu item
+    // called *Open* that closed, and VS Code's shortcuts doing the opposite of
+    // what they do there.
+    W().openTool("git")
+    expect(W().tool).toBe("git")
+    W().openTool("git")
+    expect(W().tool).toBe("git")
+  })
+
+  it("openTool switches between tools without a detour through closed", () => {
+    W().openTool("git")
+    W().openTool("search")
+    expect(W().tool).toBe("search")
+    expect(W().lastTool).toBe("search")
+  })
+
   it("selectTool toggles the same tool off", () => {
     W().selectTool("git")
     expect(W().tool).toBe("git")

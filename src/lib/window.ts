@@ -7,6 +7,7 @@
  * hashchange — so a new window pointed at `#project=…` boots straight into it.
  */
 
+import { listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event"
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog"
@@ -228,4 +229,34 @@ export function useFullscreen(): [boolean, (on?: boolean) => void] {
       setFull(on ?? !full)
     },
   ]
+}
+
+/**
+ * Subscribe to file drops on this webview, and be able to stop cleanly.
+ *
+ * Tauri's own `onDragDropEvent` subscribes to four events and hands back a
+ * *synchronous* composite that calls all four unlistens and ignores every
+ * promise they return:
+ *
+ * ```js
+ * return () => { unlistenDragEnter(); unlistenDragDrop(); unlistenDragOver(); unlistenDragLeave() }
+ * ```
+ *
+ * An unlisten rejects when the listener map is already gone — the normal case
+ * when the thing being torn down is a pane that has just been closed — and
+ * those four promises are unreachable, so no caller can catch them. That is the
+ * `listeners[eventId].handlerId` unhandled rejection that kept surfacing from
+ * fast terminal sequences with no application frame in its stack: the throw
+ * comes from inside the library's own composite.
+ *
+ * Reado subscribes to the one event it actually wants (the drop) and keeps the
+ * unlisten, so tearing down is something we can guard.
+ */
+export function onFileDrop(
+  handler: (paths: string[], position: { x: number; y: number }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ paths: string[]; position: { x: number; y: number } }>(
+    TauriEvent.DRAG_DROP,
+    (e) => handler(e.payload.paths, e.payload.position),
+  )
 }

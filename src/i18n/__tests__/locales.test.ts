@@ -29,6 +29,20 @@ describe("the shipped locales", () => {
     expect(LOCALES.map((l) => l.code)).toEqual([...new Set(LOCALES.map((l) => l.code))])
   })
 
+  // Parity across locales is not enough on its own: `graph.count` shipped as
+  // "{{nodes}} nodes · {{links}} links" in all five files at once, so every
+  // placeholder check agreed and i18next — configured for single braces
+  // (`interpolation: { prefix: "{", suffix: "}" }`) — rendered the braces
+  // literally in every language. The syntax itself has to be checked.
+  for (const locale of LOCALES) {
+    it(`${locale.code} uses single-brace placeholders, i18next's double braces are not ours`, () => {
+      const doubled = [...leaves(locale.messages as Tree)]
+        .filter(([, text]) => /\{\{/.test(text))
+        .map(([key, text]) => `${key}: ${text}`)
+      expect(doubled, `double-brace placeholders in ${locale.code}.json`).toEqual([])
+    })
+  }
+
   for (const locale of LOCALES.slice(1)) {
     describe(locale.code, () => {
       const messages = leaves(locale.messages as Tree)

@@ -39,6 +39,7 @@ vi.mock("../../../lib/docInfo", async (importOriginal) => {
 import { StatusBar } from "@/components/molecules/StatusBar"
 import { useComments } from "@/lib/comments"
 import { useDocInfo } from "@/lib/docInfo"
+import { useMascot } from "@/lib/mascot"
 import { useNotice } from "@/lib/notice"
 import { useCursor, usePalette, useProject } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
@@ -85,7 +86,8 @@ beforeEach(() => {
     languageOverride: null,
   })
   usePalette.setState({ anywhereOpen: false })
-  useTerminals.setState({ open: false })
+  useTerminals.setState({ open: false, agentTerminals: [] })
+  useMascot.setState({ state: "idle" })
 })
 
 describe("StatusBar with no active file", () => {
@@ -94,6 +96,30 @@ describe("StatusBar with no active file", () => {
     expect(screen.getByText("status.noFile")).toBeInTheDocument()
     expect(screen.getByText("status.notGit")).toBeInTheDocument()
     expect(screen.getByText("status.comments")).toBeInTheDocument()
+    expect(screen.getByText("status.agentIdle")).toBeInTheDocument()
+  })
+
+  it("says the agent is working while the agent is working", () => {
+    // This segment used to be the constant `status.agentIdle`: it announced an
+    // idle agent while the companion, reading the same facts, showed `think`.
+    useTerminals.setState({ agentTerminals: ["t1"] })
+    useMascot.setState({ state: "think" })
+    render(<StatusBar />)
+    expect(screen.getByText("status.agentWorking")).toBeInTheDocument()
+    expect(screen.queryByText("status.agentIdle")).not.toBeInTheDocument()
+  })
+
+  it("says the agent is waiting when it has asked something", () => {
+    useTerminals.setState({ agentTerminals: ["t1"] })
+    useMascot.setState({ state: "ask" })
+    render(<StatusBar />)
+    expect(screen.getByText("status.agentAsking")).toBeInTheDocument()
+  })
+
+  it("stays idle when no agent pane exists, whatever the companion is doing", () => {
+    useTerminals.setState({ agentTerminals: [] })
+    useMascot.setState({ state: "think" })
+    render(<StatusBar />)
     expect(screen.getByText("status.agentIdle")).toBeInTheDocument()
   })
 

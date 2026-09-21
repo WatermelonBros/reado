@@ -14,7 +14,6 @@
  */
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
-import { getCurrentWebview } from "@tauri-apps/api/webview"
 import {
   readText as clipboardReadText,
   writeText as clipboardWriteText,
@@ -42,7 +41,8 @@ import { agentAsked, agentIsBusy } from "@/lib/mascot"
 import { nextPaint } from "@/lib/nextPaint"
 import { notify, notifyError } from "@/lib/notice"
 import { useProject, useSettings } from "@/lib/store"
-import { shellQuote, terminalLinks, useTerminals } from "@/lib/terminals"
+import { offSafe, shellQuote, terminalLinks, useTerminals } from "@/lib/terminals"
+import { onFileDrop } from "@/lib/window"
 import { xtermFontFamily, xtermLinkColor, xtermTheme } from "@/lib/xtermTheme"
 
 const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
@@ -268,7 +268,18 @@ export function Terminal({ id, cwd, active, profile }: Props) {
       }
       if (disposed) return
 
-      unlisten.push(
+      // `disposed` is checked again after each await below: the check above is
+      // already stale by the time `listen` resolves. A pane that unmounts inside
+      // that window — which is every fast `terminal:new` / `restart` / `split` —
+      // ran its cleanup over an `unlisten` array these pushes had not reached
+      // yet, leaving a live subscription to a PTY the cleanup had just killed,
+      // with nobody left to unsubscribe it.
+      const keep = (off: UnlistenFn) => {
+        if (disposed) offSafe(off)
+        else unlisten.push(off)
+      }
+
+      keep(
         await listen<string>(`pty-output-${id}`, (e) => {
           const text = decode(e.payload)
           term.write(text)
@@ -284,7 +295,7 @@ export function Terminal({ id, cwd, active, profile }: Props) {
           }
         }),
       )
-      unlisten.push(
+      keep(
         await listen(`pty-exit-${id}`, () => term.write("\r\n\x1b[2m[process exited]\x1b[0m\r\n")),
       )
       term.attachCustomKeyEventHandler((e) => {
@@ -359,7 +370,7 @@ export function Terminal({ id, cwd, active, profile }: Props) {
       if (paintTimer) clearTimeout(paintTimer)
       themeObserver.disconnect()
       // A rejecting unlisten (listener map already torn down) must not escape.
-      unlisten.forEach((off) => void Promise.resolve(off()).catch(() => {}))
+      for (const off of unlisten) offSafe(off)
       ptyKill(id).catch(() => {})
       term.dispose()
       termRef.current = null
@@ -387,24 +398,23 @@ export function Terminal({ id, cwd, active, profile }: Props) {
   // physical-pixel position, so hit-test it against this pane: every terminal
   // stays mounted, and only the one under the cursor should take the drop.
   useEffect(() => {
-    const un = getCurrentWebview().onDragDropEvent((event) => {
-      if (event.payload.type !== "drop" || !event.payload.paths.length) return
+    const un = onFileDrop((paths, position) => {
+      if (!paths.length) return
       const host = hostRef.current
       const term = termRef.current
       if (!host || !term) return
       const dpr = window.devicePixelRatio || 1
-      const { x, y } = event.payload.position
-      const el = document.elementFromPoint(x / dpr, y / dpr)
+      const el = document.elementFromPoint(position.x / dpr, position.y / dpr)
       if (!el || !host.contains(el)) return
       // `paste` (not ptyWrite) so bracketed-paste mode is honoured and a TUI
       // agent reads it as a paste rather than as fast typing.
-      term.paste(`${event.payload.paths.map(shellQuote).join(" ")} `)
+      term.paste(`${paths.map(shellQuote).join(" ")} `)
       term.focus()
     })
     return () => {
       // Terminals unmount on pane close; swallow a rejecting unlisten so it
       // doesn't surface as an unhandled rejection.
-      void un.then((f) => f()).catch(() => {})
+      offSafe(un)
     }
   }, [])
 

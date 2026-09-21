@@ -34,6 +34,7 @@ import { createLogger } from "@/lib/logger"
 import { refreshLspServers } from "@/lib/lsp"
 import { notify } from "@/lib/notice"
 import { useProject } from "@/lib/store"
+import { offSafe } from "@/lib/terminals"
 
 const log = createLogger("extensions")
 
@@ -80,8 +81,8 @@ export function runInstall(cmd: string, target?: InstallTarget): void {
   const finish = async () => {
     if (done) return
     done = true
-    void unOut.then((f) => f())
-    void unExit.then((f) => f())
+    offSafe(unOut)
+    offSafe(unExit)
     clearTimeout(timer)
     void ptyKill(id).catch(() => {})
     // The machine changed under every cached probe, whatever the outcome.

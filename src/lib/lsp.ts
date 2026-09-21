@@ -240,6 +240,22 @@ interface ServerMessage {
  * We own the transport, so these are answered here and never reach the library.
  * Returns true when the message was handled and must not be forwarded.
  */
+/**
+ * What a server gets for the section it asked about, when the user has
+ * configured nothing.
+ *
+ * `{}` is the right answer almost everywhere — it means "no preferences",
+ * which is what VS Code sends for an unconfigured section. The JSON server is
+ * the exception: it reads `json.validate.enable` and treats a missing value as
+ * *off*, so with a bare `{}` it attaches, says nothing, and a file with a
+ * syntax error as plain as `{ "a": }` reports no problems at all. Measured: the
+ * CSS server went from zero diagnostics to two on the same broken file once it
+ * stopped receiving `null`; JSON needed the switch named as well.
+ */
+const SECTION_DEFAULTS: Record<string, unknown> = {
+  json: { validate: { enable: true } },
+}
+
 function answerServerRequest(key: string, msg: ServerMessage): boolean {
   // A request has both an id and a method; a response has an id and no method.
   if (msg.id == null || !msg.method) return false
@@ -252,15 +268,33 @@ function answerServerRequest(key: string, msg: ServerMessage): boolean {
       reply(null)
       return true
     case "workspace/configuration": {
-      // "No per-server configuration" — null per requested item, which is what
-      // the spec asks an unconfigured client to say. Refusing outright makes
-      // some servers fall back to defaults they then complain about.
-      const items = (msg.params as { items?: unknown[] } | undefined)?.items ?? []
-      reply(items.map(() => null))
+      // "No per-server configuration" — an *empty object* per requested item.
+      //
+      // The spec allows `null` and this used to send it, which is fine for the
+      // TypeScript server (it ignores the answer) and fatal for the
+      // `vscode-langservers-extracted` family: css/scss/less store the null and
+      // then dereference it (`Cannot read properties of null (reading
+      // 'validProperties')`) on every validation, and json goes equally quiet.
+      // The visible effect was a whole family of languages with no diagnostics
+      // at all, while the language everyone uses most was immune — which is
+      // exactly why it went unnoticed. `{}` is what VS Code itself answers for
+      // an unconfigured section, and what these servers are tested against.
+      const items = (msg.params as { items?: { section?: string }[] } | undefined)?.items ?? []
+      reply(items.map((it) => SECTION_DEFAULTS[it?.section ?? ""] ?? {}))
       return true
     }
     case "window/workDoneProgress/create":
       reply(null)
+      return true
+    case "workspace/diagnostic/refresh":
+      // The diagnostics twin of the code-lens refresh below, and it was missing.
+      // A pull-mode server (the JSON one, for instance) answers the first
+      // request before it has validated anything, then sends this to say the
+      // answer is ready — and Reado replied `-32601 Method not implemented` and
+      // never asked again. The file looked clean; the server had the errors all
+      // along.
+      reply(null)
+      for (const again of diagRefreshers) again()
       return true
     case "workspace/codeLens/refresh":
       // "My answer changed — ask me again." Without this, a file opened while
@@ -271,6 +305,11 @@ function answerServerRequest(key: string, msg: ServerMessage): boolean {
       for (const again of lensRefreshers) again()
       return true
     default:
+      // Everything we don't answer falls through to the library's blanket
+      // `-32601 Method not implemented`, and the server prints that on its own
+      // stderr — which is how a whole family of "Unhandled exception" lines got
+      // into the log with nothing naming the request that caused them. Say which.
+      log.warn("unanswered server request", { server: key, method: msg.method })
       return false
   }
 }
@@ -387,6 +426,19 @@ interface DiagnosticReport {
  * Asked on open, after an edit settles, and after a save, because those are the
  * three moments the answer can have changed.
  */
+/**
+ * Every open editor that pulls diagnostics, so a server saying "ask me again"
+ * reaches all of them.
+ *
+ * Same shape as `lensRefreshers`, and for the same reason: a pull-mode server
+ * answers the first request before it has finished validating, and the only
+ * thing that would ask a second time is the user typing. `workspace/diagnostic/
+ * refresh` *is* the second ask — ignoring it meant a JSON file opened and
+ * stayed clean-looking no matter how broken it was, while the server sat on the
+ * answer.
+ */
+const diagRefreshers = new Set<() => void>()
+
 const pullDiagnostics = ViewPlugin.fromClass(
   class {
     pending = -1
@@ -397,6 +449,13 @@ const pullDiagnostics = ViewPlugin.fromClass(
 
     constructor(readonly view: EditorView) {
       this.schedule(0)
+      diagRefreshers.add(this.again)
+    }
+
+    /** "The server's answer changed" — re-ask, shortly, and only if this view
+     *  still pulls at all. */
+    again = () => {
+      if (!this.off) this.schedule(120)
     }
 
     update(u: ViewUpdate) {
@@ -461,6 +520,7 @@ const pullDiagnostics = ViewPlugin.fromClass(
 
     destroy() {
       this.gone = true
+      diagRefreshers.delete(this.again)
       if (this.pending > -1) clearTimeout(this.pending)
     }
   },
@@ -1016,8 +1076,18 @@ const MAX_LENSES = 200
 
 /** Lenses arrive titleless from every server that sets `resolveProvider` — the
  *  count *is* the expensive part, so it is computed only for the lenses someone
- *  asked for. A lens that fails to resolve is dropped, not shown blank. */
+ *  asked for. A lens that fails to resolve is dropped, not shown blank.
+ *
+ *  A server that advertises `codeLensProvider` without `resolveProvider` promised
+ *  the list and not the resolution: asking anyway earned a "Method not
+ *  implemented" per lens — up to `MAX_LENSES` of them — and the JSON and CSS
+ *  servers print that on their own stderr, so the `.catch` below could not keep
+ *  it out of the log. Its lenses arrive complete or not at all. */
 async function resolveLenses(items: CodeLens[], client: LSPClient): Promise<CodeLens[]> {
+  const caps = client.serverCapabilities as ServerCaps | undefined
+  if (!caps?.codeLensProvider?.resolveProvider) {
+    return items.slice(0, MAX_LENSES).filter((l) => !!l.command?.title)
+  }
   const wanted = items.slice(0, MAX_LENSES)
   const resolved = await Promise.all(
     wanted.map((lens) =>
@@ -1234,6 +1304,33 @@ function pushLensConfig(key: string): void {
       jsonrpc: "2.0",
       method: "workspace/didChangeConfiguration",
       params: { settings: { typescript: lens, javascript: lens } },
+    }),
+  )
+}
+
+/**
+ * Push the settings a server only ever learns by being told.
+ *
+ * Same shape as `pushLensConfig` above and the same reason, for a different
+ * server: `vscode-json-languageserver` keeps validation behind
+ * `json.validate.enable` and treats "never mentioned" as off. Answering its
+ * `workspace/configuration` request is not enough — measured, a file as plainly
+ * broken as `{ "a": }` came back with a `full` report of zero items while the
+ * CSS server, over the identical plumbing, reported two on a broken stylesheet.
+ * The settings have to be pushed, once, after the handshake.
+ *
+ * Reads the same `SECTION_DEFAULTS` the pull answer uses, so the two can never
+ * drift into telling one server two different things.
+ */
+function pushSectionConfig(key: string, serverId: string): void {
+  const settings = SECTION_DEFAULTS[serverId]
+  if (!settings) return
+  void lspSend(
+    key,
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeConfiguration",
+      params: { settings: { [serverId]: settings } },
     }),
   )
 }
@@ -1798,6 +1895,14 @@ export function applyCompletion(
   }
   // Nothing to resolve: an item with no `data` has already told us everything.
   if (item.data === undefined) return
+  // And nothing to ask: a server that did not advertise `completionProvider.
+  // resolveProvider` has no handler for this, and answers by printing
+  // "Method not implemented" on its own stderr — which Reado relays, so the
+  // `.catch` below cannot keep it out of the log. Same rule as code lenses.
+  const completion = plugin.client.serverCapabilities?.completionProvider as
+    | { resolveProvider?: boolean }
+    | undefined
+  if (!completion?.resolveProvider) return
   plugin.client
     .request<LspCompletionItem, LspCompletionItem | null>("completionItem/resolve", item)
     .then((full) => {
@@ -2630,13 +2735,19 @@ function dropConn(key: string): void {
 // lifecycle to this webview session: stop the servers we started when the page
 // goes away, so the next load spawns each server fresh.
 if (typeof window !== "undefined") {
-  window.addEventListener("pagehide", () => {
+  const stopAll = () => {
     // Clear the map first so the resulting exit events read as intentional.
     for (const key of [...conns.keys()]) {
       dropConn(key)
       void lspStop(key)
     }
-  })
+  }
+  // `pagehide` is the reliable one on WebKit; `beforeunload` catches the paths
+  // that skip it. Both are best-effort — `lspStop` is a round trip to Rust and
+  // the page may not live that long — which is why the session is in the key
+  // above rather than resting on this running in time.
+  window.addEventListener("pagehide", stopAll)
+  window.addEventListener("beforeunload", stopAll)
 }
 
 /**
@@ -2652,8 +2763,34 @@ if (typeof window !== "undefined") {
 function connKey(serverId: string, root: string): string {
   let h = 7
   for (const c of root) h = (h * 31 + c.charCodeAt(0)) | 0
-  return `${serverId}:${root.replace(/[^A-Za-z0-9\-/:_]/g, "_")}:${(h >>> 0).toString(36)}`
+  return `${serverId}:${root.replace(/[^A-Za-z0-9\-/:_]/g, "_")}:${(h >>> 0).toString(36)}:${SESSION}`
 }
+
+/**
+ * This webview session, part of every connection key.
+ *
+ * LSP allows exactly one `initialize` per connection, and `lsp_start` reuses a
+ * running server for the same id — so a key that was only `server:root` handed
+ * the *same process* to two clients that each had to shake hands. Measured, the
+ * second one was told no, each server in its own words: clangd `server already
+ * initialized`, gopls `initialize called while server in initialized state`,
+ * rust-analyzer `unknown request`. That client then had no code intelligence for
+ * the rest of the session, and nothing on screen said so.
+ *
+ * Two clients reach one server in two ordinary ways: a webview reload (the
+ * servers outlive it, and the `pagehide` stop below is best-effort — it is async,
+ * and the page can go first), and a second window on the same project. Both are
+ * fixed by the same thing: a key nobody else can produce, so every client owns
+ * the process it initializes.
+ *
+ * The trade: when the stop below does miss, the previous session's server is
+ * orphaned until the app exits (`kill_all`) instead of being adopted. That is
+ * the cheaper failure — an idle process nobody talks to, versus a language with
+ * no intelligence and nothing on screen to say why. Reaping it automatically
+ * would mean a new session killing servers it cannot prove are dead, which is
+ * exactly what breaks a second window on the same project.
+ */
+const SESSION = Math.random().toString(36).slice(2, 8)
 
 /** Splice `options` into an outgoing `initialize` request; anything else passes
  * through untouched (and unparsed — every keystroke goes through here). */
@@ -2746,6 +2883,7 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
       () => {
         failedAt.delete(key)
         pushLensConfig(key)
+        pushSectionConfig(key, server.id)
         watchLensSetting()
       },
       () => failedAt.set(key, Date.now()),

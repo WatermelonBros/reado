@@ -62,6 +62,65 @@ export const LETTER_SPACING_RANGE = { min: 0, max: 0.4, default: 0 } as const
 export const clampRange = (n: number, r: { min: number; max: number; default: number }): number =>
   Number.isFinite(n) ? Math.min(r.max, Math.max(r.min, n)) : r.default
 
+/**
+ * Every numeric setting's allowed range, in one place.
+ *
+ * These limits used to live only in the *controls* (`NumberField`'s `min`/`max`
+ * in Settings), which made them unenforceable from anywhere else: the settings
+ * JSON dialog, an imported sync bundle and a project's `config.json` all reach
+ * the store without passing a control. `sanitizeSettings` clamps against this
+ * map, so every door inherits the same limit the UI has always shown.
+ *
+ * It is not a cosmetic concern: `terminalScrollback: -5` typed into the JSON
+ * dialog made xterm throw inside `<Terminal>`'s render, which took the whole
+ * window to the root error boundary — the entire app, not the pane.
+ */
+export const NUMBER_RANGES = {
+  fontSize: FONT_SIZE_RANGE,
+  lineHeight: LINE_HEIGHT_RANGE,
+  letterSpacing: LETTER_SPACING_RANGE,
+  rulerColumn: { min: 0, max: 200, default: 120 },
+  largeFileGuardMb: { min: 0, max: 64, default: 2 },
+  wrapColumn: { min: 0, max: 400, default: 0 },
+  zoom: { min: 0.6, max: 2, default: 1 },
+  mascotSize: { min: 90, max: 240, default: 160 },
+  autoSaveDelay: { min: 200, max: 10_000, default: 1000 },
+  terminalFontSize: { min: 8, max: 24, default: 12 },
+  terminalScrollback: { min: 200, max: 100_000, default: 5000 },
+} as const satisfies Record<string, { min: number; max: number; default: number }>
+
+/**
+ * Every setting whose value is one of a fixed set, and what that set is.
+ *
+ * Same reason as `NUMBER_RANGES` above, and the same door: `shapeMatches` in
+ * `settingsJson` compares `typeof`, so `"colorVision": "protanopia"` is a
+ * string and sails through — then `tokensFor` looks the mode up in its palette
+ * table, finds nothing, and reading a token off `undefined` takes the whole
+ * window to the root error boundary. A wrong word is as corrupting as a
+ * negative number; it just looks more innocent.
+ */
+export const ENUM_VALUES = {
+  lineNumbers: ["off", "on", "relative"],
+  activeLine: ["off", "gutter", "line", "both"],
+  indentGuides: ["off", "all", "active"],
+  colorVision: ["normal", "red-green", "blue-yellow"],
+  reduceMotion: ["system", "on", "off"],
+  tabBar: ["multiple", "single", "hidden"],
+  scrollbar: ["auto", "always", "hidden"],
+  cursorStyle: ["line", "block", "underline"],
+  cursorBlink: ["blink", "smooth", "solid"],
+  explorerSort: ["name", "type", "modified"],
+  mascotCorner: ["bottom-right", "bottom-left", "top-right", "top-left"],
+  autoSave: ["off", "afterDelay", "onFocusChange"],
+  defaultEol: ["auto", "LF", "CRLF"],
+  sidebarSide: ["left", "right"],
+  quickInputPosition: ["top", "center"],
+  fileIcons: ["off", "mono", "colored"],
+  logLevel: ["error", "warn", "info", "debug", "trace"],
+  terminalCursorStyle: ["block", "bar", "underline"],
+  mode: ["light", "dark", "system"],
+} as const satisfies Record<string, readonly string[]>
+
 /** How far the bottom panel runs across the window. See `panelAlignment`. */
 export type PanelAlignment = "left" | "center" | "right" | "justify"
 
@@ -406,6 +465,25 @@ export function migrateSettings(state: unknown, version: number): SettingsState 
   // the editor came as. Someone who wants it quiet turns it off again, and
   // that choice survives (this runs once, on the way to v3).
   if (version < 3) s.suggestOnTyping = true
+  // Every numeric setting, every load: a value that is out of range is out of
+  // range however it got stored, and one of them (`terminalScrollback`) takes
+  // the whole window to the error boundary the moment a terminal mounts. The
+  // clamp is unconditional so a machine already carrying a poisoned value heals
+  // on the next start rather than staying broken until someone finds the line.
+  for (const [key, range] of Object.entries(NUMBER_RANGES)) {
+    const k = key as keyof typeof NUMBER_RANGES
+    if (s[k] !== undefined) (s as Record<string, number>)[k] = clampRange(Number(s[k]), range)
+  }
+  // And a stored word that is not one of the shipped ones: the same healing,
+  // for the same reason — `colorVision: "protanopia"` blanked the window on the
+  // next paint, and it survives a restart because it was persisted.
+  for (const [key, allowed] of Object.entries(ENUM_VALUES)) {
+    const k = key as keyof typeof ENUM_VALUES
+    const v = (s as Record<string, unknown>)[k]
+    if (v !== undefined && !(allowed as readonly string[]).includes(v as string)) {
+      ;(s as Record<string, unknown>)[k] = DEFAULTS[k]
+    }
+  }
   return s as SettingsState
 }
 
@@ -560,6 +638,8 @@ interface WorkspaceState {
   lastTool: Tool
   /** Select a tool; selecting the active one collapses the panel. */
   selectTool: (tool: Tool) => void
+  /** Show a tool, never hide it — what "Open View ▸ X" and its shortcut mean. */
+  openTool: (tool: Tool) => void
   /** Collapse the sidebar, or restore the last tool (Ctrl+B). */
   toggleSidebar: () => void
   /** A query to seed the search panel (find references), consumed on read. */
@@ -617,24 +697,38 @@ interface WorkspaceState {
 }
 
 /** Tool sidebar state (which side panel is shown), persisted per user. */
+/**
+ * A tool the user has docked lives there now: bring it forward in its dock group
+ * instead of a second copy appearing in the sidebar. Unhide the region first — a
+ * docked tool whose region is collapsed would otherwise make the activity-bar
+ * button look dead. Its neighbours keep running: a dock group shows one tab and
+ * closes none of them. Returns whether the tool was docked (and so handled).
+ */
+function bringDockedForward(tool: Tool): boolean {
+  const at = findPanel(useLayout.getState().layout, tool)
+  if (!at) return false
+  useLayout.getState().toggleArea(at.area, false)
+  useLayout.getState().activate(tool)
+  return true
+}
+
 export const useWorkspace = create<WorkspaceState>()(
   persist(
     (set) => ({
       tool: "files",
       lastTool: "files",
       selectTool: (tool) => {
-        // A tool the user has docked lives there now: bring it forward in its
-        // dock group instead of a second copy appearing in the sidebar. Unhide
-        // the region first — a docked tool whose region is collapsed would
-        // otherwise make the activity-bar button look dead. Its neighbours keep
-        // running: a dock group shows one tab and closes none of them.
-        const at = findPanel(useLayout.getState().layout, tool)
-        if (at) {
-          useLayout.getState().toggleArea(at.area, false)
-          useLayout.getState().activate(tool)
-          return
-        }
+        if (bringDockedForward(tool)) return
         set((s) => (s.tool === tool ? { tool: null } : { tool, lastTool: tool }))
+      },
+      // "Open View ▸ Files" and ⌘⇧E used to route through `selectTool`, so
+      // pressing them while that view was already showing collapsed the sidebar
+      // — a menu item called *Open* that closed, and the VS Code shortcuts doing
+      // the opposite of what they do there. Opening is now its own verb;
+      // toggling stays where it was asked for (the activity-bar button, ⌘B).
+      openTool: (tool) => {
+        if (bringDockedForward(tool)) return
+        set({ tool, lastTool: tool })
       },
       toggleSidebar: () => set((s) => (s.tool ? { tool: null } : { tool: s.lastTool })),
       pendingSearch: null,

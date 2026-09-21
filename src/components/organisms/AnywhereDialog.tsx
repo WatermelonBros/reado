@@ -40,6 +40,7 @@ import {
 } from "@/lib/api"
 import { currentOS } from "@/lib/extensions"
 import { usePalette } from "@/lib/store"
+import { offSafe } from "@/lib/terminals"
 
 /** The QR payload: the address with the pairing secret + fingerprint in the
  * fragment, so neither ever hits a query string (or a server log). */
@@ -110,7 +111,7 @@ export function AnywhereDialog() {
     if (!open) return
     const pending = listen("anywhere-devices-changed", refresh)
     return () => {
-      void pending.then((off) => off())
+      offSafe(pending)
     }
   }, [open, refresh])
 

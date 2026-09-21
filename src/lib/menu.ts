@@ -653,22 +653,22 @@ export function runMenuCommand(id: string): void {
       settings.set({ showBreadcrumbs: !settings.showBreadcrumbs })
       break
     case "view:open:files":
-      workspace.selectTool("files")
+      workspace.openTool("files")
       break
     case "view:open:search":
-      workspace.selectTool("search")
+      workspace.openTool("search")
       break
     case "view:open:comments":
-      workspace.selectTool("comments")
+      workspace.openTool("comments")
       break
     case "view:open:outline":
-      workspace.selectTool("outline")
+      workspace.openTool("outline")
       break
     case "view:open:git":
-      workspace.selectTool("git")
+      workspace.openTool("git")
       break
     case "view:open:extensions":
-      workspace.selectTool("extensions")
+      workspace.openTool("extensions")
       break
     case "graph":
       workspace.toggleGraph(true)

@@ -36,7 +36,13 @@ const term = {
   markAgent: vi.fn(),
   restart: vi.fn(),
 }
-vi.mock("../terminals", () => ({ useTerminals: { getState: () => term } }))
+vi.mock("../terminals", () => ({
+  useTerminals: { getState: () => term },
+  // The real one swallows a rejecting unlisten; here it just has to be callable.
+  offSafe: (off: unknown) => {
+    if (typeof off === "function") void Promise.resolve((off as () => unknown)()).catch(() => {})
+  },
+}))
 
 import {
   AGENT_BIN,

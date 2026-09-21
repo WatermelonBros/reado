@@ -83,6 +83,7 @@ const h = vi.hoisted(() => {
       searchFor: vi.fn(),
       toggleSidebar: vi.fn(),
       selectTool: vi.fn(),
+      openTool: vi.fn(),
       toggleGraph: vi.fn(),
       toggleDocs: vi.fn(),
     },
@@ -319,11 +320,15 @@ describe("view commands", () => {
     }
   })
 
-  it("reveals each sidebar tool", () => {
+  it("opens each sidebar tool — and opening is not toggling", () => {
+    // These live under "Open View" and carry VS Code's ⌘⇧E / ⌘⇧G / ⌘⇧C. Routing
+    // them through `selectTool` meant using one while that view was already up
+    // collapsed the sidebar: a menu item called *Open* that closed.
     for (const tool of ["files", "search", "comments", "outline", "git", "extensions"]) {
       runMenuCommand(`view:open:${tool}`)
-      expect(workspace.selectTool).toHaveBeenLastCalledWith(tool)
+      expect(workspace.openTool).toHaveBeenLastCalledWith(tool)
     }
+    expect(workspace.selectTool).not.toHaveBeenCalled()
   })
 
   it("toggles the sidebar, the graph and the docs", () => {

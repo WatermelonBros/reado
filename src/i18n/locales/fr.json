@@ -786,6 +786,8 @@
     "branch": "branche",
     "comments": "{count} ouverts",
     "agentIdle": "Agent au repos",
+    "agentWorking": "Agent au travail",
+    "agentAsking": "L'agent attend votre réponse",
     "notGit": "Ce n'est pas un dépôt git",
     "goToLine": "Aller à la ligne",
     "goToLinePlaceholder": "Numéro de ligne…",
@@ -821,6 +823,7 @@
     "inFolder": "dans",
     "clearScope": "Chercher dans tout le projet",
     "placeholder": "Rechercher dans le projet…",
+    "placeholderFile": "Rechercher dans le fichier…",
     "count": "{current} sur {total}",
     "countCapped": "plus de {cap} correspondances",
     "noResults": "Aucune correspondance.",
@@ -1531,7 +1534,7 @@
       "link": "Lié"
     },
     "empty": "Rien à afficher pour l'instant. Vos commentaires, specs et documents apparaîtront ici sous forme de nœuds reliés dès que vous en ajouterez.",
-    "count": "{{nodes}} nœuds · {{links}} liens",
+    "count": "{nodes} nœuds · {links} liens",
     "reset": "Réinitialiser la vue"
   },
   "docs": {

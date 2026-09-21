@@ -40,6 +40,7 @@ import {
   setEncoding,
   useDocInfo,
 } from "@/lib/docInfo"
+import { useMascot } from "@/lib/mascot"
 import { notify, notifyError } from "@/lib/notice"
 import { usePreview } from "@/lib/preview"
 import { DEFAULT_PROFILE_ID, useProfiles } from "@/lib/profiles"
@@ -95,6 +96,19 @@ export function StatusBar() {
   const setDoc = useDocInfo((s) => s.set)
   const openComments = useComments((s) => openCount(s.comments))
   const toggleTerminal = useTerminals((s) => s.toggle)
+  // The agent segment used to be the constant `status.agentIdle` — it announced
+  // an idle agent while the companion, reading the same facts, showed `think`.
+  // It now reads those facts: an agent pane has to exist at all, and the mascot
+  // state is what Reado already knows about the turn.
+  const hasAgent = useTerminals((s) => s.agentTerminals.length > 0)
+  const mascotState = useMascot((s) => s.state)
+  const agentStatusKey: MessageKey = !hasAgent
+    ? "status.agentIdle"
+    : mascotState === "think"
+      ? "status.agentWorking"
+      : mascotState === "ask"
+        ? "status.agentAsking"
+        : "status.agentIdle"
   const { t } = useTranslation()
 
   // Reado Anywhere: a phone icon + a live dot (green when the LAN server is up),
@@ -423,7 +437,7 @@ export function StatusBar() {
             {t("status.comments", { count: openComments })}
           </span>
         )}
-        {show("agent") && <span className="px-1 text-faint">{t("status.agentIdle")}</span>}
+        {show("agent") && <span className="px-1 text-faint">{t(agentStatusKey)}</span>}
         {show("anywhere") && (
           <button
             type="button"

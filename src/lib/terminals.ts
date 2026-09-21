@@ -536,6 +536,23 @@ export function framePtyLines(tail: string, text: string): { lines: string[]; ta
   return { lines: parts.flatMap((l) => l.split("\r")).filter((l) => l !== ""), tail: rest }
 }
 
+/**
+ * Unsubscribe without the rejection escaping.
+ *
+ * Tauri's `unlisten` rejects when its listener map has already been torn down —
+ * which is the normal case here, because the thing being unsubscribed from is a
+ * PTY that just died. Two call sites guarded it by hand and five did not, so the
+ * same `listeners[eventId].handlerId` unhandled rejection kept surfacing from
+ * terminals, comments and search alike. One helper, so a new caller inherits the
+ * guard instead of rediscovering it.
+ */
+export function offSafe(off: UnlistenFn | Promise<UnlistenFn> | null | undefined): void {
+  if (!off) return
+  void Promise.resolve(off)
+    .then((fn) => fn())
+    .catch(() => {})
+}
+
 /** Subscribe to a pane's output as complete lines — `framePtyLines` per chunk. */
 export async function listenPtyLines(
   id: string,

@@ -10,7 +10,7 @@ import { useDocInfo } from "./docInfo"
 import { useMascot } from "./mascot"
 import { useNotice } from "./notice"
 import { useProject } from "./store"
-import { useTerminals } from "./terminals"
+import { offSafe, useTerminals } from "./terminals"
 
 export type Agent = "claude-code" | "codex" | "copilot" | "gemini" | "opencode"
 type ShellFamily = "cmd" | "powershell" | "posix"
@@ -222,7 +222,7 @@ function waitForQuiet(id: string, idleMs: number, capMs: number): Promise<void> 
       done = true
       if (quiet) clearTimeout(quiet)
       clearTimeout(cap)
-      unlisten?.()
+      offSafe(unlisten)
       resolve()
     }
     const cap = setTimeout(finish, capMs)
@@ -231,7 +231,7 @@ function waitForQuiet(id: string, idleMs: number, capMs: number): Promise<void> 
       quiet = setTimeout(finish, idleMs)
     }).then((u) => {
       unlisten = u
-      if (done) u() // resolved via the cap before the listener attached
+      if (done) offSafe(u) // resolved via the cap before the listener attached
     })
   })
 }
@@ -254,13 +254,13 @@ function sawOutputWithin(id: string, ms: number): Promise<boolean> {
       if (done) return
       done = true
       clearTimeout(timer)
-      unlisten?.()
+      offSafe(unlisten)
       resolve(v)
     }
     const timer = setTimeout(() => finish(false), ms)
     void listen<string>(`pty-output-${id}`, () => finish(true)).then((u) => {
       unlisten = u
-      if (done) u()
+      if (done) offSafe(u)
     })
   })
 }

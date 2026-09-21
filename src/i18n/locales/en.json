@@ -786,6 +786,8 @@
     "branch": "branch",
     "comments": "{count} open",
     "agentIdle": "Agent idle",
+    "agentWorking": "Agent working",
+    "agentAsking": "Agent waiting for you",
     "notGit": "Not a git repository",
     "goToLine": "Go to line",
     "goToLinePlaceholder": "Line number…",
@@ -821,6 +823,7 @@
     "inFolder": "in",
     "clearScope": "Search the whole project",
     "placeholder": "Search in project…",
+    "placeholderFile": "Search in file…",
     "count": "{current} of {total}",
     "countCapped": "{cap}+ matches",
     "noResults": "No matches.",
@@ -1531,7 +1534,7 @@
       "link": "Linked"
     },
     "empty": "Nothing to graph yet. Your comments, specs, and docs appear here as connected nodes once you add them.",
-    "count": "{{nodes}} nodes · {{links}} links",
+    "count": "{nodes} nodes · {links} links",
     "reset": "Reset view"
   },
   "docs": {

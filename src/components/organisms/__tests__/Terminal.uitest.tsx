@@ -14,14 +14,15 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }))
 
-let onDrop: Handler | null = null
-vi.mock("@tauri-apps/api/webview", () => ({
-  getCurrentWebview: () => ({
-    onDragDropEvent: (cb: Handler) => {
-      onDrop = cb
-      return Promise.resolve(() => {})
-    },
-  }),
+// Reado subscribes to the drop event itself: Tauri's `onDragDropEvent` hands
+// back a composite unlisten that ignores the four promises it creates.
+let onDrop: ((paths: string[], position: { x: number; y: number }) => void) | null = null
+vi.mock("@/lib/window", async (orig) => ({
+  ...(await orig<typeof import("@/lib/window")>()),
+  onFileDrop: (cb: (paths: string[], position: { x: number; y: number }) => void) => {
+    onDrop = cb
+    return Promise.resolve(() => {})
+  },
 }))
 
 const clipboardRead = vi.fn<() => Promise<string>>(async () => "")
@@ -389,9 +390,7 @@ describe("dropping files on it", () => {
     const { container } = await mount("t1")
     const host = container.querySelector("[data-terminal-id]") as HTMLElement
     vi.spyOn(document, "elementFromPoint").mockReturnValue(host)
-    onDrop?.({
-      payload: { type: "drop", position: { x: 5, y: 5 }, paths: ["/tmp/a b.ts", "/tmp/c.ts"] },
-    })
+    onDrop?.(["/tmp/a b.ts", "/tmp/c.ts"], { x: 5, y: 5 })
     // Quoted, space-separated, with a trailing space so the next word is separate.
     await waitFor(() => expect(ptyWrite).toHaveBeenCalled())
     const written = vi
@@ -408,7 +407,7 @@ describe("dropping files on it", () => {
     vi.spyOn(document, "elementFromPoint").mockReturnValue(document.createElement("div"))
     ptyWrite.mockClear()
     expect(onDrop, "the drop bridge was never wired").toBeTruthy()
-    onDrop?.({ payload: { type: "drop", position: { x: 0, y: 0 }, paths: ["/tmp/a.ts"] } })
+    onDrop?.(["/tmp/a.ts"], { x: 0, y: 0 })
     expect(ptyWrite).not.toHaveBeenCalled()
     vi.restoreAllMocks()
   })
@@ -417,7 +416,7 @@ describe("dropping files on it", () => {
     await mount("t1")
     ptyWrite.mockClear()
     expect(onDrop, "the drop bridge was never wired").toBeTruthy()
-    onDrop?.({ payload: { type: "drop", position: { x: 0, y: 0 }, paths: [] } })
+    onDrop?.([], { x: 0, y: 0 })
     expect(ptyWrite).not.toHaveBeenCalled()
   })
 })

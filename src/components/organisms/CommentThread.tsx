@@ -87,7 +87,14 @@ export function CommentThread({ comment, top, onClose }: Props) {
 
   return (
     <div
-      className="absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col shadow-[var(--shadow)]"
+      // `overflow-y-auto` on the box, and a floor under the conversation below:
+      // the header, the type row and the reply composer are fixed height, so in
+      // a short pane they took everything and left the messages `flex-1` of
+      // nothing. Measured with the terminal open — a 219px pane — the message
+      // list came out **24px tall around 145px of content**: the thread was on
+      // screen and unreadable. The conversation now keeps at least 5rem and the
+      // box scrolls when the chrome no longer fits around it.
+      className="absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col overflow-y-auto shadow-[var(--shadow)]"
       style={{
         top,
         // No border: the box is just a fill of the connector's colour, so the
@@ -215,7 +222,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
       )}
 
       {/* Thread — the conversation is the focus; metadata stays quiet. */}
-      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3">
+      <div className="min-h-[5rem] flex-1 space-y-4 overflow-y-auto px-4 py-3">
         {comment.messages.map((m, i) => (
           <div key={i} className={`group/msg ${i > 0 ? "border-t border-line pt-3" : ""}`}>
             <div className="mb-1 flex items-baseline gap-2">

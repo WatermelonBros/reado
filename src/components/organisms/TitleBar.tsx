@@ -17,9 +17,10 @@ import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, DiscordIcon, MinusIcon, SearchIcon } from "@/components/atoms/icons"
 import { LayoutControls } from "@/components/molecules/LayoutControls"
 import { MenuBar } from "@/components/molecules/MenuBar"
+import { UpdateIndicator } from "@/components/organisms/UpdatePrompt"
 import { currentOS } from "@/lib/extensions"
-import { mod } from "@/lib/shortcuts"
-import { usePalette } from "@/lib/store"
+import { shortcutFor } from "@/lib/keybindings"
+import { usePalette, useSettings } from "@/lib/store"
 
 const os = currentOS()
 const isMac = os === "mac"
@@ -122,6 +123,7 @@ function WindowControls() {
 
 export function TitleBar({ projectName }: { projectName: string | null }) {
   const { t } = useTranslation()
+  const keybindings = useSettings((s) => s.keybindings)
 
   // Win/Linux: shed the native decorations at runtime (the config keeps them so
   // the window is usable if this never runs); macOS uses Overlay from the config.
@@ -133,8 +135,12 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
   }, [])
 
   const openPalette = () => usePalette.getState().open("commands")
+  // Asked for rather than written out. This said `⌘K` while ⌘K was a chord
+  // prefix — pressing it armed the prefix and the pill did nothing, which is
+  // exactly the rot `shortcutFor` exists to stop. It also follows a rebinding.
+  const paletteKey = shortcutFor("palette:commands", keybindings)
 
-  // The Command Center pill (centered): project name + ⌘K, opens the palette.
+  // The Command Center pill (centered): project name + its key, opens the palette.
   const pill = projectName ? (
     <button
       type="button"
@@ -144,7 +150,11 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
     >
       <SearchIcon className="h-3 w-3 flex-none opacity-70" />
       <span className="truncate">{projectName}</span>
-      <kbd className="ml-auto flex-none font-sans text-[10px] tracking-wide text-faint">{mod}K</kbd>
+      {paletteKey && (
+        <kbd className="ml-auto flex-none font-sans text-[10px] tracking-wide text-faint">
+          {paletteKey}
+        </kbd>
+      )}
     </button>
   ) : (
     <span className="pointer-events-none text-xs font-medium tracking-wide text-faint">Reado</span>
@@ -167,6 +177,7 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
             belongs to the traffic lights. */}
           <div className="pointer-events-none absolute inset-x-0 flex justify-center">{pill}</div>
           <div className="ml-auto flex flex-none items-center gap-0.5">
+            <UpdateIndicator />
             <DiscordButton />
             {projectName && <LayoutControls />}
           </div>
@@ -179,6 +190,7 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
         // bare region.
         <>
           <MenuBar />
+          <UpdateIndicator />
           <DiscordButton />
           <div data-tauri-drag-region className="flex min-w-0 flex-1 justify-center px-3">
             {pill}

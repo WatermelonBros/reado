@@ -13,7 +13,14 @@
  */
 
 import { SETTINGS_EXCLUDED, syncableKeys } from "./settingsSync"
-import { DEFAULTS, type SettingsState, useSettings } from "./store"
+import {
+  clampRange,
+  DEFAULTS,
+  ENUM_VALUES,
+  NUMBER_RANGES,
+  type SettingsState,
+  useSettings,
+} from "./store"
 
 type Key = keyof typeof DEFAULTS
 
@@ -53,8 +60,27 @@ export function sanitizeSettings(raw: Record<string, unknown>): ParsedSettings {
   const rejected: string[] = []
   for (const [key, value] of Object.entries(raw)) {
     const known = key in DEFAULTS && !SETTINGS_EXCLUDED.has(key as keyof SettingsState)
-    if (known && shapeMatches(key as Key, value)) patch[key] = value
-    else rejected.push(key)
+    if (!known || !shapeMatches(key as Key, value)) {
+      rejected.push(key)
+      continue
+    }
+    // Right type, wrong magnitude is still corruption: `terminalScrollback: -5`
+    // is a number, and it took the whole window down. Every numeric setting is
+    // clamped to the range its own control already enforces, so the JSON dialog,
+    // a sync bundle and a project config cannot reach further than the UI can.
+    // A word outside the shipped set is corruption too, and a quieter kind: it
+    // reaches the store as a plain string and only shows up when something
+    // looks it up — `colorVision: "protanopia"` took the window to the error
+    // boundary on the next paint. Rejected rather than clamped: there is no
+    // "nearest" value to fall back to, and telling the user which line was
+    // unusable beats silently choosing for them.
+    const allowed = ENUM_VALUES[key as keyof typeof ENUM_VALUES] as readonly string[] | undefined
+    if (allowed && !allowed.includes(value as string)) {
+      rejected.push(key)
+      continue
+    }
+    const range = NUMBER_RANGES[key as keyof typeof NUMBER_RANGES]
+    patch[key] = range ? clampRange(value as number, range) : value
   }
   return { patch: patch as Partial<SettingsState>, rejected }
 }

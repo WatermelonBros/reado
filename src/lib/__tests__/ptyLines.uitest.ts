@@ -14,7 +14,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }))
 
-import { listenPtyLines } from "@/lib/terminals"
+import { listenPtyLines, offSafe } from "@/lib/terminals"
 
 /** What the backend sends: base64 of raw bytes. */
 const frame = (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text)))
@@ -65,5 +65,39 @@ describe("pty output as lines", () => {
     off()
     emit("p4", "after\n")
     expect(lines).toEqual([])
+  })
+})
+
+describe("offSafe", () => {
+  // Tauri's unlisten rejects when its listener map has already been torn down —
+  // the normal case, because the thing being unsubscribed from is a PTY that
+  // just died. Two call sites guarded it by hand and five did not, and the same
+  // `listeners[eventId].handlerId` unhandled rejection kept surfacing from
+  // terminals, comments and search alike.
+  it("swallows a rejecting unlisten instead of letting it escape", async () => {
+    const rejecting = () => Promise.reject(new Error("listener map already gone"))
+    const escaped: unknown[] = []
+    const onRejection = (e: PromiseRejectionEvent) => escaped.push(e.reason)
+    window.addEventListener("unhandledrejection", onRejection)
+    offSafe(rejecting)
+    offSafe(Promise.resolve(rejecting))
+    await new Promise((r) => setTimeout(r, 10))
+    window.removeEventListener("unhandledrejection", onRejection)
+    expect(escaped).toEqual([])
+  })
+
+  it("calls the unsubscribe it was given, promise or not", async () => {
+    const calls: string[] = []
+    offSafe(() => calls.push("direct"))
+    offSafe(Promise.resolve(() => calls.push("awaited")))
+    await new Promise((r) => setTimeout(r, 10))
+    expect(calls).toEqual(["direct", "awaited"])
+  })
+
+  it("does nothing when there is nothing to unsubscribe", () => {
+    expect(() => {
+      offSafe(null)
+      offSafe(undefined)
+    }).not.toThrow()
   })
 })

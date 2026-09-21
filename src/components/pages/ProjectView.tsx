@@ -76,7 +76,7 @@ import { useResolveLoop } from "@/lib/resolveLoop"
 import { composeReviewPrompt } from "@/lib/review"
 import { useSpecs } from "@/lib/specs"
 import { type Tool, useProject, useSessions, useSettings, useWorkspace } from "@/lib/store"
-import { useTerminals } from "@/lib/terminals"
+import { offSafe, useTerminals } from "@/lib/terminals"
 import { useTesting } from "@/lib/testing"
 import { useTours } from "@/lib/tours"
 import { clearOpenFile, currentOpenFile, currentWorkspaceFile, setWindowTitle } from "@/lib/window"
@@ -263,7 +263,7 @@ export function ProjectView({ root }: { root: string }) {
       // The unlisten can reject (Tauri's listener map may already be torn down
       // on a fast remount / StrictMode double-effect) — swallow it so it doesn't
       // surface as an unhandled rejection.
-      subs.forEach((p) => void p.then((un) => un()).catch(() => {}))
+      for (const sub of subs) offSafe(sub)
     }
   }, [root])
 
@@ -737,9 +737,17 @@ export function ProjectView({ root }: { root: string }) {
             {groups
               .filter((g) => g.id !== focusedGroup)
               .map((g) => (
-                <button
+                // Not a <button>: the pane holds its own tabs, close buttons and
+                // ruler markers, and a button cannot contain buttons — React said
+                // so on every split ("<button> cannot be a descendant of
+                // <button>"), and 22 nested ones is a pane whose tab order and
+                // screen-reader tree are both wrong. The element was never doing
+                // the work anyway: focusing on click is entirely the two capture
+                // handlers below. A named <section> keeps the pane addressable
+                // (it reads as a region with this label) without pretending to be
+                // a control.
+                <section
                   key={g.id}
-                  type="button"
                   aria-label={t("group.focus", { n: groups.indexOf(g) + 1 })}
                   onFocusCapture={() => focusGroup(g.id)}
                   onMouseDownCapture={() => focusGroup(g.id)}
@@ -755,7 +763,7 @@ export function ProjectView({ root }: { root: string }) {
                       </div>
                     )}
                   </div>
-                </button>
+                </section>
               ))}
             {splitPath && (
               <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-l-line">

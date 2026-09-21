@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@/i18n", () => ({ t: (k: string) => k }))
 
 import { DEFAULT_PROFILE_ID, useProfiles } from "@/lib/profiles"
-import { useSettings } from "@/lib/store"
+import { NUMBER_RANGES, useSettings } from "@/lib/store"
 
 const reset = () => {
   useProfiles.setState({
@@ -58,12 +58,12 @@ describe("switching", () => {
         {
           id: "big",
           name: "Big",
-          bundle: { version: 1, settings: { fontSize: 28 }, extensionsDisabled: [] },
+          bundle: { version: 1, settings: { fontSize: 18 }, extensionsDisabled: [] },
         },
       ],
     })
     useProfiles.getState().switchTo("big")
-    expect(useSettings.getState().fontSize).toBe(28)
+    expect(useSettings.getState().fontSize).toBe(18)
   })
 
   it("creating one also keeps the edits made under the profile being left", () => {
@@ -92,12 +92,38 @@ describe("deleting", () => {
   })
 
   it("falls back to Default when the active one goes", () => {
-    useSettings.setState({ fontSize: 30 })
+    useSettings.setState({ fontSize: 20 })
     const demo = useProfiles.getState().createFromCurrent("Demo")
     useProfiles.getState().remove(demo.id)
     expect(useProfiles.getState().activeId).toBe(DEFAULT_PROFILE_ID)
     // And Default's configuration is the one now in force.
-    expect(useSettings.getState().fontSize).toBe(30)
+    expect(useSettings.getState().fontSize).toBe(20)
+  })
+})
+
+describe("a profile carrying an impossible value", () => {
+  it("is clamped on the way in, like every other door into the store", () => {
+    // A bundle is settings from somewhere else — another machine, an exported
+    // file, a hand-edited JSON — so it gets the same range check the controls
+    // enforce. Without it a saved profile was a way to put a value in the store
+    // that no control could produce.
+    useProfiles.setState({
+      profiles: [
+        ...useProfiles.getState().profiles,
+        {
+          id: "huge",
+          name: "Huge",
+          bundle: {
+            version: 1,
+            settings: { fontSize: 999, terminalScrollback: -5 },
+            extensionsDisabled: [],
+          },
+        },
+      ],
+    })
+    useProfiles.getState().switchTo("huge")
+    expect(useSettings.getState().fontSize).toBe(NUMBER_RANGES.fontSize.max)
+    expect(useSettings.getState().terminalScrollback).toBe(NUMBER_RANGES.terminalScrollback.min)
   })
 })
 

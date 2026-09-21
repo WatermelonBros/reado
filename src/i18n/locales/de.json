@@ -786,6 +786,8 @@
     "branch": "Branch",
     "comments": "{count} offen",
     "agentIdle": "Agent im Leerlauf",
+    "agentWorking": "Agent arbeitet",
+    "agentAsking": "Agent wartet auf dich",
     "notGit": "Kein Git-Repository",
     "goToLine": "Gehe zu Zeile",
     "goToLinePlaceholder": "Zeilennummer…",
@@ -821,6 +823,7 @@
     "inFolder": "in",
     "clearScope": "Im ganzen Projekt suchen",
     "placeholder": "Im Projekt suchen…",
+    "placeholderFile": "In der Datei suchen…",
     "count": "{current} von {total}",
     "countCapped": "über {cap} Treffer",
     "noResults": "Keine Treffer.",
@@ -1531,7 +1534,7 @@
       "link": "Verknüpft"
     },
     "empty": "Noch nichts zu zeichnen. Deine Kommentare, Specs und Dokumente erscheinen hier als verbundene Knoten, sobald du welche anlegst.",
-    "count": "{{nodes}} Knoten · {{links}} Verbindungen",
+    "count": "{nodes} Knoten · {links} Verbindungen",
     "reset": "Ansicht zurücksetzen"
   },
   "docs": {

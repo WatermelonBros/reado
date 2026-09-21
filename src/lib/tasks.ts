@@ -21,7 +21,7 @@ import { createLogger, safeError } from "./logger"
 import { notify, notifyError } from "./notice"
 import { useProject } from "./store"
 import { detectTasks } from "./taskDetect"
-import { listenPtyLines, plainText, useTerminals } from "./terminals"
+import { listenPtyLines, offSafe, plainText, useTerminals } from "./terminals"
 
 const log = createLogger("tasks")
 
@@ -477,12 +477,16 @@ export async function runTask(task: Task): Promise<void> {
   useTasks.getState().set({ byTask: { ...useTasks.getState().byTask, [task.label]: [] } })
   let off: UnlistenFn | null = null
   let idle = 0
+  let stopped = false
   const stop = () => {
-    void off?.()
+    stopped = true
+    offSafe(off)
     off = null
     clearTimeout(idle)
   }
-  off = await listenPtyLines(id, (line) => {
+  // Assigned *after* the await, so `stop()` running inside that window would
+  // have nothing to unsubscribe and the subscription would outlive the run.
+  const sub = await listenPtyLines(id, (line) => {
     found.push(...matcher.push(line))
     useTasks.getState().set({ byTask: { ...useTasks.getState().byTask, [task.label]: [...found] } })
     // A task that has stopped printing has finished, as far as the reader is
@@ -490,6 +494,8 @@ export async function runTask(task: Task): Promise<void> {
     clearTimeout(idle)
     idle = window.setTimeout(stop, 4000)
   })
+  if (stopped) offSafe(sub)
+  else off = sub
   await ptyWrite(id, `${commandLine(task)}\r`)
 }
 

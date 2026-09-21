@@ -476,12 +476,22 @@ export function DockRegion({ area }: { area: DockArea }) {
                   <div
                     key={id}
                     className={
-                      id === g.active
+                      id === g.active && isOpen(id)
                         ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
                         : "hidden"
                     }
                   >
-                    {isOpen(id) && renderPanel(id)}
+                    {/* The third way to unmount a terminal, after the collapsed
+                        region and the inactive tab above: its own open flag.
+                        `isOpen(id) && …` here meant closing the panel (⌘J, the
+                        status-bar button, `terminal:toggle`) unmounted
+                        <Terminal>, which kills its PTY — measured: same session
+                        id and title on the way back, but a new shell process
+                        (pid 94457 → 94951) with the exported environment gone,
+                        and anything that had been running gone with it. A
+                        terminal stays mounted and hidden; everything else still
+                        mounts only while it is open. */}
+                    {(isOpen(id) || id === "terminal") && renderPanel(id)}
                   </div>
                 ))}
                 {/* Split target: a thick accent frame over the body, shown only while

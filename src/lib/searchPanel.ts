@@ -73,7 +73,7 @@ export function readoSearchPanel(view: EditorView): Panel {
   const scoped = scopeOf(view.state) !== null
   const searchInput = el("textarea", FIELD, {
     rows: 1,
-    placeholder: t("search.placeholder"),
+    placeholder: t("search.placeholderFile"),
     spellcheck: false,
     value: scoped ? "" : initial.search,
   })

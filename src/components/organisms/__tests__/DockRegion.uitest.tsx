@@ -63,11 +63,27 @@ describe("what the area renders", () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it("keeps the terminal tab when the terminal is closed, with no body", () => {
+  it("keeps a closed terminal mounted but hidden — unmounting it kills the shell", () => {
+    // A <Terminal> kills its PTY on unmount, so "closed" cannot mean "not
+    // rendered": measured before this rule, closing the panel and reopening it
+    // gave back the same session id and title with a *new* shell process
+    // (pid 94457 → 94951) and the exported environment gone — along with
+    // whatever had been running. It is the third way to unmount a terminal,
+    // after the collapsed region and the inactive tab, and the only one that
+    // was left unguarded.
     useTerminals.setState({ open: false })
     render(<DockRegion area="bottom" />)
     expect(screen.getByText("dock.terminal")).toBeInTheDocument()
-    expect(screen.queryByText("terminal-body")).not.toBeInTheDocument()
+    const body = screen.getByText("terminal-body")
+    expect(body).toBeInTheDocument()
+    expect(body.closest("div.hidden")).not.toBeNull()
+  })
+
+  it("shows the terminal body once the panel is open again", () => {
+    useTerminals.setState({ open: true })
+    render(<DockRegion area="bottom" />)
+    const body = screen.getByText("terminal-body")
+    expect(body.closest("div.hidden")).toBeNull()
   })
 
   it("hands the selection to an open sibling when the terminal closes", () => {
@@ -79,7 +95,8 @@ describe("what the area renders", () => {
     render(<DockRegion area="bottom" />)
     expect(screen.getByText("dock.terminal")).toBeInTheDocument()
     expect(screen.getByText("tool-body:output")).toBeInTheDocument()
-    expect(screen.queryByText("terminal-body")).not.toBeInTheDocument()
+    // Still mounted (its PTY has to survive), but not the tab being shown.
+    expect(screen.getByText("terminal-body").closest("div.hidden")).not.toBeNull()
   })
 
   it("renders nothing when the only placed panel is a closed non-terminal one", () => {

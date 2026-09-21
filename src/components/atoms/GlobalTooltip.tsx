@@ -81,7 +81,19 @@ export function GlobalTooltip() {
       className={`pointer-events-none fixed z-[200] -translate-x-1/2 rounded-md border border-line bg-overlay px-2 py-1 text-xs leading-snug text-ink shadow-[var(--shadow)] ${
         tip.above ? "-translate-y-full" : ""
       }`}
-      style={{ left: tip.x, top: tip.y, maxWidth: "min(320px, 90vw)" }}
+      style={{
+        left: tip.x,
+        top: tip.y,
+        // `left` on its own makes the browser size the bubble against what is
+        // left of the viewport: the `-translate-x-1/2` below moves it at paint
+        // time, long after layout has decided the width. Near the right edge —
+        // where most of the status bar lives — that space runs out, and at
+        // `left: 1190` in a 1280-wide window a one-line label was given 89px and
+        // wrapped into four. `max-content` sizes the bubble by its own text; the
+        // max-width keeps the centred box inside the window.
+        width: "max-content",
+        maxWidth: `min(320px, ${Math.min(tip.x, window.innerWidth - tip.x) * 2 - 8}px)`,
+      }}
     >
       {tip.text}
     </div>

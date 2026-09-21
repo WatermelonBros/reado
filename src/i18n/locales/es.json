@@ -786,6 +786,8 @@
     "branch": "rama",
     "comments": "{count} abiertos",
     "agentIdle": "Agente inactivo",
+    "agentWorking": "Agente trabajando",
+    "agentAsking": "El agente espera tu respuesta",
     "notGit": "No es un repositorio git",
     "goToLine": "Ir a la línea",
     "goToLinePlaceholder": "Número de línea…",
@@ -821,6 +823,7 @@
     "inFolder": "en",
     "clearScope": "Buscar en todo el proyecto",
     "placeholder": "Buscar en el proyecto…",
+    "placeholderFile": "Buscar en el archivo…",
     "count": "{current} de {total}",
     "countCapped": "más de {cap} coincidencias",
     "noResults": "Sin coincidencias.",
@@ -1531,7 +1534,7 @@
       "link": "Enlazado"
     },
     "empty": "Todavía no hay nada que dibujar. Tus comentarios, specs y documentos aparecerán aquí como nodos conectados en cuanto los añadas.",
-    "count": "{{nodes}} nodos · {{links}} enlaces",
+    "count": "{nodes} nodos · {links} enlaces",
     "reset": "Restablecer la vista"
   },
   "docs": {

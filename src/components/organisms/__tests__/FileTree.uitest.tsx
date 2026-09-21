@@ -47,14 +47,17 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   revealItemInDir: (p: string) => revealItemInDir(p),
 }))
 
-let onDrop: ((e: { payload: Record<string, unknown> }) => void) | null = null
-vi.mock("@tauri-apps/api/webview", () => ({
-  getCurrentWebview: () => ({
-    onDragDropEvent: (cb: (e: { payload: Record<string, unknown> }) => void) => {
-      onDrop = cb
-      return Promise.resolve(() => {})
-    },
-  }),
+// Reado subscribes to the drop event itself rather than through Tauri's
+// `onDragDropEvent`, whose composite unlisten drops four promises on the floor.
+// The handler therefore takes the paths and the position, and never sees the
+// hover or cancel phases at all.
+let onDrop: ((paths: string[], position: { x: number; y: number }) => void) | null = null
+vi.mock("@/lib/window", async (orig) => ({
+  ...(await orig<typeof import("@/lib/window")>()),
+  onFileDrop: (cb: (paths: string[], position: { x: number; y: number }) => void) => {
+    onDrop = cb
+    return Promise.resolve(() => {})
+  },
 }))
 
 const trashAndRecord = vi.fn<(p: string) => Promise<void>>(async () => {})
@@ -440,7 +443,7 @@ describe("dropping files from outside the app", () => {
     await screen.findByText("src")
     const row = screen.getByText("src").closest("button") as HTMLElement
     vi.spyOn(document, "elementFromPoint").mockReturnValue(row)
-    onDrop?.({ payload: { type: "drop", position: { x: 10, y: 10 }, paths: ["/tmp/x.ts"] } })
+    onDrop?.(["/tmp/x.ts"], { x: 10, y: 10 })
     await waitFor(() =>
       expect(importPaths).toHaveBeenCalledWith(ROOT, ["/tmp/x.ts"], `${ROOT}/src`),
     )
@@ -452,17 +455,22 @@ describe("dropping files from outside the app", () => {
     await screen.findByText("tree.empty")
     vi.spyOn(document, "elementFromPoint").mockReturnValue(document.createElement("div"))
     expect(onDrop, "the drop bridge was never wired").toBeTruthy()
-    onDrop?.({ payload: { type: "drop", position: { x: 0, y: 0 }, paths: ["/tmp/x.ts"] } })
+    onDrop?.(["/tmp/x.ts"], { x: 0, y: 0 })
     await Promise.resolve()
     expect(importPaths).not.toHaveBeenCalled()
     vi.restoreAllMocks()
   })
 
-  it("ignores the hover/cancel phases of a drag", async () => {
+  it("never hears the hover/cancel phases at all", async () => {
+    // It used to subscribe to all four drag events through Tauri's
+    // `onDragDropEvent` and filter for `type === "drop"`. The filter worked; the
+    // composite unlisten that came with it did not — it fired four async
+    // unlistens and ignored every promise, so tearing a pane down threw an
+    // unhandled `listeners[eventId]` rejection nobody could catch. Subscribing
+    // to the drop alone makes the filter unnecessary and the teardown guardable.
     render(<FileTree />)
     await screen.findByText("tree.empty")
     expect(onDrop, "the drop bridge was never wired").toBeTruthy()
-    onDrop?.({ payload: { type: "over", position: { x: 0, y: 0 } } })
     expect(importPaths).not.toHaveBeenCalled()
   })
 })

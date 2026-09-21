@@ -11,6 +11,140 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The title bar's search pill advertises a key that works.** It printed `⌘K`,
+  which had since become a chord prefix — pressing it armed the prefix and the
+  pill did nothing, leaving "⌘K is waiting for a command" in the status bar. It
+  now asks the binding table what opens the palette (`⇧⌘P`, or whatever you have
+  rebound it to) instead of spelling it out.
+- **A language server is never asked to shake hands twice.** Servers live in the
+  Rust backend and outlive a webview reload, and the connection key was only
+  `server:root` — so after a reload (or in a second window on the same project)
+  a fresh client was handed the *running* process and its `initialize` was
+  refused, each server in its own words: clangd `server already initialized`,
+  gopls `initialize called while server in initialized state`, rust-analyzer
+  `unknown request`. That client then had no code intelligence for the rest of
+  the session and nothing said so. The key now carries the webview session, so
+  every client owns the process it initializes.
+- **JSON files report their syntax errors.** `vscode-json-languageserver` keeps
+  validation behind `json.validate.enable` and treats "never mentioned" as off,
+  and answering its `workspace/configuration` request was not enough — a file as
+  plainly broken as `{ "a": }` came back with a report of zero problems. The
+  settings are now pushed after the handshake, the same way the TypeScript code
+  lens settings already were.
+- **File drops no longer leave an unhandled rejection behind.** Tauri's
+  `onDragDropEvent` returns a synchronous composite that calls four async
+  unlistens and ignores every promise they return, so tearing down a pane threw
+  a `listeners[eventId]` rejection that no caller could catch — it came from
+  inside the library, with no application frame in its stack. Reado subscribes
+  to the drop event it actually wants and keeps an unlisten it can guard.
+- **Three subscriptions that could outlive what they were watching.** A terminal
+  pane, a task run and a test run each registered their PTY listeners *after* an
+  `await`, with the "are we still alive?" check before it — so anything that
+  tore down inside that window left a live subscription to a process that had
+  just been killed. Each now checks again on the other side of the await.
+- **Closing the terminal panel no longer kills the shell.** A `<Terminal>` kills
+  its PTY when it unmounts, and the dock already guarded the two ways that could
+  happen — a collapsed region, an inactive tab — but not the third: the panel's
+  own open flag. Pressing `⌘J` (or the status-bar button) and opening it again
+  gave back the same session id and the same title with a *different* shell
+  process, the exported environment gone and anything that had been running gone
+  with it. A terminal now stays mounted and hidden.
+- **Postponing an update no longer costs you the title-bar controls.** The
+  "update available" pill placed itself at `fixed top-0 right-3`, which is
+  exactly where the trailing controls live — Discord and the sidebar, panel,
+  secondary-sidebar and layout toggles were covered, and stayed covered until you
+  took the update. The pill is now laid out by the title bar, so they move aside.
+- **A comment thread stays readable with the terminal open.** The popover gives
+  its fixed chrome — header, type row, reply box — the space it needs and lets
+  the conversation have the rest, which in a short editor pane meant 24 pixels of
+  message list around 145 pixels of message: the reply was on screen and
+  unreadable. The conversation now keeps a floor and the box scrolls instead.
+- **Tooltips near the right edge are readable again.** The global tooltip is
+  centred with a transform but was sized by the browser against the space left
+  between its `left` and the window edge — so the further right the button, the
+  narrower the bubble: the status bar's own indicators were getting 89 pixels and
+  wrapping a one-line label onto four. It now sizes itself by its text.
+- **Reado's own files no longer count as your changes.** `.reado/` (local
+  history, index, bookmarks, reading progress) and the `.mcp.json` Reado writes
+  to register its MCP server were reaching every git-derived view: Source Control
+  showed 110 changes for a project with four, the activity-bar badge agreed with
+  it, and a guided review on "the current changes" planned a reading route over
+  56 of Reado's own history snapshots. The `.gitignore` entry was meant to cover
+  this, but it is only offered when you create your first comment — and
+  `.reado/.history/` starts filling on your first save. It is now filtered at the
+  source, whatever the `.gitignore` says.
+- **CSS and SCSS files show their problems again.** Reado answered
+  `workspace/configuration` with `null` per section, which the TypeScript server
+  ignores and the `vscode-langservers-extracted` family does not: css/scss/less
+  dereferenced the null on every validation (`Cannot read properties of null
+  (reading 'validProperties')`) and produced nothing at all. Reado now answers
+  `{}`, as VS Code does — measured on the same broken stylesheet, zero
+  diagnostics became two.
+- **A server that says "my diagnostics changed, ask me again" is now heard.**
+  `workspace/diagnostic/refresh` went unanswered, so the library replied
+  `-32601 Method not implemented` on Reado's behalf and nothing re-asked: a
+  pull-mode server answers the first request before it has finished validating,
+  and that empty first answer was the only one the file ever got. The code-lens
+  twin of this handler was already there; the diagnostics one was missing.
+- **Servers are no longer asked to resolve what they never offered.** Code lenses
+  and completion items were sent `…/resolve` without checking the matching
+  `resolveProvider` capability — up to 200 round trips per document, each
+  answered with "Method not implemented" on the server's own stderr.
+- **A server request Reado doesn't answer now says so, with its name.** It used
+  to fall through to a blanket `-32601`, which is how a family of "Unhandled
+  exception" lines reached the log with nothing identifying the cause.
+- **A word that isn't one of the shipped ones can no longer take the window down
+  either.** The settings parser compared types, so `"colorVision": "protanopia"`
+  was a string like any other: accepted, stored, and then looked up in a palette
+  table that has no such mode — reading a token off `undefined` reached the root
+  error boundary, and the value survived a restart because it had been
+  persisted. Every setting whose value is one of a fixed set now declares that
+  set next to its default; a value outside it is reported and skipped, and one
+  already stored is healed on the next start.
+- **A number out of range in the settings JSON can no longer take the window
+  down.** `"terminalScrollback": -5` was accepted (it is, after all, a number),
+  stored, and then thrown by xterm inside the terminal's render — which reached
+  the root error boundary and blanked the whole app, not just the pane. Every
+  numeric setting now carries its range next to its default, so the JSON dialog,
+  an imported sync bundle and a project's `config.json` are held to the same
+  limits the controls in Settings have always shown. A value already stored out
+  of range is clamped on the next start.
+- **The agent indicator in the status bar tells the truth.** It was the constant
+  "Agent idle" — it had never once said anything else, and would announce an idle
+  agent while the companion, reading the same facts, showed it thinking. It now
+  reads those facts.
+- **"Open View ▸ …" opens.** The six entries (and `⌘⇧E`, `⌘⇧G`, `⌘⇧C`) routed
+  through the activity bar's *toggle*, so using one while that view was already
+  showing collapsed the sidebar — including the VS Code shortcuts, which there do
+  the opposite. Toggling stays where it was asked for: the activity-bar button
+  and `⌘B`.
+- **⌘F inside the editor no longer claims to search the project.** The field said
+  "Search in project…" — the sidebar's wording — while searching only the open
+  document, so a symbol that was elsewhere in the project read as missing.
+- **The knowledge graph counts its nodes.** The summary line printed
+  `{{nodes}} nodes · {{links}} links` literally, in all five languages: the one
+  string in the catalogue written with i18next's double braces, which Reado is
+  not configured for. A test now rejects that syntax outright.
+- **A split editor pane is no longer a button.** Each unfocused pane was wrapped
+  in a `<button>` that contained the pane's own tabs, close buttons and ruler
+  markers — 22 nested buttons, invalid HTML, and a tab order and screen-reader
+  tree that both came out wrong. Clicking a pane still focuses it.
+- **Far fewer unhandled rejections when a terminal, a task or a test run ends.**
+  Tauri's `unlisten` rejects once its listener map is gone, which is the normal
+  case when the thing being unsubscribed from is a PTY that just died. Two call
+  sites guarded it and seven did not; all nine now go through one `offSafe`
+  helper that takes either an unlisten or a promise of one. A rarer
+  double-unsubscribe still slips through under a fast burst of terminal
+  commands — the message says `listeners[eventId]` is already gone — and is not
+  yet tracked down.
+- **Code lenses stop asking servers to resolve what they never offered.** A
+  server that advertises code lenses without `resolveProvider` was asked anyway,
+  once per lens (up to 200 per document), and answered "Method not implemented"
+  on its own stderr — which no amount of catching on our side could keep out of
+  the log.
+
 ## [1.23.0] — 2026-09-19
 
 ### Added

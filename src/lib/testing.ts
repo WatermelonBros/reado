@@ -36,7 +36,7 @@ import { discoverTests, ptyKill, ptySpawn, submitToTerminal, type TestFile } fro
 import { createLogger, safeError } from "./logger"
 import { useMascot } from "./mascot"
 import { useProject } from "./store"
-import { listenPtyLines, plainText, shellQuote } from "./terminals"
+import { listenPtyLines, offSafe, plainText, shellQuote } from "./terminals"
 
 const log = createLogger("testing")
 
@@ -426,8 +426,8 @@ export async function runTests(scope: Scope): Promise<void> {
     if (done) return
     done = true
     endRun = null
-    void off?.()
-    void unExit?.()
+    offSafe(off)
+    offSafe(unExit)
     clearTimeout(silent)
     void ptyKill(id).catch(() => {})
     // A test the run ended without judging — stopped, crashed, or filtered out
@@ -464,7 +464,10 @@ export async function runTests(scope: Scope): Promise<void> {
   // stands for. One for an ordinary test; two hundred for a declaration in a
   // loop over two hundred cases.
   const cases = new Map<string, Set<string>>()
-  off = await listenPtyLines(id, (line) => {
+  // Assigned after the await: if `stop()` already ran (a fast failure, a second
+  // run starting), there was nothing for it to unsubscribe and the subscription
+  // outlived the run it belonged to.
+  const subLines = await listenPtyLines(id, (line) => {
     tail = `${tail}${plainText(line)}\n`.slice(-8000)
     const verdict = runner.read(line)
     if (verdict) {
@@ -488,7 +491,14 @@ export async function runTests(scope: Scope): Promise<void> {
     clearTimeout(silent)
     silent = window.setTimeout(stop, SILENCE_MS)
   })
-  unExit = await listen(`pty-exit-${id}`, () => stop())
+  const subExit = await listen(`pty-exit-${id}`, () => stop())
+  if (done) {
+    offSafe(subLines)
+    offSafe(subExit)
+    return
+  }
+  off = subLines
+  unExit = subExit
   silent = window.setTimeout(stop, SILENCE_MS)
   try {
     await ptySpawn(id, root, 24, 200)

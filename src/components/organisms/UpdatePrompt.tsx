@@ -14,8 +14,7 @@ import { Modal } from "@/components/atoms/Modal"
 import { useUpdate } from "@/lib/update"
 
 export function UpdatePrompt() {
-  const { update, version, notes, open, dismissed, installing, toast } = useUpdate()
-  const reopen = useUpdate((s) => s.reopen)
+  const { version, notes, open, installing, toast } = useUpdate()
   const dismiss = useUpdate((s) => s.dismiss)
   const install = useUpdate((s) => s.install)
   const clearToast = useUpdate((s) => s.clearToast)
@@ -70,21 +69,6 @@ export function UpdatePrompt() {
       {/* Indicator: available but dismissed. Sits in the title bar's right end —
           the wrapper is the bar's height (h-9) so the pill is vertically centered
           in it regardless of the pill's own height. */}
-      {update && dismissed && !open && (
-        <div className="pointer-events-none fixed top-0 right-3 z-[105] flex h-9 items-center">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={reopen}
-            title={t("update.available", { version: version ?? "" })}
-            className="animate-fade pointer-events-auto rounded-full border-line-strong bg-overlay shadow-[var(--shadow)]"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            {t("update.indicator")}
-          </Button>
-        </div>
-      )}
-
       {/* Toast: up-to-date / error. */}
       {toast && (
         <div
@@ -99,5 +83,34 @@ export function UpdatePrompt() {
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * The "update available" pill, shown once the prompt has been dismissed.
+ *
+ * It used to position itself — `fixed top-0 right-3 z-[105]` — which put it on
+ * top of the title bar's own trailing controls (Discord, and the sidebar / panel
+ * / secondary-sidebar / layout toggles all live in exactly that strip). Anyone
+ * who postponed an update lost those four buttons until they took it, which is
+ * a poor trade for a reminder. It is now laid out *by* the title bar, so the
+ * controls move aside instead of disappearing underneath.
+ */
+export function UpdateIndicator() {
+  const { update, dismissed, open, version } = useUpdate()
+  const reopen = useUpdate((s) => s.reopen)
+  const { t } = useTranslation()
+  if (!update || !dismissed || open) return null
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={reopen}
+      title={t("update.available", { version: version ?? "" })}
+      className="animate-fade flex-none rounded-full border-line-strong bg-overlay shadow-[var(--shadow)]"
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+      {t("update.indicator")}
+    </Button>
   )
 }
