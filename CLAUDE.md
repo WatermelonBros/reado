@@ -27,6 +27,14 @@ component, not a copy-pasted `<button className="…">`:
 If a component isn't trivial and Ark has it, use Ark. If clickable UI repeats,
 promote it to an atom rather than duplicating classes.
 
+**Anything that floats over the app must portal to `document.body`** (or be
+`position: fixed`). Two reasons, both non-negotiable: the app root carries the
+interface-zoom transform, which re-bases `position: fixed` inside it; and the
+browser pane is a *native child window* that paints above every pixel of DOM, so
+`lib/overlays.ts` finds the floating layers by exactly that property and moves the
+pane out of their way. A layer rendered inside the app tree without `fixed` opens
+**behind the page** — see the module header there.
+
 ### Phosphor icons
 
 The `atoms/icons.tsx` set wraps Phosphor. Import the **`*Icon`-suffixed** exports

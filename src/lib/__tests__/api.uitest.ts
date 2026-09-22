@@ -67,7 +67,7 @@ describe("the command boundary", () => {
   it("still sees every wrapper — bump this when you add one", () => {
     // A tripwire on the sweep itself. Exact, not `>=`: a loosened filter or a
     // broken mock would otherwise shrink the sweep silently.
-    expect(wrappers).toHaveLength(210)
+    expect(wrappers).toHaveLength(211)
   })
 
   for (const [name, fn] of wrappers) {

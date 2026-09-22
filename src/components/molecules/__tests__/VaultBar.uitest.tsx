@@ -5,14 +5,18 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { VaultItem, VaultStatus } from "@/lib/vault"
+import type { VaultItem, VaultSecret, VaultStatus } from "@/lib/vault"
 
 const api = {
   vaultStatus: vi.fn<() => Promise<VaultStatus>>(async () => ({ backend: "bw", locked: false })),
   vaultLookup: vi.fn<(url: string) => Promise<VaultItem[]>>(async () => [
     { id: "i1", title: "Example", username: "me@example.com", hasOtp: true },
   ]),
-  vaultSecret: vi.fn<(id: string) => Promise<string>>(async () => "s3cr3t!"),
+  vaultSecret: vi.fn<(id: string) => Promise<VaultSecret>>(async () => ({
+    username: "me@example.com",
+    password: "s3cr3t!",
+    hasOtp: true,
+  })),
   vaultOtp: vi.fn<(id: string) => Promise<string>>(async () => "482915"),
   vaultUnlock: vi.fn<(password: string) => Promise<void>>(async () => {}),
   vaultCreate: vi.fn<(u: string, t: string, n: string) => Promise<string>>(

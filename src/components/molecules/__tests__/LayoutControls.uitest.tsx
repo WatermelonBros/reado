@@ -98,6 +98,19 @@ describe("region toggles", () => {
 describe("the layout menu", () => {
   const open = () => userEvent.click(screen.getByRole("button", { name: "layout.more" }))
 
+  it("opens outside the app's own tree, where the browser pane can be moved for it", async () => {
+    // The pane is a native window painting above all DOM: a layer rendered
+    // *inside* the app is one the page covers, with no way to reorder them. Being
+    // a portal at body level is both what positions it correctly under interface
+    // zoom and what lets `watchOverlays` see it — without this menu, or any other,
+    // having to register anywhere.
+    const { container } = render(<LayoutControls />)
+    await open()
+    const menu = await screen.findByRole("menu")
+    expect(container.contains(menu)).toBe(false)
+    expect(document.body.contains(menu)).toBe(true)
+  })
+
   it("drives the same settings the Settings tab writes", async () => {
     render(<LayoutControls />)
     await open()

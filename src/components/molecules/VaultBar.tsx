@@ -16,7 +16,7 @@ import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon } from "@/components/atoms/icons"
 import { vaultCreate, vaultLookup, vaultOtp, vaultSecret, vaultStatus } from "@/lib/api"
-import { usePreview } from "@/lib/preview"
+import { originOf, usePreview } from "@/lib/preview"
 import { useWorkspace } from "@/lib/store"
 import type { FillResult, VaultItem, VaultStatus } from "@/lib/vault"
 import {
@@ -76,13 +76,7 @@ export function VaultBar({
   // manager CLI process per stored login, every one of which makes macOS ask
   // "Reado would like to access data from other apps". That is how one login
   // turned into a stream of system dialogs.
-  const origin = useMemo(() => {
-    try {
-      return new URL(url).origin
-    } catch {
-      return url // not a URL we can reduce — ask about it as given
-    }
-  }, [url])
+  const origin = useMemo(() => originOf(url), [url])
 
   // Ask the backend what it is and what it has for this site. Re-runs when the
   // site changes, so the list is never about the previous origin.
@@ -130,8 +124,15 @@ export function VaultBar({
   /** Fetch this login's password and put it in the form. */
   const fillLogin = (it: VaultItem) =>
     guard(async () => {
-      const secret = await vaultSecret(it.id)
-      report(await fill(fillLoginScript(it.username, secret), secret, evalInPage), it)
+      // One read, one approval prompt — and the only place the item's own fields
+      // are seen. 1Password's list says a title and an account name; whether the
+      // login also carries a one-time code is learned here, so fold it back into
+      // the list (before the fill, so the chip redraws before the note lands).
+      const { username, password, hasOtp } = await vaultSecret(it.id)
+      const full = { ...it, username: username || it.username, hasOtp }
+      if (full.hasOtp !== it.hasOtp || full.username !== it.username)
+        setItems((prev) => prev?.map((i) => (i.id === it.id ? full : i)) ?? prev)
+      report(await fill(fillLoginScript(full.username, password), password, evalInPage), full)
     })
 
   /** Fetch this login's current one-time code and put it in the form. */

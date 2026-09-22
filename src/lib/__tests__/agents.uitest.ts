@@ -6,6 +6,8 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 vi.mock("../api", () => ({
   agentInstalled: vi.fn(async () => true),
   ptyDefaultShell: vi.fn(async () => "/bin/zsh"),
+  // What the pane is running, straight from its tty. Default: a bare shell.
+  ptyForeground: vi.fn(async () => "-zsh"),
   ptyWrite: vi.fn(async () => {}),
   submitToTerminal: vi.fn(),
 }))
@@ -34,6 +36,7 @@ const term = {
   }),
   toggle: vi.fn(),
   markAgent: vi.fn(),
+  unmarkAgent: vi.fn(),
   restart: vi.fn(),
 }
 vi.mock("../terminals", () => ({
@@ -47,6 +50,7 @@ vi.mock("../terminals", () => ({
 import {
   AGENT_BIN,
   AGENT_ORDER,
+  agentInCommand,
   agentLaunchCommand,
   clearTerminal,
   dispatchToAgent,
@@ -57,13 +61,14 @@ import {
   runSelectionInTerminal,
   sanitizePromptText,
 } from "@/lib/agents"
-import { agentInstalled, ptyWrite, submitToTerminal } from "@/lib/api"
+import { agentInstalled, ptyForeground, ptyWrite, submitToTerminal } from "@/lib/api"
 
 beforeEach(() => {
   vi.clearAllMocks()
   // clearAllMocks keeps implementations, so restore the defaults a test may have
   // swapped out (an agent that isn't installed, a probe that throws).
   vi.mocked(agentInstalled).mockResolvedValue(true)
+  vi.mocked(ptyForeground).mockResolvedValue("-zsh")
   term.sessions = []
   term.activeId = null
   term.agentTerminals = []
@@ -258,11 +263,33 @@ describe("launchAgent", () => {
   })
 })
 
+describe("reading what a pane is running", () => {
+  it("recognises an agent however it was started", () => {
+    expect(agentInCommand("claude")).toBe("claude-code")
+    expect(agentInCommand("claude --resume")).toBe("claude-code")
+    expect(agentInCommand("/opt/homebrew/bin/claude --append-system-prompt x")).toBe("claude-code")
+    // Usually a script run by its interpreter.
+    expect(agentInCommand("node /Users/u/.local/bin/claude")).toBe("claude-code")
+    expect(agentInCommand("codex")).toBe("codex")
+  })
+
+  it("is not fooled by a shell that merely mentions one", () => {
+    // A prompt pasted into a shell is a prompt the shell runs, so only the
+    // executable counts — never a file it happens to be looking at.
+    expect(agentInCommand("-zsh")).toBeNull()
+    expect(agentInCommand("cat claude")).toBeNull()
+    expect(agentInCommand("vim /notes/claude.md")).toBeNull()
+    expect(agentInCommand("")).toBeNull()
+    expect(agentInCommand(null)).toBeNull()
+  })
+})
+
 describe("dispatchToAgent", () => {
   it("pastes and submits into a pane that already holds an agent", async () => {
     vi.useFakeTimers()
     term.activeId = "t1"
     term.agentTerminals = ["t1"]
+    vi.mocked(ptyForeground).mockResolvedValue("node /opt/homebrew/bin/claude")
     const done = dispatchToAgent("explain this")
     await vi.advanceTimersByTimeAsync(10_000)
     await expect(done).resolves.toBe(true)
@@ -292,6 +319,68 @@ describe("dispatchToAgent", () => {
     expect(submitToTerminal).toHaveBeenCalledWith("t1", "READO_AGENT=codex codex", 0)
     expect(term.markAgent).toHaveBeenCalledWith("t1", "codex")
     expect(vi.mocked(ptyWrite).mock.calls[0]).toEqual(["t1", "review this"])
+  })
+
+  it("sends the prompt — not a launch command — to an agent Reado never launched", async () => {
+    // The user ran `claude` themselves, so Reado's own bookkeeping says nothing.
+    // The launch command used to be typed into that running agent, which read it
+    // as a prompt.
+    vi.useFakeTimers()
+    term.activeId = "t1"
+    term.sessions = [{ id: "t1" }]
+    vi.mocked(ptyForeground).mockResolvedValue("node /Users/u/.local/bin/claude --resume")
+    const done = dispatchToAgent("fix the task")
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(done).resolves.toBe(true)
+    expect(submitToTerminal).not.toHaveBeenCalled()
+    expect(vi.mocked(ptyWrite).mock.calls[0]).toEqual(["t1", "fix the task"])
+    expect(term.markAgent).toHaveBeenCalledWith("t1", "claude-code")
+  })
+
+  it("launches one when the agent Reado remembers has since quit", async () => {
+    // The mirror image, and the dangerous one: a prompt written into a bare
+    // shell is a prompt the shell *runs*.
+    vi.useFakeTimers()
+    term.activeId = "t1"
+    term.sessions = [{ id: "t1" }]
+    term.agentTerminals = ["t1"]
+    term.lastAgent = "codex"
+    vi.mocked(ptyForeground).mockResolvedValue("-zsh")
+    const done = dispatchToAgent("fix the task")
+    await vi.advanceTimersByTimeAsync(30_000)
+    await done
+    expect(term.unmarkAgent).toHaveBeenCalledWith("t1")
+    expect(submitToTerminal).toHaveBeenCalledWith("t1", "READO_AGENT=codex codex", 0)
+  })
+
+  it("hands the prompt to the pane running an agent, not the focused shell", async () => {
+    vi.useFakeTimers()
+    term.activeId = "shell"
+    term.sessions = [{ id: "shell" }, { id: "agent" }]
+    vi.mocked(ptyForeground).mockImplementation(async (id: string) =>
+      id === "agent" ? "claude" : "-zsh",
+    )
+    const done = dispatchToAgent("fix the task")
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(done).resolves.toBe(true)
+    expect(submitToTerminal).not.toHaveBeenCalled() // no second agent launched
+    expect(term.setActive).toHaveBeenCalledWith("agent")
+    expect(vi.mocked(ptyWrite).mock.calls[0]).toEqual(["agent", "fix the task"])
+  })
+
+  it("falls back to what Reado remembers when the tty cannot be asked", async () => {
+    // Windows has no tty process group; a pane whose shell has not spawned has
+    // nothing to ask either.
+    vi.useFakeTimers()
+    term.activeId = "t1"
+    term.agentTerminals = ["t1"]
+    term.lastAgent = "claude-code"
+    vi.mocked(ptyForeground).mockResolvedValue(null as unknown as string)
+    const done = dispatchToAgent("fix the task")
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(done).resolves.toBe(true)
+    expect(submitToTerminal).not.toHaveBeenCalled()
+    expect(vi.mocked(ptyWrite).mock.calls[0]).toEqual(["t1", "fix the task"])
   })
 
   it("auto-picks the first installed agent when none was ever used", async () => {

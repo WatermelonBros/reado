@@ -56,12 +56,14 @@ import {
 } from "@/lib/api"
 import { useComments } from "@/lib/comments"
 import { useLayout } from "@/lib/layout"
+import { watchOverlays } from "@/lib/overlays"
 import {
   isLoopbackHost,
   isOriginAllowed,
+  isPageGranted,
   type LogEntry,
   type NetEntry,
-  useDialogs,
+  originOf,
   usePreview,
 } from "@/lib/preview"
 import { usePalette, useProject, useSettings, useWorkspace } from "@/lib/store"
@@ -191,10 +193,9 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // navigate somewhere else.
   const vaultDismissed = useRef("")
   const accessRequest = usePreview((s) => s.accessRequest)
-  // Reado's overlays (palette, settings, dialogs, graph/docs) render in the DOM,
-  // which a native child window would cover — hide the preview while any is open.
-  // A dock drag or open dock menu counts too: hide the preview so drop targets and
-  // the menu (both DOM) stay visible above the native window.
+  // Reado's overlays (palette, settings, graph/docs) render in the DOM, which a
+  // native child window would cover — hide the preview while any is open. A dock
+  // drag counts too: hide the preview so the drop targets (DOM) stay visible.
   // Read each store into its own unconditional hook call, then OR the booleans —
   // ORing the hooks directly would short-circuit and skip later hook calls (a
   // Rules-of-Hooks violation) the moment an earlier overlay opens.
@@ -203,10 +204,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   )
   const workspaceOverlay = useWorkspace((s) => s.graphOpen || s.docsOpen)
   const layoutOverlay = useLayout((s) => s.dragging !== null || s.menuOpen)
-  // Every Modal/Drawer registers itself (see `useDialogOverlay`), so a new dialog
-  // — the updater's, for one — hides the preview without being listed here.
-  const dialogOverlay = useDialogs((s) => s.count > 0)
-  const overlayOpen = paletteOverlay || workspaceOverlay || layoutOverlay || dialogOverlay
+  // And every *floating* layer — menu, popover, select, dialog, tooltip, the
+  // right-click menu — without any of them having to say so: `watchOverlays`
+  // reads it off the DOM (see `lib/overlays.ts`), so a new one cannot forget to
+  // register and open behind the page.
+  const [covered, setCovered] = useState(false)
+  const overlayOpen = paletteOverlay || workspaceOverlay || layoutOverlay || covered
   // Re-park the webview when the dock layout changes (a splitter drag resizes the
   // pane; the ResizeObserver can miss the settled size mid-drag).
   const dockLayout = useLayout((s) => s.layout)
@@ -452,9 +455,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
             const state = await previewEval(PAGE_STATE_JS)
               .then((raw) => JSON.parse(raw || "null") as PageState | null)
               .catch(() => null)
-            if (state?.hasSecret && s.grantedUrl !== state.href) {
-              if (askedFor.current !== state.href) {
-                askedFor.current = state.href
+            if (state?.hasSecret && !isPageGranted(state.href)) {
+              // Asked once per origin, not once per URL: a sign-in walks several
+              // pages of one site, and asking again at each step is the prompt
+              // fatigue this gate exists to avoid.
+              if (askedFor.current !== originOf(state.href)) {
+                askedFor.current = originOf(state.href)
                 usePreview.getState().setAccessRequest(state.href)
               }
               await previewPutResult(
@@ -641,6 +647,11 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     window.addEventListener("pointermove", onMove)
     window.addEventListener("pointerup", onUp)
   }
+
+  // Watch for anything Reado floats over the pane's own rectangle. Only over
+  // *that* rectangle: a tooltip on a sidebar icon is already above the page, and
+  // blanking the pane for it would be a flicker for nothing.
+  useEffect(() => watchOverlays(() => bodyRef.current, setCovered), [])
 
   // Hide the preview only while a Reado DOM overlay is open (a native window can't
   // sit under the DOM). Design comments never hide it — dots, the composer, and

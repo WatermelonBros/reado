@@ -15,6 +15,13 @@ export interface VaultItem {
   hasOtp: boolean
 }
 
+/** What one fill needs, read from the vault in a single CLI invocation. */
+export interface VaultSecret {
+  username: string
+  password: string
+  hasOtp: boolean
+}
+
 export interface VaultStatus {
   /** `"op"` (1Password) or `"bw"` (Bitwarden); null when neither CLI is installed. */
   backend: "op" | "bw" | null

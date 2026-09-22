@@ -7,7 +7,6 @@
  */
 import { Dialog } from "@ark-ui/react/dialog"
 import { Portal } from "@ark-ui/react/portal"
-import { useDialogOverlay } from "@/lib/preview"
 
 interface ModalProps {
   open: boolean
@@ -20,7 +19,6 @@ interface ModalProps {
 
 export function Modal({ open, onOpenChange, ariaLabel, className = "", children }: ModalProps) {
   // The native preview webview paints over all DOM — tell it to hide while we are up.
-  useDialogOverlay(open)
 
   return (
     <Dialog.Root open={open} onOpenChange={(d) => onOpenChange(d.open)} lazyMount unmountOnExit>

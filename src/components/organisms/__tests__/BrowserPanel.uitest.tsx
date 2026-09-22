@@ -54,7 +54,7 @@ import { Modal } from "@/components/atoms/Modal"
 import { BrowserPanel, normalizeUrl, singleLabelHost } from "@/components/organisms/BrowserPanel"
 import { useComments } from "@/lib/comments"
 import { useLayout } from "@/lib/layout"
-import { useDialogs, usePreview } from "@/lib/preview"
+import { isPageGranted, usePreview } from "@/lib/preview"
 import { usePalette, useProject, useSettings, useWorkspace } from "@/lib/store"
 
 const ROOT = "/repo"
@@ -118,7 +118,7 @@ beforeEach(() => {
     pinRequest: null,
     inspectRequest: null,
     secrets: [],
-    grantedUrl: null,
+    grants: {},
     accessRequest: null,
   })
   useComments.setState({ comments: [] })
@@ -130,7 +130,6 @@ beforeEach(() => {
   })
   useWorkspace.setState({ graphOpen: false, docsOpen: false })
   useLayout.setState({ dragging: null, menuOpen: false })
-  useDialogs.setState({ count: 0 })
 })
 afterEach(() => vi.restoreAllMocks())
 
@@ -944,7 +943,8 @@ describe("a page holding a credential", () => {
   })
 
   it("runs the command once the user grants that page", async () => {
-    usePreview.setState({ agentAccess: true, grantedUrl: "http://localhost:5173/login" })
+    usePreview.setState({ agentAccess: true })
+    usePreview.getState().grantPage("http://localhost:5173/login")
     pageHolds(true)
     command()
     render(<BrowserPanel />)
@@ -952,8 +952,21 @@ describe("a page holding a credential", () => {
     expect(api.previewEval).toHaveBeenCalledWith("document.querySelector('input').value")
   })
 
-  it("does not honour a grant given for another page", async () => {
-    usePreview.setState({ agentAccess: true, grantedUrl: "http://localhost:5173/other" })
+  it("does not honour a grant given for another site", async () => {
+    usePreview.setState({ agentAccess: true })
+    usePreview.getState().grantPage("https://elsewhere.test/login")
+    pageHolds(true)
+    command()
+    render(<BrowserPanel />)
+    await tick()
+    expect(api.previewEval).not.toHaveBeenCalledWith("document.querySelector('input').value")
+  })
+
+  it("does not re-ask on an expired grant", async () => {
+    usePreview.setState({
+      agentAccess: true,
+      grants: { "http://localhost:5173": Date.now() - 1 },
+    })
     pageHolds(true)
     command()
     render(<BrowserPanel />)
@@ -993,11 +1006,22 @@ describe("a page holding a credential", () => {
     expect(api.previewPutResult).toHaveBeenCalledWith(ROOT, expect.stringContaining("unknown op"))
   })
 
-  it("drops the grant when the pane navigates", async () => {
-    usePreview.setState({ grantedUrl: "http://localhost:5173/login", secrets: ["s3cr3t!"] })
+  it("keeps the grant across the pages of one sign-in, and drops the secrets", async () => {
+    // The grant is about a site, not a URL: re-asking at every step of a login
+    // (email → password → 2FA) is the prompt fatigue the gate must not cause.
+    usePreview.setState({ secrets: ["s3cr3t!"] })
+    usePreview.getState().grantPage("http://localhost:5173/login")
     usePreview.getState().setUrl("http://localhost:5173/app")
-    expect(usePreview.getState().grantedUrl).toBeNull()
+    expect(isPageGranted("http://localhost:5173/2fa")).toBe(true)
     expect(usePreview.getState().secrets).toEqual([])
+    // Another site is still another decision.
+    expect(isPageGranted("https://elsewhere.test/login")).toBe(false)
+  })
+
+  it("revokes every grant when the agent is switched off", async () => {
+    usePreview.getState().grantPage("http://localhost:5173/login")
+    usePreview.getState().setAgentAccess(false)
+    expect(isPageGranted("http://localhost:5173/login")).toBe(false)
   })
 
   it("redacts a filled secret from what reaches the agent", async () => {

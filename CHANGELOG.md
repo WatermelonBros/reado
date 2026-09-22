@@ -11,6 +11,46 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Send to the agent" sends the prompt when an agent is already running.** It
+  decided which of the two commands to send — the prompt, or the one that
+  launches an agent — from Reado's own record of what *it* had launched. An agent
+  the user started themselves wasn't in that record, so the launch command was
+  typed into the running agent, which read it as a prompt. Reado now asks the
+  pane's tty what is actually running there, which also covers the mirror case
+  (an agent Reado launched and the user has since quit, where the prompt would
+  have been *executed* by the bare shell), and hands the prompt to the pane
+  running an agent rather than to whichever pane happens to be focused.
+- **The mascot's speech bubble holds its text.** Two ways it didn't: the clamp
+  that limits the bubble to three lines sat on the same element as the padding
+  reserving the tail's room, and `overflow: hidden` cuts at the padding edge — so
+  the line meant to be hidden was drawn across the tail, below the outline. And a
+  long unbroken token (a file path, a URL — most of what an agent says) had
+  nowhere to wrap and ran straight out through the side. The text is clipped on
+  its own element now, and wraps mid-token when it must.
+- **Everything that floats opens in front of the browser pane.** Menus, popovers,
+  selects, tooltips, dialogs, the right-click menu on the URL bar — the pane is a
+  native child window that paints above all of Reado's own DOM, and only dialogs
+  told it to step aside, so everything else opened underneath the page. Nothing
+  registers any more: Reado reads the floating layers off the DOM (they are
+  portals on `<body>`, or `position: fixed`, and there is no third way to float),
+  so a layer added later cannot forget to. The pane steps aside only while a
+  layer actually lands *on* it — a tooltip over the sidebar leaves it alone.
+- **"Allow or deny" is asked once per site, and it sticks.** The agent-access
+  gate that guards a page holding a credential keyed its grant on the exact URL
+  and kept it only in memory — so a single sign-in re-asked at every step (email
+  → password → 2FA), and every restart asked again from scratch. The grant is now
+  per origin, lasts two days, and survives a restart; switching the agent's access
+  off revokes every one of them at once.
+- **One 1Password approval per fill, not one per login.** Listing a site's logins
+  read every match with its own `op item get` — and `op` asks the 1Password app to
+  authorize *each* invocation, so a page with a few saved logins produced a wall
+  of Allow/Deny prompts, again at every step of a sign-in. The list `op` already
+  prints carries the account name, so the lookup is one invocation, its result is
+  reused for a few minutes across pages, and the item itself is read once — at the
+  fill, which needed to read it anyway.
+
 ## [1.23.1] — 2026-09-21
 
 ### Fixed

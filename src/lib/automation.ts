@@ -32,8 +32,9 @@ import { useMascot } from "./mascot"
 // same handler it dispatches to — the only way to drive a menu command here.
 import { runMenuCommand } from "./menu"
 import { useOnboarding } from "./onboarding"
+import { overlayRects } from "./overlays"
 import { usePreReview } from "./preReview"
-import { useDialogs, usePreview } from "./preview"
+import { usePreview } from "./preview"
 import { useQa } from "./qa"
 import { useReadProgress } from "./readProgress"
 import { useSemanticSearch } from "./semanticSearch"
@@ -72,7 +73,9 @@ import { useUpdate } from "./update"
   useHierarchy,
   useLayout,
   useOnboarding,
-  useDialogs,
+  /** What Reado is floating over its own window right now — the driver's way to
+   *  ask whether a menu/dialog/tooltip is actually on screen. */
+  overlayRects,
   usePreview,
   useUpdate,
   useExtensions,

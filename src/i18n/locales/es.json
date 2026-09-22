@@ -685,8 +685,8 @@
       "password": "No se ha encontrado el campo de contraseña en esta página.",
       "otp": "No se ha encontrado el campo del código de un solo uso en esta página."
     },
-    "accessRequest": "El agente ha pedido acceso a esta página. Si se lo permites, podrá ver lo que escribas aquí: ten cuidado con cualquier contraseña o secreto que no quieras compartir.",
-    "grant": "Permitir en esta página",
+    "accessRequest": "El agente ha pedido acceso a este sitio. Si se lo permites, podrá ver lo que escribas aquí: ten cuidado con cualquier contraseña o secreto que no quieras compartir. El permiso dura dos días para este sitio; el interruptor del agente lo retira.",
+    "grant": "Permitir en este sitio",
     "deny": "Ahora no"
   },
   "inspector": {

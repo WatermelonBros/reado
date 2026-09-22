@@ -75,6 +75,10 @@ export function SpeechBubble({
   onDismiss?: () => void
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
+  /** The clamped text itself. Separate from the box because the box carries the
+   *  padding that reserves the tail's room, and the clip has to happen at the
+   *  *text's* edge — see the element it sits on. */
+  const textRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [full, setFull] = useState(false)
   /** Is there more text than the bubble is showing? Only then does a click mean
@@ -94,7 +98,8 @@ export function SpeechBubble({
       const w = el.offsetWidth
       const h = el.offsetHeight
       setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }))
-      setClipped(el.scrollHeight > el.clientHeight + 1)
+      const t = textRef.current
+      setClipped(!!t && t.scrollHeight > t.clientHeight + 1)
     }
     measure()
     const obs = new ResizeObserver(measure)
@@ -139,24 +144,41 @@ export function SpeechBubble({
       )}
       <div
         ref={boxRef}
-        role="status"
-        // The cap, in the DOM: `-webkit-line-clamp` is a style no test
-        // environment models, and this is the number that decides whether the
-        // bubble can outgrow the window.
-        data-clamp={full ? CLAMP_FULL : CLAMP}
-        className="relative px-3.5 py-2.5 text-[13px] leading-snug font-medium text-ink"
+        className="relative px-3.5"
         style={{
           // Room for the tail on whichever edge it hangs off, so the text never
           // sits on top of it.
           paddingTop: side === "top" ? 10 + TAIL : 10,
           paddingBottom: side === "bottom" ? 10 + TAIL : 10,
-          display: "-webkit-box",
-          WebkitLineClamp: full ? CLAMP_FULL : CLAMP,
-          WebkitBoxOrient: "vertical" as const,
-          overflow: "hidden",
         }}
       >
-        {text}
+        <div
+          ref={textRef}
+          role="status"
+          // The cap, in the DOM: `-webkit-line-clamp` is a style no test
+          // environment models, and this is the number that decides whether the
+          // bubble can outgrow the window.
+          data-clamp={full ? CLAMP_FULL : CLAMP}
+          className="text-[13px] leading-snug font-medium text-ink"
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: full ? CLAMP_FULL : CLAMP,
+            WebkitBoxOrient: "vertical" as const,
+            // Clipped *here*, on an element with no padding of its own. With the
+            // padding on this box, `overflow: hidden` cut at the padding edge —
+            // and the tail's 15px of room is padding, so the line the clamp was
+            // meant to hide was painted below the bubble's outline, in the band
+            // the tail hangs in. The text left the bubble.
+            overflow: "hidden",
+            // An agent says file paths and URLs: one unbroken token wider than
+            // the bubble has nowhere to wrap, so it ran straight out through the
+            // side. Breaking mid-token is the lesser evil — and the only one that
+            // keeps the words inside the outline.
+            overflowWrap: "anywhere",
+          }}
+        >
+          {text}
+        </div>
       </div>
     </button>
   )

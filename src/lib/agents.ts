@@ -4,7 +4,7 @@
  * so it works on every platform. Shared by the terminal toolbar and the menu.
  */
 import { listen } from "@tauri-apps/api/event"
-import { agentInstalled, ptyDefaultShell, ptyWrite, submitToTerminal } from "./api"
+import { agentInstalled, ptyDefaultShell, ptyForeground, ptyWrite, submitToTerminal } from "./api"
 import { syncClaudeTheme } from "./claudeTheme"
 import { useDocInfo } from "./docInfo"
 import { useMascot } from "./mascot"
@@ -180,6 +180,62 @@ export async function launchAgent(agent: Agent, bin: string): Promise<void> {
   useTerminals.getState().markAgent(id, agent)
 }
 
+/**
+ * The agent a foreground command line is running, if any.
+ *
+ * Only the executable counts — plus the script after it when the executable is
+ * an interpreter, since an agent CLI is often `node …/claude`. Not every token
+ * on the line: a shell sitting on `cat claude.md` is not an agent, and a prompt
+ * pasted into a shell is a prompt the shell *runs*.
+ */
+export function agentInCommand(line: unknown): Agent | null {
+  if (typeof line !== "string") return null
+  const base = (tok: string) => tok.split(/[\\/]/).pop() ?? ""
+  const toks = line.trim().split(/\s+/)
+  const names = [base(toks[0] ?? "")]
+  if (/^(node|bun|deno|python3?|npx|env)$/.test(names[0]) && toks[1]) names.push(base(toks[1]))
+  return AGENT_ORDER.find((a) => names.includes(AGENT_BIN[a])) ?? null
+}
+
+/**
+ * Which agent is running in a pane **right now**, read from its tty.
+ *
+ * Not from what Reado remembers launching: the user starts agents themselves and
+ * quits them without telling us, and both mistakes hurt — the launch command
+ * typed into a running agent, which reads it as a prompt (the "it sent the wrong
+ * command" bug), or a prompt typed into a bare shell, which *executes* it.
+ *
+ * The answer also corrects the bookkeeping, so the synchronous readers of
+ * `agentTerminals` — which pane is a shell, whether to offer an agent action —
+ * stop being wrong from the first ask. Where the tty can't be asked (Windows, or
+ * a pane whose shell hasn't spawned) what Reado remembers is all there is.
+ */
+export async function terminalAgent(id: string): Promise<Agent | null> {
+  const before = useTerminals.getState()
+  const remembered = before.agentTerminals.includes(id)
+    ? ((before.lastAgent as Agent | null) ?? DEFAULT_AGENT)
+    : null
+  const line = await ptyForeground(id).catch(() => null)
+  if (!line) return remembered
+  const running = agentInCommand(line)
+  const term = useTerminals.getState()
+  if (running) term.markAgent(id, running)
+  else if (term.agentTerminals.includes(id)) term.unmarkAgent(id)
+  return running
+}
+
+/** The pane a prompt belongs in: the focused one when an agent is running in it,
+ *  otherwise any pane that is running one. A prompt goes to the agent the user
+ *  already has open — not into a second one launched beside it. */
+async function paneRunningAgent(): Promise<string | null> {
+  const term = useTerminals.getState()
+  const ids = [term.activeId, ...term.sessions.map((s) => s.id)].filter((id): id is string => !!id)
+  for (const id of new Set(ids)) {
+    if (await terminalAgent(id)) return id
+  }
+  return null
+}
+
 /** Default agent when the user has never launched one. */
 const DEFAULT_AGENT: Agent = "claude-code"
 
@@ -303,13 +359,19 @@ export async function dispatchToAgent(prompt: string): Promise<boolean> {
   // Reado just gave the agent something to do: this is the only moment it knows
   // work has *started*. Nothing else tells it — `session_done` reports the end.
   useMascot.getState().working()
-  const term = useTerminals.getState()
-  const id = term.activeId ?? term.add()
-  if (term.agentTerminals.includes(id)) {
-    await pasteAndSubmit(id, prompt)
+  // Ask the panes what they are actually running before deciding which of the
+  // two commands this is — the prompt, or the one that launches an agent.
+  const running = await paneRunningAgent()
+  if (running) {
+    const term = useTerminals.getState()
+    if (running !== term.activeId) term.setActive(running)
+    term.toggle(true)
+    await pasteAndSubmit(running, prompt)
     void noticeSent()
     return true
   }
+  const term = useTerminals.getState()
+  const id = term.activeId ?? term.add()
   // Reuse the last agent, else auto-pick the first one actually installed.
   const agent = (term.lastAgent as Agent | null) ?? (await firstInstalledAgent())
   // Never launch-and-paste into a shell where the agent binary is missing.

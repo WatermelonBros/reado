@@ -302,6 +302,7 @@ pub fn run() {
             pty::pty_default_shell,
             pty::pty_write,
             pty::pty_resize,
+            pty::pty_foreground,
             pty::pty_kill,
             lsp::lsp_start,
             lsp::lsp_init_options,

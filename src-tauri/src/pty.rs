@@ -314,6 +314,40 @@ fn terminate(session: &mut Session) {
     let _ = session.child.kill();
 }
 
+/// The command line running in the foreground of a pane's tty — `claude …`,
+/// `zsh`, `cargo test …` — or `None` when the pane has no session (or on
+/// Windows, which has no tty process group to ask).
+///
+/// Whether an agent is running in a pane is a fact about the tty, and not
+/// something Reado can know from having launched one: the user starts agents
+/// themselves and quits them without telling us. Asking the OS is the only
+/// answer that is right in both directions — an agent we never launched, and one
+/// that has since exited.
+#[tauri::command]
+pub fn pty_foreground(state: State<PtyState>, id: String) -> Option<String> {
+    #[cfg(unix)]
+    {
+        let pgrp = {
+            let sessions = state.sessions.lock().ok()?;
+            sessions.get(&id)?.master.process_group_leader()?
+        };
+        // The whole command line, not the process name: an agent CLI is usually
+        // a script run by its interpreter, so `comm` says "node" where `args`
+        // says which agent it is.
+        let out = crate::proc::command("ps")
+            .args(["-o", "args=", "-p", &pgrp.to_string()])
+            .output()
+            .ok()?;
+        let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        (!line.is_empty()).then_some(line)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (state, id);
+        None
+    }
+}
+
 /// Kill a session and drop it from the registry.
 #[tauri::command]
 pub fn pty_kill(state: State<PtyState>, id: String) -> Result<(), String> {

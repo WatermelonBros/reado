@@ -685,8 +685,8 @@
       "password": "Das Passwortfeld wurde auf dieser Seite nicht gefunden.",
       "otp": "Das Feld für den Einmalcode wurde auf dieser Seite nicht gefunden."
     },
-    "accessRequest": "Der Agent hat Zugriff auf diese Seite angefragt. Wenn du ihn erlaubst, sieht er, was du hier eingibst — achte auf Passwörter oder Geheimnisse, die du nicht teilen willst.",
-    "grant": "Für diese Seite erlauben",
+    "accessRequest": "Der Agent hat Zugriff auf diese Website angefragt. Wenn du ihn erlaubst, sieht er, was du hier eingibst — achte auf Passwörter oder Geheimnisse, die du nicht teilen willst. Die Erlaubnis gilt zwei Tage für diese Website; der Agent-Schalter nimmt sie zurück.",
+    "grant": "Für diese Website erlauben",
     "deny": "Jetzt nicht"
   },
   "inspector": {

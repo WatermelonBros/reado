@@ -199,13 +199,17 @@ interface TerminalsState {
   /** Restart a pane in place: swap its id so its <Terminal> remounts (kills the
    *  old PTY, spawns a fresh shell) while keeping its slot in the layout. */
   restart: (id: string) => void
-  /** Pane ids where Reado launched an AI agent (so prompts go to the agent, not a
-   *  bare shell). */
+  /** Pane ids known to be running an AI agent (so prompts go to the agent, not a
+   *  bare shell). Reado's own record of what it launched, corrected against the
+   *  tty by `terminalAgent` — the user launches and quits agents too. */
   agentTerminals: string[]
   /** The last agent the user launched (the default for new prompts), persisted. */
   lastAgent: string | null
   /** Mark a pane as running `agent` and remember it as the last used. */
   markAgent: (id: string, agent: string) => void
+  /** Forget that a pane runs an agent — it quit, and what is there now is a
+   *  shell that would *execute* a prompt written into it. */
+  unmarkAgent: (id: string) => void
   /** Reorder tabs: drop the group `id` before (or `after`) `targetId`. */
   moveGroup: (id: string, targetId: string, after?: boolean) => void
   /** Remove a whole group (tab) and all its panes. */
@@ -333,6 +337,13 @@ export const useTerminals = create<TerminalsState>()(
             : [...s.agentTerminals, id],
           lastAgent: agent,
         })),
+
+      unmarkAgent: (id) =>
+        set((s) =>
+          s.agentTerminals.includes(id)
+            ? { agentTerminals: s.agentTerminals.filter((t) => t !== id) }
+            : s,
+        ),
 
       moveGroup: (id, targetId, after = false) =>
         set((s) => {

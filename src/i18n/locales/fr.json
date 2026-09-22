@@ -685,8 +685,8 @@
       "password": "Champ mot de passe introuvable sur cette page.",
       "otp": "Champ du code à usage unique introuvable sur cette page."
     },
-    "accessRequest": "L'agent a demandé l'accès à cette page. Si vous l'autorisez, il verra ce que vous saisissez ici — attention aux mots de passe ou secrets que vous ne voulez pas partager.",
-    "grant": "Autoriser pour cette page",
+    "accessRequest": "L'agent a demandé l'accès à ce site. Si vous l'autorisez, il verra ce que vous saisissez ici — attention aux mots de passe ou secrets que vous ne voulez pas partager. L'autorisation vaut deux jours pour ce site ; l'interrupteur de l'agent la retire.",
+    "grant": "Autoriser pour ce site",
     "deny": "Pas maintenant"
   },
   "inspector": {

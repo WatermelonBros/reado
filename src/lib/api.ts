@@ -8,7 +8,7 @@
 // Route every command through the traced wrapper so the IPC boundary (command
 // name, duration, outcome) is logged without changing any call site.
 
-import type { VaultItem, VaultStatus } from "@/lib/vault"
+import type { VaultItem, VaultSecret, VaultStatus } from "@/lib/vault"
 import { tracedInvoke as invoke } from "./logger"
 import { useSettings } from "./store"
 import { profileFor } from "./terminalProfiles"
@@ -1361,6 +1361,10 @@ export const ptyDefaultShell = () => invoke<string>("pty_default_shell")
  *  does, so a command typed into a brand-new pane is never lost. */
 export const ptyWrite = (id: string, data: string) => invoke<void>("pty_write", { id, data })
 
+/** The command line running in the foreground of a pane's tty, or null when the
+ *  pane has no shell yet (and on Windows, which has no tty process group). */
+export const ptyForeground = (id: string) => invoke<string | null>("pty_foreground", { id })
+
 /**
  * Send a command to a terminal and submit it. The text and the Enter key are
  * sent as two separate writes: a TUI agent (Claude/Codex use Ink) otherwise
@@ -1574,8 +1578,8 @@ export const vaultUnlock = (password: string) => invoke<void>("vault_unlock", { 
 /** The logins matching a page's origin — ids and usernames, never a secret. */
 export const vaultLookup = (url: string) => invoke<VaultItem[]>("vault_lookup", { url })
 
-/** One item's password, fetched at the moment of the fill. */
-export const vaultSecret = (id: string) => invoke<string>("vault_secret", { id })
+/** One item's account name and password, fetched at the moment of the fill. */
+export const vaultSecret = (id: string) => invoke<VaultSecret>("vault_secret", { id })
 
 /** One item's current one-time code. */
 export const vaultOtp = (id: string) => invoke<string>("vault_otp", { id })

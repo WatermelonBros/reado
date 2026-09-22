@@ -36,6 +36,20 @@ static OP_SESSION: Mutex<Option<(String, String)>> = Mutex::new(None);
 /// call — which would *add* a prompt per command instead of removing them.
 static OP_SIGNIN_FAILED: Mutex<bool> = Mutex::new(false);
 
+/// The login list `op item list` prints, and when it was fetched.
+///
+/// Every `op` invocation is one approval prompt from the 1Password app, and this
+/// list is the *same document* for every site — `op` is not asked to filter, the
+/// matching happens here. Fetching it once and reusing it is the difference
+/// between a prompt per page and a prompt per session. It holds titles, ids and
+/// URLs — never a password, which is still fetched at the moment of the fill.
+static OP_LIST: Mutex<Option<(std::time::Instant, String)>> = Mutex::new(None);
+
+/// How long a cached login list stays good. Long enough that a sign-in walking
+/// three origins asks once; short enough that a login added in the 1Password app
+/// shows up without restarting Reado.
+const OP_LIST_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+
 /// The CLI we drive, preferring 1Password when both are installed (it brokers its
 /// own biometric unlock, so it needs no session handling from us).
 ///
@@ -63,6 +77,16 @@ pub struct VaultItem {
     pub id: String,
     pub title: String,
     pub username: String,
+    pub has_otp: bool,
+}
+
+/// What one fill needs, read in a single CLI invocation. Request-scoped like
+/// every secret here: handed back once and dropped, never cached.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultSecret {
+    pub username: String,
+    pub password: String,
     pub has_otp: bool,
 }
 
@@ -253,30 +277,73 @@ fn op_urls(item: &serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// The ids of `op item list` entries whose stored URLs match the page, ranked.
-fn op_matches(list_json: &str, page_host: &str) -> Vec<(u8, String, String)> {
-    let items: Vec<serde_json::Value> = serde_json::from_str(list_json).unwrap_or_default();
-    let mut out: Vec<(u8, String, String)> = items
-        .iter()
-        .filter_map(|it| {
-            let id = it.get("id")?.as_str()?.to_string();
-            let title = it
-                .get("title")
-                .and_then(|t| t.as_str())
-                .unwrap_or("")
-                .to_string();
-            let r = best_rank(&op_urls(it), page_host)?;
-            Some((r, id, title))
-        })
-        .collect();
-    out.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.2.cmp(&b.2)));
-    out
+/// The full login list, fetched at most once per [`OP_LIST_TTL`].
+fn op_list() -> Result<String, String> {
+    let cached = OP_LIST.lock().ok().and_then(|g| {
+        g.as_ref()
+            .filter(|(at, _)| at.elapsed() < OP_LIST_TTL)
+            .map(|(_, json)| json.clone())
+    });
+    if let Some(json) = cached {
+        return Ok(json);
+    }
+    let json = op_run(&["item", "list", "--categories", "Login", "--format", "json"])?;
+    if let Ok(mut g) = OP_LIST.lock() {
+        *g = Some((std::time::Instant::now(), json.clone()));
+    }
+    Ok(json)
 }
 
-/// The username and whether a one-time-password field exists, from a full
-/// `op item get --format json` document. The OTP *secret* is never read here —
-/// only its presence, so the UI knows whether to offer the action.
-fn op_detail(item_json: &str) -> (String, bool) {
+/// Forget the cached list, so an item saved a moment ago is offered by the next
+/// lookup instead of five minutes from now.
+fn op_forget_list() {
+    if let Ok(mut g) = OP_LIST.lock() {
+        *g = None;
+    }
+}
+
+/// The `op item list` entries whose stored URLs match the page, ranked.
+///
+/// Everything the list shows comes out of that one document: `op item list`
+/// already carries the account name as `additional_information`, which is what
+/// 1Password itself prints under the title. Reading each match with its own
+/// `op item get` is what turned one fill into a wall of approval prompts —
+/// whether an item also holds a one-time code is learned from the fill, which
+/// reads the item anyway.
+fn op_items(list_json: &str, page_host: &str) -> Vec<VaultItem> {
+    let items: Vec<serde_json::Value> = serde_json::from_str(list_json).unwrap_or_default();
+    let mut ranked: Vec<(u8, VaultItem)> = items
+        .iter()
+        .filter_map(|it| {
+            let r = best_rank(&op_urls(it), page_host)?;
+            Some((
+                r,
+                VaultItem {
+                    id: it.get("id")?.as_str()?.to_string(),
+                    title: str_at(it, "title"),
+                    username: str_at(it, "additional_information"),
+                    has_otp: false,
+                },
+            ))
+        })
+        .collect();
+    sort_items(&mut ranked);
+    ranked.into_iter().map(|(_, i)| i).collect()
+}
+
+/// A string field of a JSON object, or "" when it is absent or isn't a string.
+fn str_at(v: &serde_json::Value, key: &str) -> String {
+    v.get(key)
+        .and_then(|x| x.as_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// What a fill needs, out of one `op item get --format json --reveal`: the
+/// account name, the password, and whether a one-time-password field exists. The
+/// OTP *secret* is not read here — `vault_otp` asks `op` for the current code at
+/// the moment the user asks for it.
+fn op_secret(item_json: &str) -> VaultSecret {
     let doc: serde_json::Value = serde_json::from_str(item_json).unwrap_or_default();
     let fields = doc
         .get("fields")
@@ -293,17 +360,29 @@ fn op_detail(item_json: &str) -> (String, bool) {
                     .filter_map(|v| v.as_str())
                     .any(|v| v.eq_ignore_ascii_case(want))
             })
-            .and_then(|f| f.get("value"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string()
+            .map(|f| str_at(f, "value"))
+            .unwrap_or_default()
     };
-    let has_otp = fields.iter().any(|f| {
-        f.get("type")
-            .and_then(|t| t.as_str())
-            .is_some_and(|t| t.eq_ignore_ascii_case("OTP"))
-    });
-    (field("username"), has_otp)
+    VaultSecret {
+        username: field("username"),
+        password: field("password"),
+        has_otp: fields.iter().any(|f| {
+            f.get("type")
+                .and_then(|t| t.as_str())
+                .is_some_and(|t| t.eq_ignore_ascii_case("OTP"))
+        }),
+    }
+}
+
+/// The same three things out of a `bw get item` document.
+fn bw_secret(item_json: &str) -> VaultSecret {
+    let doc: serde_json::Value = serde_json::from_str(item_json).unwrap_or_default();
+    let login = doc.get("login").cloned().unwrap_or_default();
+    VaultSecret {
+        username: str_at(&login, "username"),
+        password: str_at(&login, "password"),
+        has_otp: !str_at(&login, "totp").is_empty(),
+    }
 }
 
 /// `bw list items --url …` already filters by URI, but its matching is looser than
@@ -430,22 +509,7 @@ pub async fn vault_lookup(url: String) -> Result<Vec<VaultItem>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let host = host_of(&url).ok_or("not a URL")?;
         match backend().ok_or("no password manager CLI found")? {
-            "op" => {
-                let list = op_run(&["item", "list", "--categories", "Login", "--format", "json"])?;
-                op_matches(&list, &host)
-                    .into_iter()
-                    .map(|(_, id, title)| {
-                        let detail = op_run(&["item", "get", &id, "--format", "json"])?;
-                        let (username, has_otp) = op_detail(&detail);
-                        Ok(VaultItem {
-                            id,
-                            title,
-                            username,
-                            has_otp,
-                        })
-                    })
-                    .collect()
-            }
+            "op" => Ok(op_items(&op_list()?, &host)),
             _ => Ok(bw_items(
                 &run("bw", &["list", "items", "--url", &url], None)?,
                 &host,
@@ -456,13 +520,17 @@ pub async fn vault_lookup(url: String) -> Result<Vec<VaultItem>, String> {
     .map_err(|e| e.to_string())?
 }
 
-/// One item's password, fetched at the moment of the fill.
+/// One item's account name and password, fetched at the moment of the fill —
+/// one invocation, so one approval prompt. The one-time code is not in it: a
+/// code fetched before it is asked for has expired by the time it is used.
 #[tauri::command]
-pub async fn vault_secret(id: String) -> Result<String, String> {
+pub async fn vault_secret(id: String) -> Result<VaultSecret, String> {
     tauri::async_runtime::spawn_blocking(move || {
         match backend().ok_or("no password manager CLI found")? {
-            "op" => op_run(&["item", "get", &id, "--fields", "label=password", "--reveal"]),
-            _ => run("bw", &["get", "password", &id], None),
+            "op" => Ok(op_secret(&op_run(&[
+                "item", "get", &id, "--format", "json", "--reveal",
+            ])?)),
+            _ => Ok(bw_secret(&run("bw", &["get", "item", &id], None)?)),
         }
     })
     .await
@@ -500,6 +568,8 @@ pub async fn vault_create(url: String, title: String, username: String) -> Resul
                     &format!("username={username}"),
                     &format!("password={password}"),
                 ])?;
+                // The list this came from is now one item out of date.
+                op_forget_list();
             }
             _ => {
                 let doc = bw_new_item(&url, &title, &username, &password);
@@ -564,27 +634,59 @@ mod tests {
     fn op_items_are_matched_by_url_and_ordered_exact_first() {
         let list = r#"[
           {"id":"a","title":"Zeta","urls":[{"href":"https://app.example.com"}]},
-          {"id":"b","title":"Alpha","urls":[{"href":"https://example.com/login"}]},
+          {"id":"b","title":"Alpha","additional_information":"me@example.com",
+            "urls":[{"href":"https://example.com/login"}]},
           {"id":"c","title":"Other","urls":[{"href":"https://elsewhere.test"}]},
           {"id":"d","title":"Beta","overview":{"urls":[{"url":"https://example.com"}]}}
         ]"#;
-        let m = op_matches(list, "example.com");
-        let ids: Vec<&str> = m.iter().map(|(_, id, _)| id.as_str()).collect();
+        let m = op_items(list, "example.com");
+        let ids: Vec<&str> = m.iter().map(|i| i.id.as_str()).collect();
         // b and d are exact (ordered by title: Alpha, Beta), a is the subdomain
         // relation, c doesn't match at all.
         assert_eq!(ids, ["b", "d", "a"]);
+        // The account name rides along in the list — no second `op` call for it.
+        assert_eq!(m[0].username, "me@example.com");
     }
 
     #[test]
-    fn op_detail_reads_the_username_and_spots_a_one_time_password() {
+    fn op_secret_reads_the_login_and_spots_a_one_time_password() {
         let doc = r#"{"fields":[
           {"id":"username","value":"me@example.com"},
           {"id":"password","value":"s3cr3t"},
           {"id":"totp","label":"one-time password","type":"OTP","value":"otpauth://x"}
         ]}"#;
-        assert_eq!(op_detail(doc), ("me@example.com".into(), true));
+        assert_eq!(
+            op_secret(doc),
+            VaultSecret {
+                username: "me@example.com".into(),
+                password: "s3cr3t".into(),
+                has_otp: true,
+            }
+        );
         let no_otp = r#"{"fields":[{"label":"username","value":"u"}]}"#;
-        assert_eq!(op_detail(no_otp), ("u".into(), false));
+        assert_eq!(
+            op_secret(no_otp),
+            VaultSecret {
+                username: "u".into(),
+                password: String::new(),
+                has_otp: false,
+            }
+        );
+    }
+
+    #[test]
+    fn bw_secret_reads_the_login_from_one_item_document() {
+        let doc = r#"{"id":"1","login":{"username":"u","password":"p","totp":"seed"}}"#;
+        assert_eq!(
+            bw_secret(doc),
+            VaultSecret {
+                username: "u".into(),
+                password: "p".into(),
+                has_otp: true,
+            }
+        );
+        // No login section at all (a note, a card) is empty, not a panic.
+        assert_eq!(bw_secret("{}"), VaultSecret::default());
     }
 
     #[test]

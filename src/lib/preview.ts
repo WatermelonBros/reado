@@ -5,10 +5,27 @@
  * created/parked/closed by `BrowserPanel`, which measures its placeholder and
  * calls the `preview_*` commands. Kept tiny on purpose.
  */
-import { useEffect } from "react"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { VaultPick } from "./vault"
+
+/** How long the agent keeps access to an origin the user granted it for.
+ *
+ *  Per *origin* and across restarts, not per URL: a sign-in walks several pages
+ *  of one site, and a gate that re-asks at every step trains the user to click
+ *  through it without reading — which is the one thing a gate must not do. The
+ *  escape hatch is the `agentAccess` toggle, which drops every grant at once. */
+const GRANT_TTL = 48 * 60 * 60 * 1000
+
+/** The origin a grant is keyed on — or the string itself when it isn't a URL we
+ *  can reduce, so an unparseable address is asked about as given. */
+export function originOf(url: string): string {
+  try {
+    return new URL(url).origin
+  } catch {
+    return url
+  }
+}
 
 /** A sensible default dev-server URL; the user edits it in the pane's URL bar. */
 const DEFAULT_URL = "http://localhost:5173"
@@ -96,9 +113,9 @@ interface PreviewState {
    *  from everything that crosses to the agent. Never persisted; dropped the
    *  moment the pane navigates or closes. */
   secrets: string[]
-  /** The page URL the user granted the agent access to while a credential is in
-   *  it. One page, this run only — never persisted. */
-  grantedUrl: string | null
+  /** Origins the user granted the agent access to while a credential was in the
+   *  page, each with the epoch ms it stops counting (see `GRANT_TTL`). */
+  grants: Record<string, number>
   /** A refused agent command waiting on the user: the page it asked about. The
    *  agent already got its refusal; this only drives Reado's own prompt. */
   accessRequest: string | null
@@ -129,7 +146,7 @@ interface PreviewState {
   setAgentAccess: (on: boolean) => void
   addAllowedOrigin: (origin: string) => void
   addSecret: (value: string) => void
-  grantPage: (url: string | null) => void
+  grantPage: (url: string) => void
   setVaultPick: (pick: VaultPick | null) => void
   setAccessRequest: (url: string | null) => void
   setDevice: (d: { w: number; h: number; label: string } | null) => void
@@ -156,7 +173,7 @@ export const usePreview = create<PreviewState>()(
       agentAccess: true,
       allowlist: [],
       secrets: [],
-      grantedUrl: null,
+      grants: {},
       accessRequest: null,
       vaultPick: null,
       device: null,
@@ -165,13 +182,12 @@ export const usePreview = create<PreviewState>()(
       logs: [],
       net: [],
       openPane: (url) => set((s) => ({ open: true, url: url ?? s.url })),
-      // A new URL is a new page: the credentials Reado filled are gone from it, and
-      // so is any access the user granted for it.
+      // A new URL is a new page: the credentials Reado filled are gone from it.
+      // The grant is not — it is the user's decision about a *site*, and clearing
+      // it here is what made one sign-in ask over and over.
       setUrl: (url) =>
         set((s) =>
-          s.url === url
-            ? { url }
-            : { url, secrets: [], grantedUrl: null, accessRequest: null, vaultPick: null },
+          s.url === url ? { url } : { url, secrets: [], accessRequest: null, vaultPick: null },
         ),
       toggleInspector: () => set((s) => ({ inspector: !s.inspector })),
       setInspectorPos: (p) => set({ inspectorPos: p }),
@@ -179,12 +195,24 @@ export const usePreview = create<PreviewState>()(
       setInspectorDetached: (inspectorDetached) => set({ inspectorDetached }),
       setInspectRequest: (p) => set({ inspectRequest: p }),
       setPinRequest: (p) => set({ pinRequest: p }),
-      setAgentAccess: (on) => set({ agentAccess: on }),
+      // Turning the agent off revokes what it was granted: the toggle is the one
+      // control that has to mean "and nothing it was allowed before, either".
+      setAgentAccess: (on) => set(on ? { agentAccess: true } : { agentAccess: false, grants: {} }),
       addAllowedOrigin: (origin) =>
         set((s) => (s.allowlist.includes(origin) ? s : { allowlist: [...s.allowlist, origin] })),
       addSecret: (value) =>
         set((s) => (s.secrets.includes(value) ? s : { secrets: [...s.secrets, value] })),
-      grantPage: (grantedUrl) => set({ grantedUrl, accessRequest: null }),
+      grantPage: (url) =>
+        set((s) => {
+          const now = Date.now()
+          // Expired origins go on the way past, so the persisted record is the
+          // grants that are still live rather than every site ever signed into.
+          const live = Object.entries(s.grants).filter(([, until]) => until > now)
+          return {
+            grants: { ...Object.fromEntries(live), [originOf(url)]: now + GRANT_TTL },
+            accessRequest: null,
+          }
+        }),
       setVaultPick: (vaultPick) => set({ vaultPick }),
       setAccessRequest: (accessRequest) => set({ accessRequest }),
       setDevice: (device) => set({ device }),
@@ -202,17 +230,17 @@ export const usePreview = create<PreviewState>()(
           logs: [],
           net: [],
           secrets: [],
-          grantedUrl: null,
           accessRequest: null,
           vaultPick: null,
         }),
     }),
-    // Persist the URL and the agent opt-in across restarts.
+    // Persist the URL, the agent opt-in, and the access the user granted it.
     {
       name: "reado.preview",
       partialize: (s) => ({
         url: s.url,
         agentAccess: s.agentAccess,
+        grants: s.grants,
         allowlist: s.allowlist,
         paneWidth: s.paneWidth,
         inspectorPos: s.inspectorPos,
@@ -223,16 +251,9 @@ export const usePreview = create<PreviewState>()(
   ),
 )
 
-/** Open DOM dialog count (Modal/Drawer). The preview is a native child webview and
- *  paints above *all* DOM, so BrowserPanel hides it while any dialog is up. Counted
- *  here rather than allowlisted per-store, so a new dialog can't forget to hide it. */
-export const useDialogs = create<{ count: number }>()(() => ({ count: 0 }))
-
-/** Register an open dialog for as long as `open` is true. */
-export function useDialogOverlay(open: boolean): void {
-  useEffect(() => {
-    if (!open) return
-    useDialogs.setState((s) => ({ count: s.count + 1 }))
-    return () => useDialogs.setState((s) => ({ count: Math.max(0, s.count - 1) }))
-  }, [open])
+/** Has the user granted the agent this page's origin, and is that grant still
+ *  good? The only way the gate is allowed to answer "yes". */
+export function isPageGranted(url: string): boolean {
+  const until = usePreview.getState().grants[originOf(url)]
+  return until !== undefined && until > Date.now()
 }

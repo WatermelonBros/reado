@@ -685,8 +685,8 @@
       "password": "Non ho trovato il campo password in questa pagina.",
       "otp": "Non ho trovato il campo del codice temporaneo in questa pagina."
     },
-    "accessRequest": "L'agente ha richiesto accesso ai dati di questa pagina. Se accetti, l'agente può vedere cosa inserisci qui — attenzione a password o segreti che non vuoi condividere.",
-    "grant": "Consenti per questa pagina",
+    "accessRequest": "L'agente ha richiesto accesso ai dati di questo sito. Se accetti, l'agente può vedere cosa inserisci qui — attenzione a password o segreti che non vuoi condividere. Il consenso vale per questo sito per due giorni; l'interruttore dell'agente lo revoca.",
+    "grant": "Consenti per questo sito",
     "deny": "Non ora"
   },
   "inspector": {

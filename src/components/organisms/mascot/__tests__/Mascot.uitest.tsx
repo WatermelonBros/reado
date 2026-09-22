@@ -124,6 +124,36 @@ describe("the bubble follows the corner it is parked in", () => {
     expect(bubble.dataset.bubbleSide).toBe(corner.startsWith("bottom") ? "bottom" : "top")
   })
 
+  it.each(CORNERS)("%s clips the text inside the outline, not in the tail's band", (corner) => {
+    // The bug this guards: the clamp and the tail's room were on the *same*
+    // element, and `overflow: hidden` cuts at the padding edge — so the line the
+    // clamp meant to hide was painted across the 15px the tail hangs in, below
+    // the bubble's own outline. The clipped element must carry no padding of its
+    // own; the box around it is what reserves the tail's room.
+    render(<MascotCompanion state="idle" text="done" corner={corner} />)
+    const clamped = screen.getByRole("status")
+    expect(clamped.style.overflow).toBe("hidden")
+    expect(clamped.style.padding).toBe("")
+    expect(clamped.style.paddingTop).toBe("")
+    expect(clamped.style.paddingBottom).toBe("")
+    const box = clamped.parentElement as HTMLElement
+    const tailSide = corner.startsWith("bottom") ? box.style.paddingBottom : box.style.paddingTop
+    expect(tailSide).toBe("25px") // 10 of air + the tail's 15
+  })
+
+  it("breaks a path too long for the bubble instead of running out of it", () => {
+    // An agent says file paths: one unbroken token wider than the bubble has
+    // nowhere to wrap, and went straight out through the side.
+    render(
+      <MascotCompanion
+        state="idle"
+        text="/Users/u/very/long/path/to/a/File.tsx"
+        corner="bottom-right"
+      />,
+    )
+    expect(screen.getByRole("status").style.overflowWrap).toBe("anywhere")
+  })
+
   it("draws bubble and tail as one closed path", () => {
     const d = bubblePath(200, 80, 170)
     // One `M`, one `Z`: a second subpath would be a tail drawn separately, which

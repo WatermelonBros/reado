@@ -685,8 +685,8 @@
       "password": "Couldn't find the password field on this page.",
       "otp": "Couldn't find the one-time code field on this page."
     },
-    "accessRequest": "The agent asked for access to this page. If you allow it, the agent can see what you enter here — mind any password or secret you don't want to share.",
-    "grant": "Allow for this page",
+    "accessRequest": "The agent asked for access to this site. If you allow it, the agent can see what you enter here — mind any password or secret you don't want to share. It stays allowed for this site for two days; the agent toggle takes it back.",
+    "grant": "Allow for this site",
     "deny": "Not now"
   },
   "inspector": {
