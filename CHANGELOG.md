@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.23.2] — 2026-09-22
+
 ### Fixed
 
 - **"Send to the agent" sends the prompt when an agent is already running.** It
@@ -2598,7 +2600,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.23.1...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.23.2...HEAD
+[1.23.2]: https://github.com/WatermelonBros/reado/compare/v1.23.1...v1.23.2
 [1.23.1]: https://github.com/WatermelonBros/reado/compare/v1.23.0...v1.23.1
 [1.23.0]: https://github.com/WatermelonBros/reado/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/WatermelonBros/reado/compare/v1.21.0...v1.22.0
