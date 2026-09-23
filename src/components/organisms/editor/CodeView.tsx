@@ -1,14 +1,8 @@
 import { autocompletion } from "@codemirror/autocomplete"
 import { historyField } from "@codemirror/commands"
 import { bracketMatching, indentUnit, LanguageDescription } from "@codemirror/language"
-import { forEachDiagnostic } from "@codemirror/lint"
-import { selectSelectionMatches } from "@codemirror/search"
-import { Compartment, EditorState } from "@codemirror/state"
+import { EditorState } from "@codemirror/state"
 import { EditorView, highlightWhitespace } from "@codemirror/view"
-import {
-  readText as clipboardReadText,
-  writeText as clipboardWriteText,
-} from "@tauri-apps/plugin-clipboard-manager"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ContextMenu } from "@/components/atoms/ContextMenu"
@@ -17,82 +11,36 @@ import { CommentThread } from "@/components/organisms/CommentThread"
 import { type RibbonMark, StructureRibbon } from "@/components/organisms/StructureRibbon"
 import type { MessageKey } from "@/i18n"
 import { dispatchToAgent } from "@/lib/agents"
-import {
-  type Comment,
-  type CommentType,
-  type Context,
-  type EditorConfig as EditorConfigProps,
-  editorConfigFor,
-  findDefinition,
-  gitBlame,
-  gitWorkingDiffLines,
-  readFile,
-  writeFile,
-} from "@/lib/api"
-import { blameGutter, inlineBlame } from "@/lib/blameGutter"
+import { type Comment, type CommentType, type Context, findDefinition, readFile } from "@/lib/api"
 import { bookmarkGutter } from "@/lib/bookmarkGutter"
 import { useBookmarks } from "@/lib/bookmarks"
 import { bracketColors } from "@/lib/bracketColors"
-import { changedLinesHighlight, diffGutter } from "@/lib/changedLines"
-import {
-  actionsAtCursor,
-  GROUP_LABEL,
-  groupOf,
-  organizeImports,
-  runAction,
-} from "@/lib/codeActions"
+import { changedLinesHighlight } from "@/lib/changedLines"
+import { actionsAtCursor, GROUP_LABEL, groupOf, runAction } from "@/lib/codeActions"
 import { colorSwatches, type SwatchHit } from "@/lib/colorSwatch"
 import { commentGutter, type LineComments } from "@/lib/commentGutter"
 import { toRelative, useComments } from "@/lib/comments"
 import { useDiagnostics } from "@/lib/diagnostics"
-import {
-  applyEol,
-  applyHygiene,
-  compareWithSaved,
-  detectEol,
-  detectIndent,
-  type Eol,
-  encodingFor,
-  eolFor,
-  formatDocument,
-  setEditorConfig as recordEditorConfig,
-  registerView,
-  saveAs,
-  textToSave,
-  useDocInfo,
-} from "@/lib/docInfo"
+import { detectEol, registerView, useDocInfo } from "@/lib/docInfo"
 import { grammarSupport } from "@/lib/extGrammars"
 import { resolvedLanguageId } from "@/lib/extLanguages"
 import { languages } from "@/lib/languages"
-import { createLogger, safeError } from "@/lib/logger"
 import {
-  fileSaved,
   hasServer,
   lspDefinition,
   lspHover,
   lspSupport,
   type ResolvedAction,
-  renameSymbolAt,
   useLspServers,
 } from "@/lib/lsp"
 import { enabledExtensions, useMarketplace } from "@/lib/marketplace"
 import { notify } from "@/lib/notice"
 import { extractSymbols } from "@/lib/outline"
-import { noteSelfWrite, useReadProgress } from "@/lib/readProgress"
+import { useReadProgress } from "@/lib/readProgress"
 import { composeExplainPrompt, composeSymbolExplainPrompt } from "@/lib/review"
-import {
-  clampRange,
-  FONT_SIZE_RANGE,
-  LETTER_SPACING_RANGE,
-  LINE_HEIGHT_RANGE,
-  useEditorActions,
-  useProject,
-  useSessions,
-  useSettings,
-} from "@/lib/store"
+import { useEditorActions, useProject, useSessions, useSettings } from "@/lib/store"
 import { testGutter } from "@/lib/testGutter"
 import { runTests, type TestStatus, testId, useTesting } from "@/lib/testing"
-import { isUntitled, useUntitled } from "@/lib/untitled"
 import { rootFor } from "@/lib/workspace"
 import { buildCodeExtensions } from "./buildCodeExtensions"
 import {
@@ -105,14 +53,11 @@ import {
   ThreadConnector,
 } from "./CodeOverlays"
 import { ColorPickerPopover } from "./ColorPickerPopover"
+import { editorContextMenuItems } from "./contextMenuItems"
 import {
   activeLineExt,
   ExternalReload,
-  findReferencesAt,
   focusExtension,
-  goToDefinitionAt,
-  goToImplementationAt,
-  goToTypeDefinitionAt,
   indentGuidesExt,
   lineNumbersExt,
   rulerExt,
@@ -121,8 +66,12 @@ import {
   useReconfigure,
   wrapExt,
 } from "./extensions"
-
-const log = createLogger("editor")
+import { useCompartments } from "./hooks/useCompartments"
+import { useDocInfoSync } from "./hooks/useDocInfoSync"
+import { useEditorSave } from "./hooks/useEditorSave"
+import { useGitGutters } from "./hooks/useGitGutters"
+import { useNonceEffect } from "./hooks/useNonceEffect"
+import { useReadingSettings } from "./hooks/useReadingSettings"
 
 /**
  * Undo histories of files whose editor was torn down.
@@ -192,61 +141,65 @@ export function CodeView({
   // there is one folder open, and silently resolves a second folder's file
   // against the first as soon as there are two.
   const fileRoot = useMemo(() => rootFor(path), [path])
+  const {
+    wrapComp,
+    colorComp,
+    bracketColorComp,
+    whitespaceComp,
+    langComp,
+    focusComp,
+    gutterComp,
+    blameComp,
+    bookmarkComp,
+    testComp,
+    tabSizeComp,
+    indentUnitComp,
+    lspComp,
+    completionComp,
+    changedComp,
+    diffComp,
+    lineNumbersComp,
+    activeLineComp,
+    indentGuidesComp,
+    bracketComp,
+    rulerComp,
+  } = useCompartments()
   const hostRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
+  const { saveFile, flushOnClose, autoSave, saveError, setSaveError } = useEditorSave(viewRef, {
+    path,
+    relPath,
+    fileRoot,
+    pinned,
+  })
   const autoSaveTimer = useRef<number | undefined>(undefined)
   const cursorSaveTimer = useRef<number | undefined>(undefined)
-  const wrapComp = useMemo(() => new Compartment(), [])
-  const colorComp = useMemo(() => new Compartment(), [])
-  const bracketColorComp = useMemo(() => new Compartment(), [])
-  const whitespaceComp = useMemo(() => new Compartment(), [])
-  const langComp = useMemo(() => new Compartment(), [])
-  const focusComp = useMemo(() => new Compartment(), [])
-  const gutterComp = useMemo(() => new Compartment(), [])
-  const blameComp = useMemo(() => new Compartment(), [])
-  const bookmarkComp = useMemo(() => new Compartment(), [])
-  const testComp = useMemo(() => new Compartment(), [])
-  const tabSizeComp = useMemo(() => new Compartment(), [])
-  const indentUnitComp = useMemo(() => new Compartment(), [])
-  const lspComp = useMemo(() => new Compartment(), [])
-  const completionComp = useMemo(() => new Compartment(), [])
   // Changes when a language server is installed, so the open file can pick it up.
   const serversNonce = useLspServers((s) => s.nonce)
-  const changedComp = useMemo(() => new Compartment(), [])
-  const diffComp = useMemo(() => new Compartment(), [])
-  const blame = useEditorActions((s) => s.blame)
-  const inlineBlameOn = useSettings((s) => s.inlineBlame)
-  const diffGutterOn = useSettings((s) => s.diffGutter)
   const indentSize = useDocInfo((s) => s.indentSize)
   const indentKind = useDocInfo((s) => s.indentKind)
-  const languageOverride = useDocInfo((s) => s.languageOverride)
   const stickyScroll = useSettings((s) => s.stickyScroll)
   const colorSwatchesOn = useSettings((s) => s.colorSwatches)
   // The swatch that was clicked, and so the literal a picker would rewrite.
   const [pickingColor, setPickingColor] = useState<SwatchHit | null>(null)
   // Reading controls (clamped numerics apply as CSS vars; the rest as compartments).
-  const fontSize = useSettings((s) => clampRange(s.fontSize, FONT_SIZE_RANGE))
-  const lineHeight = useSettings((s) => clampRange(s.lineHeight, LINE_HEIGHT_RANGE))
-  const letterSpacing = useSettings((s) => clampRange(s.letterSpacing, LETTER_SPACING_RANGE))
-  const lineNumbersMode = useSettings((s) => s.lineNumbers)
-  const activeLineMode = useSettings((s) => s.activeLine)
-  const indentGuidesMode = useSettings((s) => s.indentGuides)
-  const bracketMatchingOn = useSettings((s) => s.bracketMatching)
-  const bracketColorsOn = useSettings((s) => s.bracketPairColors)
-  const rulerColumn = useSettings((s) => s.rulerColumn)
-  /** What `.editorconfig` says about this file, once it has been read. */
-  const [editorConfig, setEditorConfig] = useState<EditorConfigProps | null>(null)
-  const cursorStyle = useSettings((s) => s.cursorStyle)
-  const cursorBlink = useSettings((s) => s.cursorBlink)
-  const scrollbar = useSettings((s) => s.scrollbar)
-  const suggestOnTyping = useSettings((s) => s.suggestOnTyping)
-  const inlineDiagnostics = useSettings((s) => s.inlineDiagnostics)
-  const lineNumbersComp = useMemo(() => new Compartment(), [])
-  const activeLineComp = useMemo(() => new Compartment(), [])
-  const indentGuidesComp = useMemo(() => new Compartment(), [])
-  const bracketComp = useMemo(() => new Compartment(), [])
-  const rulerComp = useMemo(() => new Compartment(), [])
+  const {
+    fontSize,
+    lineHeight,
+    letterSpacing,
+    lineNumbersMode,
+    activeLineMode,
+    indentGuidesMode,
+    bracketMatchingOn,
+    bracketColorsOn,
+    rulerColumn,
+    cursorStyle,
+    cursorBlink,
+    scrollbar,
+    suggestOnTyping,
+    inlineDiagnostics,
+  } = useReadingSettings()
   const setActiveThread = useComments((s) => s.setActive)
   const activeId = useComments((s) => s.activeId)
   const reanchoringId = useComments((s) => s.reanchoringId)
@@ -257,13 +210,9 @@ export function CodeView({
     const c = s.comments.find((x) => x.id === s.reanchoringId)
     return c?.messages[0]?.body.split("\n")[0] ?? ""
   })
-  const lastComposeNonce = useRef(composeNonce)
   const explainNonce = useEditorActions((s) => s.explainNonce)
   const peekNonce = useEditorActions((s) => s.peekNonce)
   const quickFixNonce = useEditorActions((s) => s.quickFixNonce)
-  const lastExplainNonce = useRef(explainNonce)
-  const lastPeekNonce = useRef(peekNonce)
-  const lastQuickFixNonce = useRef(quickFixNonce)
   const { t } = useTranslation()
 
   // Comment-overlay state, local to this file's view.
@@ -297,9 +246,6 @@ export function CodeView({
   } | null>(null)
   // Bumped on scroll/resize so the overlays re-read their anchor coordinates.
   const [, setTick] = useState(0)
-  // A failed write (read-only file, permission, disk full). Surfaced as a small
-  // dismissable banner so a save error is never swallowed silently.
-  const [saveError, setSaveError] = useState(false)
 
   // Group comments by their anchored start line for the gutter. A line is shown
   // "done" (green) only when every comment on it is resolved.
@@ -433,71 +379,6 @@ export function CodeView({
     })
   }
 
-  // Save the buffer to disk (Cmd/Ctrl+S). Never in PR mode: the bytes are the
-  // PR's (from a ref), so writing them would clobber the user's working tree.
-  const saveFile = async () => {
-    const view = viewRef.current
-    if (!view || pinned) return
-    // A scratch buffer has nowhere to be written back to: saving one is Save As.
-    if (isUntitled(path)) return saveAs()
-    // Opt-in save pipeline, applied only on write (never on read): format on
-    // save, then trim trailing whitespace and/or ensure a final newline. A
-    // formatter that fails or hangs is reported but never blocks the write.
-    const text = await textToSave(view)
-    if (viewRef.current !== view) return // the tab changed while formatting ran
-    noteSelfWrite(relPath) // our own save — don't let it mark the file unread
-    writeFile(fileRoot, relPath, text)
-      .then(() => {
-        useEditorActions.getState().setDirty(relPath, false)
-        setSaveError(false) // clear any prior failure on a successful save
-        fileSaved(view) // the formatter may have rewritten it; re-ask the server
-      })
-      .catch((e) => {
-        // The inline banner is the contextual surface; also log the raw error so
-        // a save failure is never fully swallowed for diagnostics.
-        log.error("file save failed", { path: relPath, error: safeError(e) })
-        setSaveError(true)
-      })
-  }
-
-  // Closing (or switching away from) a file with unsaved edits: write what is in
-  // the buffer, right now. `saveFile` cannot be reused — it drops the write when
-  // the tab changed under it, which is exactly the case here — and formatting is
-  // skipped on purpose: the formatter resolves "the active document", which by
-  // this point is the file being switched *to*.
-  const flushOnClose = (view: EditorView, root: string) => {
-    // The scratch buffer's disk is the store. This is what makes switching to
-    // another tab and back keep the text: the view unmounts, and its content
-    // has to land somewhere before it goes.
-    if (isUntitled(path)) {
-      useUntitled.getState().setText(path, view.state.doc.toString())
-      useEditorActions.getState().setDirty(relPath, false)
-      return
-    }
-    noteSelfWrite(relPath)
-    writeFile(
-      root,
-      relPath,
-      applyEol(applyHygiene(view.state.doc.toString(), relPath), eolFor(view)),
-      encodingFor(view),
-    )
-      .then(() => useEditorActions.getState().setDirty(relPath, false))
-      .catch((e) => log.error("flush on close failed", { path: relPath, error: safeError(e) }))
-  }
-
-  // Auto Save: write only when there are unsaved edits (avoids needless writes).
-  const autoSave = () => {
-    if (!useEditorActions.getState().isDirty(relPath)) return
-    // Auto Save must not open a Save As dialog behind the user's back — for a
-    // scratch buffer it means "park the text", which is all there is to do.
-    const view = viewRef.current
-    if (isUntitled(path)) {
-      if (view) useUntitled.getState().setText(path, view.state.doc.toString())
-      return
-    }
-    void saveFile()
-  }
-
   // In re-anchor mode the same gesture sets an orphan's new anchor instead of
   // opening the composer.
   const anchorOrCompose = (start: number, end: number) => {
@@ -614,29 +495,15 @@ export function CodeView({
   }
 
   // Respond to a compose request from the global shortcut / command palette.
-  useEffect(() => {
-    if (composeNonce === lastComposeNonce.current) return
-    lastComposeNonce.current = composeNonce
+  // startComposer reads live editor state on call; no need to re-bind.
+  useNonceEffect(composeNonce, () => {
     if (viewRef.current) startComposer(viewRef.current)
-    // startComposer reads live editor state on call; no need to re-bind.
-  }, [composeNonce])
+  })
 
   // Explain / Peek requested from the palette or menu (primary pane only).
-  useEffect(() => {
-    if (explainNonce === lastExplainNonce.current) return
-    lastExplainNonce.current = explainNonce
-    if (primary) explainSelection(false)
-  }, [explainNonce])
-  useEffect(() => {
-    if (peekNonce === lastPeekNonce.current) return
-    lastPeekNonce.current = peekNonce
-    if (primary) peekDefinition()
-  }, [peekNonce])
-  useEffect(() => {
-    if (quickFixNonce === lastQuickFixNonce.current) return
-    lastQuickFixNonce.current = quickFixNonce
-    if (primary) void openActionMenu()
-  }, [quickFixNonce])
+  useNonceEffect(explainNonce, () => primary && explainSelection(false))
+  useNonceEffect(peekNonce, () => primary && peekDefinition())
+  useNonceEffect(quickFixNonce, () => primary && void openActionMenu())
 
   // Create the editor once per file.
   useEffect(() => {
@@ -832,10 +699,6 @@ export function CodeView({
     bracketMatchingOn,
     bracketComp,
   ])
-  // `max_line_length` is the project's own answer about its line width, so it
-  // outranks the reader's ruler setting. `0` is editorconfig's explicit "off".
-  const effectiveRuler = editorConfig?.maxLineLength ?? rulerColumn
-  useReconfigure(viewRef, rulerComp, rulerExt(effectiveRuler), [effectiveRuler, rulerComp])
   useReconfigure(viewRef, bracketColorComp, bracketColorsOn ? bracketColors : [], [
     bracketColorsOn,
     bracketColorComp,
@@ -887,70 +750,19 @@ export function CodeView({
   const unit = indentKind === "tabs" ? "\t" : " ".repeat(indentSize)
   useReconfigure(viewRef, indentUnitComp, indentUnit.of(unit), [unit, indentUnitComp])
 
-  // Apply a manual language-mode override picked from the status bar.
-  useEffect(() => {
-    const view = viewRef.current
-    if (!view || !languageOverride) return
-    const desc = languages.find((l) => l.name === languageOverride)
-    if (!desc) {
-      view.dispatch({ effects: langComp.reconfigure([]) }) // Plain Text
-      return
-    }
-    desc.load().then((support) => {
-      viewRef.current?.dispatch({ effects: langComp.reconfigure(support) })
-    })
-  }, [languageOverride, langComp])
-
-  // Surface document info (line endings, indentation, language) to the status
-  // bar. Detected from the raw text, since CodeMirror normalises line endings.
-  // Only the primary pane drives the status bar.
-  useEffect(() => {
-    if (!primary) return
-    const desc = LanguageDescription.matchFilename(languages, path)
-    const ext = path.split(".").pop() ?? ""
-    const language = desc?.name ?? (ext ? ext.toUpperCase() : "Plain Text")
-    const indent = detectIndent(text)
-    useDocInfo.getState().set({
-      eol: detectEol(text),
-      encoding: encoding ?? "utf-8",
-      indentKind: indent.kind,
-      indentSize: indent.size,
-      language,
-      languageOverride: null,
-    })
-  }, [text, path, primary, encoding])
-
-  // `.editorconfig` outranks what the file looks like.
-  //
-  // Detection is a guess made from the bytes; the project's own file is the
-  // answer, and honouring it is why committing one is worth anything. Applied
-  // after the detection effect above (both run on open, in order), and recorded
-  // per file so the save paths can obey the trim / final-newline rules too.
-  useEffect(() => {
-    let cancelled = false
-    editorConfigFor(fileRoot, path)
-      .then((cfg) => {
-        if (cancelled) return
-        setEditorConfig(cfg.applies ? cfg : null)
-        recordEditorConfig(relPath, cfg)
-        if (!cfg.applies || !primary) return
-        const patch: { indentKind?: "spaces" | "tabs"; indentSize?: number; eol?: Eol } = {}
-        if (cfg.indentStyle) patch.indentKind = cfg.indentStyle === "tab" ? "tabs" : "spaces"
-        if (cfg.indentSize) patch.indentSize = cfg.indentSize
-        // `cr`-only endings are a real editorconfig value and not something
-        // Reado writes, so it is read as LF rather than silently mangled.
-        if (cfg.endOfLine === "lf" || cfg.endOfLine === "crlf") {
-          patch.eol = cfg.endOfLine.toUpperCase() as Eol
-        }
-        if (Object.keys(patch).length > 0) useDocInfo.getState().set(patch)
-      })
-      .catch(() => {
-        if (!cancelled) setEditorConfig(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [path, relPath, primary])
+  const editorConfig = useDocInfoSync(viewRef, {
+    text,
+    path,
+    relPath,
+    fileRoot,
+    primary,
+    encoding,
+    langComp,
+  })
+  // `max_line_length` is the project's own answer about its line width, so it
+  // outranks the reader's ruler setting. `0` is editorconfig's explicit "off".
+  const effectiveRuler = editorConfig?.maxLineLength ?? rulerColumn
+  useReconfigure(viewRef, rulerComp, rulerExt(effectiveRuler), [effectiveRuler, rulerComp])
 
   // Toggle focus mode live.
   useReconfigure(viewRef, focusComp, focusExtension(focusMode), [focusMode, focusComp])
@@ -984,48 +796,7 @@ export function CodeView({
     })
   }, [testLines, runTestAtLine, testComp])
 
-  // The blame column (breadcrumb toggle) and the inline, cursor-line annotation
-  // (a setting) read the same `git_blame`, so one fetch serves both. The column
-  // wins when both are on — showing the same fact twice on one line is noise.
-  useEffect(() => {
-    if (!blame && !inlineBlameOn) {
-      viewRef.current?.dispatch({ effects: blameComp.reconfigure([]) })
-      return
-    }
-    let cancelled = false
-    gitBlame(fileRoot, relPath)
-      .then((lines) => {
-        if (cancelled || !lines.length) return
-        const ext = blame ? blameGutter(lines) : inlineBlame(lines)
-        viewRef.current?.dispatch({ effects: blameComp.reconfigure(ext) })
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [blame, inlineBlameOn, relPath, blameComp])
-
-  // Mark the lines this working tree changes since HEAD. Keyed on `text`, which
-  // is what a save or an on-disk change produces (the file is re-read and the
-  // prop replaced) — this component is keyed by path, so it does not remount on
-  // a save and nothing else here would refresh the marks.
-  useEffect(() => {
-    if (!diffGutterOn) {
-      viewRef.current?.dispatch({ effects: diffComp.reconfigure([]) })
-      return
-    }
-    let cancelled = false
-    gitWorkingDiffLines(fileRoot, relPath)
-      .then((ranges) => {
-        if (!cancelled) {
-          viewRef.current?.dispatch({ effects: diffComp.reconfigure(diffGutter(ranges)) })
-        }
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [diffGutterOn, relPath, diffComp, text])
+  useGitGutters(viewRef, { fileRoot, relPath, text, blameComp, diffComp })
 
   // Highlight the anchored block while its thread is open.
   useEffect(() => {
@@ -1296,142 +1067,17 @@ export function CodeView({
   const ctxActions = () => {
     const view = viewRef.current
     if (!view || !ctxMenu) return []
-    const pos = ctxMenu.pos
-    const word = view.state.wordAt(pos)
-    const isRepo = useProject.getState().git.isRepo
-    // A language-server diagnostic at the clicked line — offered as a quick
-    // "create task" so the problem can become an anchored task without hovering.
-    const clickLine = view.state.doc.lineAt(pos)
-    let diagMessage: string | null = null
-    forEachDiagnostic(view.state, (d, from, to) => {
-      if (diagMessage) return
-      if (to >= clickLine.from && from <= clickLine.to) diagMessage = d.message
+    return editorContextMenuItems(view, ctxMenu.pos, {
+      t,
+      pinned,
+      path,
+      relPath,
+      explainSymbol,
+      explainSelection,
+      peekDefinition,
+      openActionMenu,
+      openComposerFor,
     })
-    const hasSelection = !view.state.selection.main.empty
-    // With no selection, cut and copy take the whole line — the way they do in
-    // VS Code, and the reason the pair is worth reaching for without selecting
-    // anything first. `to` spans the line break so a cut removes the line rather
-    // than leaving a blank one behind.
-    const clipRange = () => {
-      const sel = view.state.selection.main
-      if (!sel.empty)
-        return { from: sel.from, to: sel.to, text: view.state.sliceDoc(sel.from, sel.to) }
-      const line = view.state.doc.lineAt(sel.head)
-      return {
-        from: line.from,
-        to: Math.min(line.to + 1, view.state.doc.length),
-        text: `${line.text}\n`,
-      }
-    }
-    return [
-      // The webview has no native context menu, so the clipboard verbs have to
-      // be here or right-click offers no way to copy at all.
-      !pinned && {
-        label: t("editor.cut"),
-        run: () => {
-          const { from, to, text } = clipRange()
-          void clipboardWriteText(text).catch(() => {})
-          view.dispatch({ changes: { from, to, insert: "" } })
-        },
-      },
-      {
-        label: t("editor.copy"),
-        run: () => void clipboardWriteText(clipRange().text).catch(() => {}),
-      },
-      !pinned && {
-        label: t("editor.paste"),
-        run: () => {
-          void clipboardReadText()
-            .then((text) => text && view.dispatch(view.state.replaceSelection(text)))
-            .catch(() => {})
-        },
-      },
-      word && {
-        label: t("editor.goToDef"),
-        separatorBefore: true,
-        run: () => goToDefinitionAt(view, pos),
-      },
-      hasServer(path) &&
-        word && {
-          label: t("editor.goToTypeDef"),
-          run: () => goToTypeDefinitionAt(view, pos),
-        },
-      hasServer(path) &&
-        word && {
-          label: t("editor.goToImpl"),
-          run: () => goToImplementationAt(view, pos),
-        },
-      hasServer(path) &&
-        word && {
-          label: t("editor.explainSymbol"),
-          run: () => explainSymbol(pos),
-        },
-      word && {
-        label: t("editor.peekDef"),
-        run: () => {
-          view.dispatch({ selection: { anchor: pos } })
-          peekDefinition()
-        },
-      },
-      word && {
-        label: t("editor.findRefs"),
-        run: () => {
-          view.dispatch({ selection: { anchor: pos } })
-          findReferencesAt(view)
-        },
-      },
-      !pinned &&
-        hasServer(path) &&
-        word && {
-          label: t("editor.renameSymbol"),
-          run: () => {
-            view.dispatch({ selection: { anchor: pos } })
-            view.focus()
-            renameSymbolAt(view)
-          },
-        },
-      hasSelection && {
-        label: t("editor.allOccurrences"),
-        run: () => selectSelectionMatches(view),
-      },
-      hasServer(path) && {
-        label: t("lsp.quickFix"),
-        separatorBefore: true,
-        run: () => void openActionMenu(),
-      },
-      hasServer(path) && {
-        label: t("lsp.organizeImports"),
-        run: () => void organizeImports(),
-      },
-      diagMessage && {
-        label: t("lsp.createTaskFromProblem"),
-        run: () =>
-          openComposerFor(clickLine.number, clickLine.number, { body: diagMessage!, type: "bug" }),
-      },
-      {
-        label: t("comment.new"),
-        run: () => {
-          const line = view.state.doc.lineAt(pos).number
-          openComposerFor(line, line)
-        },
-      },
-      { label: t("editor.explain"), run: () => explainSelection(false) },
-      { label: t("editor.explainNote"), run: () => explainSelection(true) },
-      // A pinned (PR-ref) buffer is read-only — formatting mutates it but the
-      // save is a no-op, so don't offer it.
-      !pinned && { label: t("editor.format"), run: () => void formatDocument() },
-      // Only when there is something unsaved to compare — otherwise the diff is
-      // guaranteed empty and the item is a dead end.
-      !pinned &&
-        useEditorActions.getState().isDirty(relPath) && {
-          label: t("diff.compareWithSaved"),
-          run: () => compareWithSaved(),
-        },
-      isRepo && {
-        label: t("diff.toggle"),
-        run: () => useEditorActions.getState().setDiffing(!useEditorActions.getState().diffing),
-      },
-    ].filter(Boolean) as { label: string; run: () => void; separatorBefore?: boolean }[]
   }
 
   // Track the hovered line to show the "+" add-comment affordance.

@@ -21,40 +21,12 @@ import { useTranslation } from "react-i18next"
 import { TYPE_COLOR } from "@/components/atoms/commentMeta"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon } from "@/components/atoms/icons"
-import { docLinks, listFiles } from "@/lib/api"
-import { baseName, useComments } from "@/lib/comments"
-import { type DocItem, listDocs } from "@/lib/knowledge"
+import { useComments } from "@/lib/comments"
+import { useDocs } from "@/lib/docs"
+import { buildGraph, type Layer, type Node } from "@/lib/knowledgeGraph"
 import { useSpecs } from "@/lib/specs"
 import { useProject, useWorkspace } from "@/lib/store"
-
-const stripExt = (s: string) => s.replace(/\.(md|markdown|mdx)$/i, "")
-/** The folder a document lives in, as its own grouping ("" for the root). */
-const dirname = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "")
-
-/** The layers the legend can switch off. `file` covers the note→file anchors. */
-type Layer = "doc" | "spec" | "comment" | "file"
-
-interface Node {
-  id: string
-  kind: "file" | "comment" | "spec" | "doc" | "folder"
-  layer: Layer
-  label: string
-  color: string
-  x: number
-  y: number
-  vx: number
-  vy: number
-  /** Navigation target. */
-  file: string
-  line: number
-  commentId?: string
-}
-interface Edge {
-  a: string
-  b: string
-  /** "colocation" (containment) reads quiet; "link" (a real reference) accented. */
-  kind: "colocation" | "link"
-}
+import { useForceLayout } from "./knowledgeGraph/useForceLayout"
 
 /** Zoom limits, and how much one wheel notch moves it. */
 const MIN_ZOOM = 0.25
@@ -80,8 +52,9 @@ export function KnowledgeGraph() {
   const { t } = useTranslation()
 
   const size = { w: 1280, h: 760 }
-  const [docs, setDocs] = useState<DocItem[]>([])
-  const [links, setLinks] = useState<Array<[string, string]>>([])
+  // The KB's own docs join the graph as a layer beside comments and specs, and
+  // the links they make to each other are what the graph is actually for.
+  const { docs, links } = useDocs(root, { links: true })
   const [hidden, setHidden] = useState<Set<Layer>>(new Set())
   const [view, setView] = useState({ x: 0, y: 0, k: 1 })
 
@@ -92,176 +65,12 @@ export function KnowledgeGraph() {
     return () => window.removeEventListener("keydown", onKey)
   }, [close])
 
-  // The KB's own docs join the graph as a layer beside comments and specs, and
-  // the links they make to each other are what the graph is actually for — one
-  // backend call for both, rather than reading a hundred files over IPC.
-  useEffect(() => {
-    let live = true
-    listFiles(root)
-      .then(async (files) => {
-        if (!live) return
-        const found = listDocs(files)
-        setDocs(found)
-        const paths = files.filter((f) => /\.(md|markdown|mdx)$/i.test(f.replace(/\\/g, "/")))
-        const edges = await docLinks(root, paths).catch(() => [])
-        if (live) setLinks(edges)
-      })
-      .catch(() => {})
-    return () => {
-      live = false
-    }
-  }, [root])
-
   // Build the graph from comments, specs and docs (positions seeded once).
-  const { nodes, edges } = useMemo(() => {
-    const nodes: Node[] = []
-    const edges: Edge[] = []
-    const byId = new Set<string>()
-    // Seeded across the area rather than on a circle: a ring seed with a weak
-    // pull to the centre never breaks, and the graph settled as a donut with
-    // every label piled on the rim and nothing in the middle.
-    const add = (node: Omit<Node, "x" | "y" | "vx" | "vy">) => {
-      if (byId.has(node.id)) return
-      byId.add(node.id)
-      // A deterministic scatter (hashed from the id) — a re-render must not
-      // reshuffle the layout the user has just made sense of.
-      let h = 2166136261
-      for (const c of node.id) h = Math.imul(h ^ c.charCodeAt(0), 16777619)
-      const u = ((h >>> 0) % 1000) / 1000
-      const v = (((h >>> 10) >>> 0) % 1000) / 1000
-      nodes.push({
-        ...node,
-        x: size.w * (0.12 + u * 0.76),
-        y: size.h * (0.12 + v * 0.76),
-        vx: 0,
-        vy: 0,
-      })
-    }
-    /** Node id for a knowledge document, so links can find it by path. */
-    const docId = (path: string) => `k:${path}`
-
-    for (const c of comments) {
-      add({
-        id: `c:${c.id}`,
-        kind: "comment",
-        layer: "comment",
-        label: c.messages[0]?.body.split("\n")[0]?.slice(0, 28) || c.type,
-        color: TYPE_COLOR[c.type],
-        file: c.anchor.file,
-        line: c.anchor.startLine,
-        commentId: c.id,
-      })
-      if (c.anchor.file) {
-        add({
-          id: `f:${c.anchor.file}`,
-          kind: "file",
-          layer: "file",
-          label: baseName(c.anchor.file),
-          color: "var(--accent)",
-          file: c.anchor.file,
-          line: 1,
-        })
-        edges.push({ a: `c:${c.id}`, b: `f:${c.anchor.file}`, kind: "colocation" })
-      }
-      // Manual links between notes.
-      for (const target of c.links) {
-        if (comments.some((x) => x.id === target))
-          edges.push({ a: `c:${c.id}`, b: `c:${target}`, kind: "link" })
-      }
-    }
-
-    // --- Specs ---
-    // A group with a single document is that document: the hub carried the only
-    // useful name (the capability) while the child was labelled from its file
-    // name — which for `specs/<capability>/spec.md` is the word "spec", 64 times
-    // over, each pair floating unconnected to anything else.
-    for (const g of specGroups) {
-      if (g.items.length === 1) {
-        const it = g.items[0]
-        add({
-          id: docId(it.path),
-          kind: "spec",
-          layer: "spec",
-          label: g.title,
-          color: "var(--syn-control)",
-          file: it.path,
-          line: 1,
-        })
-        continue
-      }
-      const hub = `g:${g.kind}:${g.title}`
-      add({
-        id: hub,
-        kind: "folder",
-        layer: "spec",
-        label: g.title,
-        color: "var(--accent)",
-        file: "",
-        line: 0,
-      })
-      for (const it of g.items) {
-        add({
-          id: docId(it.path),
-          kind: "spec",
-          layer: "spec",
-          label: stripExt(it.label),
-          color: "var(--syn-control)",
-          file: it.path,
-          line: 1,
-        })
-        edges.push({ a: docId(it.path), b: hub, kind: "colocation" })
-      }
-    }
-
-    // --- Docs ---
-    // Grouped by the folder they live in, not all onto one hub: a single "Docs"
-    // node with fifty spokes is a starburst whose edges cross the whole canvas.
-    const docPaths = new Set(docs.map((d) => d.path))
-    const folders = new Map<string, number>()
-    for (const d of docs) folders.set(dirname(d.path), (folders.get(dirname(d.path)) ?? 0) + 1)
-    for (const d of docs) {
-      add({
-        id: docId(d.path),
-        kind: "doc",
-        layer: "doc",
-        label: stripExt(baseName(d.path)),
-        color: "var(--syn-string)",
-        file: d.path,
-        line: 1,
-      })
-      const dir = dirname(d.path)
-      // A folder holding one document adds a node and says nothing.
-      if ((folders.get(dir) ?? 0) < 2) continue
-      const hub = `dir:${dir}`
-      add({
-        id: hub,
-        kind: "folder",
-        layer: "doc",
-        // The project root itself, for documents that live directly in it.
-        label: dir || "/",
-        color: "var(--accent)",
-        file: "",
-        line: 0,
-      })
-      edges.push({ a: docId(d.path), b: hub, kind: "colocation" })
-    }
-
-    // The links the documents actually make to each other — the reason to draw
-    // a graph at all. Spec documents take part too, wherever they are known.
-    for (const [from, to] of links) {
-      if (byId.has(docId(from)) && byId.has(docId(to)))
-        edges.push({ a: docId(from), b: docId(to), kind: "link" })
-    }
-
-    // Bridge: a note anchored on a document links across to it.
-    for (const c of comments) {
-      const target = c.anchor.file && docId(c.anchor.file)
-      if (target && byId.has(target) && docPaths.has(c.anchor.file))
-        edges.push({ a: `c:${c.id}`, b: target, kind: "link" })
-    }
-
-    return { nodes, edges }
-  }, [comments, specGroups, docs, links])
+  const { nodes, edges } = useMemo(
+    () =>
+      buildGraph({ docs, links, comments, specGroups }, { size, typeColor: (t) => TYPE_COLOR[t] }),
+    [comments, specGroups, docs, links],
+  )
 
   // What the legend leaves switched on. Edges survive only with both ends.
   const shown = useMemo(() => {
@@ -278,94 +87,9 @@ export function KnowledgeGraph() {
   const pressAt = useRef<{ x: number; y: number } | null>(null)
   const panFrom = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null)
   const [hoverId, setHoverId] = useState<string | null>(null)
-  const [, setTick] = useState(0)
-  // Restarts the cooled-down simulation (called when a node is grabbed). Set by
-  // the simulation effect; a ref so handlers always call the live one.
-  const reheatRef = useRef<() => void>(() => {})
-
-  // Force simulation with cooldown: it runs until the layout settles (low kinetic
-  // energy) or a frame cap, then STOPS — so it doesn't re-render the whole SVG
-  // forever (which made a large graph stutter and its nodes impossible to click
-  // or drag). Grabbing a node reheats it.
-  useEffect(() => {
-    let raf = 0
-    let frames = 0
-    let running = false
-    const MAX_FRAMES = 600
-    const byId = (id: string) => nodesRef.current.find((n) => n.id === id)
-    const step = () => {
-      const ns = nodesRef.current
-      for (let i = 0; i < ns.length; i++) {
-        for (let j = i + 1; j < ns.length; j++) {
-          const a = ns[i]
-          const b = ns[j]
-          let dx = a.x - b.x
-          let dy = a.y - b.y
-          const d2 = dx * dx + dy * dy || 1
-          const f = 5200 / d2
-          const d = Math.sqrt(d2)
-          dx /= d
-          dy /= d
-          a.vx += dx * f
-          a.vy += dy * f
-          b.vx -= dx * f
-          b.vy -= dy * f
-        }
-      }
-      for (const e of shown.edges) {
-        const a = byId(e.a)
-        const b = byId(e.b)
-        if (!a || !b) continue
-        const dx = b.x - a.x
-        const dy = b.y - a.y
-        const d = Math.sqrt(dx * dx + dy * dy) || 1
-        const f = (d - 130) * 0.012
-        a.vx += (dx / d) * f
-        a.vy += (dy / d) * f
-        b.vx -= (dx / d) * f
-        b.vy -= (dy / d) * f
-      }
-      let energy = 0
-      for (const n of ns) {
-        if (n.id === dragId.current) {
-          n.vx = 0
-          n.vy = 0
-          continue
-        }
-        n.vx += (size.w / 2 - n.x) * 0.002
-        n.vy += (size.h / 2 - n.y) * 0.002
-        n.vx *= 0.86
-        n.vy *= 0.86
-        n.x = Math.max(24, Math.min(size.w - 24, n.x + n.vx))
-        n.y = Math.max(24, Math.min(size.h - 24, n.y + n.vy))
-        energy += n.vx * n.vx + n.vy * n.vy
-      }
-      frames++
-      setTick((x) => x + 1)
-      // Keep going while there's meaningful motion (or a node is being dragged),
-      // up to a hard cap; otherwise settle and stop re-rendering. The threshold
-      // scales with node count so large graphs also reach a stop.
-      if ((energy > 0.03 * ns.length || dragId.current) && frames < MAX_FRAMES) {
-        raf = requestAnimationFrame(step)
-      } else {
-        running = false
-      }
-    }
-    const start = () => {
-      if (running) return
-      running = true
-      raf = requestAnimationFrame(step)
-    }
-    reheatRef.current = () => {
-      frames = 0
-      start()
-    }
-    start()
-    return () => {
-      cancelAnimationFrame(raf)
-      running = false
-    }
-  }, [shown.edges])
+  // Restarts the cooled-down simulation (called when a node is grabbed); a ref so
+  // handlers always call the live one.
+  const reheatRef = useForceLayout(nodesRef, shown.edges, { size, dragId })
 
   const navigate = (n: Node) => {
     // Hubs (folders, spec groups) carry no file; clicking one just rearranges.

@@ -1,75 +1,36 @@
-/**
- * Lazy, gitignore-aware file tree.
- *
- * Directories load their children on first expand (`list_dir`), so even large
- * repositories render instantly. The "show hidden" toggle re-fetches with
- * ignore rules disabled. Clicking a file opens it; right-clicking any row (or
- * the empty area) offers to leave a file-, folder- or project-scoped comment.
- *
- * Files can be reorganised by drag-and-drop: drag a row onto a folder to move
- * it (internal), or drop files from outside the app onto a folder to copy them
- * in. The tree re-lists itself when files change on disk (`treeNonce`).
- */
-
-import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager"
-import { revealItemInDir } from "@tauri-apps/plugin-opener"
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { create } from "zustand"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
-import {
-  ChevronIcon,
-  CloseIcon,
-  DeltaIcon,
-  EditIcon,
-  FileIcon,
-  LayoutIcon,
-  MessageIcon,
-  SparkleIcon,
-  TrashIcon,
-} from "@/components/atoms/icons"
+import { ChevronIcon, CloseIcon, DeltaIcon, FileIcon } from "@/components/atoms/icons"
 import { AuditDialog, type AuditTarget } from "@/components/organisms/AuditDialog"
 import { type CommentTarget, TreeCommentDialog } from "@/components/organisms/TreeCommentDialog"
-import {
-  createDir,
-  createFile,
-  type DirEntry,
-  importPaths,
-  listDir,
-  listFiles,
-  movePath,
-} from "@/lib/api"
+import { createDir, createFile, type DirEntry, importPaths, listDir, movePath } from "@/lib/api"
 import { baseName, toRelative } from "@/lib/comments"
 import { useDiagnostics } from "@/lib/diagnostics"
-import { compareWithSaved } from "@/lib/docInfo"
 import { nestEntries, nestingRulesFor } from "@/lib/fileNesting"
 import { trashAndRecord, useFileUndo } from "@/lib/fileUndo"
 import { type FileStatus, folderHasChanges, STATUS, useGitStatus } from "@/lib/gitStatus"
 import { notifyError } from "@/lib/notice"
+import { dirName, pathSep } from "@/lib/paths"
+import { useProjectFiles } from "@/lib/projectFiles"
 import { prompt } from "@/lib/prompt"
 import { LAST_READ_BASE, useReadProgress } from "@/lib/readProgress"
-import { FILE_BASE, useEditorActions, useProject, useSettings, useWorkspace } from "@/lib/store"
-import { dropPathsIntoTerminal, offSafe, useTerminals } from "@/lib/terminals"
-import { useTextView } from "@/lib/textView"
+import { useEditorActions, useProject, useSettings } from "@/lib/store"
 import { filterEntries, sortEntries } from "@/lib/treeSort"
-import { onFileDrop, revealAppName } from "@/lib/window"
 import { removeWorkspaceFolder, rootFor } from "@/lib/workspace"
+import {
+  dropDir,
+  type FileTreeMenuCtx,
+  fileTreeMenuItems,
+  openWithItems,
+} from "./fileTree/fileTreeMenu"
+import { ghostAt, useTreeDrag } from "./fileTree/useTreeDrag"
+import { useTreeSelection } from "./fileTree/useTreeSelection"
 
 type Ctx = (entry: DirEntry | null, e: React.MouseEvent) => void
-
-/** The project's full file list (rel paths, "/"-separated), cached so each folder
- *  row can show a quiet read/total aggregate without re-walking the disk. */
-const useProjectFiles = create<{ files: string[]; load: (root: string) => void }>((set) => ({
-  files: [],
-  load: (root) =>
-    void listFiles(root)
-      .then((fs) => set({ files: fs.map((f) => f.replace(/\\/g, "/")) }))
-      // A transient failure keeps the cached list — wiping it to [] would flicker
-      // away the per-folder read/total badges. Stale beats empty here.
-      .catch(() => {}),
-}))
 
 /** Per-collection memo for `countPrefix`, keyed on the collection itself.
  *
@@ -99,18 +60,6 @@ const countPrefix = (items: Iterable<string> & object, prefix: string) => {
   cache.set(prefix, n)
   return n
 }
-
-/** Files Reado renders as something other than code, and so can be opened either
- *  way ("Open With ▸ Editor / Preview"). */
-const hasPreview = (p: string) =>
-  /\.(md|markdown|mdx|svg|png|jpe?g|gif|webp|bmp|ico|avif|pdf)$/i.test(p)
-const sep = (p: string) => (p.includes("\\") ? "\\" : "/")
-const parentOf = (p: string) => p.slice(0, p.lastIndexOf(sep(p)))
-/** The drag label sits just below-right of the cursor, clear of the pointer. */
-const ghostAt = (x: number, y: number) => `translate(${x + 14}px, ${y + 12}px)`
-
-/** Where a row drops into: a folder takes its own path, a file its parent dir. */
-const dropDir = (entry: DirEntry) => (entry.isDir ? entry.path : parentOf(entry.path))
 
 /** Pointer-drag reorder/move context. HTML5 drag doesn't fire in the Tauri
  *  webview (the OS drop handler owns it), and it also mis-hit-tests under interface
@@ -174,15 +123,8 @@ export function FileTree() {
      *  in place beats teaching it hover-intent and nested positioning. */
     view?: "openWith"
   } | null>(null)
-  // Multi-selection: ⌘/Ctrl+click toggles a row, ⇧+click takes the range from
-  // the anchor. Empty means "just whatever row you act on", which is what a
-  // plain click leaves behind.
-  const [selected, setSelected] = useState<string[]>([])
-  const anchorRef = useRef<string | null>(null)
-  // The window-level pointer handlers are re-bound only when a drag starts, so
-  // they read the selection through a ref rather than a stale closure.
-  const selectedRef = useRef(selected)
-  selectedRef.current = selected
+  const { selected, setSelected, anchorRef, selectedRef, onRowClick, targetsFor, keyDownWith } =
+    useTreeSelection(containerRef)
 
   // The tree's own clipboard: a cut is a pending move, a copy a pending copy.
   // Deliberately not the system clipboard — pasting a file path into an editor
@@ -240,8 +182,8 @@ export function FileTree() {
   const move = useCallback(
     async (from: string, destDir: string) => {
       // Moving a folder into itself or its own subtree isn't a move.
-      if (destDir === from || destDir.startsWith(from + sep(from))) return
-      await moveTo(from, `${destDir}${sep(destDir)}${baseName(from)}`)
+      if (destDir === from || destDir.startsWith(from + pathSep(from))) return
+      await moveTo(from, `${destDir}${pathSep(destDir)}${baseName(from)}`)
     },
     [moveTo],
   )
@@ -257,217 +199,16 @@ export function FileTree() {
         confirmLabel: t("tree.renameConfirm"),
       })
       if (!name || name === current) return
-      await moveTo(path, `${parentOf(path)}${sep(path)}${name}`)
+      await moveTo(path, `${dirName(path)}${pathSep(path)}${name}`)
     },
     [moveTo, t],
   )
 
-  // Pointer-based drag to move a file/folder into another folder. Press a row,
-  // move past a small threshold, and release over a destination folder.
-  const [draggingPath, setDraggingPath] = useState<string | null>(null)
-  const [overDir, setOverDir] = useState<string | null>(null)
-  const dragStart = useRef<{ path: string; x: number; y: number; isDir: boolean } | null>(null)
-  // The label that follows the cursor while dragging. It is moved by writing the
-  // transform directly (a re-render per pointer move would be visible lag), so
-  // the last pointer position is kept in a ref for the first frame too.
-  const ghostRef = useRef<HTMLDivElement>(null)
-  const ptr = useRef({ x: 0, y: 0 })
-
-  const onRowPointerDown = useCallback(
-    (path: string) => (e: React.PointerEvent) => {
-      if (e.button !== 0) return
-      // `data-dir` is the row's own path for a folder, its parent for a file —
-      // so the row already says which one it is; no extra prop to thread down.
-      const isDir = e.currentTarget.getAttribute("data-dir") === path
-      dragStart.current = { path, x: e.clientX, y: e.clientY, isDir }
-    },
-    [],
-  )
-
-  useEffect(() => {
-    const destAt = (x: number, y: number) =>
-      document
-        .elementFromPoint(x, y)
-        ?.closest<HTMLElement>("[data-dir]")
-        ?.getAttribute("data-dir") ?? null
-    const onPointerMove = (e: PointerEvent) => {
-      const s = dragStart.current
-      if (!s) return
-      if (!draggingPath) {
-        if (Math.abs(e.clientX - s.x) + Math.abs(e.clientY - s.y) < 5) return
-        setDraggingPath(s.path)
-      }
-      ptr.current = { x: e.clientX, y: e.clientY }
-      if (ghostRef.current) ghostRef.current.style.transform = ghostAt(e.clientX, e.clientY)
-      setOverDir(destAt(e.clientX, e.clientY))
-    }
-    const onPointerUp = (e: PointerEvent) => {
-      const s = dragStart.current
-      dragStart.current = null
-      const wasDragging = draggingPath
-      setDraggingPath(null)
-      setOverDir(null)
-      if (!s || !wasDragging) return
-      // Swallow the trailing click so releasing a drag doesn't also open the file.
-      const stopClick = (ev: Event) => {
-        ev.stopPropagation()
-        ev.preventDefault()
-        window.removeEventListener("click", stopClick, true)
-      }
-      window.addEventListener("click", stopClick, true)
-      const dest = destAt(e.clientX, e.clientY)
-      // Dragging a row that is part of the selection drags the whole selection.
-      const dragged = selectedRef.current.includes(s.path) ? selectedRef.current : [s.path]
-      if (dest) void Promise.all(dragged.map((p) => move(p, dest)))
-      // Dropped outside the tree: if a terminal is under the cursor, type the
-      // paths there instead — that's how you hand files to an agent in the PTY.
-      else dropPathsIntoTerminal(e.clientX, e.clientY, dragged)
-    }
-    window.addEventListener("pointermove", onPointerMove)
-    window.addEventListener("pointerup", onPointerUp)
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove)
-      window.removeEventListener("pointerup", onPointerUp)
-    }
-  }, [draggingPath, move])
-
-  // While a row is in flight the grabbing cursor wins everywhere — including
-  // over the terminal and the editor, which set cursors of their own.
-  useEffect(() => {
-    if (!draggingPath) return
-    document.documentElement.setAttribute("data-dragging-file", "")
-    return () => document.documentElement.removeAttribute("data-dragging-file")
-  }, [draggingPath])
-
-  // External drag-and-drop: OS file drops are delivered by Tauri (not HTML5),
-  // with a physical-pixel position. Resolve the folder under the cursor and copy
-  // the dropped paths into it; ignore drops outside the tree.
-  useEffect(() => {
-    const un = onFileDrop((paths, position) => {
-      const tree = containerRef.current
-      if (!tree) return
-      const dpr = window.devicePixelRatio || 1
-      const el = document.elementFromPoint(position.x / dpr, position.y / dpr)
-      if (!el || !tree.contains(el)) return
-      const destDir = el.closest("[data-dir]")?.getAttribute("data-dir") || root
-      importPaths(rootFor(destDir), paths, destDir)
-        .then(() => useProject.getState().bumpTree())
-        .catch(() => {})
-    })
-    // FileTree unmounts on every tool switch, so the unlisten regularly finds a
-    // listener map that is already gone.
-    return () => offSafe(un)
-  }, [root])
-
-  // Keyboard on the tree, like VS Code's explorer: F2 renames, Delete (⌘⌫ on
-  // macOS) deletes, arrows walk and open/close rows. The focused row is the
-  // event's own target, so no separate selection state has to be kept in sync.
-  const onRowClick = useCallback((path: string, e: React.MouseEvent): boolean => {
-    if (e.metaKey || e.ctrlKey) {
-      setSelected((sel) => (sel.includes(path) ? sel.filter((p) => p !== path) : [...sel, path]))
-      anchorRef.current = path
-      return true
-    }
-    if (e.shiftKey) {
-      const rows = [
-        ...(containerRef.current?.querySelectorAll<HTMLElement>("[data-path]") ?? []),
-      ].map((r) => r.dataset.path ?? "")
-      const from = rows.indexOf(anchorRef.current ?? path)
-      const to = rows.indexOf(path)
-      if (from !== -1 && to !== -1) {
-        setSelected(rows.slice(Math.min(from, to), Math.max(from, to) + 1))
-        return true
-      }
-    }
-    // A plain click collapses the selection to this row and opens it as before.
-    setSelected([path])
-    anchorRef.current = path
-    return false
-  }, [])
-
-  /** The paths an action should apply to: the whole selection when the row acted
-   *  on is part of it, otherwise just that row. Right-clicking outside the
-   *  selection acts on what you right-clicked — never silently on ten files. */
-  const targetsFor = useCallback(
-    (path: string) => (selected.includes(path) && selected.length > 1 ? selected : [path]),
-    [selected],
-  )
-
-  /** The rows currently on screen, in display order — collapsed folders' children
-   *  aren't rendered, so this is exactly what the arrows should walk. */
-  const visibleRows = () => [
-    ...(containerRef.current?.querySelectorAll<HTMLElement>("[data-path]") ?? []),
-  ]
-
-  const onTreeKeyDown = (e: React.KeyboardEvent) => {
-    const row = (e.target as HTMLElement).closest<HTMLElement>("[data-path]")
-    const path = row?.dataset.path
-    if (!path) return
-    const isDir = row?.getAttribute("aria-expanded") !== null
-    const expanded = row?.getAttribute("aria-expanded") === "true"
-    const mod = e.metaKey || e.ctrlKey
-    if (mod && ["x", "c", "v", "d"].includes(e.key.toLowerCase())) {
-      e.preventDefault()
-      const entry: DirEntry = { name: baseName(path), path, isDir }
-      if (e.key.toLowerCase() === "x") setClip({ paths: targetsFor(path), cut: true })
-      else if (e.key.toLowerCase() === "c") setClip({ paths: targetsFor(path), cut: false })
-      else if (e.key.toLowerCase() === "v") void paste(entry)
-      else void duplicate(targetsFor(path))
-      return
-    }
-    if (e.key === "F2") {
-      e.preventDefault()
-      void rename(path)
-    } else if (e.key === "Delete" || (e.key === "Backspace" && (e.metaKey || e.ctrlKey))) {
-      e.preventDefault()
-      void remove(targetsFor(path))
-    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault()
-      const rows = visibleRows()
-      const next = rows.indexOf(row!) + (e.key === "ArrowDown" ? 1 : -1)
-      const target = rows[next]
-      if (!target) return
-      target.focus()
-      // Shift extends the selection as you walk; otherwise the selection is
-      // simply wherever you are.
-      if (e.shiftKey) {
-        const from = rows.indexOf(
-          rows.find((r) => r.dataset.path === anchorRef.current) ?? (row as HTMLElement),
-        )
-        setSelected(
-          rows
-            .slice(Math.min(from, next), Math.max(from, next) + 1)
-            .map((r) => r.dataset.path ?? ""),
-        )
-      } else {
-        setSelected([target.dataset.path ?? ""])
-        anchorRef.current = target.dataset.path ?? null
-      }
-    } else if (e.key === "Home" || e.key === "End") {
-      e.preventDefault()
-      const rows = visibleRows()
-      ;(e.key === "Home" ? rows[0] : rows[rows.length - 1])?.focus()
-    } else if (e.key.length === 1 && !mod && !e.altKey) {
-      // Type-ahead: a letter jumps to the next row whose name starts with it,
-      // wrapping — how every file list has worked since Finder.
-      const rows = visibleRows()
-      const from = rows.indexOf(row!) + 1
-      const wanted = e.key.toLowerCase()
-      const hit = [...rows.slice(from), ...rows.slice(0, from)].find((r) =>
-        (baseName(r.dataset.path ?? "") || "").toLowerCase().startsWith(wanted),
-      )
-      if (hit) {
-        e.preventDefault()
-        hit.focus()
-      }
-    } else if (e.key === "ArrowRight" && isDir && !expanded) {
-      e.preventDefault()
-      useProject.getState().toggleDir(relOf(path), true)
-    } else if (e.key === "ArrowLeft" && isDir && expanded) {
-      e.preventDefault()
-      useProject.getState().toggleDir(relOf(path), false)
-    }
-  }
+  const { draggingPath, overDir, onRowPointerDown, dragStart, ghostRef, ptr } = useTreeDrag(move, {
+    root,
+    containerRef,
+    selectedRef,
+  })
 
   /**
    * A row's path, relative to *its own* workspace folder.
@@ -488,7 +229,7 @@ export function FileTree() {
     })
     if (!name) return
     const owner = rootFor(dir)
-    const rel = toRelative(owner, `${dir}${sep(dir)}${name}`)
+    const rel = toRelative(owner, `${dir}${pathSep(dir)}${name}`)
     try {
       if (kind === "folder") {
         await createDir(owner, rel)
@@ -529,10 +270,10 @@ export function FileTree() {
     async (paths: string[]) => {
       try {
         // Grouped by folder: one call per destination is all `import_paths` needs.
-        for (const dir of new Set(paths.map(parentOf))) {
+        for (const dir of new Set(paths.map(dirName))) {
           await importPaths(
             root,
-            paths.filter((p) => parentOf(p) === dir),
+            paths.filter((p) => dirName(p) === dir),
             dir,
           )
         }
@@ -568,376 +309,36 @@ export function FileTree() {
     setTarget({ kind, path })
   }
 
-  /** The "Open With ▸" page: the viewers that actually apply to this file. */
-  const openWithItems = (entry: DirEntry): ContextMenuItem[] => {
-    const asText = useTextView.getState().force.has(entry.path)
-    const openWith = (viewer: "text" | "preview" | "diff") => () => {
-      setMenu(null)
-      useTextView.getState().setText(entry.path, viewer === "text")
-      if (viewer === "diff") useEditorActions.getState().requestView("diff")
-      open(entry.path)
-    }
-    return [
-      {
-        label: t("tree.openWithBack"),
-        keepOpen: true,
-        onSelect: () => setMenu((m) => (m ? { ...m, view: undefined } : m)),
-      },
-      {
-        label: t("tree.viewerText"),
-        checked: asText,
-        separatorBefore: true,
-        onSelect: openWith("text"),
-      },
-      // Only offered where there *is* a rich rendering to fall back to; for a
-      // plain .ts file "Preview" would just be the editor under another name.
-      ...(hasPreview(entry.path)
-        ? [{ label: t("tree.viewerPreview"), checked: !asText, onSelect: openWith("preview") }]
-        : []),
-      ...(useProject.getState().git.isRepo
-        ? [{ label: t("tree.viewerDiff"), onSelect: openWith("diff") }]
-        : []),
-    ]
+  const menuCtx: FileTreeMenuCtx = {
+    t,
+    close: () => setMenu(null),
+    setOpenWithPage: (on) =>
+      menu &&
+      setMenu({ x: menu.x, y: menu.y, entry: menu.entry, view: on ? "openWith" : undefined }),
+    relOf,
+    targetsFor,
+    clip,
+    setClip,
+    compareLeft,
+    setCompareLeft,
+    sortMode,
+    open,
+    openComment,
+    setAudit,
+    rename,
+    paste,
+    duplicate,
+    remove,
+    create,
   }
-
   const menuItems: ContextMenuItem[] =
     menu?.view === "openWith" && menu.entry
-      ? openWithItems(menu.entry)
+      ? openWithItems(menu.entry, menuCtx)
       : menu
-        ? [
-            ...(menu.entry
-              ? [
-                  {
-                    label: t(menu.entry.isDir ? "tree.commentFolder" : "tree.commentFile"),
-                    icon: <MessageIcon className="h-3.5 w-3.5" />,
-                    onSelect: () =>
-                      openComment(menu.entry!.isDir ? "folder" : "file", relOf(menu.entry!.path)),
-                  },
-                  {
-                    label: t("tree.audit"),
-                    icon: <SparkleIcon className="h-3.5 w-3.5" />,
-                    onSelect: () => {
-                      setAudit({
-                        path: relOf(menu.entry!.path),
-                        isDir: menu.entry!.isDir,
-                      })
-                      setMenu(null)
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry && !menu.entry.isDir
-              ? [
-                  {
-                    label: t("split.openSide"),
-                    icon: <LayoutIcon className="h-3.5 w-3.5" />,
-                    onSelect: () => {
-                      useProject.getState().openSplit(menu.entry!.path)
-                      setMenu(null)
-                    },
-                  },
-                  {
-                    label: useReadProgress.getState().read.has(relOf(menu.entry.path))
-                      ? t("tree.markUnread")
-                      : t("tree.markRead"),
-                    onSelect: () => {
-                      const relP = relOf(menu.entry!.path)
-                      const isRead = useReadProgress.getState().read.has(relP)
-                      useReadProgress.getState().mark(rootFor(menu.entry!.path), relP, !isRead)
-                      setMenu(null)
-                    },
-                  },
-                ]
-              : []),
-            ...(() => {
-              if (!menu.entry?.isDir) return []
-              // Only offer the direction that would actually change something: a
-              // folder with everything already read shouldn't offer "mark read", an
-              // all-unread (or empty) folder shouldn't offer "mark unread".
-              const folderOwner = rootFor(menu.entry.path)
-              const folderRel = relOf(menu.entry.path)
-              const files = useProjectFiles
-                .getState()
-                .files.filter((f) => f.startsWith(`${folderRel}/`))
-              if (files.length === 0) return []
-              const read = useReadProgress.getState().read
-              const someUnread = files.some((f) => !read.has(f))
-              const someRead = files.some((f) => read.has(f))
-              const mark = (value: boolean) => {
-                useReadProgress.getState().markMany(folderOwner, files, value)
-                setMenu(null)
-              }
-              return [
-                ...(someUnread
-                  ? [{ label: t("tree.markFolderRead"), onSelect: () => mark(true) }]
-                  : []),
-                ...(someRead
-                  ? [{ label: t("tree.markFolderUnread"), onSelect: () => mark(false) }]
-                  : []),
-              ]
-            })(),
-            ...(menu.entry && !menu.entry.isDir && /\.svg$/i.test(menu.entry.path)
-              ? [
-                  {
-                    label: t("tree.openAsText"),
-                    icon: <EditIcon className="h-3.5 w-3.5" />,
-                    onSelect: () => {
-                      useTextView.getState().openAsText(menu.entry!.path)
-                      open(menu.entry!.path)
-                      setMenu(null)
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry && !menu.entry.isDir && /\.(md|markdown|mdx)$/i.test(menu.entry.path)
-              ? [
-                  {
-                    // Markdown opens as rendered prose by default; this opens it
-                    // straight into the editable source view.
-                    label: t("tree.editSource"),
-                    icon: <EditIcon className="h-3.5 w-3.5" />,
-                    onSelect: () => {
-                      useTextView.getState().openAsText(menu.entry!.path)
-                      open(menu.entry!.path)
-                      setMenu(null)
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry
-              ? [
-                  {
-                    label: t("tree.reveal", { app: revealAppName() }),
-                    onSelect: () => {
-                      void revealItemInDir(menu.entry!.path)
-                      setMenu(null)
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry
-              ? [
-                  {
-                    label: t("tree.rename"),
-                    icon: <EditIcon className="h-3.5 w-3.5" />,
-                    separatorBefore: true,
-                    onSelect: () => {
-                      const path = menu.entry!.path
-                      setMenu(null)
-                      void rename(path)
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry && !menu.entry.isDir
-              ? [
-                  {
-                    // Two-file compare, the pair VS Code puts here: pick one
-                    // file, then pick the other. The chosen file survives folder
-                    // navigation, which is the point — the two rarely sit
-                    // side by side.
-                    label: t("tree.selectForCompare"),
-                    separatorBefore: true,
-                    onSelect: () => {
-                      setCompareLeft(relOf(menu.entry!.path))
-                      setMenu(null)
-                    },
-                  },
-                  ...(compareLeft && compareLeft !== relOf(menu.entry.path)
-                    ? [
-                        {
-                          label: t("tree.compareWithSelected", { name: baseName(compareLeft) }),
-                          onSelect: () => {
-                            const actions = useEditorActions.getState()
-                            const path = menu.entry!.path
-                            setMenu(null)
-                            // Open the right-hand file, then diff it against the
-                            // one picked earlier. The base is a path sentinel, so
-                            // the diff view resolves it the same way it resolves
-                            // "saved" or a git ref.
-                            open(path)
-                            actions.setCompareBuffer(null)
-                            actions.setDiffBase(`${FILE_BASE}${compareLeft}`)
-                            // Through the request queue, not by setting the flag:
-                            // opening the file resets the pane to its default
-                            // view a moment later, which wiped a flag set here
-                            // and left you looking at the file with no diff.
-                            actions.requestView("diff")
-                          },
-                        },
-                      ]
-                    : []),
-                ]
-              : []),
-            ...(menu.entry?.isDir
-              ? [
-                  {
-                    label: t("tree.findInFolder"),
-                    separatorBefore: true,
-                    onSelect: () => {
-                      setMenu(null)
-                      useWorkspace.getState().setSearchScope(relOf(menu.entry!.path))
-                      useWorkspace.getState().selectTool("search")
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry &&
-            !menu.entry.isDir &&
-            useEditorActions.getState().isDirty(relOf(menu.entry.path))
-              ? [
-                  {
-                    label: t("diff.compareWithSaved"),
-                    separatorBefore: true,
-                    onSelect: () => {
-                      const path = menu.entry!.path
-                      setMenu(null)
-                      // The buffer only exists while that file is the open one.
-                      if (useProject.getState().active === path) compareWithSaved()
-                      else open(path)
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry && !menu.entry.isDir
-              ? [
-                  {
-                    label: t("tree.openWith"),
-                    separatorBefore: true,
-                    onSelect: () => {
-                      const at = { x: menu.x, y: menu.y, entry: menu.entry }
-                      setMenu({ ...at, view: "openWith" })
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry
-              ? [
-                  {
-                    label: t("tree.openInTerminal"),
-                    separatorBefore: true,
-                    onSelect: () => {
-                      const dir = dropDir(menu.entry!)
-                      setMenu(null)
-                      const terminals = useTerminals.getState()
-                      terminals.add(dir)
-                      terminals.toggle(true)
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry
-              ? [
-                  {
-                    label: t("tree.cut"),
-                    separatorBefore: true,
-                    onSelect: () => {
-                      setClip({ paths: targetsFor(menu.entry!.path), cut: true })
-                      setMenu(null)
-                    },
-                  },
-                  {
-                    label: t("tree.copy"),
-                    onSelect: () => {
-                      setClip({ paths: targetsFor(menu.entry!.path), cut: false })
-                      setMenu(null)
-                    },
-                  },
-                ]
-              : []),
-            ...(clip
-              ? [
-                  {
-                    label: t("tree.paste"),
-                    separatorBefore: !menu.entry,
-                    onSelect: () => {
-                      const entry = menu.entry
-                      setMenu(null)
-                      void paste(entry)
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry
-              ? [
-                  {
-                    label: t("tree.duplicate"),
-                    onSelect: () => {
-                      const paths = targetsFor(menu.entry!.path)
-                      setMenu(null)
-                      void duplicate(paths)
-                    },
-                  },
-                ]
-              : []),
-            {
-              label: t("file.newFile"),
-              separatorBefore: !menu.entry,
-              onSelect: () => void create("file", menu.entry),
-            },
-            {
-              label: t("tree.newFolder"),
-              onSelect: () => void create("folder", menu.entry),
-            },
-            ...(menu.entry
-              ? [
-                  {
-                    label: t("tree.copyPath"),
-                    separatorBefore: true,
-                    onSelect: () => {
-                      void clipboardWriteText(menu.entry!.path).catch(() => {})
-                      setMenu(null)
-                    },
-                  },
-                  {
-                    label: t("tree.copyRelativePath"),
-                    onSelect: () => {
-                      void clipboardWriteText(relOf(menu.entry!.path)).catch(() => {})
-                      setMenu(null)
-                    },
-                  },
-                ]
-              : []),
-            ...(menu.entry
-              ? [
-                  {
-                    label:
-                      targetsFor(menu.entry.path).length > 1
-                        ? t("tree.deleteMany", { count: targetsFor(menu.entry.path).length })
-                        : t("tree.delete"),
-                    icon: <TrashIcon className="h-3.5 w-3.5" />,
-                    danger: true,
-                    separatorBefore: true,
-                    onSelect: () => {
-                      const paths = targetsFor(menu.entry!.path)
-                      setMenu(null)
-                      void remove(paths)
-                    },
-                  },
-                ]
-              : []),
-            ...(["name", "type", "modified"] as const).map((mode, i) => ({
-              label: `${t("tree.sort")}: ${t(
-                mode === "name"
-                  ? "tree.sortName"
-                  : mode === "type"
-                    ? "tree.sortType"
-                    : "tree.sortModified",
-              )}`,
-              separatorBefore: i === 0,
-              checked: sortMode === mode,
-              onSelect: () => {
-                useSettings.getState().set({ explorerSort: mode })
-                setMenu(null)
-              },
-            })),
-            {
-              label: t("tree.commentProject"),
-              icon: <MessageIcon className="h-3.5 w-3.5" />,
-              onSelect: () => openComment("project"),
-            },
-          ]
+        ? fileTreeMenuItems(menu.entry, menuCtx)
         : []
+
+  const onTreeKeyDown = keyDownWith({ relOf, setClip, paste, duplicate, remove, rename })
 
   return (
     <RowCtx.Provider value={{ onRowPointerDown, draggingPath, overDir, selected, onRowClick }}>
@@ -1228,7 +629,7 @@ function TreeNode({
   // Reveal the open file: ancestor folders auto-expand (the chain cascades as
   // each level mounts), and the active row scrolls into view.
   useEffect(() => {
-    if (entry.isDir && active?.startsWith(entry.path + sep(entry.path))) {
+    if (entry.isDir && active?.startsWith(entry.path + pathSep(entry.path))) {
       useProject.getState().toggleDir(relPath, true)
     }
   }, [active, entry.isDir, entry.path, relPath])

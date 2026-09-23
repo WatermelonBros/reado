@@ -39,8 +39,9 @@ import { SendReviewDialog } from "@/components/organisms/SendReviewDialog"
 import { Terminal } from "@/components/organisms/Terminal"
 import { AGENT_BIN, AGENT_ORDER, type Agent, launchAgent } from "@/lib/agents"
 import { agentInstalled } from "@/lib/api"
-import { toRelative, useComments } from "@/lib/comments"
+import { openTaskCount as openTaskCountOf, toRelative, useComments } from "@/lib/comments"
 import { findPanel, useLayout } from "@/lib/layout"
+import { trackPointer } from "@/lib/pointerDrag"
 import { useFlip, usePointerReorder } from "@/lib/pointerReorder"
 import { prompt } from "@/lib/prompt"
 import { useProject, useSettings } from "@/lib/store"
@@ -94,9 +95,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
   // Where the panel sits is the layout model's answer, not a second copy kept
   // here: dragging it to another dock has to change this too.
   const isRight = useLayout((s) => findPanel(s.layout, "terminal")?.area === "right")
-  const openTaskCount = useComments(
-    (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
-  )
+  const openTaskCount = useComments((s) => openTaskCountOf(s.comments))
   const { t } = useTranslation()
 
   // Drag-to-reorder the tabs (pointer-based; HTML5 DnD is hijacked by Tauri's
@@ -218,12 +217,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
       isRight
         ? setWidth((window.innerWidth - ev.clientX) / zoom)
         : setHeight((window.innerHeight - ev.clientY) / zoom)
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-    }
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
+    trackPointer(onMove)
   }
 
   // Resize two adjacent panes by dragging the divider between pane k and k+1.
@@ -249,12 +243,7 @@ export function TerminalPanel({ docked = false }: { docked?: boolean } = {}) {
       sizes[k + 1] = b
       setSizes(group.id, sizes)
     }
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-    }
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
+    trackPointer(onMove)
   }
 
   const paneIds = activeGroup?.paneIds ?? []

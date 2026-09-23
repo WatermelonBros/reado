@@ -13,7 +13,7 @@
  * PTY can only be handed a file by name.
  */
 
-import { listen, type UnlistenFn } from "@tauri-apps/api/event"
+import type { UnlistenFn } from "@tauri-apps/api/event"
 import {
   readText as clipboardReadText,
   writeText as clipboardWriteText,
@@ -31,12 +31,15 @@ import { ChevronIcon, CloseIcon, SearchIcon } from "@/components/atoms/icons"
 import {
   anywherePublishAgent,
   clipboardImageToTemp,
+  onPtyExit,
+  onPtyOutput,
   ptyKill,
   ptyResize,
   ptySpawn,
   ptyWrite,
   resolvePath,
 } from "@/lib/api"
+import { osDropTarget } from "@/lib/dropTarget"
 import { agentAsked, agentIsBusy } from "@/lib/mascot"
 import { nextPaint } from "@/lib/nextPaint"
 import { notify, notifyError } from "@/lib/notice"
@@ -280,8 +283,8 @@ export function Terminal({ id, cwd, active, profile }: Props) {
       }
 
       keep(
-        await listen<string>(`pty-output-${id}`, (e) => {
-          const text = decode(e.payload)
+        await onPtyOutput(id, (chunk) => {
+          const text = decode(chunk)
           term.write(text)
           // Mirror an agent pane to any paired phone. Best-effort and rate-limited
           // by the tail buffer below: Anywhere may be off, and a phone watching an
@@ -295,9 +298,7 @@ export function Terminal({ id, cwd, active, profile }: Props) {
           }
         }),
       )
-      keep(
-        await listen(`pty-exit-${id}`, () => term.write("\r\n\x1b[2m[process exited]\x1b[0m\r\n")),
-      )
+      keep(await onPtyExit(id, () => term.write("\r\n\x1b[2m[process exited]\x1b[0m\r\n")))
       term.attachCustomKeyEventHandler((e) => {
         if (e.type !== "keydown") return true
         const key = e.key.toLowerCase()
@@ -403,9 +404,7 @@ export function Terminal({ id, cwd, active, profile }: Props) {
       const host = hostRef.current
       const term = termRef.current
       if (!host || !term) return
-      const dpr = window.devicePixelRatio || 1
-      const el = document.elementFromPoint(position.x / dpr, position.y / dpr)
-      if (!el || !host.contains(el)) return
+      if (!osDropTarget(host, position)) return
       // `paste` (not ptyWrite) so bracketed-paste mode is honoured and a TUI
       // agent reads it as a paste rather than as fast typing.
       term.paste(`${paths.map(shellQuote).join(" ")} `)

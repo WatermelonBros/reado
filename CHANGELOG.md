@@ -22,6 +22,26 @@ commit.
   resources and from `reado task show`; `reado task list` labels the task with
   the page and the element.
 
+### Changed
+
+- **The Git panel's ⋯ menu and its pickers work from the keyboard.** The menu is
+  now a real menu: arrow keys move through it, Escape closes it and focus goes
+  back to the button. Revert, cherry-pick, merge, rebase, worktrees, submodules,
+  tags and remotes open in a centred dialog, and each picker reloads its list
+  every time it opens.
+- **The status bar's right-click menu lists items in the order they appear on the
+  bar.** Terminal, column selection and profile were out of place.
+- **The Coverage panel reopens instantly.** It shares the project's file list with
+  the file tree, and a failed listing keeps the last list instead of showing
+  none. Spec labels also drop an `.mdx` extension, not only `.md`.
+- **Every palette entry is a command you can bind to a shortcut.** About thirty
+  of them (onboarding, tours, tests, guided review, profiles, sync, …) ran their
+  own code outside the command table, so they could not be bound and showed no
+  shortcut chip; they are now ordinary commands.
+- **`reado review context --json` includes the session's objective,** as the MCP
+  tool already did. An empty `READO_AGENT` now counts as unset in the CLI too,
+  and `--model ""` falls back to `READO_MODEL`.
+
 ### Fixed
 
 - **Menus and popovers open above notifications and panels.** Their stacking
@@ -66,6 +86,32 @@ commit.
 - **Comments in the browser preview open inside the page.** The comment box, the
   comment card and the right-click menu opened wherever the click was, and near
   the right or bottom edge hung out of the visible page; they are pulled back in.
+- **An agent started in a phone terminal can reach `reado`.** The Reado
+  Anywhere terminal built its shell without the `PATH` and `COLORTERM` the desktop
+  terminal sets, so the bundled `reado` was missing there and the agent's MCP
+  server never started. Both terminals now open their shell the same way.
+- **A drag that gets interrupted ends.** When the OS or the webview took the
+  pointer mid-drag, or the window lost focus, resizing the sidebar, dock,
+  terminal or preview kept following the mouse, and a tab or file-tree drag left
+  its ghost stuck to the cursor.
+- **Blame and change marks follow the right folder in a workspace.** Switching
+  folder without switching file left the gutters showing the previous folder's
+  git data.
+- **`comment_add` over MCP creates a task by default,** like `reado comment add`.
+  It used to create a note, so the same request made a task over one channel and
+  a note over the other. Pass `kind: "note"` for a note.
+- **Accepting the same proposal twice at once makes one comment.** Two accepts at
+  the same time, from the desktop and the CLI, could each create a comment and
+  orphan one of them. Answering a blocked task now adds the reply and reopens the
+  task in one write.
+- **The agent's hand-back and mascot lines are never read half-written.**
+  `done.json`, `mascot.json` and the preview command file are now written in one
+  step. On Linux the file watcher also picks up these atomic writes; it skipped
+  them before, so saves made that way went unnoticed.
+- **The phone's list of changed files matches the desktop's.** Reado Anywhere
+  read `git status` on its own: paths with spaces or accents came back quoted,
+  Reado's own `.reado` files showed up as changes, and the read could collide
+  with a git command running in the terminal (`index.lock`).
 
 ## [1.23.2] — 2026-09-22
 

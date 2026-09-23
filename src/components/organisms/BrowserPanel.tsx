@@ -12,9 +12,8 @@
  * rather than reworking the model.
  */
 
-import { getCurrentWindow } from "@tauri-apps/api/window"
 import { openUrl } from "@tauri-apps/plugin-opener"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
@@ -34,49 +33,25 @@ import {
 } from "@/components/atoms/icons"
 import { AccessRequest, VaultBar } from "@/components/molecules/VaultBar"
 import {
-  type Comment,
-  type CommentKind,
-  type CommentPatch,
-  type CommentType,
   hostResolves,
-  previewCaptureFrame,
-  previewClearState,
-  previewClose,
   previewDetach,
-  previewDetectUrls,
   previewEval,
   previewNavigate,
-  previewOpen,
-  previewPersistState,
-  previewPutResult,
-  previewSetBounds,
   previewSetVisible,
-  previewSetZoom,
-  previewTakeCmd,
-  type WebTarget,
 } from "@/lib/api"
+import { DRAIN_JS } from "@/lib/bridgeScript"
 import { useComments } from "@/lib/comments"
 import { useLayout } from "@/lib/layout"
 import { watchOverlays } from "@/lib/overlays"
-import {
-  isLoopbackHost,
-  isOriginAllowed,
-  isPageGranted,
-  type LogEntry,
-  type NetEntry,
-  originOf,
-  usePreview,
-} from "@/lib/preview"
+import { trackPointer } from "@/lib/pointerDrag"
+import { isLoopbackHost, usePreview } from "@/lib/preview"
+import { type BridgeDrain, callBridge, dispatchBridge, injectCommentBox } from "@/lib/previewBridge"
 import { usePalette, useProject, useSettings, useWorkspace } from "@/lib/store"
-import {
-  GATED_REASON,
-  HAS_LOGIN_JS,
-  PAGE_STATE_JS,
-  type PageState,
-  redact,
-  type VaultPick,
-} from "@/lib/vault"
+import { HAS_LOGIN_JS } from "@/lib/vault"
 import { BrowserInspector } from "./BrowserInspector"
+import { useDevServerProbe } from "./browser/useDevServerProbe"
+import { usePreviewAgentCommands, usePreviewAgentMirror } from "./browser/usePreviewAgent"
+import { usePreviewBounds } from "./browser/usePreviewBounds"
 
 /** Two URLs point at the same document (ignoring query/hash) — for matching a
  *  page's design comments to the URL currently shown in the preview. */
@@ -90,37 +65,8 @@ function sameDoc(a: string, b: string): boolean {
   }
 }
 
-/** Inject the rich comment card into the page over the live webview (author, type,
- *  messages, reply, resolve). Reado formats the labels; the in-page bridge renders
- *  them and reports reply/resolve back through its drain buffer. */
-function injectCommentBox(c: Comment): void {
-  const box = {
-    id: c.id,
-    x: c.anchor.x ?? 0,
-    y: c.anchor.y ?? 0,
-    target: c.anchor.target ?? null,
-    type: c.type,
-    kind: c.kind,
-    resolved: c.state === "done",
-    messages: c.messages.map((m) => ({
-      who: m.agent ?? m.author,
-      when: new Date(m.createdAt).toLocaleString(),
-      body: m.body,
-    })),
-  }
-  void previewEval(
-    `window.__readoBridge&&window.__readoBridge.showComment(${JSON.stringify(box)})`,
-  ).catch(() => {})
-}
-
 /** Where a non-URL address-bar entry goes. */
 const SEARCH = "https://duckduckgo.com/?q="
-
-/** How often to look for a dev server, while looking is still finding something. */
-const PROBE_MS = 2000
-/** …and the ceiling it backs off to while it is not. Each probe opens a socket
- *  per candidate port, so the idle case has to be cheap. */
-const PROBE_MAX_MS = 30_000
 
 /** Turn whatever was typed into a navigable URL: a bare host gets a scheme (http
  *  when it looks local — loopback, a dev TLD, or an explicit port — https otherwise,
@@ -180,7 +126,6 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   const setPaneWidth = usePreview((s) => s.setPaneWidth)
   const browserZoom = usePreview((s) => s.browserZoom)
   const setBrowserZoom = usePreview((s) => s.setBrowserZoom)
-  const zoom = useSettings((s) => s.zoom) || 1
   const root = useProject((s) => s.root)
   const pinRequest = usePreview((s) => s.pinRequest)
   const setPinRequest = usePreview((s) => s.setPinRequest)
@@ -212,29 +157,20 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   // register and open behind the page.
   const [covered, setCovered] = useState(false)
   const overlayOpen = paletteOverlay || workspaceOverlay || layoutOverlay || covered
-  // Re-park the webview when the dock layout changes (a splitter drag resizes the
-  // pane; the ResizeObserver can miss the settled size mid-drag).
-  const dockLayout = useLayout((s) => s.layout)
   const { t } = useTranslation()
   const bodyRef = useRef<HTMLDivElement>(null)
-  const openedRef = useRef(false)
-  const lastCmdId = useRef("")
+  const mirrorAgentState = usePreviewAgentMirror(root)
+  const runAgentCommand = usePreviewAgentCommands(root, bodyRef)
   const lastNetSig = useRef("")
   // The last comment-marker set applied to the page, so the drain tick re-injects
   // only when it changes (or when the page reloaded and dropped the layer).
   const lastMarksSig = useRef("")
   const showMarksRef = useRef(true)
-  // Last console+network snapshot mirrored to `.reado/`, so we write only on change.
-  const lastPersisted = useRef("")
-  const lastBounds = useRef({ x: 0, y: 0, w: 0, h: 0, z: 1 })
   // The user took control of the URL bar → stop auto-switching to detected servers.
   const manualUrl = useRef(false)
   // The URL input is focused (being edited) → don't auto-switch, or the key={url}
   // remount would discard the user's in-progress typing.
   const urlFocused = useRef(false)
-  // The page we've already put an access request up for, so a refused agent that
-  // keeps trying doesn't re-prompt the user who already said "not now".
-  const askedFor = useRef("")
   // Whether the current URL responded last check → reload on a dead→live transition.
   const wasLive = useRef(false)
   // The page answered the last drain, i.e. it is loaded and running. A loaded
@@ -256,7 +192,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       if (!openedRef.current) return
       let raw: string | null = null
       try {
-        raw = await previewEval("window.__readoBridge ? window.__readoBridge.drain() : null")
+        raw = await previewEval(DRAIN_JS)
       } catch (e) {
         pageAlive.current = false
         // The webview vanished while the pane is open (a close/reopen race). The URL
@@ -265,131 +201,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       }
       try {
         if (!alive) return
-        const data = raw
-          ? (JSON.parse(raw) as {
-              logs?: LogEntry[]
-              net?: NetEntry[]
-              inspect?: number[]
-              commentAt?: {
-                x: number
-                y: number
-                url: string
-                text: string
-                target: WebTarget | null
-              } | null
-              openComment?: string | null
-              commentReply?: { id: string; text: string } | null
-              commentResolve?: string | null
-              commentType?: { id: string; type: CommentType } | null
-              commentKind?: { id: string; kind: CommentKind } | null
-              commentEdit?: { id: string; text: string } | null
-              hasMarks?: boolean
-              vaultPick?: VaultPick | null
-              href?: string
-            } | null)
-          : null
+        const data = raw ? (JSON.parse(raw) as BridgeDrain | null) : null
         // The bridge answering *is* the page being loaded and running — an empty
         // reply is a page that hasn't got there yet.
         pageAlive.current = data != null
         if (data) {
-          // Follow the page. A link, a redirect, or a router pushing a new route
-          // all move the page without telling Reado — the address bar showed
-          // whatever was last typed into it, which made Back, Reload and the
-          // address itself lie about where you were.
-          if (data.href) trackHref(data.href)
-          // A pick in the in-page credential chip. The strip acts on it — it is
-          // what holds the vault connection and knows how to fill.
-          if (data.vaultPick) usePreview.getState().setVaultPick(data.vaultPick)
-          // Right-click "inspect" from the page → open the inspector on that node.
-          if (data.inspect) {
-            const s2 = usePreview.getState()
-            s2.setInspectRequest(data.inspect)
-            if (!s2.inspector) s2.toggleInspector()
-          }
-          // The in-page "Comment here" composer was saved → create the design comment.
-          // Route through the store so the list updates synchronously (dots draw,
-          // an immediate open finds it) and firstComment can drive the gitignore prompt.
-          if (data.commentAt?.text) {
-            const c = data.commentAt
-            void useComments
-              .getState()
-              .create({
-                file: "",
-                scope: "web",
-                startLine: 0,
-                endLine: 0,
-                type: "note",
-                kind: "note",
-                body: c.text,
-                context: { snippet: "", before: "", after: "" },
-                url: c.url,
-                x: c.x,
-                y: c.y,
-                target: c.target ?? undefined,
-              })
-              .then(({ firstComment }) => {
-                if (firstComment && !useSettings.getState().gitignoreDontAsk)
-                  useComments.getState().setGitignorePrompt(true)
-              })
-              .catch(() => {})
-          }
-          // A page dot was clicked → show its comment card over the live page.
-          if (data.openComment) {
-            const c = useComments.getState().comments.find((x) => x.id === data.openComment)
-            if (c) injectCommentBox(c)
-          }
-          // Reply typed in the in-page card → post it, then re-render the card.
-          if (data.commentReply) {
-            const { id, text } = data.commentReply
-            void useComments
-              .getState()
-              .reply(id, text)
-              .then(() => {
-                const c = useComments.getState().comments.find((x) => x.id === id)
-                if (c) injectCommentBox(c)
-              })
-              .catch(() => {})
-          }
-          // Resolve clicked in the card → mark done and dismiss the card.
-          if (data.commentResolve) {
-            void useComments
-              .getState()
-              .setState(data.commentResolve, "done")
-              .catch(() => {})
-            void previewEval("window.__readoBridge&&window.__readoBridge.closeComment()").catch(
-              () => {},
-            )
-          }
-          // Type / kind / edit changed in the card → patch it, then re-render.
-          // Coalesce fields destined for the same comment into a single patch:
-          // separate read-modify-write calls (backend rewrites the whole comment)
-          // would race and drop a field (last write wins).
-          const patchAndReopen = (id: string, p: CommentPatch) =>
-            void useComments
-              .getState()
-              .patch(id, p)
-              .then(() => {
-                const c = useComments.getState().comments.find((x) => x.id === id)
-                if (c) injectCommentBox(c)
-              })
-              .catch(() => {})
-          const patches = new Map<string, CommentPatch>()
-          if (data.commentType)
-            patches.set(data.commentType.id, {
-              ...patches.get(data.commentType.id),
-              type: data.commentType.type,
-            })
-          if (data.commentKind)
-            patches.set(data.commentKind.id, {
-              ...patches.get(data.commentKind.id),
-              kind: data.commentKind.kind,
-            })
-          if (data.commentEdit)
-            patches.set(data.commentEdit.id, {
-              ...patches.get(data.commentEdit.id),
-              body: data.commentEdit.text,
-            })
-          for (const [id, p] of patches) patchAndReopen(id, p)
+          dispatchBridge(data, { trackHref })
           // Keep the comment dots on the page: re-inject when the set changes, or
           // when the page reloaded and dropped the layer (data.hasMarks == false).
           const webList = useComments
@@ -412,9 +229,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
             .join(",")}`
           if (marksSig !== lastMarksSig.current || !data.hasMarks) {
             lastMarksSig.current = marksSig
-            void previewEval(
-              `window.__readoBridge&&window.__readoBridge.marks(${JSON.stringify(webList)},${showMarksRef.current})`,
-            ).catch(() => {})
+            void callBridge("marks", webList, showMarksRef.current).catch(() => {})
           }
           const logs = data.logs ?? []
           const net = data.net ?? []
@@ -435,97 +250,10 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       } catch {
         /* page not ready — retry next tick */
       }
-      // Mirror to `.reado/` for the MCP whenever access is on. The files' presence
-      // means "preview is live", so write the initial empty state too — but only
-      // when the snapshot actually changed, not on every idle tick.
-      const s = usePreview.getState()
-      if (root && s.agentAccess) {
-        // Redacted on the way out: this file is what the agent reads. The store
-        // above keeps the real values, so the user's own inspector still shows
-        // their own page the way a browser's developer tools would.
-        const logsJson = redact(JSON.stringify(s.logs), s.secrets)
-        const netJson = redact(JSON.stringify(s.net), s.secrets)
-        const snap = `${logsJson}${netJson}`
-        if (snap !== lastPersisted.current) {
-          lastPersisted.current = snap
-          void previewPersistState(root, logsJson, netJson)
-        }
-      }
-
-      // Execute the agent's pending control command (opt-in only). eval covers
-      // dom/animation/click/type (the CLI ships the JS); navigate is allowlisted.
-      if (root && s.agentAccess) {
-        try {
-          const raw = await previewTakeCmd(root)
-          const cmd = raw ? (JSON.parse(raw) as { id?: string; op?: string; arg?: string }) : null
-          if (cmd?.id && cmd.id !== lastCmdId.current) {
-            lastCmdId.current = cmd.id
-            let ok = true
-            let result = ""
-            // The gate: ask the page, right now, whether it holds a credential.
-            // Checked per command rather than on the poll tick, so a password
-            // typed a moment ago cannot be beaten by a command already queued.
-            // A refusal is an answer — we never block waiting for the user.
-            const state = await previewEval(PAGE_STATE_JS)
-              .then((raw) => JSON.parse(raw || "null") as PageState | null)
-              .catch(() => null)
-            if (state?.hasSecret && !isPageGranted(state.href)) {
-              // Asked once per origin, not once per URL: a sign-in walks several
-              // pages of one site, and asking again at each step is the prompt
-              // fatigue this gate exists to avoid.
-              if (askedFor.current !== originOf(state.href)) {
-                askedFor.current = originOf(state.href)
-                usePreview.getState().setAccessRequest(state.href)
-              }
-              await previewPutResult(
-                root,
-                JSON.stringify({ id: cmd.id, ok: false, result: GATED_REASON }),
-              )
-              return
-            }
-            try {
-              if (cmd.op === "eval") {
-                result = await previewEval(cmd.arg ?? "")
-              } else if (cmd.op === "navigate") {
-                // Resolve a relative path (e.g. "/roadmap") against the current URL.
-                let url = cmd.arg ?? ""
-                try {
-                  url = new URL(url, usePreview.getState().url).href
-                } catch {
-                  /* keep as-is; the allowlist check will reject a bad URL */
-                }
-                if (!isOriginAllowed(url, s.allowlist)) {
-                  ok = false
-                  result = "origin not allowed"
-                } else {
-                  await previewNavigate(url)
-                  s.setUrl(url)
-                  result = url
-                }
-              } else if (cmd.op === "frame") {
-                const r = bodyRef.current?.getBoundingClientRect()
-                if (r) result = await previewCaptureFrame(r.left, r.top, r.width, r.height)
-                else {
-                  ok = false
-                  result = "no preview region"
-                }
-              } else {
-                ok = false
-                result = `unknown op: ${cmd.op}`
-              }
-            } catch (e) {
-              ok = false
-              result = String(e)
-            }
-            await previewPutResult(
-              root,
-              redact(JSON.stringify({ id: cmd.id, ok, result }), usePreview.getState().secrets),
-            )
-          }
-        } catch {
-          /* no pending command */
-        }
-      }
+      // Mirror to `.reado/` for the MCP, then run the agent's pending command —
+      // both only while agent access is on.
+      mirrorAgentState()
+      await runAgentCommand()
     }
     const id = window.setInterval(tick, 700)
     return () => {
@@ -534,79 +262,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     }
   }, [root, appendLogs, setNet])
 
-  // The pane rect for the child window: centred at the chosen device size (scaled
-  // by the page zoom), or filling the pane in responsive mode.
-  const computeBounds = useCallback(() => {
-    const el = bodyRef.current
-    if (!el) return null
-    const r = el.getBoundingClientRect()
-    if (r.width < 1 || r.height < 1) return null
-    const dev = usePreview.getState().device
-    const bz = usePreview.getState().browserZoom
-    let x = r.left
-    let w = r.width
-    let h = r.height
-    if (dev) {
-      w = Math.min(dev.w * bz, r.width)
-      h = Math.min(dev.h * bz, r.height)
-      x = r.left + (r.width - w) / 2
-    }
-    return { x, y: r.top, w, h, z: bz }
-  }, [])
-
-  // Reposition the (already-open) child window; keep zoom in sync.
-  const syncBounds = useCallback(() => {
-    const b = computeBounds()
-    if (!b) return
-    void previewSetBounds(b.x, b.y, b.w, b.h)
-    if (Math.abs(lastBounds.current.z - b.z) > 0.001) void previewSetZoom(b.z)
-    lastBounds.current = b
-  }, [computeBounds])
-
-  // Open/navigate the child window at `url` (create-or-navigate — self-heals if the
-  // window went away). Used on first open, URL changes, and dead→live reloads.
-  const openAt = useCallback(
-    (url: string) => {
-      const b = computeBounds()
-      if (!b) return
-      openedRef.current = true
-      void previewOpen(url, b.x, b.y, b.w, b.h)
-      if (Math.abs(lastBounds.current.z - b.z) > 0.001) void previewSetZoom(b.z)
-      lastBounds.current = b
-    },
-    [computeBounds],
-  )
-
-  useEffect(() => {
-    openAt(usePreview.getState().url)
-    const el = bodyRef.current
-    if (!el) return
-    // If the webview isn't up yet (bounds were 0 at mount, e.g. on reopen), create
-    // it once the placeholder has a real size; otherwise just re-park it.
-    const ro = new ResizeObserver(() => {
-      // No box at all — the dock region is collapsed. The preview is a real OS
-      // child window, so it doesn't hide with its placeholder: close it, and
-      // let the branch below re-open it when the region comes back.
-      if (!computeBounds()) {
-        if (openedRef.current) {
-          openedRef.current = false
-          void previewClose()
-        }
-        return
-      }
-      if (openedRef.current) syncBounds()
-      else openAt(usePreview.getState().url)
-    })
-    ro.observe(el)
-    return () => {
-      ro.disconnect()
-      openedRef.current = false
-      void previewClose()
-      // Drop the MCP mirror so the agent's tools report "no preview" once closed.
-      const r = useProject.getState().root
-      if (r) void previewClearState(r)
-    }
-  }, [syncBounds, openAt, computeBounds])
+  const { openAt, openedRef } = usePreviewBounds(bodyRef)
 
   // Offer the credential strip when the page shows a login form, the way a
   // browser extension does. The page is loading while this runs, so it looks a
@@ -636,13 +292,6 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     }
   }, [url])
 
-  // Re-park when the device, pane width, or interface zoom changes. Zoom matters:
-  // it's a CSS transform, so the ResizeObserver doesn't fire — but the pane's
-  // on-screen rect (what the child window needs) does move.
-  useEffect(() => {
-    syncBounds()
-  }, [device, paneWidth, zoom, browserZoom, inspectorSize, inspectorPos, dockLayout, syncBounds])
-
   // Drag the inspector's edge to resize it (height when docked bottom, width right).
   const startInspectorResize = (e: React.PointerEvent) => {
     e.preventDefault()
@@ -654,12 +303,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       const cur = pos === "right" ? ev.clientX : ev.clientY
       setInspectorSize(startSize + (start - cur) / z)
     }
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-    }
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
+    trackPointer(onMove)
   }
 
   // Watch for anything Reado floats over the pane's own rectangle. Only over
@@ -703,18 +347,6 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     }
   }, [pinRequest, setPinRequest])
 
-  // The preview is a child window in screen coordinates, so it must follow the
-  // host window when it moves or resizes.
-  useEffect(() => {
-    const win = getCurrentWindow()
-    const uns: Array<() => void> = []
-    void win.onMoved(() => syncBounds()).then((u) => uns.push(u))
-    void win.onResized(() => syncBounds()).then((u) => uns.push(u))
-    return () => {
-      for (const u of uns) u()
-    }
-  }, [syncBounds])
-
   const fitZoom = () => {
     const el = bodyRef.current
     const dev = usePreview.getState().device
@@ -734,12 +366,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       const dw = (startX - ev.clientX) / z
       setPaneWidth(Math.min(startW + dw, window.innerWidth / z - 200))
     }
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-    }
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
+    trackPointer(onMove)
   }
 
   const setDim = (which: "w" | "h", val: number) => {
@@ -751,75 +378,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
     })
   }
 
-  // Sniff the common dev-server ports and switch to the running one if the current
-  // URL is dead. Re-checked every 2s so a dev server started *after* opening the
-  // pane gets picked up automatically. A live current URL (incl. a manual one) is
-  // probed too, so it's never overridden.
-  useEffect(() => {
-    let alive = true
-    const origin = (u: string) => {
-      try {
-        return new URL(u).origin
-      } catch {
-        return ""
-      }
-    }
-    // True when there is nothing left to look for — the page is talking, or a
-    // server answered. False means the probe found nothing and is worth slowing
-    // down: it opens a socket per candidate port, and a pane left pointed at a
-    // server that is not running would otherwise knock on every one of them
-    // every two seconds, for as long as the pane is open.
-    const check = async (): Promise<boolean> => {
-      if (!alive) return true
-      // The page is up and talking: leave it alone. This check exists for a pane
-      // pointed at a server that isn't running yet — not to drag a working page
-      // back to the address Reado last wrote down. It used to do exactly that:
-      // follow a link, and two seconds later the pane snapped back to where it
-      // started (or to some other detected server), which is why the address
-      // never changed and Back had nothing to go back to.
-      if (pageAlive.current) {
-        wasLive.current = true
-        return true
-      }
-      const curUrl = usePreview.getState().url
-      let live: string[] = []
-      try {
-        live = await previewDetectUrls(root, curUrl)
-      } catch {
-        return false
-      }
-      const curLive = live.some((u) => origin(u) === origin(curUrl))
-      if (curLive) {
-        // The current URL responds: if it just came alive (server started after we
-        // opened), reload it so a page loaded while dead now shows.
-        if (!wasLive.current) openAt(curUrl)
-        wasLive.current = true
-      } else {
-        wasLive.current = false
-        // Auto-pick a detected server only while the user hasn't taken the wheel
-        // and isn't mid-edit in the URL bar (a remount would drop their typing).
-        if (!manualUrl.current && !urlFocused.current && live.length) {
-          usePreview.getState().setUrl(live[0])
-          openAt(live[0])
-        }
-      }
-      return curLive || live.length > 0
-    }
-    // Two seconds while something is there to find, doubling to half a minute
-    // while nothing is: a dev server that starts later is still picked up, and a
-    // pane sitting on a dead address stops hammering the machine.
-    let delay = PROBE_MS
-    let timer = 0
-    const tick = async () => {
-      delay = (await check()) ? PROBE_MS : Math.min(delay * 2, PROBE_MAX_MS)
-      if (alive) timer = window.setTimeout(tick, delay)
-    }
-    timer = window.setTimeout(tick, 0)
-    return () => {
-      alive = false
-      window.clearTimeout(timer)
-    }
-  }, [root, openAt])
+  useDevServerProbe(root, { openAt, pageAlive, wasLive, manualUrl, urlFocused })
 
   /** Take the page's own URL as the truth, unless the user is mid-edit in the
    *  address bar — retyping under their cursor is worse than a stale address. */

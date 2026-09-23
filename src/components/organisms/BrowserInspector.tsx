@@ -27,6 +27,7 @@ import { dispatchToAgent } from "@/lib/agents"
 import { previewEval } from "@/lib/api"
 import { findPanel, useLayout } from "@/lib/layout"
 import { type LogEntry, type LogLevel, type NetEntry, usePreview } from "@/lib/preview"
+import { callBridge } from "@/lib/previewBridge"
 
 type StoreKind = "cookie" | "local" | "session"
 interface DomNode {
@@ -105,7 +106,7 @@ export function BrowserInspector({ docked = false }: { docked?: boolean } = {}) 
   const [pickMode, setPickMode] = useState(false)
   const setPick = (on: boolean) => {
     setPickMode(on)
-    void previewEval(`window.__readoBridge&&window.__readoBridge.setPick(${on})`)
+    void callBridge("setPick", on)
   }
   const headerRef = useRef<HTMLElement>(null)
   const [narrow, setNarrow] = useState(false)
@@ -126,7 +127,7 @@ export function BrowserInspector({ docked = false }: { docked?: boolean } = {}) 
   const clearAll = () => {
     clearCaptured()
     setSelectedNet(null)
-    void previewEval("window.__readoBridge && window.__readoBridge.clear()")
+    void callBridge("clear")
   }
   const [storage, setStorage] = useState<{
     cookies: [string, string][]
@@ -190,11 +191,8 @@ export function BrowserInspector({ docked = false }: { docked?: boolean } = {}) 
 
   // Hover a tree node → highlight the element in the page (Chrome-style).
   const idxsOf = (path: string) => path.split(".").slice(1).map(Number)
-  const hiNode = (path: string) =>
-    void previewEval(
-      `window.__readoBridge&&window.__readoBridge.hi(${JSON.stringify(idxsOf(path))})`,
-    )
-  const unhiNode = () => void previewEval("window.__readoBridge&&window.__readoBridge.unhi()")
+  const hiNode = (path: string) => void callBridge("hi", idxsOf(path))
+  const unhiNode = () => void callBridge("unhi")
 
   // A right-click "inspect" on the page → open Elements, expand to the node, flash it.
   useEffect(() => {

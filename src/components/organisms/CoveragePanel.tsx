@@ -6,13 +6,10 @@
  */
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { listFiles } from "@/lib/api"
 import { computeCoverage } from "@/lib/coverage"
-import { createLogger, safeError } from "@/lib/logger"
+import { useProjectFileList } from "@/lib/projectFiles"
 import { useReadProgress } from "@/lib/readProgress"
 import { useProject } from "@/lib/store"
-
-const log = createLogger("coverage")
 
 /** A progress bar that grows to its value on mount / when the value changes.
  *  Reduce-motion collapses the width transition to instant (global CSS rule). */
@@ -34,27 +31,12 @@ function Bar({ pct, className = "h-1.5" }: { pct: number; className?: string }) 
 
 export function CoveragePanel() {
   const root = useProject((s) => s.root)
-  const treeNonce = useProject((s) => s.treeNonce)
   const open = useProject((s) => s.open)
   const read = useReadProgress((s) => s.read)
   const changed = useReadProgress((s) => s.changed)
   const { t } = useTranslation()
 
-  const [files, setFiles] = useState<string[] | null>(null)
-
-  useEffect(() => {
-    if (!root) return
-    let cancelled = false
-    listFiles(root)
-      .then((f) => !cancelled && setFiles(f))
-      .catch((e) => {
-        log.warn("list files failed", { error: safeError(e) })
-        if (!cancelled) setFiles([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [root, treeNonce])
+  const files = useProjectFileList(root)
 
   const cov = useMemo(
     () => (files ? computeCoverage(files, read, changed) : null),

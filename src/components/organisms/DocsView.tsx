@@ -19,23 +19,15 @@ import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
 import { ChevronIcon, CloseIcon, DocsIcon, MessageIcon, SpecsIcon } from "@/components/atoms/icons"
 import { Select } from "@/components/atoms/Select"
-import {
-  allowProjectAssets,
-  type Comment,
-  type CommentType,
-  listFiles,
-  readFile,
-  searchText,
-} from "@/lib/api"
+import { allowProjectAssets, type Comment, type CommentType, readFile, searchText } from "@/lib/api"
 import { baseName, toRelative, useComments } from "@/lib/comments"
-import { type DocItem, listDocs } from "@/lib/knowledge"
+import { stripDocExt, useDocs } from "@/lib/docs"
+import type { DocItem } from "@/lib/knowledge"
 import { markdownRehypeFor, markdownUrlTransform } from "@/lib/markdown"
 import { useSpecs } from "@/lib/specs"
 import { useProject, useWorkspace } from "@/lib/store"
 
 type Selection = { kind: "notes" } | { kind: "doc" | "spec"; path: string; label: string }
-
-const stripExt = (s: string) => s.replace(/\.(md|markdown|mdx)$/i, "")
 
 export function DocsView() {
   const comments = useComments((s) => s.comments)
@@ -48,7 +40,7 @@ export function DocsView() {
   const close = useWorkspace((s) => s.toggleDocs)
   const { t } = useTranslation()
 
-  const [docs, setDocs] = useState<DocItem[]>([])
+  const { docs } = useDocs(root)
   const [query, setQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState<CommentType | "all">("all")
   const [selection, setSelection] = useState<Selection>({ kind: "notes" })
@@ -63,18 +55,16 @@ export function DocsView() {
 
   useEffect(() => {
     loadArchived()
-    listFiles(root)
-      .then((files) => {
-        const ds = listDocs(files)
-        setDocs(ds)
-        // Open the README (or first doc) by default; fall back to notes.
-        if (ds.length) setSelection({ kind: "doc", path: ds[0].path, label: ds[0].label })
-      })
-      .catch(() => {})
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close(false)
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [loadArchived, close, root])
+
+  // Open the README (or first doc) by default, each time the list is (re)loaded;
+  // fall back to notes.
+  useEffect(() => {
+    if (docs.length) setSelection({ kind: "doc", path: docs[0].path, label: docs[0].label })
+  }, [docs])
 
   // Fetch the selected markdown document.
   useEffect(() => {
@@ -337,7 +327,7 @@ export function DocsView() {
                         g.items.map((it) =>
                           navButton(
                             it.path,
-                            stripExt(it.label),
+                            stripDocExt(it.label),
                             <SpecsIcon className="h-3.5 w-3.5 flex-none text-faint" />,
                             { kind: "spec", path: it.path, label: it.label },
                             true,

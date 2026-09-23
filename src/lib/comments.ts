@@ -214,3 +214,7 @@ export const commentsForFile = (comments: Comment[], relPath: string) =>
 
 /** Count of comments that are still open (for the status bar / badges). */
 export const openCount = (comments: Comment[]) => comments.filter((c) => c.state === "open").length
+
+/** Open tasks only — the agent's outstanding work, as the badges count it. */
+export const openTaskCount = (comments: Comment[]) =>
+  comments.filter((c) => c.kind === "task" && c.state === "open").length

@@ -10,13 +10,12 @@ import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, FileIcon, PinIcon } from "@/components/atoms/icons"
 import { baseName, toRelative } from "@/lib/comments"
 import { formatDocument } from "@/lib/docInfo"
+import { dirName } from "@/lib/paths"
 import { useFlip, usePointerReorder } from "@/lib/pointerReorder"
 import { useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
 import { isUntitled, untitledName, useUntitled } from "@/lib/untitled"
 import { revealAppName } from "@/lib/window"
-
-const dirname = (p: string) => p.slice(0, p.length - baseName(p).length - 1)
 
 /**
  * The label for a tab: its file name, plus the parent folder when another open
@@ -35,7 +34,7 @@ export function tabLabels(paths: string[]): Map<string, { name: string; dir?: st
     paths.map((p) => {
       const name = nameOf(p)
       const ambiguous = !isUntitled(p) && (counts.get(name) ?? 0) > 1
-      return [p, { name, dir: ambiguous ? baseName(dirname(p)) : undefined }]
+      return [p, { name, dir: ambiguous ? baseName(dirName(p)) : undefined }]
     }),
   )
 }
@@ -183,7 +182,7 @@ export function Tabs({ group }: { group?: string } = {}) {
       label: t("tree.openInTerminal"),
       onSelect: () => {
         const terminals = useTerminals.getState()
-        terminals.add(dirname(path))
+        terminals.add(dirName(path))
         terminals.toggle(true)
       },
     },

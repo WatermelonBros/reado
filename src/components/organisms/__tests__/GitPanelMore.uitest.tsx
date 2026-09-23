@@ -218,9 +218,11 @@ describe("the ⋯ menu", () => {
   })
 
   it("closes on a click outside it", async () => {
-    const { container } = render(<GitPanel />)
+    render(<GitPanel />)
     await openMenu()
-    fireEvent.click(container.querySelector(".fixed.inset-0") as HTMLElement)
+    // An Ark menu now: the outside click is a press anywhere off the menu, not a
+    // hand-rolled full-screen scrim.
+    await userEvent.click(screen.getByPlaceholderText("git.commitPlaceholder"))
     await waitFor(() => expect(screen.queryByText("git.stashes")).not.toBeInTheDocument())
   })
 })

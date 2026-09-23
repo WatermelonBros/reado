@@ -1,16 +1,8 @@
-/**
- * The Source Control side panel.
- *
- * Surfaces the working-tree changes split into staged and unstaged groups, lets
- * you stage / unstage / discard individual files (or all), and commit the staged
- * set with a message. Selecting a file opens it with the diff view on so you can
- * see what changed (including the agent's edits).
- */
-import type { ReactNode } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
 import { Button } from "@/components/atoms/Button"
+import { Dropdown, MenuRow } from "@/components/atoms/Dropdown"
 import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
 import {
@@ -33,114 +25,39 @@ import { Textarea } from "@/components/atoms/Textarea"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import {
   type GitChange,
-  gitBranches,
   gitCommit,
   gitCreateBranch,
   gitDiscard,
   gitDiscardAll,
   gitFetch,
-  gitInfo,
   gitPull,
   gitPush,
-  gitRefs,
   gitStage,
   gitStageAll,
   gitStash,
   gitStashApply,
   gitStashDrop,
-  gitStashList,
   gitStashPop,
   gitSync,
   gitUnstage,
   gitUnstageAll,
-  type Remote,
-  type StashEntry,
-  type Submodule,
   submitToTerminal,
-  type Worktree,
 } from "@/lib/api"
-import { baseName } from "@/lib/comments"
-import {
-  addRemote,
-  addWorktree,
-  amendLastCommit,
-  cherryPickCommit,
-  createTag,
-  deleteTag,
-  listRemotes,
-  listSubmodules,
-  listTags,
-  listWorktrees,
-  mergeBranch,
-  rebaseOnto,
-  removeRemote,
-  removeWorktree,
-  revertCommit,
-  setSigning,
-  signingOn,
-  updateSubmodules,
-} from "@/lib/gitOps"
-import { STATUS, useGitStatus } from "@/lib/gitStatus"
+import { amendLastCommit, setSigning, signingOn } from "@/lib/gitOps"
+import { useGitStatus } from "@/lib/gitStatus"
 import { notify } from "@/lib/notice"
 import { composeCommitPrompt } from "@/lib/review"
 import { useEditorActions, useProject, useWorkspace } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
-import { openProjectHere } from "@/lib/window"
+import { GitChangeRow, GitGroupHeader } from "./git/GitChangeRow"
+import { GitPicker, PICKERS, type PickerId } from "./git/GitPicker"
+import { useGitRepoData } from "./git/useGitRepoData"
 import { RebaseDialog } from "./RebaseDialog"
-
-const dirname = (p: string) => {
-  const i = p.lastIndexOf("/")
-  return i > 0 ? p.slice(0, i) : ""
-}
-
-/** One row of the repo menu. Fifteen of these were written out by hand, which is
- *  how two of them drifted into a different disabled style. */
-function MenuItem({
-  icon,
-  label,
-  onClick,
-  disabled,
-  danger,
-}: {
-  icon: ReactNode
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  danger?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface disabled:opacity-40 ${
-        danger ? "text-marker" : "text-ink"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
-  )
-}
-
-/** The menu entries that do nothing but open a picker — the whole difference
- *  between them is which one. */
-const PICKERS = [
-  ["revert", "git.revert"],
-  ["cherry", "git.cherryPick"],
-  ["merge", "git.merge"],
-  ["rebase", "git.rebase"],
-  ["worktrees", "git.worktrees"],
-  ["submodules", "git.submodules"],
-  ["tags", "git.tags"],
-  ["remotes", "git.remotes"],
-] as const
 
 export function GitPanel() {
   const root = useProject((s) => s.root)
   const open = useProject((s) => s.open)
   const git = useProject((s) => s.git)
-  const setGit = useProject((s) => s.setGit)
   const activeTerminal = useTerminals((s) => s.activeId)
   const addTerminal = useTerminals((s) => s.add)
   const { t } = useTranslation()
@@ -153,93 +70,19 @@ export function GitPanel() {
   const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null)
   // Stash index armed for drop confirmation (inline, like discardDiscard above).
   const [confirmDropStash, setConfirmDropStash] = useState<number | null>(null)
-  // Repo-level "more actions" dropdown + its data.
+  // Repo-level "more actions" dropdown.
   const [menuOpen, setMenuOpen] = useState(false)
-  // The "more" menu is positioned with fixed coords (to the right of the dots) so
-  // it escapes the sidebar's overflow clipping entirely.
-  const dotsRef = useRef<HTMLDivElement>(null)
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
-  const [stashes, setStashes] = useState<StashEntry[]>([])
   const [branchName, setBranchName] = useState<string | null>(null) // null = input hidden
   const [confirmDiscardAll, setConfirmDiscardAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** Which picker is open — the commit list for revert/cherry-pick, or the tag
    *  and remote lists. One at a time, so the panel never stacks two questions. */
-  const [picking, setPicking] = useState<
-    | "revert"
-    | "cherry"
-    | "tags"
-    | "remotes"
-    | "merge"
-    | "rebase"
-    | "worktrees"
-    | "submodules"
-    | null
-  >(null)
-  const [commits, setCommits] = useState<Array<{ hash: string; subject: string }>>([])
-  const [tags, setTags] = useState<string[]>([])
-  const [remotes, setRemotes] = useState<Remote[]>([])
-  const [branches, setBranches] = useState<string[]>([])
-  const [worktrees, setWorktrees] = useState<Worktree[]>([])
-  const [submodules, setSubmodules] = useState<Submodule[]>([])
+  const [picking, setPicking] = useState<PickerId | null>(null)
   /** The branch an interactive rebase is being planned against; null = closed. */
   const [rebasing, setRebasing] = useState<string | null>(null)
   const [signing, setSigningState] = useState(false)
 
-  // Load what the open picker needs, and nothing else.
-  useEffect(() => {
-    if (!picking) return
-    if (picking === "tags") void listTags().then(setTags)
-    else if (picking === "remotes") void listRemotes().then(setRemotes)
-    else if (picking === "worktrees") void listWorktrees().then(setWorktrees)
-    else if (picking === "submodules") void listSubmodules().then(setSubmodules)
-    else if (picking === "merge" || picking === "rebase")
-      // The current branch is not a thing to merge or rebase onto itself.
-      void gitBranches(root).then((b) =>
-        setBranches([...b.local, ...b.remote].filter((n) => n !== b.current)),
-      )
-    else void gitRefs(root).then((r) => setCommits(r.commits))
-  }, [picking, root])
-
-  const refresh = useCallback(() => {
-    void useGitStatus.getState().refresh(root)
-  }, [root])
-
-  const refreshStashes = useCallback(() => {
-    gitStashList(root)
-      .then(setStashes)
-      .catch(() => setStashes([]))
-  }, [root])
-
-  // Refresh ahead/behind/remote after a repo op so the push/sync affordances
-  // reflect the new state (a commit adds to `ahead`, a push clears it).
-  const refreshInfo = useCallback(() => {
-    gitInfo(root)
-      .then(setGit)
-      .catch(() => {})
-  }, [root, setGit])
-
-  /** After an operation that can move HEAD or the working tree, re-read both. */
-  const refreshAll = useCallback(() => {
-    refresh()
-    refreshInfo()
-  }, [refresh, refreshInfo])
-
-  useEffect(() => {
-    refresh()
-    refreshInfo()
-    // Keep the view fresh as the tree changes (cheap, debounced by interval).
-    // Skip the poll while the window is hidden — nothing to refresh for.
-    // `refreshInfo` rides along so the rail's badge can't disagree with the list
-    // the panel is showing: the count and the list are the same fact, and only
-    // one of them being refreshed is how they drift apart.
-    const id = window.setInterval(() => {
-      if (document.hidden) return
-      refresh()
-      refreshInfo()
-    }, 4000)
-    return () => clearInterval(id)
-  }, [refresh, refreshInfo])
+  const { stashes, refresh, refreshStashes, refreshInfo, refreshAll } = useGitRepoData(root)
 
   const staged = changes.filter((c) => c.staged)
   const unstaged = changes.filter((c) => !c.staged)
@@ -334,85 +177,16 @@ export function GitPanel() {
     submitToTerminal(id, composeCommitPrompt(), id === activeTerminal ? 0 : 400)
   }
 
-  // Render functions, not components: declared in the body, a component is a
-  // fresh type each render, and the 4s status poll would remount every row —
-  // now that each row carries IconButtons, that tears down their tooltip
-  // machines fifteen times a minute.
-  const row = (c: GitChange, key: string) => {
-    const s = STATUS[c.status]
-    return (
-      <li key={key} className="group/row">
-        <div className="flex items-center gap-2 px-3 py-1 text-sm transition-colors hover:bg-surface">
-          <button
-            type="button"
-            onClick={() => select(c)}
-            title={c.path}
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          >
-            <span className="truncate text-ink">{baseName(c.path)}</span>
-            <span className="truncate text-xs text-faint">{dirname(c.path)}</span>
-          </button>
-          {confirmDiscard === c.path ? (
-            <InlineConfirm
-              question={`${t("git.discard")}?`}
-              confirmLabel={t("comment.delete")}
-              onConfirm={() => discard(c)}
-              onCancel={() => setConfirmDiscard(null)}
-            />
-          ) : (
-            <div className="flex flex-none items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
-              {!c.staged && (
-                <IconButton
-                  size="xs"
-                  danger
-                  label={t("git.discard")}
-                  icon={<DiscardIcon className="h-3.5 w-3.5" />}
-                  onClick={() => setConfirmDiscard(c.path)}
-                />
-              )}
-              <IconButton
-                size="xs"
-                label={c.staged ? t("git.unstage") : t("git.stage")}
-                icon={
-                  c.staged ? (
-                    <MinusIcon className="h-3.5 w-3.5" />
-                  ) : (
-                    <PlusIcon className="h-3.5 w-3.5" />
-                  )
-                }
-                onClick={() => act(c.staged ? gitUnstage(root, c.path) : gitStage(root, c.path))}
-              />
-            </div>
-          )}
-          <span className="flex-none font-mono text-xs font-semibold" style={{ color: s.color }}>
-            {s.letter}
-          </span>
-        </div>
-      </li>
-    )
-  }
-
-  const groupHeader = (
-    label: string,
-    count: number,
-    actions: { onClick: () => void; label: string; Icon: typeof PlusIcon; danger?: boolean }[],
-  ) => (
-    <div className="group/hdr flex items-center gap-2 px-3 pt-3 pb-1 text-xs font-medium tracking-wide text-muted uppercase">
-      <span>{label}</span>
-      <span className="text-faint">{count}</span>
-      <div className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover/hdr:opacity-100 group-focus-within/hdr:opacity-100">
-        {actions.map((a) => (
-          <IconButton
-            key={a.label}
-            size="xs"
-            danger={a.danger}
-            label={a.label}
-            icon={<a.Icon className="h-3.5 w-3.5" />}
-            onClick={a.onClick}
-          />
-        ))}
-      </div>
-    </div>
+  const changeRow = (c: GitChange, key: string) => (
+    <GitChangeRow
+      key={key}
+      change={c}
+      confirming={confirmDiscard === c.path}
+      onSelect={() => select(c)}
+      onArmDiscard={setConfirmDiscard}
+      onDiscard={() => discard(c)}
+      onToggleStage={() => act(c.staged ? gitUnstage(root, c.path) : gitStage(root, c.path))}
+    />
   )
 
   const toolButton = (
@@ -467,374 +241,151 @@ export function GitPanel() {
         {toolButton("fetch", () => runRepo(gitFetch(root)), t("git.fetch"), FetchIcon, !hasRemote)}
         {toolButton("pull", () => runRepo(gitPull(root)), t("git.pull"), PullIcon, !hasRemote)}
         {toolButton("push", () => runRepo(gitPush(root)), t("git.push"), PushIcon, !canPush)}
-        <div ref={dotsRef} className="ml-auto">
-          {toolButton(
-            "more",
-            () => {
-              const next = !menuOpen
+        <div className="ml-auto">
+          <Dropdown
+            label={t("git.more")}
+            placement="right"
+            open={menuOpen}
+            onOpenChange={(next) => {
               if (next) {
-                const r = dotsRef.current?.getBoundingClientRect()
-                if (r) setMenuPos({ top: r.top, left: r.right + 6 })
                 refreshStashes()
                 // Read signing from the repository each time: it lives in git's
                 // own config, which the user may have changed elsewhere.
                 void signingOn().then(setSigningState)
               }
               setMenuOpen(next)
-            },
-            t("git.more"),
-            MoreIcon,
-          )}
-          {picking && (
-            <>
-              <div className="fixed inset-0 z-20" onClick={() => setPicking(null)} />
-              <div className="fixed top-1/4 left-1/2 z-30 max-h-[50vh] w-[28rem] -translate-x-1/2 overflow-y-auto rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]">
-                {picking === "tags" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPicking(null)
-                        void createTag().then(refreshAll)
+            }}
+            triggerAsChild
+            trigger={
+              <IconButton
+                disabled={busy}
+                label={t("git.more")}
+                icon={<MoreIcon className="h-4 w-4" />}
+              />
+            }
+            className="max-h-[var(--available-height)] w-60 overflow-y-auto text-sm"
+          >
+            <MenuRow
+              icon={<GitBranchIcon className="h-3.5 w-3.5 text-muted" />}
+              label={t("git.newBranch")}
+              onClick={() => setBranchName("")}
+            />
+            {/* Fixing what just happened, and reshaping the branch. These
+                used to mean leaving for a terminal, which is the one place a
+                read-first editor should not have to send anyone. */}
+            <MenuRow
+              icon={<GitBranchIcon className="h-3.5 w-3.5 text-muted" />}
+              label={t("git.amend")}
+              onClick={() => void amendLastCommit().then(refreshAll)}
+            />
+            {(Object.keys(PICKERS) as PickerId[]).map((key) => (
+              <MenuRow
+                key={key}
+                icon={<GitBranchIcon className="h-3.5 w-3.5 text-muted" />}
+                label={t(PICKERS[key].label)}
+                onClick={() => setPicking(key)}
+              />
+            ))}
+            <MenuRow
+              icon={<GraphIcon className="h-3.5 w-3.5 text-muted" />}
+              label={t("gitGraph.title")}
+              onClick={() => useWorkspace.getState().toggleGitGraph(true)}
+            />
+            <MenuRow
+              icon={<SealCheckIcon className="h-3.5 w-3.5 text-muted" />}
+              label={signing ? t("git.signingDisable") : t("git.signingEnable")}
+              onClick={() => {
+                const next = !signing
+                setSigningState(next)
+                void setSigning(next)
+              }}
+            />
+            <MenuRow
+              icon={<StashIcon className="h-3.5 w-3.5 text-muted" />}
+              label={t("git.stash")}
+              disabled={changes.length === 0}
+              onClick={() => runRepo(gitStash(root, "", false))}
+            />
+            <MenuRow
+              icon={<StashIcon className="h-3.5 w-3.5 text-muted" />}
+              label={t("git.stashUntracked")}
+              disabled={changes.length === 0}
+              onClick={() => runRepo(gitStash(root, "", true))}
+            />
+            <MenuRow
+              icon={<DiscardIcon className="h-3.5 w-3.5" />}
+              label={t("git.discardAll")}
+              danger
+              disabled={unstaged.length === 0}
+              onClick={() => setConfirmDiscardAll(true)}
+            />
+
+            {/* The stashes are rows with actions of their own, not menu items:
+                each one offers three, and one of those asks first. */}
+            <div className="mt-1 border-t border-line px-3 pt-1.5 pb-0.5 text-[10px] font-medium tracking-wide text-faint uppercase">
+              {t("git.stashes")}
+            </div>
+            {stashes.length === 0 ? (
+              <p className="px-3 py-1.5 text-xs text-faint">{t("git.noStashes")}</p>
+            ) : (
+              stashes.map((s) => (
+                <div
+                  key={s.index}
+                  className="group/stash flex items-center gap-1 px-3 py-1 hover:bg-surface"
+                >
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted" title={s.message}>
+                    {s.message}
+                  </span>
+                  {confirmDropStash === s.index ? (
+                    <InlineConfirm
+                      question={t("git.stashDropConfirm")}
+                      confirmLabel={t("git.stashDrop")}
+                      onConfirm={() => {
+                        setConfirmDropStash(null)
+                        runRepo(gitStashDrop(root, s.index))
                       }}
-                      className="flex w-full items-center px-3 py-1.5 text-left text-ink hover:bg-surface"
-                    >
-                      {t("git.tagCreate")}
-                    </button>
-                    {tags.map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => {
-                          setPicking(null)
-                          void deleteTag(name).then(refreshAll)
-                        }}
-                        className="flex w-full items-center justify-between px-3 py-1.5 text-left text-muted hover:bg-surface"
+                      onCancel={() => setConfirmDropStash(null)}
+                    />
+                  ) : (
+                    <>
+                      <Button
+                        size="sm"
+                        className="opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100"
+                        onClick={() => runRepo(gitStashApply(root, s.index))}
                       >
-                        <span>{name}</span>
-                        <span className="text-[10px] text-faint">{t("git.tagDelete")}</span>
-                      </button>
-                    ))}
-                  </>
-                )}
-                {picking === "remotes" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPicking(null)
-                        void addRemote().then(refreshAll)
-                      }}
-                      className="flex w-full items-center px-3 py-1.5 text-left text-ink hover:bg-surface"
-                    >
-                      {t("git.remoteAdd")}
-                    </button>
-                    {remotes.map((r) => (
-                      <button
-                        key={r.name}
-                        type="button"
-                        onClick={() => {
-                          setPicking(null)
-                          void removeRemote(r.name).then(refreshAll)
-                        }}
-                        className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-muted hover:bg-surface"
+                        {t("git.stashApply")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100"
+                        onClick={() => runRepo(gitStashPop(root, s.index))}
                       >
-                        <span className="flex-none text-ink">{r.name}</span>
-                        <span className="min-w-0 truncate text-[10px] text-faint">{r.url}</span>
-                      </button>
-                    ))}
-                  </>
-                )}
-                {(picking === "merge" || picking === "rebase") && (
-                  <>
-                    {picking === "rebase" && (
+                        {t("git.stashPop")}
+                      </Button>
                       <button
                         type="button"
-                        onClick={() => {
-                          const onto = branches[0]
-                          setPicking(null)
-                          if (onto) setRebasing(onto)
-                        }}
-                        className="flex w-full items-center px-3 py-1.5 text-left text-muted hover:bg-surface"
+                        onClick={() => setConfirmDropStash(s.index)}
+                        className="flex-none text-xs text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100 hover:text-marker"
                       >
-                        {t("git.rebasePick")}
+                        {t("git.stashDrop")}
                       </button>
-                    )}
-                    {branches.length === 0 && (
-                      <p className="px-3 py-1.5 text-xs text-faint">{t("git.noBranches")}</p>
-                    )}
-                    {branches.map((b) => (
-                      <button
-                        key={b}
-                        type="button"
-                        onClick={() => {
-                          setPicking(null)
-                          void (picking === "merge" ? mergeBranch(b) : rebaseOnto(b)).then(
-                            refreshAll,
-                          )
-                        }}
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-surface"
-                      >
-                        <GitBranchIcon className="h-3.5 w-3.5 text-muted" />
-                        <span className="min-w-0 truncate">{b}</span>
-                      </button>
-                    ))}
-                  </>
-                )}
-                {picking === "worktrees" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPicking(null)
-                        void addWorktree().then(refreshAll)
-                      }}
-                      className="flex w-full items-center px-3 py-1.5 text-left text-ink hover:bg-surface"
-                    >
-                      {t("git.worktreeAdd")}
-                    </button>
-                    {worktrees.map((w) => (
-                      <div
-                        key={w.path}
-                        className="flex w-full items-center justify-between gap-3 px-3 py-1.5"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPicking(null)
-                            void openProjectHere(w.path)
-                          }}
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left hover:underline"
-                        >
-                          <span className="flex-none text-ink">
-                            {w.branch ?? t("git.detached")}
-                          </span>
-                          <span className="min-w-0 truncate text-[10px] text-faint">{w.path}</span>
-                        </button>
-                        {!w.isMain && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPicking(null)
-                              void removeWorktree(w.path).then(refreshAll)
-                            }}
-                            className="flex-none text-[10px] text-marker hover:underline"
-                          >
-                            {t("git.worktreeRemove")}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </>
-                )}
-                {picking === "submodules" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPicking(null)
-                        void updateSubmodules().then(refreshAll)
-                      }}
-                      className="flex w-full items-center px-3 py-1.5 text-left text-ink hover:bg-surface"
-                    >
-                      {t("git.submodulesUpdate")}
-                    </button>
-                    {submodules.length === 0 && (
-                      <p className="px-3 py-1.5 text-xs text-faint">{t("git.noSubmodules")}</p>
-                    )}
-                    {submodules.map((m) => (
-                      <button
-                        key={m.path}
-                        type="button"
-                        onClick={() => {
-                          setPicking(null)
-                          void (m.initialized
-                            ? openProjectHere(`${root}/${m.path}`)
-                            : updateSubmodules(m.path).then(refreshAll))
-                        }}
-                        className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left hover:bg-surface"
-                      >
-                        <span className="min-w-0 truncate text-ink">{m.path}</span>
-                        <span className="flex-none text-[10px] text-faint">
-                          {m.initialized
-                            ? m.modified
-                              ? t("git.submoduleModified")
-                              : m.sha.slice(0, 7)
-                            : t("git.submoduleMissing")}
-                        </span>
-                      </button>
-                    ))}
-                  </>
-                )}
-                {(picking === "revert" || picking === "cherry") &&
-                  commits.map((c) => (
-                    <button
-                      key={c.hash}
-                      type="button"
-                      onClick={() => {
-                        const commit = c.hash
-                        setPicking(null)
-                        void (
-                          picking === "revert" ? revertCommit(commit) : cherryPickCommit(commit)
-                        ).then(refreshAll)
-                      }}
-                      className="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-surface"
-                    >
-                      <span className="flex-none font-mono text-[10px] text-faint">
-                        {c.hash.slice(0, 7)}
-                      </span>
-                      <span className="min-w-0 truncate text-ink">{c.subject}</span>
-                    </button>
-                  ))}
-              </div>
-            </>
-          )}
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </Dropdown>
+          <GitPicker
+            picking={picking}
+            onClose={() => setPicking(null)}
+            ctx={{ root, refreshAll, startRebase: setRebasing }}
+          />
           {rebasing && (
             <RebaseDialog
               upstream={rebasing}
               onClose={() => setRebasing(null)}
               onDone={refreshAll}
             />
-          )}
-          {menuOpen && menuPos && (
-            <>
-              <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
-              <div
-                className="fixed z-30 w-60 overflow-y-auto rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]"
-                style={{
-                  top: menuPos.top,
-                  left: menuPos.left,
-                  maxHeight: `calc(100vh - ${menuPos.top}px - 8px)`,
-                }}
-              >
-                <MenuItem
-                  icon={<GitBranchIcon className="h-3.5 w-3.5 text-muted" />}
-                  label={t("git.newBranch")}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    setBranchName("")
-                  }}
-                />
-                {/* Fixing what just happened, and reshaping the branch. These
-                    used to mean leaving for a terminal, which is the one place a
-                    read-first editor should not have to send anyone. */}
-                <MenuItem
-                  icon={<GitBranchIcon className="h-3.5 w-3.5 text-muted" />}
-                  label={t("git.amend")}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    void amendLastCommit().then(refreshAll)
-                  }}
-                />
-                {PICKERS.map(([key, label]) => (
-                  <MenuItem
-                    key={key}
-                    icon={<GitBranchIcon className="h-3.5 w-3.5 text-muted" />}
-                    label={t(label)}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      setPicking(key)
-                    }}
-                  />
-                ))}
-                <MenuItem
-                  icon={<GraphIcon className="h-3.5 w-3.5 text-muted" />}
-                  label={t("gitGraph.title")}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    useWorkspace.getState().toggleGitGraph(true)
-                  }}
-                />
-                <MenuItem
-                  icon={<SealCheckIcon className="h-3.5 w-3.5 text-muted" />}
-                  label={signing ? t("git.signingDisable") : t("git.signingEnable")}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    const next = !signing
-                    setSigningState(next)
-                    void setSigning(next)
-                  }}
-                />
-                <MenuItem
-                  icon={<StashIcon className="h-3.5 w-3.5 text-muted" />}
-                  label={t("git.stash")}
-                  disabled={changes.length === 0}
-                  onClick={() => runRepo(gitStash(root, "", false))}
-                />
-                <MenuItem
-                  icon={<StashIcon className="h-3.5 w-3.5 text-muted" />}
-                  label={t("git.stashUntracked")}
-                  disabled={changes.length === 0}
-                  onClick={() => runRepo(gitStash(root, "", true))}
-                />
-                <MenuItem
-                  icon={<DiscardIcon className="h-3.5 w-3.5" />}
-                  label={t("git.discardAll")}
-                  danger
-                  disabled={unstaged.length === 0}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    setConfirmDiscardAll(true)
-                  }}
-                />
-
-                <div className="mt-1 border-t border-line px-3 pt-1.5 pb-0.5 text-[10px] font-medium tracking-wide text-faint uppercase">
-                  {t("git.stashes")}
-                </div>
-                {stashes.length === 0 ? (
-                  <p className="px-3 py-1.5 text-xs text-faint">{t("git.noStashes")}</p>
-                ) : (
-                  stashes.map((s) => (
-                    <div
-                      key={s.index}
-                      className="group/stash flex items-center gap-1 px-3 py-1 hover:bg-surface"
-                    >
-                      <span
-                        className="min-w-0 flex-1 truncate text-xs text-muted"
-                        title={s.message}
-                      >
-                        {s.message}
-                      </span>
-                      {confirmDropStash === s.index ? (
-                        <InlineConfirm
-                          question={t("git.stashDropConfirm")}
-                          confirmLabel={t("git.stashDrop")}
-                          onConfirm={() => {
-                            setConfirmDropStash(null)
-                            runRepo(gitStashDrop(root, s.index))
-                          }}
-                          onCancel={() => setConfirmDropStash(null)}
-                        />
-                      ) : (
-                        <>
-                          <Button
-                            size="sm"
-                            className="opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100"
-                            onClick={() => runRepo(gitStashApply(root, s.index))}
-                          >
-                            {t("git.stashApply")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100"
-                            onClick={() => runRepo(gitStashPop(root, s.index))}
-                          >
-                            {t("git.stashPop")}
-                          </Button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDropStash(s.index)}
-                            className="flex-none text-xs text-muted opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100 focus-visible:opacity-100 hover:text-marker"
-                          >
-                            {t("git.stashDrop")}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
           )}
         </div>
       </div>
@@ -925,31 +476,43 @@ export function GitPanel() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {staged.length > 0 && (
             <>
-              {groupHeader(t("git.staged"), staged.length, [
-                {
-                  onClick: () => act(gitUnstageAll(root)),
-                  label: t("git.unstageAll"),
-                  Icon: MinusIcon,
-                },
-              ])}
+              <GitGroupHeader
+                label={t("git.staged")}
+                count={staged.length}
+                actions={[
+                  {
+                    onClick: () => act(gitUnstageAll(root)),
+                    label: t("git.unstageAll"),
+                    Icon: MinusIcon,
+                  },
+                ]}
+              />
               <ul className="m-0 list-none p-0">
-                {staged.map((c, i) => row(c, `s:${i}:${c.path}`))}
+                {staged.map((c, i) => changeRow(c, `s:${i}:${c.path}`))}
               </ul>
             </>
           )}
           {unstaged.length > 0 && (
             <>
-              {groupHeader(t("git.changes"), unstaged.length, [
-                {
-                  onClick: () => setConfirmDiscardAll(true),
-                  label: t("git.discardAll"),
-                  Icon: DiscardIcon,
-                  danger: true,
-                },
-                { onClick: () => act(gitStageAll(root)), label: t("git.stageAll"), Icon: PlusIcon },
-              ])}
+              <GitGroupHeader
+                label={t("git.changes")}
+                count={unstaged.length}
+                actions={[
+                  {
+                    onClick: () => setConfirmDiscardAll(true),
+                    label: t("git.discardAll"),
+                    Icon: DiscardIcon,
+                    danger: true,
+                  },
+                  {
+                    onClick: () => act(gitStageAll(root)),
+                    label: t("git.stageAll"),
+                    Icon: PlusIcon,
+                  },
+                ]}
+              />
               <ul className="m-0 list-none p-0">
-                {unstaged.map((c, i) => row(c, `u:${i}:${c.path}`))}
+                {unstaged.map((c, i) => changeRow(c, `u:${i}:${c.path}`))}
               </ul>
             </>
           )}

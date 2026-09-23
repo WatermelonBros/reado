@@ -4,8 +4,6 @@
  * restores the prior session on mount; persists the session as tabs change.
  */
 
-import { listen } from "@tauri-apps/api/event"
-import { getCurrentWindow } from "@tauri-apps/api/window"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
@@ -36,54 +34,26 @@ import { KnowledgeGraph } from "@/components/organisms/KnowledgeGraph"
 import { Tabs } from "@/components/organisms/Tabs"
 import { TOOL_TITLE, ToolPanelBody } from "@/components/organisms/ToolPanelBody"
 import { TourBar } from "@/components/organisms/ToursPanel"
-import { t as translate } from "@/i18n"
-import { dispatchToAgent } from "@/lib/agents"
-import {
-  anywhereClearProject,
-  anywhereSetProject,
-  gitInfo,
-  listFiles,
-  type Objective,
-  previewClose,
-  ptyWrite,
-  readFile,
-  reanchorFile,
-  rebuildIndex,
-  resolvePath,
-  semanticRebuild,
-  semanticReindexFile,
-  startWatching,
-} from "@/lib/api"
-import { useBookmarks } from "@/lib/bookmarks"
-import { baseName, toRelative, useComments } from "@/lib/comments"
+import { previewClose } from "@/lib/api"
+import { openTaskCount as openTaskCountOf, toRelative, useComments } from "@/lib/comments"
 import { newFile, newFolder } from "@/lib/docInfo"
-import { useGuidedReview } from "@/lib/guidedReview"
 import { type DockArea, findPanel, useLayout } from "@/lib/layout"
-import { createLogger, safeError } from "@/lib/logger"
-import { notifyWatchedFileChanged } from "@/lib/lsp"
-import { moodOf, useMascot } from "@/lib/mascot"
+import { workbenchColumns } from "@/lib/layoutColumns"
 import { ensureMcp } from "@/lib/mcp"
-import { notifyError } from "@/lib/notice"
-import { notifyAgentDone, notifyResolved } from "@/lib/notify"
-import { usePreReview } from "@/lib/preReview"
+import { notifyResolved } from "@/lib/notify"
+import { trackPointer } from "@/lib/pointerDrag"
 import { usePreview } from "@/lib/preview"
 import { loadProjectConfig, watchProjectConfig } from "@/lib/projectConfig"
-import { useQa } from "@/lib/qa"
-import { useReadProgress, wasSelfWrite } from "@/lib/readProgress"
+import { useReadProgress } from "@/lib/readProgress"
 import { useReasoning } from "@/lib/reasoning"
 import { offerRecommendations } from "@/lib/recommended"
 import { useResolveLoop } from "@/lib/resolveLoop"
-import { composeReviewPrompt } from "@/lib/review"
 import { useSpecs } from "@/lib/specs"
-import { type Tool, useProject, useSessions, useSettings, useWorkspace } from "@/lib/store"
-import { offSafe, useTerminals } from "@/lib/terminals"
+import { type Tool, useProject, useSettings, useWorkspace } from "@/lib/store"
 import { useTesting } from "@/lib/testing"
-import { useTours } from "@/lib/tours"
-import { clearOpenFile, currentOpenFile, currentWorkspaceFile, setWindowTitle } from "@/lib/window"
-import { acrossRoots, loadWorkspace, workspaceRoots } from "@/lib/workspace"
-import { foldersOfWorkspaceFile } from "@/lib/workspaceFile"
-
-const log = createLogger("project")
+import { useAnywhereBridge } from "./project/useAnywhereBridge"
+import { useProjectSession } from "./project/useProjectSession"
+import { useProjectWatcher } from "./project/useProjectWatcher"
 
 // Keep at least this much room for the editor when applying the sidebar width,
 // so a width persisted on a large monitor can't squeeze the editor to nothing
@@ -96,86 +66,14 @@ const MIN_EDITOR_WIDTH = 360
 const MIN_SIDEBAR_WIDTH = 180
 
 export function ProjectView({ root }: { root: string }) {
-  const init = useProject((s) => s.init)
-  const setGit = useProject((s) => s.setGit)
-  const tabs = useProject((s) => s.tabs)
-  const active = useProject((s) => s.active)
-  const expandedDirs = useProject((s) => s.expandedDirs)
   const splitPath = useProject((s) => s.splitPath)
   const groups = useProject((s) => s.groups)
   const focusedGroup = useProject((s) => s.focusedGroup)
   const focusGroup = useProject((s) => s.focusGroup)
   const treeNonce = useProject((s) => s.treeNonce)
-  const saveSession = useSessions((s) => s.save)
   const { t } = useTranslation()
 
-  // True once the saved session has been restored. We must not persist the
-  // (empty) initial state before then, or it would clobber the saved session.
-  const restored = useRef(false)
-
-  // Restore the saved session synchronously on mount, then load git info
-  // separately. Doing the restore synchronously (rather than after the async
-  // git call) keeps tab order deterministic and race-free.
-  useEffect(() => {
-    // Restore the saved session only when the setting allows; otherwise start
-    // clean. The stored session is left on disk (not deleted).
-    const session = useSettings.getState().restoreSession
-      ? useSessions.getState().byRoot[root]
-      : undefined
-    init(
-      root,
-      {
-        isRepo: false,
-        branch: null,
-        ahead: 0,
-        behind: 0,
-        hasRemote: false,
-        hasUpstream: false,
-        changedFiles: 0,
-      },
-      session,
-    )
-    restored.current = true
-    // The workspace's other folders, if this one has any. Loaded after `init`
-    // (which seeds the list with the primary folder) so a slow read can never
-    // leave the tree with no root at all. A window opened from a portable
-    // workspace file takes its list from *that* file — the folder's own
-    // `.reado/workspace.json` is what a folder opened directly uses.
-    const wsFile = currentWorkspaceFile()
-    useProject.getState().setWorkspaceFile(wsFile)
-    void (wsFile ? foldersOfWorkspaceFile(wsFile) : loadWorkspace(root)).then((folders) => {
-      for (const folder of folders) useProject.getState().addRoot(folder)
-    })
-    // Opened from an OS file association: open the requested file, then drop the
-    // hash param so a reload doesn't re-open it.
-    const openFile = currentOpenFile()
-    if (openFile?.startsWith(root)) {
-      useProject.getState().open(openFile)
-      clearOpenFile()
-    }
-    setWindowTitle(baseName(root))
-    useComments.getState().load(root)
-    useReadProgress.getState().load(root)
-    useBookmarks.getState().load(root)
-    useQa.getState().load(root)
-    useTours.getState().load(root)
-    usePreReview.getState().load(root)
-    useGuidedReview.getState().load(root)
-    void useResolveLoop.getState().load(root)
-    acrossRoots(workspaceRoots(), listFiles)
-      .then((f) => setTotalFiles(f.length))
-      .catch(() => setTotalFiles(0))
-    // Build the SQLite index on open if missing/stale (rebuildable cache).
-    rebuildIndex(root).catch((e) => log.warn("index rebuild failed", { error: safeError(e) }))
-    // And the semantic one, so "where do we…?" answers from the first keystroke
-    // rather than waiting on an agent.
-    semanticRebuild(root).catch((e) =>
-      log.warn("semantic index rebuild failed", { error: safeError(e) }),
-    )
-    gitInfo(root)
-      .then(setGit)
-      .catch((e) => log.warn("git info failed", { error: safeError(e) }))
-  }, [root, init, setGit])
+  const totalFiles = useProjectSession(root)
 
   // Reload the specs list when files change on disk (mirrors the file tree), so
   // adding/removing an OpenSpec change or capability shows up without a reopen —
@@ -205,89 +103,7 @@ export function ProjectView({ root }: { root: string }) {
     useProject.getState().bumpTree()
   }, [excludeGlobs])
 
-  // Reado Anywhere: expose this window's project to paired phones, and act on
-  // their requests (run the agent / pre-review) when they target this project.
-  useEffect(() => {
-    if (!root) return
-    const id = getCurrentWindow().label
-    anywhereSetProject(id, root, baseName(root)).catch(() => {})
-    const subs = [
-      listen<string>("anywhere://run-agent", (e) => {
-        if (e.payload !== root) return
-        const tasks = useComments
-          .getState()
-          .comments.filter((c) => c.kind === "task" && c.state === "open")
-        void dispatchToAgent(composeReviewPrompt(tasks.length))
-      }),
-      listen<string>("anywhere://prereview", (e) => {
-        if (e.payload === root) usePreReview.getState().generate(root)
-      }),
-      // Keystrokes from a paired phone, typed into the agent terminal here. The
-      // desktop owns the PTY, so it does the write — one writer, no interleaving.
-      listen<string>("anywhere://agent-input", (e) => {
-        const term = useTerminals.getState()
-        const target =
-          term.activeId && term.agentTerminals.includes(term.activeId)
-            ? term.activeId
-            : term.agentTerminals[0]
-        if (target) void ptyWrite(target, e.payload).catch(() => {})
-      }),
-      // A paired phone triggered a guided-review agent action — run it here (the
-      // agent lives on this desktop). Disposals the phone does hit disk directly.
-      listen<{
-        root: string
-        id: string
-        file: string
-        action: string
-        objective: string | null
-      }>("anywhere://review-action", (e) => {
-        const a = e.payload
-        if (a.root !== root) return
-        const g = useGuidedReview.getState()
-        switch (a.action) {
-          case "start":
-            void g.start(root, { kind: "diff" }, (a.objective as Objective) ?? "bug_risk")
-            break
-          case "file":
-            void g.reviewFile(root, a.id, a.file)
-            break
-          case "respond":
-            void g.respond(root, a.id, a.file)
-            break
-          case "challenge":
-            void g.challenge(root, a.id, a.file)
-            break
-          case "send":
-            void g.sendTasks(root, a.id)
-            break
-        }
-      }),
-    ]
-    return () => {
-      anywhereClearProject(id).catch(() => {})
-      // The unlisten can reject (Tauri's listener map may already be torn down
-      // on a fast remount / StrictMode double-effect) — swallow it so it doesn't
-      // surface as an unhandled rejection.
-      for (const sub of subs) offSafe(sub)
-    }
-  }, [root])
-
-  // Persist the session whenever the open tabs, active file, tree drill-down, or
-  // split pane change, so reopening the project restores all of it.
-  useEffect(() => {
-    if (!restored.current) return
-    saveSession(root, {
-      tabs,
-      active,
-      expanded: expandedDirs,
-      split: splitPath,
-      // The focused group's live fields are written back so the saved
-      // arrangement describes what is on screen, not what it was at the last
-      // focus change.
-      groups: groups.map((g) => (g.id === focusedGroup ? { ...g, tabs, active } : g)),
-      focusedGroup,
-    })
-  }, [root, tabs, active, expandedDirs, splitPath, groups, focusedGroup, saveSession])
+  useAnywhereBridge(root)
 
   // Apply per-project settings overrides, then persist changes back to them.
   useEffect(() => {
@@ -300,131 +116,7 @@ export function ProjectView({ root }: { root: string }) {
     void offerRecommendations(root)
   }, [root])
 
-  // Watch the project and re-anchor a file's comments when it changes on disk
-  // (external edits, or the agent's own writes).
-  useEffect(() => {
-    // A failed watcher silently breaks live refresh (external edits, agent writes
-    // won't show) — surface it so the user knows updates won't stream in.
-    startWatching(root).catch((e) => notifyError("project", translate("notice.watchFailed"), e))
-    // Coalesce tree refreshes: a burst of file-changed events (e.g. an agent
-    // bulk-editing) would otherwise trigger one full repo re-walk + tree re-list
-    // per file. Debounce bumpTree() to fire once after the burst settles.
-    let treeTimer: ReturnType<typeof setTimeout> | null = null
-    const bumpTreeSoon = () => {
-      if (treeTimer) clearTimeout(treeTimer)
-      treeTimer = setTimeout(() => {
-        treeTimer = null
-        useProject.getState().bumpTree()
-        // Editing a file changes the working tree but touches nothing under
-        // `.git`, so no `git-changed` arrives — refresh here too, or the Source
-        // Control badge only catches up on the next commit or checkout.
-        gitInfo(root)
-          .then(setGit)
-          .catch((e) => log.warn("git info failed", { error: safeError(e) }))
-      }, 250)
-    }
-    const offs = [
-      listen<{ file: string }>("file-changed", (event) => {
-        const { file } = event.payload
-        // An external change (e.g. an agent's edit) to a file marked read means
-        // there's new content to look at — flag the delta *before* unmarking
-        // (mark(read=false) keeps the snapshot), then flip it to unread. Our own
-        // saves are suppressed via wasSelfWrite.
-        if (!wasSelfWrite(file) && useReadProgress.getState().read.has(file)) {
-          useReadProgress.getState().markChanged(file)
-          useReadProgress.getState().mark(root, file, false)
-        }
-        reanchorFile(root, file)
-          .then((list) => useComments.getState().replaceForFile(file, list))
-          .catch(() => {})
-        // A language server that registered for watched files is entitled to
-        // hear about this one — otherwise its picture of the project ages.
-        notifyWatchedFileChanged(root, file)
-        // Keep the semantic index current, one file at a time — a full rebuild
-        // per keystroke-triggered save would be the wrong shape entirely.
-        semanticReindexFile(root, file).catch((e) =>
-          log.warn("semantic reindex failed", { error: safeError(e) }),
-        )
-        // Re-list the tree so files created/moved/deleted on disk (or dragged in
-        // from outside) show up without a manual refresh — coalesced so a burst
-        // of edits only walks the tree once.
-        bumpTreeSoon()
-        // If a file open in a tab was deleted on disk, close the tab instead of
-        // leaving a broken editor (VS Code behaviour).
-        const { tabs, close } = useProject.getState()
-        // Tabs hold absolute paths; pass the absolute path so resolve_path checks
-        // it against the project root (a relative path would fail to canonicalize
-        // and wrongly close the tab on every edit). `resolvePath` is the existence
-        // probe this needs — `readFile` would ship the whole file body across IPC
-        // on every save just to be thrown away.
-        const tab = tabs.find((p) => toRelative(root, p) === file)
-        if (tab) {
-          resolvePath(root, tab)
-            .then((found) => {
-              if (!found) close(tab)
-            })
-            .catch(() => close(tab))
-        }
-      }),
-      // An agent mutated comments via the `reado` CLI — reload the list so the
-      // UI reflects done/reply/add without a manual refresh.
-      listen("comments-changed", () => {
-        useComments
-          .getState()
-          .load(root)
-          // The resolve loop tracks progress by watching comments resolve.
-          .then(() => useResolveLoop.getState().sync(root))
-          .catch((e) => log.warn("resolve-loop sync failed", { error: safeError(e) }))
-        rebuildIndex(root).catch((e) => log.warn("index rebuild failed", { error: safeError(e) }))
-      }),
-      // A guided review advanced (the agent planned a route or proposed an
-      // artifact via the CLI) — reload sessions so the Review Guide stays live.
-      listen("sessions-changed", () => {
-        useGuidedReview.getState().load(root)
-      }),
-      // The agent narrated a reasoning line via `reado thought` — refresh the
-      // live reasoning feed docked beside the terminal.
-      listen("reasoning-changed", () => {
-        useReasoning.getState().load(root)
-      }),
-      // The agent called `session_done` over MCP: it is handing the turn back.
-      // The user has usually walked away, which is the whole point of the
-      // notification and the chime.
-      listen("agent-done", async () => {
-        const c = await readFile(root, `${root}/.reado/done.json`, true).catch(() => null)
-        if (c?.kind !== "text") return
-        try {
-          const { status, summary } = JSON.parse(c.text) as { status: string; summary: string }
-          notifyAgentDone(status, summary)
-        } catch {
-          /* a half-written file: the next write brings the whole one */
-        }
-      }),
-      // The agent asked the mascot to say something (`mascot_say` over MCP).
-      // Same channel as the handoff: one file, most recent wins.
-      listen("mascot-say", async () => {
-        const c = await readFile(root, `${root}/.reado/mascot.json`, true).catch(() => null)
-        if (c?.kind !== "text") return
-        try {
-          const { text, mood } = JSON.parse(c.text) as { text: string; mood?: string }
-          if (text) useMascot.getState().say(text, moodOf(mood))
-        } catch {
-          /* a half-written file: the next write brings the whole one */
-        }
-      }),
-      // The branch changed on disk (e.g. `git checkout` in the terminal) — refresh
-      // git state so the status bar shows the real branch.
-      listen("git-changed", () => {
-        gitInfo(root)
-          .then(setGit)
-          .catch((e) => log.warn("git info failed", { error: safeError(e) }))
-      }),
-    ]
-    return () => {
-      if (treeTimer) clearTimeout(treeTimer)
-      offs.forEach((p) => void p.then((off) => off()).catch(() => {}))
-    }
-  }, [root])
+  useProjectWatcher(root)
 
   const [toolMenu, setToolMenu] = useState<{ x: number; y: number; tool: Tool } | null>(null)
   const onRight = useSettings((s) => s.sidebarSide) === "right"
@@ -478,10 +170,7 @@ export function ProjectView({ root }: { root: string }) {
   const closeSplit = useProject((s) => s.closeSplit)
   const swapSplit = useProject((s) => s.swapSplit)
   const readCount = useReadProgress((s) => s.read.size)
-  const [totalFiles, setTotalFiles] = useState(0)
-  const openTaskCount = useComments(
-    (s) => s.comments.filter((c) => c.kind === "task" && c.state === "open").length,
-  )
+  const openTaskCount = useComments((s) => openTaskCountOf(s.comments))
   const prevOpenTasks = useRef(openTaskCount)
 
   // Notify when the open-task count drops (the agent resolved something).
@@ -531,14 +220,10 @@ export function ProjectView({ root }: { root: string }) {
       latest = onRight ? window.innerWidth / zoom - x - rail : x - rail
       setDragWidth(latest)
     }
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
+    trackPointer(onMove, () => {
       setSidebarWidth(latest)
       setDragWidth(null)
-    }
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
+    })
   }
 
   // Clamp the applied (not persisted) width so the editor keeps a minimum size.
@@ -551,33 +236,13 @@ export function ProjectView({ root }: { root: string }) {
     Math.min(dragWidth ?? sidebarWidth, layoutWidth - MIN_EDITOR_WIDTH),
   )
 
-  // The workbench columns, in the order they appear on screen. `aux` is always
-  // emitted: an `auto` track whose region draws nothing is zero wide, which is
-  // cheaper than threading DockRegion's own "should I render?" test up here.
-  const columns = [
-    ...(showActivityBar && !onRight ? [{ name: "act", size: "auto" }] : []),
-    ...(tool && !onRight ? [{ name: "side", size: `${appliedSidebarWidth}px` }] : []),
-    { name: "edit", size: "minmax(0, 1fr)" },
-    { name: "aux", size: "auto" },
-    ...(tool && onRight ? [{ name: "side", size: `${appliedSidebarWidth}px` }] : []),
-    ...(showActivityBar && onRight ? [{ name: "act", size: "auto" }] : []),
-  ]
-  // Panel alignment, as VS Code means it: the panel always covers the editor,
-  // and the setting says how much further out it runs. The activity bar is
-  // never covered — it is the window's spine, not a region of the workbench —
-  // so the span is measured over the other columns only. With the sidebar moved
-  // to the right edge the editor *is* the leftmost column, and "left"
-  // correctly collapses to "center".
-  const body = columns.map((c, i) => ({ ...c, i })).filter((c) => c.name !== "act")
-  const editAt = body.findIndex((c) => c.name === "edit")
-  const toLeft = panelAlignment === "left" || panelAlignment === "justify"
-  const toRight = panelAlignment === "right" || panelAlignment === "justify"
-  const from = body[toLeft ? 0 : editAt].i
-  const to = body[toRight ? body.length - 1 : editAt].i
-  const rowRegions = columns.map((c) => c.name).join(" ")
-  const rowPanel = columns
-    .map((c, i) => (c.name !== "act" && i >= from && i <= to ? "panel" : c.name))
-    .join(" ")
+  const { columns, rowRegions, rowPanel } = workbenchColumns({
+    showActivityBar,
+    onRight,
+    sidebar: !!tool,
+    sidebarWidth: appliedSidebarWidth,
+    panelAlignment,
+  })
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

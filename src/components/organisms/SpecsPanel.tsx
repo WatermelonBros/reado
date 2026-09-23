@@ -10,11 +10,11 @@ import { useTranslation } from "react-i18next"
 import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
 import { ChevronIcon, CollapseAllIcon, FetchIcon, SearchIcon } from "@/components/atoms/icons"
+import { stripDocExt } from "@/lib/docs"
 import { type SpecGroup, useSpecs } from "@/lib/specs"
 import { useProject } from "@/lib/store"
 
 /** Display label without the markdown extension (proposal.md → proposal). */
-const stripExt = (label: string) => label.replace(/\.(md|markdown)$/i, "")
 
 /** Keep groups whose title matches (all their items) or that have matching items. */
 function filterGroups(groups: SpecGroup[], query: string): SpecGroup[] {
@@ -133,7 +133,7 @@ export function SpecsPanel() {
                             {item.isSpec && (
                               <span className="h-1 w-1 flex-none rounded-full bg-[var(--syn-control)]" />
                             )}
-                            <span className="truncate">{stripExt(item.label)}</span>
+                            <span className="truncate">{stripDocExt(item.label)}</span>
                           </button>
                         </li>
                       )

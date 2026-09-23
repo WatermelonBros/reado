@@ -6,67 +6,17 @@
  */
 import { Popover } from "@ark-ui/react/popover"
 import { Portal } from "@ark-ui/react/portal"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
-import { Dropdown, MenuLabel, MenuRow } from "@/components/atoms/Dropdown"
 import { Input } from "@/components/atoms/Input"
-import {
-  BrowserIcon,
-  DeviceIcon,
-  GitBranchIcon,
-  MascotIcon,
-  MessageIcon,
-  TerminalIcon,
-} from "@/components/atoms/icons"
-import type { MessageKey } from "@/i18n"
-import {
-  anywhereStatus,
-  type GitBranches,
-  gitBranches,
-  gitCheckout,
-  gitInfo,
-  listEncodings,
-} from "@/lib/api"
 import { useChords } from "@/lib/chords"
-import { openCount, toRelative, useComments } from "@/lib/comments"
-import {
-  convertEol,
-  type Eol,
-  editorConfigOf,
-  goToLine,
-  LANGUAGE_OPTIONS,
-  reopenWithEncoding,
-  setEncoding,
-  useDocInfo,
-} from "@/lib/docInfo"
-import { useMascot } from "@/lib/mascot"
-import { notify, notifyError } from "@/lib/notice"
-import { usePreview } from "@/lib/preview"
-import { DEFAULT_PROFILE_ID, useProfiles } from "@/lib/profiles"
+import { toRelative } from "@/lib/comments"
+import { goToLine } from "@/lib/docInfo"
 import { mod } from "@/lib/shortcuts"
-import { useCursor, usePalette, useProject, useSettings } from "@/lib/store"
-import { useTerminals } from "@/lib/terminals"
-
-/**
- * The indicators the status bar lets you switch off, in the order they appear.
- *
- * Deliberately not everything: the file path and the caret position are what a
- * status bar is for, and a bar you can empty completely is a bar you should
- * have hidden instead (View ▸ Toggle Status Bar, also in this menu).
- */
-const STATUS_ITEMS: Array<{ id: string; labelKey: MessageKey }> = [
-  { id: "preview", labelKey: "preview.open" },
-  { id: "encoding", labelKey: "status.encoding" },
-  { id: "branch", labelKey: "status.branch" },
-  { id: "comments", labelKey: "status.openComments" },
-  { id: "agent", labelKey: "status.agentIdle" },
-  { id: "anywhere", labelKey: "anywhere.title" },
-  { id: "mascot", labelKey: "settings.mascot" },
-  { id: "terminal", labelKey: "terminal.toggle" },
-  { id: "column", labelKey: "editor.columnSelection" },
-  { id: "profile", labelKey: "profile.status" },
-]
+import { useCursor, useProject, useSettings } from "@/lib/store"
+import { STATUS_ITEMS } from "./statusBar/items"
+import { ITEM } from "./statusBar/shared"
 
 /** Path relative to the project root, with forward slashes. Delegates to the
  *  shared helper: a private copy here silently lost its sibling-prefix guard,
@@ -74,108 +24,28 @@ const STATUS_ITEMS: Array<{ id: string; labelKey: MessageKey }> = [
 const relativePath = (root: string, path: string | null): string | null =>
   path ? toRelative(root, path) : null
 
-/** Shared style for a clickable status-bar item. */
-const ITEM =
-  "inline-flex flex-none items-center gap-[5px] whitespace-nowrap rounded-sm px-1 transition-colors hover:bg-overlay hover:text-ink"
-
 export function StatusBar() {
   const root = useProject((s) => s.root)
   const active = useProject((s) => s.active)
-  const git = useProject((s) => s.git)
-  const profiles = useProfiles((s) => s.profiles)
-  const activeProfileId = useProfiles((s) => s.activeId)
-  const activeProfile = profiles.find((p) => p.id === activeProfileId) ?? profiles[0]
-  const previewOpen = usePreview((s) => s.open)
   const { line, col } = useCursor()
-  const eol = useDocInfo((s) => s.eol)
-  const encoding = useDocInfo((s) => s.encoding)
   const chordPending = useChords((s) => s.pending)
-  const indentKind = useDocInfo((s) => s.indentKind)
-  const indentSize = useDocInfo((s) => s.indentSize)
-  const language = useDocInfo((s) => s.language)
-  const setDoc = useDocInfo((s) => s.set)
-  const openComments = useComments((s) => openCount(s.comments))
-  const toggleTerminal = useTerminals((s) => s.toggle)
-  // The agent segment used to be the constant `status.agentIdle` — it announced
-  // an idle agent while the companion, reading the same facts, showed `think`.
-  // It now reads those facts: an agent pane has to exist at all, and the mascot
-  // state is what Reado already knows about the turn.
-  const hasAgent = useTerminals((s) => s.agentTerminals.length > 0)
-  const mascotState = useMascot((s) => s.state)
-  const agentStatusKey: MessageKey = !hasAgent
-    ? "status.agentIdle"
-    : mascotState === "think"
-      ? "status.agentWorking"
-      : mascotState === "ask"
-        ? "status.agentAsking"
-        : "status.agentIdle"
   const { t } = useTranslation()
 
-  // Reado Anywhere: a phone icon + a live dot (green when the LAN server is up),
-  // opening the pairing dialog. Re-checked whenever the dialog opens/closes.
-  const anywhereOpen = usePalette((s) => s.anywhereOpen)
-  const [anywhereOn, setAnywhereOn] = useState(false)
-  useEffect(() => {
-    anywhereStatus()
-      .then((s) => setAnywhereOn(!!s))
-      .catch(() => setAnywhereOn(false))
-  }, [anywhereOpen])
-
   const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null)
-  // The list comes from the backend so the menu and the decoder can't disagree
-  // about what Reado supports.
-  const [encodings, setEncodings] = useState<string[]>([])
-  useEffect(() => {
-    listEncodings()
-      .then(setEncodings)
-      .catch(() => setEncodings([]))
-  }, [])
   const [gotoValue, setGotoValue] = useState("")
-  const [branches, setBranches] = useState<GitBranches | null>(null)
-
-  const loadBranches = () => {
-    setBranches(null)
-    gitBranches(root)
-      .then(setBranches)
-      .catch(() => setBranches(null))
-  }
-
-  const checkout = async (name: string, remote: boolean) => {
-    try {
-      await gitCheckout(root, name, remote)
-      // Refresh in place. A full page reload would tear down the terminals and
-      // tabs; instead update the branch + tree now, and let the file watcher
-      // reload the open file and re-anchor comments for the new working tree.
-      useProject.getState().setGit(await gitInfo(root))
-      useProject.getState().bumpTree()
-    } catch (e) {
-      // Picking a branch closes the menu, so the reason it didn't happen has to
-      // go where the other failures go — a dirty working tree is the usual one.
-      notifyError("statusBar", String(e))
-    }
-  }
 
   const rel = relativePath(root, active)
-  // Where the indentation and endings came from. Without this the picker shows
-  // a value the reader didn't choose and can't account for.
-  const ec = rel ? editorConfigOf(rel) : undefined
-  const ecNote = (set: boolean) => (set ? ` — ${t("status.fromEditorconfig")}` : "")
-
   // Which of the optional indicators are showing. The file path and the caret
   // position are not in here: they are what a status bar is *for*.
   const hidden = useSettings((s) => s.hiddenStatusItems)
-  const columnSelection = useSettings((s) => s.columnSelection)
-  // Right-clicking the companion sends it away; without this the only way back
-  // is the settings dialog.
-  const mascotOn = useSettings((s) => s.mascot)
   const show = (id: string) => !hidden.includes(id)
   const toggleItem = (id: string) =>
     useSettings.getState().set({
       hiddenStatusItems: hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id],
     })
   const ctxItems: ContextMenuItem[] = [
-    ...STATUS_ITEMS.map((item) => ({
-      label: t(item.labelKey),
+    ...STATUS_ITEMS.filter((item) => item.labelKey).map((item) => ({
+      label: t(item.labelKey!),
       checked: show(item.id),
       onSelect: () => toggleItem(item.id),
     })),
@@ -262,241 +132,8 @@ export function StatusBar() {
       </div>
 
       <div className="flex h-full min-w-0 flex-wrap items-center justify-end gap-x-1 overflow-hidden *:flex *:h-full *:flex-none *:items-center">
-        {show("preview") && (
-          <button
-            type="button"
-            onClick={() => {
-              const p = usePreview.getState()
-              if (p.open) p.close()
-              else p.openPane()
-            }}
-            title={t("preview.open")}
-            className={`${ITEM} ${previewOpen ? "text-accent" : ""}`}
-          >
-            <BrowserIcon className="h-3.5 w-3.5" />
-          </button>
-        )}
-        {active && (
-          <>
-            <Dropdown
-              label={`${t("status.indent")}${ecNote(!!ec?.indentStyle || !!ec?.indentSize)}`}
-              triggerClassName={ITEM}
-              trigger={t(indentKind === "tabs" ? "status.tabs" : "status.spaces", {
-                size: indentSize,
-              })}
-            >
-              {(["spaces", "tabs"] as const).map((kind) => (
-                <MenuRow
-                  key={kind}
-                  label={t(kind === "tabs" ? "status.useTabs" : "status.useSpaces")}
-                  checked={indentKind === kind}
-                  onClick={() => setDoc({ indentKind: kind })}
-                />
-              ))}
-              <div className="my-1 border-t border-line" />
-              {[2, 4, 8].map((size) => (
-                <MenuRow
-                  key={size}
-                  label={String(size)}
-                  checked={indentSize === size}
-                  onClick={() => setDoc({ indentSize: size })}
-                />
-              ))}
-            </Dropdown>
-            <Dropdown
-              label={`${t("status.eol")}${ecNote(!!ec?.endOfLine)}`}
-              triggerClassName={ITEM}
-              trigger={eol}
-            >
-              {(["LF", "CRLF"] as Eol[]).map((opt) => (
-                <MenuRow
-                  key={opt}
-                  label={opt}
-                  checked={opt === eol}
-                  onClick={() => opt !== eol && convertEol(opt)}
-                />
-              ))}
-            </Dropdown>
-            {show("encoding") && (
-              <Dropdown
-                label={t("status.encoding")}
-                triggerClassName={ITEM}
-                trigger={encoding}
-                className="max-h-72 w-56 overflow-y-auto"
-              >
-                {/* Two different acts, not one: re-decoding the bytes you have,
-                    and choosing what the next save writes. Merging them would
-                    silently rewrite a file you only wanted to look at. */}
-                <MenuLabel>{t("status.reopenWith")}</MenuLabel>
-                {encodings.map((name) => (
-                  <MenuRow
-                    key={`r:${name}`}
-                    value={`r:${name}`}
-                    label={name}
-                    checked={name === encoding}
-                    onClick={() => void reopenWithEncoding(name)}
-                  />
-                ))}
-                <MenuLabel>{t("status.saveWith")}</MenuLabel>
-                {encodings.map((name) => (
-                  <MenuRow
-                    key={`s:${name}`}
-                    value={`s:${name}`}
-                    label={name}
-                    onClick={() => {
-                      const view = useDocInfo.getState().view
-                      if (!view) return
-                      setEncoding(view, name)
-                      notify("info", t("status.encodingSaveSet", { name }))
-                    }}
-                  />
-                ))}
-              </Dropdown>
-            )}
-            {language && (
-              <Dropdown
-                label={t("status.language")}
-                triggerClassName={ITEM}
-                trigger={language}
-                className="max-h-[40vh] overflow-y-auto"
-              >
-                {LANGUAGE_OPTIONS.map((name) => (
-                  <MenuRow
-                    key={name}
-                    label={name}
-                    checked={language === name}
-                    onClick={() => setDoc({ language: name, languageOverride: name })}
-                  />
-                ))}
-              </Dropdown>
-            )}
-          </>
-        )}
-        {/* Which configuration is in use. Shown only when it is not the default
-            one: a bar that always says "Default" is a bar saying nothing. */}
-        {show("profile") && activeProfile.id !== DEFAULT_PROFILE_ID && (
-          <Dropdown
-            label={t("profile.status")}
-            triggerClassName={ITEM}
-            trigger={activeProfile.name}
-            className="max-h-72 w-56 overflow-y-auto"
-          >
-            {profiles.map((p) => (
-              <MenuRow
-                key={p.id}
-                label={p.name}
-                checked={p.id === activeProfile.id}
-                onClick={() => useProfiles.getState().switchTo(p.id)}
-              />
-            ))}
-          </Dropdown>
-        )}
-        {show("branch") && git.isRepo ? (
-          <Dropdown
-            label={t("status.branch")}
-            triggerClassName={ITEM}
-            onOpen={loadBranches}
-            className="max-h-72 w-60 overflow-y-auto"
-            trigger={
-              <>
-                <GitBranchIcon className="h-[13px] w-[13px]" />
-                {git.branch ?? "—"}
-              </>
-            }
-          >
-            {!branches ? (
-              <p className="px-3 py-2 text-sm text-faint">{t("common.loading")}</p>
-            ) : (
-              <>
-                <MenuLabel>{t("branch.local")}</MenuLabel>
-                {branches.local.length === 0 && <p className="px-3 py-1 text-sm text-faint">—</p>}
-                {branches.local.map((b) => (
-                  <MenuRow
-                    key={`l:${b}`}
-                    value={`l:${b}`}
-                    label={b}
-                    checked={b === branches.current}
-                    onClick={() => void checkout(b, false)}
-                  />
-                ))}
-                {branches.remote.length > 0 && <MenuLabel>{t("branch.remote")}</MenuLabel>}
-                {branches.remote.map((b) => (
-                  <MenuRow
-                    key={`r:${b}`}
-                    value={`r:${b}`}
-                    label={b}
-                    onClick={() => void checkout(b, true)}
-                  />
-                ))}
-              </>
-            )}
-          </Dropdown>
-        ) : show("branch") ? (
-          <span className="px-1 text-faint">{t("status.notGit")}</span>
-        ) : null}
-        {show("comments") && (
-          <span
-            className="inline-flex items-center gap-[5px] px-1 whitespace-nowrap"
-            title={t("status.openComments")}
-          >
-            <MessageIcon className="h-[13px] w-[13px]" />
-            {t("status.comments", { count: openComments })}
-          </span>
-        )}
-        {show("agent") && <span className="px-1 text-faint">{t(agentStatusKey)}</span>}
-        {show("anywhere") && (
-          <button
-            type="button"
-            onClick={() => usePalette.getState().toggleAnywhere(true)}
-            title={t("anywhere.title")}
-            aria-label={`${t("anywhere.title")} — ${t(anywhereOn ? "anywhere.statusOn" : "anywhere.statusOff")}`}
-            className={`${ITEM} text-faint`}
-          >
-            <DeviceIcon className="h-[13px] w-[13px]" />
-            <span
-              aria-hidden
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: anywhereOn ? "var(--syn-string)" : "var(--border-strong)" }}
-            />
-          </button>
-        )}
-        {show("mascot") && (
-          <button
-            type="button"
-            onClick={() => useSettings.getState().set({ mascot: !mascotOn })}
-            title={t("mascot.toggle")}
-            aria-label={t("mascot.toggle")}
-            aria-pressed={mascotOn}
-            className={`${ITEM} ${mascotOn ? "text-accent" : "text-faint"}`}
-          >
-            <MascotIcon className="h-[13px] w-[13px]" />
-          </button>
-        )}
-        {/* Only while it is on: a mode you cannot see is a mode that confuses
-            whoever next touches the keyboard — but an indicator that is always
-            there, and always says "off", is noise. */}
-        {show("column") && columnSelection && (
-          <button
-            type="button"
-            onClick={() => useSettings.getState().set({ columnSelection: false })}
-            title={t("status.columnSelection")}
-            aria-label={t("status.columnSelection")}
-            className={`${ITEM} text-accent`}
-          >
-            {t("editor.columnSelection")}
-          </button>
-        )}
-        {show("terminal") && (
-          <button
-            type="button"
-            data-tour="terminal"
-            onClick={() => toggleTerminal()}
-            title={`${t("terminal.toggle")} (${mod}J)`}
-            aria-label={t("terminal.toggle")}
-            className={`${ITEM} text-faint`}
-          >
-            <TerminalIcon className="h-[13px] w-[13px]" />
-          </button>
+        {STATUS_ITEMS.map(
+          ({ id, labelKey, Item }) => (!labelKey || show(id)) && <Item key={id} rel={rel} />,
         )}
       </div>
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems} onClose={() => setCtx(null)} />}

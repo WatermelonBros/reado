@@ -8,6 +8,8 @@
  * the agent. Both are pure string builders so they can be tested without a webview.
  */
 
+import { bridgeScript } from "./bridgeScript"
+
 export interface VaultItem {
   id: string
   title: string
@@ -141,7 +143,8 @@ export interface VaultPick {
  * was, and never crosses into the page except into the field it fills.
  */
 export const vaultChipScript = (items: VaultItem[], label: string, otpLabel: string): string =>
-  `window.__readoBridge&&window.__readoBridge.vault(${JSON.stringify(
+  bridgeScript(
+    "vault",
     items.map((i) => ({
       id: i.id,
       title: i.title,
@@ -149,14 +152,14 @@ export const vaultChipScript = (items: VaultItem[], label: string, otpLabel: str
       hasOtp: i.hasOtp,
       otpLabel,
     })),
-  )},${JSON.stringify(label)})`
+    label,
+  )
 
 /** Say what happened, inside the chip. */
-export const vaultNoteScript = (text: string): string =>
-  `window.__readoBridge&&window.__readoBridge.vaultNote(${JSON.stringify(text)})`
+export const vaultNoteScript = (text: string): string => bridgeScript("vaultNote", text)
 
 /** Take the chip down. */
-export const VAULT_CHIP_CLOSE_JS = `window.__readoBridge&&window.__readoBridge.vaultClose()`
+export const VAULT_CHIP_CLOSE_JS = bridgeScript("vaultClose")
 
 /**
  * The gate probe, run immediately before each agent command: does this page hold a
