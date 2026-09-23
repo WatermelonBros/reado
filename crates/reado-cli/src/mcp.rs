@@ -8,9 +8,12 @@
 //! (the agent still mutates tasks through the normal `reado` commands).
 
 use std::io::{BufRead, Write};
-use std::path::Path;
 
 use reado_core::{self as core, CommentKind, CommentState};
+
+mod browser;
+mod review;
+mod tasks;
 
 /// Answered to `initialize`, i.e. what we speak to handshake-era ("legacy")
 /// clients. Every agent shipping today opens this way.
@@ -140,7 +143,7 @@ fn server_info() -> serde_json::Value {
     serde_json::json!({ "name": "reado", "version": env!("CARGO_PKG_VERSION") })
 }
 
-type RpcResult = Result<serde_json::Value, (i64, String)>;
+type RpcResult = Result<serde_json::Value, RpcError>;
 
 fn handle(root: &str, method: &str, params: Option<&serde_json::Value>) -> RpcResult {
     match method {
@@ -202,24 +205,23 @@ fn resource_list() -> serde_json::Value {
     ])
 }
 
-fn read_resource(root: &str, uri: &str) -> Result<String, (i64, String)> {
-    let err = |e: String| (-32603, e);
+fn read_resource(root: &str, uri: &str) -> Result<String, RpcError> {
     match uri {
         "reado://tasks" => {
             let tasks: Vec<_> = core::list_comments(root)
                 .into_iter()
                 .filter(|c| c.meta.kind == CommentKind::Task && c.meta.state != CommentState::Done)
                 .collect();
-            serde_json::to_string_pretty(&tasks).map_err(|e| err(e.to_string()))
+            serde_json::to_string_pretty(&tasks).map_err(internal)
         }
         "reado://comments" => {
             let all = core::list_comments(root);
-            serde_json::to_string_pretty(&all).map_err(|e| err(e.to_string()))
+            serde_json::to_string_pretty(&all).map_err(internal)
         }
-        "reado://reading-progress" => Ok(read_json_file(root, "read.json")),
-        "reado://bookmarks" => Ok(read_json_file(root, "bookmarks.json")),
-        "reado://preview-console" => Ok(read_json_file(root, "preview-console.json")),
-        "reado://preview-network" => Ok(read_json_file(root, "preview-network.json")),
+        "reado://reading-progress" => Ok(read_json_file(root, core::READ_PROGRESS_FILE)),
+        "reado://bookmarks" => Ok(read_json_file(root, core::BOOKMARKS_FILE)),
+        "reado://preview-console" => Ok(read_json_file(root, core::PREVIEW_CONSOLE_FILE)),
+        "reado://preview-network" => Ok(read_json_file(root, core::PREVIEW_NETWORK_FILE)),
         other => Err((-32602, format!("unknown resource: {other}"))),
     }
 }
@@ -281,7 +283,7 @@ fn tool_list() -> serde_json::Value {
         { "name": "task_done", "description": "Resolve a task, recording how. With `verify` the command decides: passing marks it done, otherwise it stays resolved-but-unverified for a human.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "diffRef": { "type": "string" }, "verify": { "type": "string" }, "model": { "type": "string" } }, "required": ["id"] }) },
         { "name": "task_fail", "description": "Record a failed attempt on a task, with a note. Past the attempt budget the task blocks itself.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "note": { "type": "string" } }, "required": ["id"] }) },
         { "name": "task_block", "description": "Block a task: you cannot proceed without a human answering first.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "reason": { "type": "string" } }, "required": ["id", "reason"] }) },
-        { "name": "comment_add", "description": "Add a comment anchored to a file and line. `kind` is task (sent to the AI batch) or note.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "file": { "type": "string" }, "line": { "type": "number" }, "end": { "type": "number" }, "type": { "type": "string" }, "kind": { "type": "string" }, "body": { "type": "string" } }, "required": ["file", "line", "body"] }) },
+        { "name": "comment_add", "description": "Add a comment anchored to a file and line. `kind` is task (the default: it joins the user task queue) or note.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "file": { "type": "string" }, "line": { "type": "number" }, "end": { "type": "number" }, "type": { "type": "string" }, "kind": { "type": "string" }, "body": { "type": "string" } }, "required": ["file", "line", "body"] }) },
         { "name": "mascot_say", "description": "Say one line through Reado's mascot — the small companion in the corner of the user's screen. For the moment the user must know about while they are away from the desk: what you need from them, or what just landed. Not narration, not progress, not a running commentary: it interrupts a human, and a companion that chatters gets turned off. `mood` is done, ask, think or talk (default talk); use `ask` only when you are actually waiting for them.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "text": { "type": "string" }, "mood": { "type": "string" } }, "required": ["text"] }) },
         { "name": "session_done", "description": "Call this when your next act is to wait for the user — the request is finished, you are blocked, or you need an answer. NOT after a command returns or a step completes: if you will do anything else before stopping, it is too early. Reado alerts a user who has walked away, so a premature call fetches them back for nothing. `summary` is one line on what happened; `status` is done (default), blocked or failed.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "summary": { "type": "string" }, "status": { "type": "string" } } }) },
         { "name": "comment_reply", "description": "Reply in a comment's thread.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "body": { "type": "string" } }, "required": ["id", "body"] }) },
@@ -299,428 +301,84 @@ fn tool_list() -> serde_json::Value {
     ])
 }
 
-/// A comment type by name, defaulting to `note` for anything unrecognised —
-/// an agent's typo should not fail the write.
-fn parse_type(name: &str) -> core::CommentType {
-    match name {
-        "bug" => core::CommentType::Bug,
-        "refactor" => core::CommentType::Refactor,
-        "performance" => core::CommentType::Performance,
-        "question" => core::CommentType::Question,
-        _ => core::CommentType::Note,
+/// A tool's error: a JSON-RPC code and its message.
+type RpcError = (i64, String);
+
+/// A server-side failure (`-32603`), as opposed to a bad request.
+fn internal(e: impl std::fmt::Display) -> RpcError {
+    (-32603, e.to_string())
+}
+
+/// A tool call's `arguments`, read leniently: a missing or mistyped field reads
+/// as empty/zero, and the tool decides whether that is an error.
+#[derive(Clone, Copy)]
+struct Args<'a>(Option<&'a serde_json::Value>);
+
+impl Args<'_> {
+    fn get(&self, k: &str) -> Option<&serde_json::Value> {
+        self.0.and_then(|a| a.get(k))
     }
-}
-
-/// The agent identity mutations are attributed to. Same source as the CLI's, so
-/// a task resolved over MCP and one resolved from a shell read the same.
-fn agent_id() -> String {
-    std::env::var("READO_AGENT")
-        .ok()
-        .filter(|a| !a.is_empty())
-        .unwrap_or_else(|| "agent".to_string())
-}
-
-/// A structured result for a mutating tool: what changed, and what it is now.
-fn mutation_result(c: &core::Comment, action: &str) -> Result<String, (i64, String)> {
-    serde_json::to_string_pretty(&serde_json::json!({
-        "action": action,
-        "id": c.meta.id,
-        "state": c.meta.state,
-        "attempts": c.meta.attempts,
-        "blockedReason": c.meta.blocked_reason,
-        "resolution": c.meta.resolution,
-    }))
-    .map_err(|e| (-32603, e.to_string()))
-}
-
-/// Send a command to the running preview pane over the file queue and wait for its
-/// result (the pane polls ~0.7s; we poll up to ~6s). No pane → timeout.
-fn send_command(root: &str, op: &str, arg: &str) -> Result<String, (i64, String)> {
-    let dir = Path::new(root).join(".reado");
-    std::fs::create_dir_all(&dir).map_err(|e| (-32603, e.to_string()))?;
-    let id = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0)
-        .to_string();
-    let cmd = serde_json::json!({ "id": id, "op": op, "arg": arg });
-    std::fs::write(dir.join("preview-cmd.json"), cmd.to_string())
-        .map_err(|e| (-32603, e.to_string()))?;
-    let result_path = dir.join("preview-result.json");
-    for _ in 0..60 {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        let Ok(s) = std::fs::read_to_string(&result_path) else {
-            continue;
-        };
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else {
-            continue;
-        };
-        if v.get("id").and_then(|i| i.as_str()) != Some(id.as_str()) {
-            continue;
-        }
-        let ok = v.get("ok").and_then(|o| o.as_bool()).unwrap_or(false);
-        let res = v
-            .get("result")
-            .and_then(|r| r.as_str())
-            .unwrap_or("")
-            .to_string();
-        return if ok { Ok(res) } else { Err((-32603, res)) };
-    }
-    Err((
-        -32603,
-        "no preview pane running (open the browser preview and enable agent access)".into(),
-    ))
-}
-
-/// JS-quote a string for safe embedding in an eval expression.
-fn jsq(s: &str) -> String {
-    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".into())
-}
-
-/// The session a review tool acts on: the `sessionId` given, or the newest one
-/// still open. An agent that has just been handed a session id passes it; one
-/// resuming after a compaction should still land on the right session rather
-/// than failing on a missing argument.
-fn resolve_session(
-    root: &str,
-    args: Option<&serde_json::Value>,
-) -> Result<core::Session, (i64, String)> {
-    let id = args
-        .and_then(|a| a.get("sessionId"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    if !id.is_empty() {
-        return core::get_session(root, &id).map_err(|e| (-32602, e.to_string()));
-    }
-    core::list_sessions(root)
-        .into_iter()
-        .find(|s| s.status != core::SessionStatus::Done)
-        .ok_or((
-            -32602,
-            "no open guided-review session — ask the user to start one in Reado".into(),
-        ))
-}
-
-/// The `route` argument as route entries, with the field names named in the
-/// error so a mis-shaped array is fixable without guessing.
-fn route_arg(args: Option<&serde_json::Value>) -> Result<Vec<core::RouteEntry>, (i64, String)> {
-    let raw = args
-        .and_then(|a| a.get("route"))
-        .cloned()
-        .ok_or((-32602, "missing `route`".to_string()))?;
-    serde_json::from_value(raw).map_err(|e| {
-        (
-            -32602,
-            format!("invalid route: {e} — expected an array of {{file, priority, reason, suggestedReviewMode, relatedFiles}}"),
-        )
-    })
-}
-
-fn call_tool(
-    root: &str,
-    name: &str,
-    args: Option<&serde_json::Value>,
-) -> Result<String, (i64, String)> {
-    // The mirror file's *presence* means a preview is live (it's written every tick
-    // while agent access is on). An absent file → no preview; a present `[]` →
-    // preview live but nothing captured yet.
-    let read = |file: &str| -> String {
-        let path = Path::new(root).join(".reado").join(file);
-        if !path.exists() {
-            "No preview pane running — open the browser preview in Reado.".to_string()
-        } else {
-            read_json_file(root, file)
-        }
-    };
-    let sarg = |k: &str| {
-        args.and_then(|a| a.get(k))
+    fn str(&self, k: &str) -> String {
+        self.get(k)
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string()
-    };
-    let narg = |k: &str| {
-        args.and_then(|a| a.get(k))
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0)
-    };
+    }
+    fn num(&self, k: &str) -> f64 {
+        self.get(k).and_then(|v| v.as_f64()).unwrap_or(0.0)
+    }
+}
+
+fn call_tool(root: &str, name: &str, args: Option<&serde_json::Value>) -> Result<String, RpcError> {
+    use browser::send_command;
+    let a = Args(args);
     match name {
-        "browser_console" => Ok(read("preview-console.json")),
-        "browser_network" => Ok(read("preview-network.json")),
-        // Live perception + drive over the control queue. Drive actions ship JS the
-        // pane runs via the CSP-immune eval channel; navigation is allowlist-checked.
-        "browser_eval" => send_command(root, "eval", &sarg("js")),
-        "browser_navigate" => send_command(root, "navigate", &sarg("url")),
-        "browser_dom" => send_command(root, "eval", &format!(
-            "(()=>{{const el=document.querySelector({s});if(!el)return null;const r=el.getBoundingClientRect();const c=getComputedStyle(el);return{{tag:el.tagName,html:el.outerHTML.slice(0,2000),rect:{{x:r.x,y:r.y,w:r.width,h:r.height}},display:c.display,color:c.color,background:c.backgroundColor,font:c.font}};}})()",
-            s = jsq(&sarg("selector")))),
-        "browser_animation" => send_command(root, "eval", &format!(
-            "(()=>{{const el=document.querySelector({s});if(!el)return null;return el.getAnimations().map(a=>({{name:a.animationName,timing:a.effect.getComputedTiming(),keyframes:a.effect.getKeyframes()}}));}})()",
-            s = jsq(&sarg("selector")))),
-        "browser_click" => send_command(root, "eval", &format!(
-            "(()=>{{const el=document.querySelector({s});if(!el)return'not found';el.scrollIntoView({{block:'center'}});el.click();return'clicked';}})()",
-            s = jsq(&sarg("selector")))),
-        "browser_hover" => send_command(root, "eval", &format!(
-            "(()=>{{const el=document.querySelector({s});if(!el)return'not found';el.dispatchEvent(new MouseEvent('mouseover',{{bubbles:true}}));el.dispatchEvent(new MouseEvent('mouseenter',{{bubbles:true}}));return'hovered';}})()",
-            s = jsq(&sarg("selector")))),
-        "browser_type" => send_command(root, "eval", &format!(
-            "(()=>{{const el=document.querySelector({s});if(!el)return'not found';el.focus();el.value={t};el.dispatchEvent(new Event('input',{{bubbles:true}}));el.dispatchEvent(new Event('change',{{bubbles:true}}));return'typed';}})()",
-            s = jsq(&sarg("selector")), t = jsq(&sarg("text")))),
-        "browser_scroll" => send_command(root, "eval", &format!(
-            "(()=>{{window.scrollTo({x},{y});return'scrolled';}})()",
-            x = narg("x"), y = narg("y"))),
+        // Perception (read the captured buffers mirrored to `.reado/`).
+        "browser_console" => Ok(browser::mirror(root, core::PREVIEW_CONSOLE_FILE)),
+        "browser_network" => Ok(browser::mirror(root, core::PREVIEW_NETWORK_FILE)),
+        "browser_errors" => browser::errors(root),
+        // Live perception + drive over the control queue.
+        "browser_eval" => send_command(root, "eval", &a.str("js")),
+        "browser_navigate" => send_command(root, "navigate", &a.str("url")),
+        "browser_dom" => send_command(root, "eval", &browser::dom_js(&a.str("selector"))),
+        "browser_animation" => {
+            send_command(root, "eval", &browser::animation_js(&a.str("selector")))
+        }
+        "browser_click" => send_command(root, "eval", &browser::click_js(&a.str("selector"))),
+        "browser_hover" => send_command(root, "eval", &browser::hover_js(&a.str("selector"))),
+        "browser_type" => send_command(
+            root,
+            "eval",
+            &browser::type_js(&a.str("selector"), &a.str("text")),
+        ),
+        "browser_scroll" => send_command(root, "eval", &browser::scroll_js(a.num("x"), a.num("y"))),
         "browser_frame" => send_command(root, "frame", ""),
 
         // ---- Mutating tools: the review loop's verbs ----
-        "task_done" => {
-            let verify = sarg("verify");
-            let verification = (!verify.is_empty()).then(|| core::Verification {
-                passed: crate::run_verify(root, &verify),
-                cmd: verify,
-            });
-            let model = {
-                let m = sarg("model");
-                if m.is_empty() {
-                    std::env::var("READO_MODEL").ok().filter(|v| !v.is_empty())
-                } else {
-                    Some(m)
-                }
-            };
-            let diff_ref = {
-                let d = sarg("diffRef");
-                (!d.is_empty()).then_some(d)
-            };
-            let c = core::resolve_comment(
-                root,
-                &sarg("id"),
-                core::Resolution {
-                    agent: agent_id(),
-                    model,
-                    diff_ref,
-                    verify: verification,
-                    at: crate::now_millis(),
-                },
-            )
-            .map_err(|e| (-32603, e.to_string()))?;
-            mutation_result(&c, "task_done")
-        }
-        "task_fail" => {
-            let note = sarg("note");
-            if !note.is_empty() {
-                core::add_reply(root, &sarg("id"), "agent", Some(agent_id()), note)
-                    .map_err(|e| (-32603, e.to_string()))?;
-            }
-            let c = core::fail_attempt(root, &sarg("id")).map_err(|e| (-32603, e.to_string()))?;
-            mutation_result(&c, "task_fail")
-        }
-        "mascot_say" => {
-            let mood = sarg("mood");
-            // A refusal (empty, or too long for a bubble) comes back as the
-            // agent's own error to read and act on, not as a server fault.
-            let said = core::mark_mascot_say(root, &sarg("text"), &mood)
-                .map_err(|e| (-32602, e.to_string()))?;
-            Ok(format!("said: {}", said.text))
-        }
-        "session_done" => {
-            let status = match sarg("status").as_str() {
-                "blocked" => "blocked",
-                "failed" => "failed",
-                _ => "done",
-            };
-            core::mark_session_done(root, status, &sarg("summary"))
-                .map_err(|e| (-32603, e.to_string()))?;
-            Ok("Noted — Reado will let the user know.".to_string())
-        }
-        "task_block" => {
-            let c = core::block_comment(root, &sarg("id"), &sarg("reason"))
-                .map_err(|e| (-32603, e.to_string()))?;
-            mutation_result(&c, "task_block")
-        }
-        "comment_add" => {
-            let line = narg("line") as u32;
-            let end = narg("end") as u32;
-            let kind = if sarg("kind") == "task" {
-                CommentKind::Task
-            } else {
-                CommentKind::Note
-            };
-            let created = core::create_comment(
-                root,
-                core::NewComment {
-                    file: sarg("file"),
-                    scope: core::Scope::Range,
-                    start_line: line.max(1),
-                    end_line: if end >= line.max(1) { end } else { line.max(1) },
-                    comment_type: parse_type(&sarg("type")),
-                    kind,
-                    body: sarg("body"),
-                    context: core::Context::default(),
-                    url: None,
-                    x: None,
-                    y: None,
-                    target: None,
-                },
-                "agent",
-                Some(agent_id()),
-            )
-            .map_err(|e| (-32603, e.to_string()))?;
-            mutation_result(&created.comment, "comment_add")
-        }
-        "comment_reply" => {
-            let c = core::add_reply(
-                root,
-                &sarg("id"),
-                "agent",
-                Some(agent_id()),
-                sarg("body"),
-            )
-            .map_err(|e| (-32603, e.to_string()))?;
-            mutation_result(&c, "comment_reply")
-        }
+        "task_done" => tasks::task_done(root, a),
+        "task_fail" => tasks::task_fail(root, a),
+        "task_block" => tasks::task_block(root, a),
+        "comment_add" => tasks::comment_add(root, a),
+        "comment_reply" => tasks::comment_reply(root, a),
+        "mascot_say" => tasks::mascot_say(root, a),
+        "session_done" => tasks::session_done(root, a),
+
         // ---- Guided Pair Review: the session verbs ----
-        "session_show" => {
-            let s = resolve_session(root, args)?;
-            serde_json::to_string_pretty(&s).map_err(|e| (-32603, e.to_string()))
-        }
-        "review_context" => {
-            let s = resolve_session(root, args)?;
-            let file = sarg("file");
-            let proposals: Vec<_> = s.proposals.iter().filter(|p| p.file == file).collect();
-            let fstate = s.files.iter().find(|f| f.file == file);
-            serde_json::to_string_pretty(&serde_json::json!({
-                "sessionId": s.id,
-                "file": file,
-                "objective": s.objective,
-                "entry": s.route.iter().find(|e| e.file == file),
-                "state": fstate.map(|f| f.state),
-                "summary": fstate.and_then(|f| f.summary.clone()),
-                "proposals": proposals,
-            }))
-            .map_err(|e| (-32603, e.to_string()))
-        }
-        "review_plan" => {
-            let s = resolve_session(root, args)?;
-            let route = route_arg(args)?;
-            let planned = core::set_route(root, &s.id, route).map_err(|e| (-32603, e.to_string()))?;
-            let uncovered = core::uncovered_files(&planned);
-            serde_json::to_string_pretty(&serde_json::json!({
-                "sessionId": planned.id,
-                "routed": planned.route.len(),
-                "uncovered": uncovered,
-                "note": if uncovered.is_empty() {
-                    "Route set. Review the files in order."
-                } else {
-                    "Route set, but these files are in the scope and not in your route. Propose a route change that includes them, or mark each out of scope with session_show's file states — leaving them out in silence is not an answer."
-                },
-            }))
-            .map_err(|e| (-32603, e.to_string()))
-        }
-        "review_propose_route_change" => {
-            let s = resolve_session(root, args)?;
-            let route = route_arg(args)?;
-            let reason = sarg("reason");
-            if reason.trim().is_empty() {
-                return Err((-32602, "a route change needs a reason — it is what the human reads to decide".into()));
-            }
-            let updated = core::propose_route_change(
-                root,
-                &s.id,
-                route,
-                reason,
-                "agent",
-                Some(agent_id()),
-            )
-            .map_err(|e| (-32603, e.to_string()))?;
-            Ok(format!(
-                "Proposed a {}-file route change on session {}. The current route is unchanged until the human accepts it in Reado — carry on with the file you were reviewing.",
-                updated.route_change.as_ref().map_or(0, |c| c.route.len()),
-                updated.id
-            ))
-        }
-        "review_propose_comment" => {
-            let s = resolve_session(root, args)?;
-            let line = (narg("line") as u32).max(1);
-            let end = narg("end") as u32;
-            let p = core::add_proposal(
-                root,
-                &s.id,
-                core::NewProposal {
-                    artifact_type: core::ArtifactType::Comment,
-                    file: sarg("file"),
-                    start_line: line,
-                    end_line: if end >= line { end } else { line },
-                    comment_type: Some(parse_type(&sarg("type"))),
-                    body: sarg("body"),
-                },
-                "agent",
-                Some(agent_id()),
-            )
-            .map_err(|e| (-32603, e.to_string()))?;
-            Ok(format!(
-                "Proposed {} on {}:{} — awaiting the human's decision.",
-                p.id, p.file, p.start_line
-            ))
-        }
-        "review_propose" => {
-            let s = resolve_session(root, args)?;
-            let artifact_type = match sarg("kind").as_str() {
-                "follow-up" | "follow_up" => core::ArtifactType::FollowUp,
-                "needs-context" | "needs_context" => core::ArtifactType::NeedsContext,
-                _ => core::ArtifactType::Question,
-            };
-            let line = narg("line") as u32;
-            let p = core::add_proposal(
-                root,
-                &s.id,
-                core::NewProposal {
-                    artifact_type,
-                    file: sarg("file"),
-                    start_line: line,
-                    end_line: line,
-                    comment_type: None,
-                    body: sarg("body"),
-                },
-                "agent",
-                Some(agent_id()),
-            )
-            .map_err(|e| (-32603, e.to_string()))?;
-            Ok(format!("Proposed {} ({:?}).", p.id, p.artifact_type))
-        }
-        "review_summarize_file" => {
-            let s = resolve_session(root, args)?;
-            core::set_file_summary(root, &s.id, &sarg("file"), sarg("text"))
-                .map_err(|e| (-32603, e.to_string()))?;
-            Ok(format!("Summary recorded for {}.", sarg("file")))
-        }
-        "session_summarize" => {
-            let s = resolve_session(root, args)?;
-            core::set_session_summary(root, &s.id, sarg("text"))
-                .map_err(|e| (-32603, e.to_string()))?;
-            Ok("Session summary recorded.".to_string())
-        }
-        "browser_errors" => {
-            if !Path::new(root).join(".reado").join("preview-console.json").exists() {
-                return Ok("No preview pane running — open the browser preview in Reado.".to_string());
-            }
-            let raw = read_json_file(root, "preview-console.json");
-            let entries: Vec<serde_json::Value> = serde_json::from_str(&raw).unwrap_or_default();
-            let errors: Vec<_> = entries
-                .into_iter()
-                .filter(|e| e.get("level").and_then(|l| l.as_str()) == Some("error"))
-                .collect();
-            if errors.is_empty() {
-                Ok("No errors captured.".to_string())
-            } else {
-                serde_json::to_string_pretty(&errors).map_err(|e| (-32603, e.to_string()))
-            }
-        }
+        "session_show" => review::session_show(root, a),
+        "review_context" => review::review_context(root, a),
+        "review_plan" => review::review_plan(root, a),
+        "review_propose_route_change" => review::review_propose_route_change(root, a),
+        "review_propose_comment" => review::review_propose_comment(root, a),
+        "review_propose" => review::review_propose(root, a),
+        "review_summarize_file" => review::review_summarize_file(root, a),
+        "session_summarize" => review::session_summarize(root, a),
         other => Err((-32602, format!("unknown tool: {other}"))),
     }
 }
 
 /// Read a `.reado/<name>` JSON file, defaulting to an empty array.
 fn read_json_file(root: &str, name: &str) -> String {
-    std::fs::read_to_string(Path::new(root).join(".reado").join(name))
+    std::fs::read_to_string(core::reado_dir(root).join(name))
         .ok()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "[]".to_string())
@@ -728,6 +386,7 @@ fn read_json_file(root: &str, name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::browser::{jsq, send_command};
     use super::*;
 
     fn root_str(dir: &tempfile::TempDir) -> String {
@@ -952,7 +611,27 @@ mod tests {
         let done = call_tool(&root, "task_done", Some(&serde_json::json!({ "id": id }))).unwrap();
         let done: serde_json::Value = serde_json::from_str(&done).unwrap();
         assert_eq!(done["state"], "resolved-unverified");
-        assert_eq!(done["resolution"]["agent"], agent_id());
+        assert_eq!(done["resolution"]["agent"], crate::ops::agent_id());
+    }
+
+    #[test]
+    fn comment_add_defaults_to_a_task_like_the_cli() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = root_str(&dir);
+        std::fs::write(dir.path().join("src.rs"), "fn main() {}\n").unwrap();
+        let add = |args: serde_json::Value| {
+            let out = call_tool(&root, "comment_add", Some(&args)).unwrap();
+            let id = serde_json::from_str::<serde_json::Value>(&out).unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            core::get_comment(&root, &id).unwrap().meta.kind
+        };
+        let task = add(serde_json::json!({ "file": "src.rs", "line": 1, "body": "x" }));
+        assert_eq!(task, CommentKind::Task);
+        let note =
+            add(serde_json::json!({ "file": "src.rs", "line": 1, "kind": "note", "body": "y" }));
+        assert_eq!(note, CommentKind::Note);
     }
 
     #[test]
@@ -1066,6 +745,32 @@ mod tests {
     }
 
     #[test]
+    fn every_listed_tool_is_dispatched() {
+        // A tool in `tool_list` that `call_tool` does not route is advertised to
+        // the agent and then refused as unknown. Root it under a regular *file*
+        // so `.reado/` can never be created: every tool fails at its first write
+        // (the browser queue included, before it starts polling for a pane).
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("not-a-dir");
+        std::fs::write(&file, "").unwrap();
+        let root = file.join("project").to_string_lossy().into_owned();
+        let started = std::time::Instant::now();
+        for tool in tool_list().as_array().unwrap() {
+            let name = tool["name"].as_str().unwrap();
+            if let Err((_, msg)) = call_tool(&root, name, Some(&serde_json::json!({}))) {
+                assert!(
+                    !msg.starts_with("unknown tool"),
+                    "{name} is listed but not dispatched"
+                );
+            }
+        }
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "a tool waited instead of failing fast"
+        );
+    }
+
+    #[test]
     fn unknown_tool_is_invalid_params() {
         let dir = tempfile::tempdir().unwrap();
         let err = call_tool(&root_str(&dir), "browser_teleport", None).unwrap_err();
@@ -1095,7 +800,7 @@ mod tests {
         let root = root_str(&dir);
         // Simulate the desktop pane: wait for the command, echo a result for its id.
         let handle = std::thread::spawn(move || {
-            let cmd_path = reado_dir.join("preview-cmd.json");
+            let cmd_path = reado_dir.join(core::PREVIEW_CMD_FILE);
             for _ in 0..100 {
                 std::thread::sleep(std::time::Duration::from_millis(20));
                 let Ok(s) = std::fs::read_to_string(&cmd_path) else {
@@ -1106,7 +811,7 @@ mod tests {
                 };
                 let id = v["id"].as_str().unwrap().to_string();
                 let out = serde_json::json!({ "id": id, "ok": true, "result": "42" });
-                std::fs::write(reado_dir.join("preview-result.json"), out.to_string()).unwrap();
+                std::fs::write(reado_dir.join(core::PREVIEW_RESULT_FILE), out.to_string()).unwrap();
                 return;
             }
         });
@@ -1121,7 +826,7 @@ mod tests {
         let reado_dir = reado(&dir);
         let root = root_str(&dir);
         let handle = std::thread::spawn(move || {
-            let cmd_path = reado_dir.join("preview-cmd.json");
+            let cmd_path = reado_dir.join(core::PREVIEW_CMD_FILE);
             for _ in 0..100 {
                 std::thread::sleep(std::time::Duration::from_millis(20));
                 let Ok(s) = std::fs::read_to_string(&cmd_path) else {
@@ -1133,7 +838,7 @@ mod tests {
                 let id = v["id"].as_str().unwrap().to_string();
                 let out =
                     serde_json::json!({ "id": id, "ok": false, "result": "origin not allowed" });
-                std::fs::write(reado_dir.join("preview-result.json"), out.to_string()).unwrap();
+                std::fs::write(reado_dir.join(core::PREVIEW_RESULT_FILE), out.to_string()).unwrap();
                 return;
             }
         });
@@ -1150,7 +855,7 @@ mod tests {
         let reado_dir = reado(&dir);
         let root = root_str(&dir);
         let handle = std::thread::spawn(move || {
-            let cmd_path = reado_dir.join("preview-cmd.json");
+            let cmd_path = reado_dir.join(core::PREVIEW_CMD_FILE);
             for _ in 0..100 {
                 std::thread::sleep(std::time::Duration::from_millis(20));
                 let Ok(s) = std::fs::read_to_string(&cmd_path) else {
@@ -1161,7 +866,7 @@ mod tests {
                 };
                 let id = v["id"].as_str().unwrap().to_string();
                 let out = serde_json::json!({ "id": id, "ok": true, "result": "data:image/png;base64,AAAA" });
-                std::fs::write(reado_dir.join("preview-result.json"), out.to_string()).unwrap();
+                std::fs::write(reado_dir.join(core::PREVIEW_RESULT_FILE), out.to_string()).unwrap();
                 return;
             }
         });

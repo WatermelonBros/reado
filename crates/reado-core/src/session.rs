@@ -12,7 +12,7 @@
 //! `.reado/comments/` entry via [`crate::create_comment`] and links it back to
 //! the proposal, so the session never duplicates the comment store.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -288,7 +288,7 @@ pub struct NewProposal {
 // ---- Paths ---------------------------------------------------------------
 
 fn sessions_dir(root: &str) -> PathBuf {
-    Path::new(root).join(".reado").join("sessions")
+    crate::reado_dir(root).join(crate::SESSIONS_DIR)
 }
 
 /// A session id is safe to use as a filename: non-empty and free of path
@@ -371,6 +371,12 @@ pub fn get_session(root: &str, id: &str) -> Result<Session> {
 /// Read-modify-write a session, stamping `updated_at`.
 fn mutate(root: &str, id: &str, f: impl FnOnce(&mut Session)) -> Result<Session> {
     let _lock = crate::ReadoLock::acquire(root)?;
+    mutate_locked(root, id, f)
+}
+
+/// `mutate` for a caller already holding the `ReadoLock` — it is an flock, and a
+/// second acquire from the same process waits on itself.
+fn mutate_locked(root: &str, id: &str, f: impl FnOnce(&mut Session)) -> Result<Session> {
     let mut session = get_session(root, id)?;
     f(&mut session);
     session.updated_at = now_millis();
@@ -567,6 +573,10 @@ pub fn accept_proposal(
     proposal_id: &str,
     kind: CommentKind,
 ) -> Result<Session> {
+    // Held from the "already accepted?" check to the final write: otherwise two
+    // accepts at once (desktop and CLI) both pass the check and both create a
+    // durable comment, one of them orphaned.
+    let _lock = crate::ReadoLock::acquire(root)?;
     let session = get_session(root, id)?;
     let proposal = session
         .proposals
@@ -620,7 +630,7 @@ pub fn accept_proposal(
         CommentKind::Note => ArtifactState::ConvertedToNote,
     };
 
-    mutate(root, id, |s| {
+    mutate_locked(root, id, |s| {
         if let Some(p) = s.proposals.iter_mut().find(|p| p.id == proposal_id) {
             p.state = new_state;
             p.comment_id = comment_id;
@@ -1104,6 +1114,37 @@ mod tests {
         accept_proposal(root, &s.id, &p.id, CommentKind::Task).unwrap();
         // A second accept must be a no-op: still exactly one durable comment.
         accept_proposal(root, &s.id, &p.id, CommentKind::Task).unwrap();
+        assert_eq!(crate::list_comments(root).len(), 1);
+    }
+
+    #[test]
+    fn concurrent_accepts_create_one_comment() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        std::fs::write(dir.path().join("a.rs"), "fn main() {}\n").unwrap();
+        let s = start(root);
+        let p = add_proposal(
+            root,
+            &s.id,
+            NewProposal {
+                artifact_type: ArtifactType::Comment,
+                file: "a.rs".into(),
+                start_line: 1,
+                end_line: 1,
+                comment_type: Some(CommentType::Bug),
+                body: "bug".into(),
+            },
+            "agent",
+            None,
+        )
+        .unwrap();
+        // Desktop and CLI accepting together: each takes its own flock, as two
+        // processes would.
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                scope.spawn(|| accept_proposal(root, &s.id, &p.id, CommentKind::Task).unwrap());
+            }
+        });
         assert_eq!(crate::list_comments(root).len(), 1);
     }
 
