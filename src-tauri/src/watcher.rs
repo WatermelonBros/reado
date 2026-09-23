@@ -111,40 +111,50 @@ fn is_ignored(matchers: &[Gitignore], path: &Path) -> bool {
     })
 }
 
+/// `path` as `/`-separated text, so the checks below read the same on Windows.
+fn slashed(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+/// True if `path` is inside `.reado/<dir>/`.
+fn in_reado_dir(path: &Path, dir: &str) -> bool {
+    slashed(path).contains(&format!("/{}/{dir}/", reado_core::READO_DIR))
+}
+
+/// True if `path` is the file `.reado/<name>`.
+fn is_reado_file(path: &Path, name: &str) -> bool {
+    slashed(path).ends_with(&format!("/{}/{name}", reado_core::READO_DIR))
+}
+
 /// True if `path` is a comment file under `.reado/comments` or `.reado/archive`.
 fn is_comment_store(path: &Path) -> bool {
-    let s = path.to_string_lossy().replace('\\', "/");
-    s.contains("/.reado/comments/") || s.contains("/.reado/archive/")
+    in_reado_dir(path, reado_core::COMMENTS_DIR) || in_reado_dir(path, reado_core::ARCHIVE_DIR)
 }
 
 /// True if `path` is a guided-review session under `.reado/sessions`. Changes
 /// here mean the agent (via the `reado` CLI) advanced a session.
 fn is_session_store(path: &Path) -> bool {
-    let s = path.to_string_lossy().replace('\\', "/");
-    s.contains("/.reado/sessions/")
+    in_reado_dir(path, reado_core::SESSIONS_DIR)
 }
 
 /// True if `path` is the agent's live reasoning feed. A change means the agent
 /// (via `reado thought`) narrated another decision — reload the reasoning panel.
 fn is_reasoning_store(path: &Path) -> bool {
-    let s = path.to_string_lossy().replace('\\', "/");
-    s.ends_with("/.reado/reasoning.jsonl")
+    is_reado_file(path, reado_core::REASONING_FILE)
 }
 
 /// True if `path` is something the agent asked the companion to say
 /// (`mascot_say` over MCP). Same channel as the handoff below, one file per
 /// saying, most recent wins.
 fn is_mascot_say(path: &Path) -> bool {
-    let s = path.to_string_lossy().replace('\\', "/");
-    s.ends_with("/.reado/mascot.json")
+    is_reado_file(path, reado_core::MASCOT_FILE)
 }
 
 /// True if `path` is the agent's end-of-turn handoff (`session_done` over MCP).
 /// A change means the agent said it is done, blocked or stuck — the moment to
 /// get the attention of a user who walked away.
 fn is_agent_done(path: &Path) -> bool {
-    let s = path.to_string_lossy().replace('\\', "/");
-    s.ends_with("/.reado/done.json")
+    is_reado_file(path, reado_core::DONE_FILE)
 }
 
 /// True if `path` is git state whose change alters what `git status` would say.
@@ -183,6 +193,206 @@ fn relative(root: &Path, path: &Path) -> Option<String> {
 /// hold them, a watcher could never be stopped.
 #[derive(Default)]
 pub struct WatcherState(Mutex<HashMap<PathBuf, notify::RecommendedWatcher>>);
+
+/// A predicate on a changed path.
+type PathTest = fn(&Path) -> bool;
+
+/// The `.reado/` and `.git/` paths that stand for a panel reload rather than a
+/// file change, each with the event it raises. A path matching one goes no
+/// further. Each event is raised once per flush however many paths matched it,
+/// because one commit (say) touches several of these files and the UI only
+/// needs to re-read once.
+const SIGNALS: &[(PathTest, &str)] = &[
+    // Changes under .reado/comments|archive mean an agent (via the `reado` CLI)
+    // mutated comments — tell the UI to reload.
+    (is_comment_store, "comments-changed"),
+    // Changes under .reado/sessions mean a guided review advanced (the agent
+    // planned a route or proposed an artifact); tell the UI to reload the session.
+    (is_session_store, "sessions-changed"),
+    // The agent narrated a reasoning line via `reado thought`.
+    (is_reasoning_store, "reasoning-changed"),
+    // The agent handed the turn back via `session_done`.
+    (is_agent_done, "agent-done"),
+    (is_mascot_say, "mascot-say"),
+    // Git state moved under us — a commit, checkout, stage or merge in the
+    // terminal. `.git/` is otherwise ignored.
+    (is_git_state, "git-changed"),
+];
+
+/// The event a moved file's comments raise.
+const COMMENTS_CHANGED: &str = "comments-changed";
+
+/// One coalescing window of filesystem events, between two flushes.
+#[derive(Default)]
+struct Batch {
+    pending: HashSet<PathBuf>,
+    // Tracked per debounce window so a delete+create pair (how macOS/FSEvents
+    // reports a rename) can be reunited into a comment move instead of orphan.
+    created: HashSet<PathBuf>,
+    removed: HashSet<PathBuf>,
+    /// When the current coalescing window opened. Used to cap it at
+    /// MAX_COALESCE so continuous churn can't keep resetting the DEBOUNCE
+    /// timer forever and starve the flush.
+    window_start: Option<Instant>,
+}
+
+/// What a flush tells the UI.
+#[derive(Debug, Default, PartialEq)]
+struct Flushed {
+    /// Project-relative files whose contents changed, for `file-changed`.
+    files: Vec<String>,
+    /// Events to raise, once each, in [`SIGNALS`] order.
+    signals: Vec<&'static str>,
+}
+
+impl Batch {
+    /// How long to wait for the next event. Normally a full quiet period, but
+    /// never let the window exceed MAX_COALESCE: shrink the timeout to the
+    /// remaining budget so a busy period still flushes instead of accumulating
+    /// unbounded state.
+    fn timeout(&self) -> Duration {
+        match self.window_start {
+            Some(start) => DEBOUNCE.min(MAX_COALESCE.saturating_sub(start.elapsed())),
+            None => DEBOUNCE,
+        }
+    }
+
+    /// Add one event to the window. Returns the endpoints of a rename that
+    /// reported both of them (Linux/inotify), which lets the caller move a
+    /// file's comments instead of orphaning them.
+    fn record(&mut self, event: notify::Event) -> Option<(PathBuf, PathBuf)> {
+        // Open the coalescing window on the first event since the last flush, so
+        // MAX_COALESCE is measured from here.
+        self.window_start.get_or_insert_with(Instant::now);
+        if matches!(
+            event.kind,
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both))
+        ) && event.paths.len() == 2
+        {
+            let pair = (event.paths[0].clone(), event.paths[1].clone());
+            // Still a change to both paths: an atomic write (temp file renamed
+            // into place) is exactly this event, and skipping it would miss
+            // `.reado/` updates and file saves alike.
+            self.pending.extend(event.paths);
+            return Some(pair);
+        }
+        // Categorise each path as a create / remove / neither so the flush can
+        // pair a delete+create into a rename. `Side::Unknown` is a single-ended
+        // rename (FSEvents) decided by existence.
+        enum Side {
+            Create,
+            Remove,
+            Unknown,
+            Other,
+        }
+        let side = match event.kind {
+            EventKind::Create(_) | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                Side::Create
+            }
+            EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                Side::Remove
+            }
+            EventKind::Modify(ModifyKind::Name(_)) => Side::Unknown,
+            _ => Side::Other,
+        };
+        for path in event.paths {
+            match side {
+                Side::Create => {
+                    self.created.insert(path.clone());
+                }
+                Side::Remove => {
+                    self.removed.insert(path.clone());
+                }
+                Side::Unknown => {
+                    if path.exists() {
+                        self.created.insert(path.clone());
+                    } else {
+                        self.removed.insert(path.clone());
+                    }
+                }
+                Side::Other => {}
+            }
+            self.pending.insert(path);
+        }
+        None
+    }
+
+    /// Close the window: move comments across a delete+create rename, then sort
+    /// every pending path into a signal, a changed file, or nothing.
+    fn flush(&mut self, root: &Path, matchers: &[Gitignore]) -> Flushed {
+        let mut raised: HashSet<&'static str> = HashSet::new();
+        if let Some((from, to)) = pair_rename(root, &self.removed, &self.created) {
+            if reado_core::rename_comments(&root.to_string_lossy(), &from, &to).unwrap_or(0) > 0 {
+                raised.insert(COMMENTS_CHANGED);
+            }
+        }
+        self.created.clear();
+        self.removed.clear();
+        // Window flushed; the next event opens a fresh one.
+        self.window_start = None;
+
+        let mut files = Vec::new();
+        for path in self.pending.drain() {
+            if let Some((_, event)) = SIGNALS.iter().find(|(matches, _)| matches(&path)) {
+                raised.insert(event);
+                continue;
+            }
+            if path.is_dir() || is_ignored(matchers, &path) {
+                continue;
+            }
+            if let Some(rel) = relative(root, &path) {
+                files.push(rel);
+            }
+        }
+        Flushed {
+            files,
+            signals: SIGNALS
+                .iter()
+                .map(|(_, event)| *event)
+                .filter(|event| raised.contains(event))
+                .collect(),
+        }
+    }
+}
+
+/// Reunite a delete+create into a rename: if exactly one removed file carried
+/// comments and exactly one file was created in this window, treat it as that
+/// file's new path. Returns `(from, to)`, project-relative, when the comments
+/// should move.
+fn pair_rename(
+    root: &Path,
+    removed: &HashSet<PathBuf>,
+    created: &HashSet<PathBuf>,
+) -> Option<(String, String)> {
+    if removed.is_empty() || created.is_empty() {
+        return None;
+    }
+    let comments = reado_core::list_comments(&root.to_string_lossy());
+    let removed_commented: Vec<&PathBuf> = removed
+        .iter()
+        .filter(|p| {
+            relative(root, p).is_some_and(|rel| comments.iter().any(|c| c.meta.anchor.file == rel))
+        })
+        .collect();
+    if removed_commented.len() != 1 || created.len() != 1 {
+        return None;
+    }
+    let created_path = created.iter().next()?;
+    let from = relative(root, removed_commented[0])?;
+    let to = relative(root, created_path)?;
+    // Corroborate the pairing: the created file must still contain one of the
+    // removed file's anchored snippets. Counts of 1+1 alone are coincidental — an
+    // unrelated delete+create in the same window would otherwise move comments
+    // onto the wrong file.
+    let new_content = std::fs::read_to_string(created_path).unwrap_or_default();
+    let looks_like_rename = comments.iter().any(|c| {
+        c.meta.anchor.file == from && {
+            let s = c.meta.context.snippet.trim();
+            !s.is_empty() && new_content.contains(s)
+        }
+    });
+    (from != to && looks_like_rename).then_some((from, to))
+}
 
 /// Start watching `root`, and stop watching anything else.
 ///
@@ -233,84 +443,20 @@ pub fn start_watching(
         // Built here, not in the command: collecting the ignore files walks the
         // project, and `start_watching` is a blocking command — on the UI thread.
         let matchers = ignore_matchers(&root);
-        let mut pending: HashSet<PathBuf> = HashSet::new();
-        // Tracked per debounce window so a delete+create pair (how macOS/FSEvents
-        // reports a rename) can be reunited into a comment move instead of orphan.
-        let mut created: HashSet<PathBuf> = HashSet::new();
-        let mut removed: HashSet<PathBuf> = HashSet::new();
-        // When the current coalescing window opened. Used to cap it at
-        // MAX_COALESCE so continuous churn can't keep resetting the DEBOUNCE
-        // timer forever and starve the flush.
-        let mut window_start: Option<Instant> = None;
-
+        let mut batch = Batch::default();
         loop {
-            // Normally wait a full quiet period, but never let the window exceed
-            // MAX_COALESCE: shrink the timeout to the remaining budget so a busy
-            // period still flushes instead of accumulating unbounded state.
-            let timeout = match window_start {
-                Some(start) => DEBOUNCE.min(MAX_COALESCE.saturating_sub(start.elapsed())),
-                None => DEBOUNCE,
-            };
-            match rx.recv_timeout(timeout) {
+            match rx.recv_timeout(batch.timeout()) {
                 Ok(Ok(event)) => {
-                    // A rename that reports both endpoints (Linux/inotify) lets us
-                    // move a file's comments instead of orphaning them.
-                    if matches!(
-                        event.kind,
-                        EventKind::Modify(ModifyKind::Name(RenameMode::Both))
-                    ) && event.paths.len() == 2
-                    {
-                        if let (Some(from), Some(to)) = (
-                            relative(&root, &event.paths[0]),
-                            relative(&root, &event.paths[1]),
-                        ) {
-                            if reado_core::rename_comments(&root.to_string_lossy(), &from, &to)
-                                .unwrap_or(0)
-                                > 0
-                            {
-                                let _ = app.emit("comments-changed", ());
-                            }
-                        }
+                    let Some((from, to)) = batch.record(event) else {
                         continue;
-                    }
-                    // Categorise each path as a create / remove / neither so the
-                    // flush can pair a delete+create into a rename. `Side::Unknown`
-                    // is a single-ended rename (FSEvents) decided by existence.
-                    enum Side {
-                        Create,
-                        Remove,
-                        Unknown,
-                        Other,
-                    }
-                    let side = match event.kind {
-                        EventKind::Create(_)
-                        | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => Side::Create,
-                        EventKind::Remove(_)
-                        | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => Side::Remove,
-                        EventKind::Modify(ModifyKind::Name(_)) => Side::Unknown,
-                        _ => Side::Other,
                     };
-                    // Open the coalescing window on the first event since the
-                    // last flush, so MAX_COALESCE is measured from here.
-                    window_start.get_or_insert_with(Instant::now);
-                    for path in event.paths {
-                        match side {
-                            Side::Create => {
-                                created.insert(path.clone());
-                            }
-                            Side::Remove => {
-                                removed.insert(path.clone());
-                            }
-                            Side::Unknown => {
-                                if path.exists() {
-                                    created.insert(path.clone());
-                                } else {
-                                    removed.insert(path.clone());
-                                }
-                            }
-                            Side::Other => {}
+                    if let (Some(from), Some(to)) = (relative(&root, &from), relative(&root, &to)) {
+                        if reado_core::rename_comments(&root.to_string_lossy(), &from, &to)
+                            .unwrap_or(0)
+                            > 0
+                        {
+                            let _ = app.emit(COMMENTS_CHANGED, ());
                         }
-                        pending.insert(path);
                     }
                 }
                 Ok(Err(e)) => {
@@ -322,128 +468,17 @@ pub fn start_watching(
                     );
                 }
                 Err(RecvTimeoutError::Timeout) => {
-                    let mut comments_dirty = false;
-                    let mut sessions_dirty = false;
-                    let mut reasoning_dirty = false;
-                    let mut agent_done_dirty = false;
-                    let mut mascot_dirty = false;
-                    let mut git_dirty = false;
-
-                    // Reunite a delete+create into a rename: if exactly one removed
-                    // file carried comments and exactly one file was created in this
-                    // window, treat it as that file's new path and move the comments.
-                    if !removed.is_empty() && !created.is_empty() {
-                        let root_str = root.to_string_lossy();
-                        let comments = reado_core::list_comments(&root_str);
-                        let removed_commented: Vec<&PathBuf> = removed
-                            .iter()
-                            .filter(|p| {
-                                relative(&root, p).is_some_and(|rel| {
-                                    comments.iter().any(|c| c.meta.anchor.file == rel)
-                                })
-                            })
-                            .collect();
-                        if removed_commented.len() == 1 && created.len() == 1 {
-                            let created_path = created.iter().next().unwrap();
-                            if let (Some(from), Some(to)) = (
-                                relative(&root, removed_commented[0]),
-                                relative(&root, created_path),
-                            ) {
-                                // Corroborate the pairing: the created file must
-                                // still contain one of the removed file's anchored
-                                // snippets. Counts of 1+1 alone are coincidental —
-                                // an unrelated delete+create in the same window
-                                // would otherwise move comments onto the wrong file.
-                                let new_content =
-                                    std::fs::read_to_string(created_path).unwrap_or_default();
-                                let looks_like_rename = comments.iter().any(|c| {
-                                    c.meta.anchor.file == from && {
-                                        let s = c.meta.context.snippet.trim();
-                                        !s.is_empty() && new_content.contains(s)
-                                    }
-                                });
-                                if from != to
-                                    && looks_like_rename
-                                    && reado_core::rename_comments(&root_str, &from, &to)
-                                        .unwrap_or(0)
-                                        > 0
-                                {
-                                    comments_dirty = true;
-                                }
-                            }
-                        }
+                    let flushed = batch.flush(&root, &matchers);
+                    for file in flushed.files {
+                        crate::log::debug(
+                            "watcher",
+                            "file changed (reanchor)",
+                            serde_json::json!({ "file": file }),
+                        );
+                        let _ = app.emit("file-changed", FileChanged { file });
                     }
-                    created.clear();
-                    removed.clear();
-                    // Window flushed; the next event opens a fresh one.
-                    window_start = None;
-
-                    for path in pending.drain() {
-                        // Changes under .reado/comments|archive mean an agent (via
-                        // the `reado` CLI) mutated comments — tell the UI to reload.
-                        if is_comment_store(&path) {
-                            comments_dirty = true;
-                            continue;
-                        }
-                        // Changes under .reado/sessions mean a guided review
-                        // advanced (the agent planned a route or proposed an
-                        // artifact); tell the UI to reload the session.
-                        if is_session_store(&path) {
-                            sessions_dirty = true;
-                            continue;
-                        }
-                        // The agent narrated a reasoning line via `reado thought`.
-                        if is_reasoning_store(&path) {
-                            reasoning_dirty = true;
-                            continue;
-                        }
-                        if is_mascot_say(&path) {
-                            mascot_dirty = true;
-                            continue;
-                        }
-                        // The agent handed the turn back via `session_done`.
-                        if is_agent_done(&path) {
-                            agent_done_dirty = true;
-                            continue;
-                        }
-                        // Git state moved under us — a commit, checkout, stage or
-                        // merge in the terminal. Flagged rather than emitted here,
-                        // because one commit touches several of these files and the
-                        // UI only needs to re-read once. `.git/` is otherwise
-                        // ignored below.
-                        if is_git_state(&path) {
-                            git_dirty = true;
-                            continue;
-                        }
-                        if path.is_dir() || is_ignored(&matchers, &path) {
-                            continue;
-                        }
-                        if let Some(rel) = relative(&root, &path) {
-                            crate::log::debug(
-                                "watcher",
-                                "file changed (reanchor)",
-                                serde_json::json!({ "file": rel }),
-                            );
-                            let _ = app.emit("file-changed", FileChanged { file: rel });
-                        }
-                    }
-                    if comments_dirty {
-                        let _ = app.emit("comments-changed", ());
-                    }
-                    if sessions_dirty {
-                        let _ = app.emit("sessions-changed", ());
-                    }
-                    if reasoning_dirty {
-                        let _ = app.emit("reasoning-changed", ());
-                    }
-                    if agent_done_dirty {
-                        let _ = app.emit("agent-done", ());
-                    }
-                    if mascot_dirty {
-                        let _ = app.emit("mascot-say", ());
-                    }
-                    if git_dirty {
-                        let _ = app.emit("git-changed", ());
+                    for event in flushed.signals {
+                        let _ = app.emit(event, ());
                     }
                 }
                 Err(RecvTimeoutError::Disconnected) => break,
@@ -457,6 +492,7 @@ pub fn start_watching(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use notify::event::{CreateKind, DataChange, RemoveKind};
 
     #[test]
     fn a_nested_gitignore_is_honoured_and_stays_in_its_own_directory() {
@@ -575,6 +611,148 @@ mod tests {
         assert!(!is_git_state(Path::new("/p/.git/config")));
         assert!(!is_git_state(Path::new("/p/src/HEAD")));
         assert!(!is_git_state(Path::new("/p/src/main.rs")));
+    }
+
+    fn event(kind: EventKind, paths: &[&Path]) -> notify::Event {
+        paths
+            .iter()
+            .fold(notify::Event::new(kind), |e, p| e.add_path(p.to_path_buf()))
+    }
+
+    #[test]
+    fn a_rename_reporting_both_ends_is_also_a_change_to_both() {
+        // An atomic write — a temp file renamed into place — arrives as exactly
+        // this event. Handing back the pair for the comment move must not stop
+        // it counting as a change, or `.reado/` updates and saves go missing.
+        let mut batch = Batch::default();
+        let tmp = PathBuf::from("/p/.reado/comments/.c1.md.tmp");
+        let file = PathBuf::from("/p/.reado/comments/c1.md");
+        let pair = batch.record(event(
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            &[&tmp, &file],
+        ));
+        assert_eq!(pair, Some((tmp.clone(), file.clone())));
+        assert!(batch.pending.contains(&tmp) && batch.pending.contains(&file));
+        assert!(batch.window_start.is_some(), "the window must open");
+        assert!(batch.created.is_empty() && batch.removed.is_empty());
+        assert_eq!(
+            batch.flush(Path::new("/p"), &[]).signals,
+            vec!["comments-changed"]
+        );
+    }
+
+    #[test]
+    fn creates_and_removes_are_sorted_for_rename_pairing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let (new, old) = (root.join("new.ts"), root.join("old.ts"));
+        let (here, gone) = (root.join("here.ts"), root.join("gone.ts"));
+        let edited = root.join("edited.ts");
+        std::fs::write(&here, "").unwrap();
+
+        let mut batch = Batch::default();
+        assert_eq!(
+            batch.record(event(EventKind::Create(CreateKind::File), &[&new])),
+            None
+        );
+        batch.record(event(EventKind::Remove(RemoveKind::File), &[&old]));
+        // A single-ended rename (FSEvents) is decided by whether the path exists.
+        batch.record(event(
+            EventKind::Modify(ModifyKind::Name(RenameMode::Any)),
+            &[&here, &gone],
+        ));
+        batch.record(event(
+            EventKind::Modify(ModifyKind::Data(DataChange::Content)),
+            &[&edited],
+        ));
+        assert_eq!(batch.created, HashSet::from([new.clone(), here.clone()]));
+        assert_eq!(batch.removed, HashSet::from([old.clone(), gone.clone()]));
+        assert_eq!(batch.pending.len(), 5);
+    }
+
+    #[test]
+    fn the_window_never_outlives_max_coalesce() {
+        let mut batch = Batch::default();
+        assert_eq!(batch.timeout(), DEBOUNCE);
+        // Sustained churn: the window opened MAX_COALESCE ago, so it flushes now
+        // rather than waiting out another quiet period.
+        batch.window_start = Instant::now().checked_sub(MAX_COALESCE);
+        if batch.window_start.is_some() {
+            assert_eq!(batch.timeout(), Duration::ZERO);
+        }
+    }
+
+    #[test]
+    fn a_flush_raises_each_signal_once_and_reports_real_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("src/a.ts"), "").unwrap();
+
+        let mut batch = Batch::default();
+        batch.record(event(
+            EventKind::Modify(ModifyKind::Data(DataChange::Content)),
+            &[
+                &root.join(".git/index"),
+                &root.join(".git/refs/heads/main"),
+                &root.join(".reado/sessions/s1.json"),
+                &root.join(".git/objects/ab/cdef"),
+                &root.join("src"),
+                &root.join("src/a.ts"),
+            ],
+        ));
+        let flushed = batch.flush(root, &ignore_matchers(root));
+        // Two git files, one event; a directory and git's objects are nothing.
+        assert_eq!(flushed.files, vec!["src/a.ts".to_string()]);
+        assert_eq!(flushed.signals, vec!["sessions-changed", "git-changed"]);
+        assert!(batch.pending.is_empty() && batch.window_start.is_none());
+    }
+
+    #[test]
+    fn a_delete_and_create_pair_is_a_rename_only_when_the_content_followed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let root_str = root.to_string_lossy();
+        std::fs::write(root.join("a.ts"), "fn keep_me() {}\n").unwrap();
+        reado_core::create_comment(
+            &root_str,
+            reado_core::NewComment {
+                file: "a.ts".into(),
+                scope: reado_core::Scope::Range,
+                start_line: 1,
+                end_line: 1,
+                comment_type: reado_core::CommentType::Note,
+                kind: reado_core::CommentKind::Task,
+                body: "check this".into(),
+                context: Default::default(),
+                url: None,
+                x: None,
+                y: None,
+                target: None,
+            },
+            "human",
+            None,
+        )
+        .unwrap();
+        std::fs::remove_file(root.join("a.ts")).unwrap();
+        let removed = HashSet::from([root.join("a.ts")]);
+
+        std::fs::write(root.join("b.ts"), "fn keep_me() {}\n").unwrap();
+        let created = HashSet::from([root.join("b.ts")]);
+        assert_eq!(
+            pair_rename(root, &removed, &created),
+            Some(("a.ts".to_string(), "b.ts".to_string()))
+        );
+
+        // 1+1 by count, but the new file holds none of the anchored code.
+        std::fs::write(root.join("c.ts"), "something else\n").unwrap();
+        let unrelated = HashSet::from([root.join("c.ts")]);
+        assert_eq!(pair_rename(root, &removed, &unrelated), None);
+
+        // Two candidates is a guess, not a rename.
+        let two = HashSet::from([root.join("b.ts"), root.join("c.ts")]);
+        assert_eq!(pair_rename(root, &removed, &two), None);
+        assert_eq!(pair_rename(root, &HashSet::new(), &created), None);
     }
 
     #[test]

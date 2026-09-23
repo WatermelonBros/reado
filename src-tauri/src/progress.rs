@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use crate::error::{Error, Result};
 
 fn store_path(root: &str) -> PathBuf {
-    Path::new(root).join(".reado").join("read.json")
+    reado_core::reado_dir(root).join(reado_core::READ_PROGRESS_FILE)
 }
 
 fn load(root: &str) -> Vec<String> {

@@ -68,41 +68,7 @@ pub fn run() {
         // the webview Clipboard API — on Windows that pops a WebView2 permission
         // prompt naming the origin ("tauri.localhost"), not the app.
         .plugin(tauri_plugin_clipboard_manager::init())
-        .setup(|app| {
-            // Bring up the logging engine before anything else so the rest of
-            // setup is captured. Resolve a *per-user private* log dir: the OS
-            // app-log dir, or a home-relative fallback. We deliberately avoid a
-            // shared temp dir (multi-user exposure); if neither resolves we skip
-            // logging rather than write somewhere world-readable. Logging never
-            // blocks startup.
-            use tauri::Manager;
-            let home = app.path().home_dir().ok();
-            let log_dir = app
-                .path()
-                .app_log_dir()
-                .ok()
-                .or_else(|| home.as_ref().map(|h| h.join(".reado").join("logs")));
-            if let Some(log_dir) = log_dir {
-                let log_path = log::init(log_dir, home);
-                log::info(
-                    "app",
-                    "startup",
-                    serde_json::json!({
-                        "version": app.package_info().version.to_string(),
-                        "logPath": log_path.to_string_lossy(),
-                    }),
-                );
-            }
-            menu::init(app)?;
-            // Watches the cursor so the companion window can let clicks through
-            // everywhere except the character. Harmless while it doesn't exist.
-            mascot::watch_cursor(app.handle().clone());
-            anywhere::dev_autostart(app.handle());
-            // Files passed on the command line (Windows/Linux cold launch). macOS
-            // delivers them via RunEvent::Opened instead.
-            fileopen::open_from_args(app.handle());
-            Ok(())
-        })
+        .setup(setup)
         .manage(pty::PtyState::default())
         .manage(mascot::HitRect::default())
         .manage(mascot::Park::default())
@@ -113,34 +79,7 @@ pub fn run() {
         .manage(symbols::SymbolCache::default())
         .manage(menu::LastFocused::default())
         .manage(watcher::WatcherState::default())
-        .on_window_event(|window, event| {
-            use tauri::Manager;
-            // Remember the focused window so menu actions target it (the menu is
-            // shared across windows).
-            if let tauri::WindowEvent::Focused(true) = event {
-                log::debug(
-                    "app",
-                    "window focused",
-                    serde_json::json!({ "window": window.label() }),
-                );
-                if let Ok(mut last) = window.app_handle().state::<menu::LastFocused>().0.lock() {
-                    *last = Some(window.label().to_string());
-                }
-            }
-            // Reap a closing window's PTYs so its shells/dev servers don't linger
-            // as orphans while other windows keep the app alive.
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                log::info(
-                    "app",
-                    "window close requested",
-                    serde_json::json!({ "window": window.label() }),
-                );
-                pty::kill_for_window(
-                    &window.app_handle().state::<pty::PtyState>(),
-                    window.label(),
-                );
-            }
-        })
+        .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
             fs::list_dir,
             fs::list_files,
@@ -360,28 +299,100 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building Reado")
-        .run(|app, event| {
-            // macOS delivers "open these files with Reado" as an Apple event.
-            #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Opened { urls } = &event {
-                for url in urls {
-                    if let Ok(path) = url.to_file_path() {
-                        fileopen::open_path(app, &path);
-                    }
-                }
+        .run(on_run_event);
+}
+
+/// App setup: logging first, then the menu, the companion's cursor watch, the
+/// dev Anywhere autostart and any files passed on the command line.
+fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    // Bring up the logging engine before anything else so the rest of
+    // setup is captured. Resolve a *per-user private* log dir: the OS
+    // app-log dir, or a home-relative fallback. We deliberately avoid a
+    // shared temp dir (multi-user exposure); if neither resolves we skip
+    // logging rather than write somewhere world-readable. Logging never
+    // blocks startup.
+    use tauri::Manager;
+    let home = app.path().home_dir().ok();
+    let log_dir = app
+        .path()
+        .app_log_dir()
+        .ok()
+        .or_else(|| home.as_ref().map(|h| h.join(".reado").join("logs")));
+    if let Some(log_dir) = log_dir {
+        let log_path = log::init(log_dir, home);
+        log::info(
+            "app",
+            "startup",
+            serde_json::json!({
+                "version": app.package_info().version.to_string(),
+                "logPath": log_path.to_string_lossy(),
+            }),
+        );
+    }
+    menu::init(app)?;
+    // Watches the cursor so the companion window can let clicks through
+    // everywhere except the character. Harmless while it doesn't exist.
+    mascot::watch_cursor(app.handle().clone());
+    anywhere::dev_autostart(app.handle());
+    // Files passed on the command line (Windows/Linux cold launch). macOS
+    // delivers them via RunEvent::Opened instead.
+    fileopen::open_from_args(app.handle());
+    Ok(())
+}
+
+/// Per-window events: track focus for the shared menu, reap a closing window's
+/// PTYs.
+fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
+    use tauri::Manager;
+    // Remember the focused window so menu actions target it (the menu is
+    // shared across windows).
+    if let tauri::WindowEvent::Focused(true) = event {
+        log::debug(
+            "app",
+            "window focused",
+            serde_json::json!({ "window": window.label() }),
+        );
+        if let Ok(mut last) = window.app_handle().state::<menu::LastFocused>().0.lock() {
+            *last = Some(window.label().to_string());
+        }
+    }
+    // Reap a closing window's PTYs so its shells/dev servers don't linger
+    // as orphans while other windows keep the app alive.
+    if let tauri::WindowEvent::CloseRequested { .. } = event {
+        log::info(
+            "app",
+            "window close requested",
+            serde_json::json!({ "window": window.label() }),
+        );
+        pty::kill_for_window(
+            &window.app_handle().state::<pty::PtyState>(),
+            window.label(),
+        );
+    }
+}
+
+/// App-level run events: files opened through the OS (macOS), teardown on exit.
+fn on_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    // macOS delivers "open these files with Reado" as an Apple event.
+    #[cfg(target_os = "macos")]
+    if let tauri::RunEvent::Opened { urls } = &event {
+        for url in urls {
+            if let Ok(path) = url.to_file_path() {
+                fileopen::open_path(app, &path);
             }
-            // On exit, terminate every PTY (and its dev servers) so nothing
-            // outlives the app.
-            if let tauri::RunEvent::Exit = event {
-                use tauri::Manager;
-                log::info(
-                    "app",
-                    "exit: tearing down subsystems",
-                    serde_json::Value::Null,
-                );
-                pty::kill_all(&app.state::<pty::PtyState>());
-                lsp::kill_all(&app.state::<lsp::LspState>());
-                anywhere::shutdown(&app.state::<anywhere::AnywhereState>());
-            }
-        });
+        }
+    }
+    // On exit, terminate every PTY (and its dev servers) so nothing
+    // outlives the app.
+    if let tauri::RunEvent::Exit = event {
+        use tauri::Manager;
+        log::info(
+            "app",
+            "exit: tearing down subsystems",
+            serde_json::Value::Null,
+        );
+        pty::kill_all(&app.state::<pty::PtyState>());
+        lsp::kill_all(&app.state::<lsp::LspState>());
+        anywhere::shutdown(&app.state::<anywhere::AnywhereState>());
+    }
 }

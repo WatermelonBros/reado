@@ -64,11 +64,45 @@ macro_rules! acc {
     };
 }
 
+/// Forward a custom menu item's click to the frontend as a `menu` event.
+#[cfg(target_os = "macos")]
+fn forward_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
+    use tauri::{Emitter, Manager};
+
+    // Predefined items are handled natively; forward our custom ids so the
+    // frontend can run the matching command. Send to the *focused* window
+    // only — otherwise, with multiple windows open, one menu action would
+    // fire in every window.
+    let id = event.id().0.clone();
+    // Prefer the last-focused window (tracked on focus); fall back to whichever
+    // currently reports focus, then to a broadcast.
+    let last_label = app
+        .state::<LastFocused>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|g| g.clone());
+    let target = last_label
+        .and_then(|l| app.get_webview_window(&l))
+        .or_else(|| {
+            app.webview_windows()
+                .into_values()
+                .find(|w| w.is_focused().unwrap_or(false))
+        });
+    match target {
+        Some(win) => {
+            let _ = win.emit("menu", id);
+        }
+        None => {
+            let _ = app.emit("menu", id);
+        }
+    }
+}
+
 /// Build the macOS global menu and forward custom-item clicks to the frontend.
 #[cfg(target_os = "macos")]
 fn init_macos(app: &App) -> tauri::Result<()> {
     use tauri::menu::{MenuBuilder, SubmenuBuilder};
-    use tauri::{Emitter, Manager};
 
     let app_menu = SubmenuBuilder::new(app, "Reado")
         .about(None)
@@ -367,36 +401,7 @@ fn init_macos(app: &App) -> tauri::Result<()> {
     // title now names the project.
     window_menu.set_as_windows_menu_for_nsapp()?;
 
-    app.on_menu_event(|app, event| {
-        // Predefined items are handled natively; forward our custom ids so the
-        // frontend can run the matching command. Send to the *focused* window
-        // only — otherwise, with multiple windows open, one menu action would
-        // fire in every window.
-        let id = event.id().0.clone();
-        // Prefer the last-focused window (tracked on focus); fall back to whichever
-        // currently reports focus, then to a broadcast.
-        let last_label = app
-            .state::<LastFocused>()
-            .0
-            .lock()
-            .ok()
-            .and_then(|g| g.clone());
-        let target = last_label
-            .and_then(|l| app.get_webview_window(&l))
-            .or_else(|| {
-                app.webview_windows()
-                    .into_values()
-                    .find(|w| w.is_focused().unwrap_or(false))
-            });
-        match target {
-            Some(win) => {
-                let _ = win.emit("menu", id);
-            }
-            None => {
-                let _ = app.emit("menu", id);
-            }
-        }
-    });
+    app.on_menu_event(forward_menu_event);
 
     Ok(())
 }

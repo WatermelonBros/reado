@@ -414,7 +414,22 @@ fn server_command(server: &str, cwd: &str) -> Option<(String, Vec<String>)> {
         // Vue: typescript-language-server carrying `@vue/typescript-plugin` —
         // see `vue_plugin` for why the Vue server itself is not what runs.
         "vue" => pair("typescript-language-server", &["--stdio"]),
-        "angular" => pair("ngserver", &["--stdio"]),
+        // The Angular server needs to be told where to find typescript and
+        // @angular/language-service — the project's own node_modules, which in a
+        // monorepo is a package's, not the opened root's.
+        "angular" => {
+            let probe = angular_probe(cwd);
+            pair(
+                "ngserver",
+                &[
+                    "--stdio",
+                    "--tsProbeLocations",
+                    &probe,
+                    "--ngProbeLocations",
+                    &probe,
+                ],
+            )
+        }
         "rust" => pair("rust-analyzer", &[]),
         "python" => pair("pyright-langserver", &["--stdio"]),
         "go" => pair("gopls", &[]),
@@ -451,6 +466,76 @@ fn server_command(server: &str, cwd: &str) -> Option<(String, Vec<String>)> {
     }
 }
 
+/// Read one LSP message body off `reader` (Content-Length framing). `Ok(None)`
+/// at end of stream; a header block without a usable length is skipped. A
+/// length over [`MAX_LSP_MESSAGE`] is a `FileTooLarge` error — the caller ends
+/// the pump rather than allocate it.
+fn read_message<R: BufRead>(reader: &mut R) -> std::io::Result<Option<Vec<u8>>> {
+    loop {
+        // Parse headers up to the blank line; we only need Content-Length.
+        let mut len = 0usize;
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line)? == 0 {
+                return Ok(None);
+            }
+            let trimmed = line.trim_end();
+            if trimmed.is_empty() {
+                break;
+            }
+            if let Some(v) = trimmed.strip_prefix("Content-Length:") {
+                len = v.trim().parse().unwrap_or(0);
+            }
+        }
+        if len == 0 {
+            continue;
+        }
+        // Guard against a bogus/hostile Content-Length before allocating:
+        // `vec![0u8; len]` on a wild value aborts the app or panics, and a panic in
+        // the pump would skip its exit-emit. Ending the pump gracefully lets the
+        // frontend learn the server is gone.
+        if len > MAX_LSP_MESSAGE {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::FileTooLarge,
+                format!("content-length {len} exceeds the {MAX_LSP_MESSAGE}-byte cap"),
+            ));
+        }
+        let mut buf = vec![0u8; len];
+        reader.read_exact(&mut buf)?;
+        return Ok(Some(buf));
+    }
+}
+
+/// Drain a server's stderr until it closes, each line into the log (truncated)
+/// under the LSP scope and out to the frontend's Output panel as `lsp-stderr`.
+/// Runs on its own thread so a chatty server never stalls stdout.
+fn drain_stderr(app: &AppHandle, id: &str, stderr: impl Read) {
+    let mut reader = BufReader::new(stderr);
+    // Drain byte-wise (not `.lines()`): a single non-UTF-8 byte must not end the
+    // drain, or the server's stderr pipe fills, its next write() blocks, and it
+    // wedges with stdout starved and no exit event. Lossy decode logs the invalid
+    // line instead of dropping the whole stream.
+    let mut raw = Vec::new();
+    loop {
+        raw.clear();
+        match reader.read_until(b'\n', &mut raw) {
+            Ok(0) | Err(_) => break, // EOF or pipe error → stop draining
+            Ok(_) => {}
+        }
+        let line = String::from_utf8_lossy(&raw);
+        if line.trim().is_empty() {
+            continue;
+        }
+        let line = truncate_stderr(&line);
+        crate::log::debug(
+            "lsp",
+            "server stderr",
+            serde_json::json!({ "id": id, "line": line.as_str() }),
+        );
+        let _ = app.emit("lsp-stderr", serde_json::json!({ "id": id, "line": line }));
+    }
+}
+
 /// Start the language server named `server` (resolved against an allowlist) for
 /// connection `id`, running in `cwd`. Its JSON-RPC output is emitted as
 /// `lsp-{id}` events (one per message).
@@ -473,7 +558,7 @@ pub fn lsp_start(
     if map.contains_key(&id) {
         return Ok(());
     }
-    let (command, base_args) = server_command(&server, &cwd).ok_or_else(|| {
+    let (command, args) = server_command(&server, &cwd).ok_or_else(|| {
         crate::log::warn(
             "lsp",
             "unknown server requested",
@@ -487,17 +572,6 @@ pub fn lsp_start(
             "server binary not installed",
             serde_json::json!({ "server": server, "binary": command }),
         );
-    }
-    let mut args: Vec<String> = base_args;
-    // The Angular server needs to be told where to find typescript and
-    // @angular/language-service — the project's own node_modules, which in a
-    // monorepo is a package's, not the opened root's.
-    if server == "angular" {
-        let probe = angular_probe(&cwd);
-        for flag in ["--tsProbeLocations", "--ngProbeLocations"] {
-            args.push(flag.to_string());
-            args.push(probe.clone());
-        }
     }
     // crate::proc::command already runs with the login-shell PATH, so nvm/cargo/
     // brew-installed servers resolve here.
@@ -537,35 +611,7 @@ pub fn lsp_start(
         // these lines, but "why won't this server start" is a question you ask
         // inside the app, not in a JSON-lines file in Application Support.
         let err_app = app.clone();
-        std::thread::spawn(move || {
-            let mut reader = BufReader::new(stderr);
-            // Drain byte-wise (not `.lines()`): a single non-UTF-8 byte must not
-            // end the drain, or the server's stderr pipe fills, its next write()
-            // blocks, and it wedges with stdout starved and no exit event. Lossy
-            // decode logs the invalid line instead of dropping the whole stream.
-            let mut raw = Vec::new();
-            loop {
-                raw.clear();
-                match reader.read_until(b'\n', &mut raw) {
-                    Ok(0) | Err(_) => break, // EOF or pipe error → stop draining
-                    Ok(_) => {}
-                }
-                let line = String::from_utf8_lossy(&raw);
-                if line.trim().is_empty() {
-                    continue;
-                }
-                let line = truncate_stderr(&line);
-                crate::log::debug(
-                    "lsp",
-                    "server stderr",
-                    serde_json::json!({ "id": err_id.as_str(), "line": line.as_str() }),
-                );
-                let _ = err_app.emit(
-                    "lsp-stderr",
-                    serde_json::json!({ "id": err_id.as_str(), "line": line }),
-                );
-            }
-        });
+        std::thread::spawn(move || drain_stderr(&err_app, &err_id, stderr));
     }
 
     std::thread::spawn(move || {
@@ -576,42 +622,22 @@ pub fn lsp_start(
         let pump = move || {
             let mut reader = BufReader::new(stdout);
             loop {
-                // Parse headers up to the blank line; we only need Content-Length.
-                let mut len = 0usize;
-                loop {
-                    let mut line = String::new();
-                    match reader.read_line(&mut line) {
-                        Ok(0) | Err(_) => return, // EOF or error → server gone
-                        Ok(_) => {}
+                match read_message(&mut reader) {
+                    Ok(Some(buf)) => {
+                        let _ = pump_app.emit(&event, String::from_utf8_lossy(&buf).into_owned());
                     }
-                    let trimmed = line.trim_end();
-                    if trimmed.is_empty() {
-                        break;
+                    // EOF → server gone.
+                    Ok(None) => return,
+                    Err(e) if e.kind() == std::io::ErrorKind::FileTooLarge => {
+                        crate::log::error(
+                            "lsp",
+                            "content-length exceeds cap; ending pump",
+                            serde_json::json!({ "event": event.as_str(), "error": e.to_string(), "cap": MAX_LSP_MESSAGE }),
+                        );
+                        return;
                     }
-                    if let Some(v) = trimmed.strip_prefix("Content-Length:") {
-                        len = v.trim().parse().unwrap_or(0);
-                    }
+                    Err(_) => return,
                 }
-                if len == 0 {
-                    continue;
-                }
-                // Guard against a bogus/hostile Content-Length before allocating:
-                // `vec![0u8; len]` on a wild value aborts the app or panics, and a
-                // panic here would skip the exit-emit below. Ending the pump
-                // gracefully lets the frontend learn the server is gone.
-                if len > MAX_LSP_MESSAGE {
-                    crate::log::error(
-                        "lsp",
-                        "content-length exceeds cap; ending pump",
-                        serde_json::json!({ "event": event.as_str(), "len": len, "cap": MAX_LSP_MESSAGE }),
-                    );
-                    return;
-                }
-                let mut buf = vec![0u8; len];
-                if reader.read_exact(&mut buf).is_err() {
-                    return;
-                }
-                let _ = pump_app.emit(&event, String::from_utf8_lossy(&buf).into_owned());
             }
         };
         pump();
@@ -684,6 +710,54 @@ mod tests {
         }
     }
     use super::*;
+
+    #[test]
+    fn read_message_deframes_consecutive_messages() {
+        let wire = b"Content-Length: 2\r\n\r\n{}Content-Type: x\r\nContent-Length: 4\r\n\r\nnull";
+        let mut r = std::io::Cursor::new(&wire[..]);
+        assert_eq!(read_message(&mut r).unwrap(), Some(b"{}".to_vec()));
+        // Other headers are skipped; only the length matters.
+        assert_eq!(read_message(&mut r).unwrap(), Some(b"null".to_vec()));
+        assert_eq!(read_message(&mut r).unwrap(), None);
+    }
+
+    #[test]
+    fn a_header_block_without_a_length_is_skipped() {
+        let wire = b"X-Nothing: 1\r\n\r\nContent-Length: 1\r\n\r\n7";
+        let mut r = std::io::Cursor::new(&wire[..]);
+        assert_eq!(read_message(&mut r).unwrap(), Some(b"7".to_vec()));
+    }
+
+    #[test]
+    fn a_wild_content_length_is_refused_before_allocating() {
+        let wire = b"Content-Length: 99999999999999\r\n\r\n";
+        let err = read_message(&mut std::io::Cursor::new(&wire[..])).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::FileTooLarge);
+    }
+
+    #[test]
+    fn a_truncated_body_is_an_error_not_a_message() {
+        let wire = b"Content-Length: 10\r\n\r\nabc";
+        assert!(read_message(&mut std::io::Cursor::new(&wire[..])).is_err());
+    }
+
+    #[test]
+    fn the_angular_server_is_told_where_to_probe() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        let (bin, args) = server_command("angular", &root).unwrap();
+        assert_eq!(bin, "ngserver");
+        assert_eq!(
+            args,
+            [
+                "--stdio",
+                "--tsProbeLocations",
+                &root,
+                "--ngProbeLocations",
+                &root
+            ]
+        );
+    }
 
     #[test]
     fn short_stderr_line_is_untouched_but_trimmed() {

@@ -50,14 +50,104 @@ static OP_LIST: Mutex<Option<(std::time::Instant, String)>> = Mutex::new(None);
 /// shows up without restarting Reado.
 const OP_LIST_TTL: std::time::Duration = std::time::Duration::from_secs(300);
 
-/// The CLI we drive, preferring 1Password when both are installed (it brokers its
-/// own biometric unlock, so it needs no session handling from us).
-///
-/// Resolution goes through the *login-shell* PATH: a Finder-launched GUI inherits
-/// a stripped PATH that misses every brew/npm-global install, which would make a
-/// perfectly installed `op` invisible.
-fn backend() -> Option<&'static str> {
-    ["op", "bw"].into_iter().find(|b| crate::proc::on_path(b))
+/// A password-manager CLI Reado can drive: 1Password's `op` or Bitwarden's `bw`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Backend {
+    Op,
+    Bw,
+}
+
+impl Backend {
+    /// The CLI we drive, preferring 1Password when both are installed (it brokers
+    /// its own biometric unlock, so it needs no session handling from us).
+    ///
+    /// Resolution goes through the *login-shell* PATH: a Finder-launched GUI
+    /// inherits a stripped PATH that misses every brew/npm-global install, which
+    /// would make a perfectly installed `op` invisible.
+    fn detect() -> Option<Self> {
+        [Self::Op, Self::Bw]
+            .into_iter()
+            .find(|b| crate::proc::on_path(b.program()))
+    }
+
+    /// The detected backend, or the error every vault command gives without one.
+    fn require() -> Result<Self, String> {
+        Self::detect().ok_or_else(|| "no password manager CLI found".into())
+    }
+
+    /// The executable, which is also the name the frontend knows it by.
+    fn program(self) -> &'static str {
+        match self {
+            Self::Op => "op",
+            Self::Bw => "bw",
+        }
+    }
+
+    /// Whether the vault must be unlocked before use. `op` brokers its own unlock
+    /// through the 1Password app, so it is never "locked" from our side; `bw`
+    /// says so itself.
+    fn locked(self) -> bool {
+        self == Self::Bw
+            && run("bw", &["status"], None)
+                .ok()
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| v.get("status").and_then(|s| s.as_str()).map(String::from))
+                .is_none_or(|s| s != "unlocked")
+    }
+
+    /// The logins matching `url` (whose host is `host`), best match first.
+    fn lookup(self, url: &str, host: &str) -> Result<Vec<VaultItem>, String> {
+        match self {
+            Self::Op => Ok(op_items(&op_list()?, host)),
+            Self::Bw => Ok(bw_items(
+                &run("bw", &["list", "items", "--url", url], None)?,
+                host,
+            )),
+        }
+    }
+
+    /// One item's account name and password.
+    fn secret(self, id: &str) -> Result<VaultSecret, String> {
+        match self {
+            Self::Op => Ok(op_secret(&op_run(&[
+                "item", "get", id, "--format", "json", "--reveal",
+            ])?)),
+            Self::Bw => Ok(bw_secret(&run("bw", &["get", "item", id], None)?)),
+        }
+    }
+
+    /// One item's current one-time code.
+    fn otp(self, id: &str) -> Result<String, String> {
+        match self {
+            Self::Op => op_run(&["item", "get", id, "--otp"]),
+            Self::Bw => run("bw", &["get", "totp", id], None),
+        }
+    }
+
+    /// Save a new login.
+    fn create(self, url: &str, title: &str, username: &str, password: &str) -> Result<(), String> {
+        match self {
+            Self::Op => {
+                op_run(&[
+                    "item",
+                    "create",
+                    "--category=login",
+                    &format!("--title={title}"),
+                    &format!("--url={url}"),
+                    &format!("username={username}"),
+                    &format!("password={password}"),
+                ])?;
+                // The list this came from is now one item out of date.
+                op_forget_list();
+            }
+            Self::Bw => {
+                let doc = bw_new_item(url, title, username, password);
+                let encoded = crate::fs::base64_encode(doc.as_bytes());
+                run("bw", &["create", "item", &encoded], None)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Which backend is available, and whether it needs unlocking before use.
@@ -461,23 +551,15 @@ fn generate_password() -> String {
 #[tauri::command]
 pub async fn vault_status() -> VaultStatus {
     tauri::async_runtime::spawn_blocking(|| {
-        let Some(b) = backend() else {
+        let Some(b) = Backend::detect() else {
             return VaultStatus {
                 backend: None,
                 locked: false,
             };
         };
-        // `op` brokers its own unlock through the 1Password app, so it is never
-        // "locked" from our side; `bw` says so itself.
-        let locked = b == "bw"
-            && run("bw", &["status"], None)
-                .ok()
-                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-                .and_then(|v| v.get("status").and_then(|s| s.as_str()).map(String::from))
-                .is_none_or(|s| s != "unlocked");
         VaultStatus {
-            backend: Some(b.to_string()),
-            locked,
+            backend: Some(b.program().to_string()),
+            locked: b.locked(),
         }
     })
     .await
@@ -508,13 +590,7 @@ pub async fn vault_unlock(password: String) -> Result<(), String> {
 pub async fn vault_lookup(url: String) -> Result<Vec<VaultItem>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let host = host_of(&url).ok_or("not a URL")?;
-        match backend().ok_or("no password manager CLI found")? {
-            "op" => Ok(op_items(&op_list()?, &host)),
-            _ => Ok(bw_items(
-                &run("bw", &["list", "items", "--url", &url], None)?,
-                &host,
-            )),
-        }
+        Backend::require()?.lookup(&url, &host)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -525,29 +601,17 @@ pub async fn vault_lookup(url: String) -> Result<Vec<VaultItem>, String> {
 /// code fetched before it is asked for has expired by the time it is used.
 #[tauri::command]
 pub async fn vault_secret(id: String) -> Result<VaultSecret, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        match backend().ok_or("no password manager CLI found")? {
-            "op" => Ok(op_secret(&op_run(&[
-                "item", "get", &id, "--format", "json", "--reveal",
-            ])?)),
-            _ => Ok(bw_secret(&run("bw", &["get", "item", &id], None)?)),
-        }
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || Backend::require()?.secret(&id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// One item's current one-time code. Requested when asked for, never stored.
 #[tauri::command]
 pub async fn vault_otp(id: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        match backend().ok_or("no password manager CLI found")? {
-            "op" => op_run(&["item", "get", &id, "--otp"]),
-            _ => run("bw", &["get", "totp", &id], None),
-        }
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || Backend::require()?.otp(&id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Save a new login for `url` and return the generated password, so the caller can
@@ -556,27 +620,9 @@ pub async fn vault_otp(id: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn vault_create(url: String, title: String, username: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let backend = Backend::require()?;
         let password = generate_password();
-        match backend().ok_or("no password manager CLI found")? {
-            "op" => {
-                op_run(&[
-                    "item",
-                    "create",
-                    "--category=login",
-                    &format!("--title={title}"),
-                    &format!("--url={url}"),
-                    &format!("username={username}"),
-                    &format!("password={password}"),
-                ])?;
-                // The list this came from is now one item out of date.
-                op_forget_list();
-            }
-            _ => {
-                let doc = bw_new_item(&url, &title, &username, &password);
-                let encoded = crate::fs::base64_encode(doc.as_bytes());
-                run("bw", &["create", "item", &encoded], None)?;
-            }
-        }
+        backend.create(&url, &title, &username, &password)?;
         Ok(password)
     })
     .await
@@ -720,6 +766,15 @@ mod tests {
         assert_eq!(doc["login"]["username"], "u");
         assert_eq!(doc["login"]["password"], "pw");
         assert_eq!(doc["login"]["uris"][0]["uri"], "https://example.com");
+    }
+
+    #[test]
+    fn a_backend_is_reported_by_its_cli_name() {
+        // `VaultStatus.backend` is these strings; the frontend branches on them.
+        assert_eq!(Backend::Op.program(), "op");
+        assert_eq!(Backend::Bw.program(), "bw");
+        // 1Password never reads as locked: it brokers its own unlock.
+        assert!(!Backend::Op.locked());
     }
 
     #[test]

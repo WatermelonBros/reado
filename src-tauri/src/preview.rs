@@ -401,14 +401,11 @@ fn framework_ports(pkg: &serde_json::Value) -> Vec<u16> {
     }
 }
 
-/// Write `content` to `path` atomically: fill a sibling temp file, then rename it
-/// over the target. The `reado` CLI polls these files, so a plain truncate-then-
-/// write would let a concurrent reader observe an empty/partial document; rename
-/// is atomic on the same filesystem, so readers only ever see old or new, whole.
+/// Write `content` to `path` atomically (temp file + rename): the `reado` CLI
+/// polls these files, and a plain truncate-then-write would let it read a torn
+/// document.
 fn atomic_write(path: &std::path::Path, content: &str) -> std::io::Result<()> {
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, content)?;
-    std::fs::rename(&tmp, path)
+    reado_core::atomic_write(path, content.as_bytes())
 }
 
 /// Persist the drained console + network snapshots under the project's `.reado/`
@@ -416,10 +413,12 @@ fn atomic_write(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 /// One writer (BrowserPanel) owns the drain; this just mirrors it to disk.
 #[tauri::command]
 pub fn preview_persist_state(root: String, console: String, network: String) -> Result<(), String> {
-    let dir = std::path::Path::new(&root).join(".reado");
+    let dir = reado_core::reado_dir(&root);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    atomic_write(&dir.join("preview-console.json"), &console).map_err(|e| e.to_string())?;
-    atomic_write(&dir.join("preview-network.json"), &network).map_err(|e| e.to_string())?;
+    atomic_write(&dir.join(reado_core::PREVIEW_CONSOLE_FILE), &console)
+        .map_err(|e| e.to_string())?;
+    atomic_write(&dir.join(reado_core::PREVIEW_NETWORK_FILE), &network)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -427,12 +426,12 @@ pub fn preview_persist_state(root: String, console: String, network: String) -> 
 /// so the agent's tools correctly report "no preview pane running" afterwards.
 #[tauri::command]
 pub fn preview_clear_state(root: String) -> Result<(), String> {
-    let dir = std::path::Path::new(&root).join(".reado");
+    let dir = reado_core::reado_dir(&root);
     for f in [
-        "preview-console.json",
-        "preview-network.json",
-        "preview-cmd.json",
-        "preview-result.json",
+        reado_core::PREVIEW_CONSOLE_FILE,
+        reado_core::PREVIEW_NETWORK_FILE,
+        reado_core::PREVIEW_CMD_FILE,
+        reado_core::PREVIEW_RESULT_FILE,
     ] {
         let _ = std::fs::remove_file(dir.join(f));
     }
@@ -490,19 +489,14 @@ pub fn preview_capture_frame<R: Runtime>(
 /// the pane executes it and writes `.reado/preview-result.json` `{id, ok, result}`.
 #[tauri::command]
 pub fn preview_take_cmd(root: String) -> Option<String> {
-    std::fs::read_to_string(
-        std::path::Path::new(&root)
-            .join(".reado")
-            .join("preview-cmd.json"),
-    )
-    .ok()
+    std::fs::read_to_string(reado_core::reado_dir(&root).join(reado_core::PREVIEW_CMD_FILE)).ok()
 }
 
 #[tauri::command]
 pub fn preview_put_result(root: String, result: String) -> Result<(), String> {
-    let dir = std::path::Path::new(&root).join(".reado");
+    let dir = reado_core::reado_dir(&root);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    atomic_write(&dir.join("preview-result.json"), &result).map_err(|e| e.to_string())
+    atomic_write(&dir.join(reado_core::PREVIEW_RESULT_FILE), &result).map_err(|e| e.to_string())
 }
 
 /// Detach the preview into its own window (e.g. a second monitor): close the

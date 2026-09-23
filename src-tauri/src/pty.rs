@@ -94,6 +94,37 @@ fn default_shell() -> (String, Vec<&'static str>) {
     }
 }
 
+/// The command for an interactive shell in `cwd` — the user's override when set,
+/// else the platform login shell. Every PTY Reado opens (the terminal panel and a
+/// phone terminal alike) goes through here, so they get the same environment.
+pub(crate) fn shell_command(
+    cwd: &str,
+    shell: Option<String>,
+    shell_args: Option<Vec<String>>,
+) -> CommandBuilder {
+    let (default_exe, default_args) = default_shell();
+    let chosen = shell.filter(|s| !s.trim().is_empty());
+    let args: Vec<String> = match &chosen {
+        Some(_) => shell_args.unwrap_or_default(),
+        None => default_args.iter().map(|a| (*a).to_string()).collect(),
+    };
+    let mut cmd = CommandBuilder::new(chosen.unwrap_or(default_exe));
+    for arg in args {
+        cmd.arg(arg);
+    }
+    if !cwd.is_empty() {
+        cmd.cwd(cwd);
+    }
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    // The shell re-derives PATH from the user's profile, but it *keeps* what it
+    // inherits — which is how the bundled `reado` stays reachable in a terminal
+    // whose profile never adds `~/.local/bin`. Without it an agent launched here
+    // can't start the MCP server it is told to call.
+    cmd.env("PATH", crate::proc::login_shell_path());
+    cmd
+}
+
 fn size(rows: u16, cols: u16) -> PtySize {
     PtySize {
         rows,
@@ -133,26 +164,7 @@ pub fn pty_spawn(
         .openpty(size(rows, cols))
         .map_err(|e| e.to_string())?;
 
-    let (default_exe, default_args) = default_shell();
-    let chosen = shell.filter(|s| !s.trim().is_empty());
-    let args: Vec<String> = match &chosen {
-        Some(_) => shell_args.unwrap_or_default(),
-        None => default_args.iter().map(|a| (*a).to_string()).collect(),
-    };
-    let mut cmd = CommandBuilder::new(chosen.unwrap_or(default_exe));
-    for arg in args {
-        cmd.arg(arg);
-    }
-    if !cwd.is_empty() {
-        cmd.cwd(&cwd);
-    }
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("COLORTERM", "truecolor");
-    // The shell re-derives PATH from the user's profile, but it *keeps* what it
-    // inherits — which is how the bundled `reado` stays reachable in a terminal
-    // whose profile never adds `~/.local/bin`. Without it an agent launched here
-    // can't start the MCP server it is told to call.
-    cmd.env("PATH", crate::proc::login_shell_path());
+    let cmd = shell_command(&cwd, shell, shell_args);
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| {
         crate::log::error(
