@@ -51,8 +51,10 @@ export function installCmd(
 }
 
 export interface LangServerExt {
-  /** Must match the Rust `server_command` id and the LSP `SERVERS` id. */
+  /** Must match the Rust `server_command` id. */
   id: string
+  /** The file extensions this server handles — what the editor routes to it. */
+  exts: string[]
   name: string
   description: string
   /** How to install the server, per OS. */
@@ -64,6 +66,7 @@ export interface LangServerExt {
 export const LANG_SERVERS: LangServerExt[] = [
   {
     id: "typescript",
+    exts: ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"],
     name: "TypeScript / JavaScript / React",
     description:
       "Types, diagnostics, imports and navigation for TS, JS and React (JSX/TSX). A project on TypeScript 7 needs nothing installed — its own compiler answers; older projects use typescript-language-server.",
@@ -72,6 +75,9 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "angular",
+    // None of its own: it shares .ts/.html with TypeScript and HTML, and takes
+    // them over in a project with an angular.json (see `lspSupport`).
+    exts: [],
     name: "Angular",
     description:
       "Angular language server — template type-checking and IntelliSense; auto-used in projects with angular.json.",
@@ -80,6 +86,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "rust",
+    exts: ["rs"],
     name: "Rust",
     description: "rust-analyzer — the official Rust language server.",
     install: all("rustup component add rust-analyzer"),
@@ -87,6 +94,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "python",
+    exts: ["py", "pyi"],
     name: "Python",
     description: "Pyright — fast type checking and IntelliSense for Python.",
     install: all("npm install -g pyright"),
@@ -94,6 +102,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "go",
+    exts: ["go"],
     name: "Go",
     description: "gopls — the official Go language server.",
     install: all("go install golang.org/x/tools/gopls@latest"),
@@ -101,6 +110,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "cpp",
+    exts: ["c", "h", "cc", "cpp", "cxx", "hpp", "hh"],
     name: "C / C++",
     description: "clangd — language server from the LLVM project.",
     install: {
@@ -118,6 +128,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "bash",
+    exts: ["sh", "bash"],
     name: "Bash",
     description: "bash-language-server — diagnostics and completion for shell scripts.",
     install: all("npm install -g bash-language-server"),
@@ -125,6 +136,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "csharp",
+    exts: ["cs"],
     name: "C#",
     description: "csharp-ls — a lightweight C# language server.",
     install: all("dotnet tool install --global csharp-ls"),
@@ -132,6 +144,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "java",
+    exts: ["java"],
     name: "Java",
     description: "Eclipse JDT Language Server (jdtls).",
     install: {
@@ -143,6 +156,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "kotlin",
+    exts: ["kt", "kts"],
     name: "Kotlin",
     description: "kotlin-language-server — IDE features for Kotlin.",
     install: {
@@ -154,6 +168,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "scala",
+    exts: ["scala", "sbt", "sc"],
     name: "Scala",
     description: "Metals — the Scala language server.",
     install: all("cs install metals"),
@@ -161,6 +176,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "ruby",
+    exts: ["rb"],
     name: "Ruby",
     description: "ruby-lsp — Shopify's Ruby language server.",
     install: all("gem install ruby-lsp"),
@@ -168,6 +184,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "php",
+    exts: ["php"],
     name: "PHP",
     description: "Intelephense — PHP code intelligence.",
     install: all("npm install -g intelephense"),
@@ -175,6 +192,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "lua",
+    exts: ["lua"],
     name: "Lua",
     description: "lua-language-server — from the LuaLS project.",
     install: {
@@ -189,6 +207,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "swift",
+    exts: ["swift"],
     name: "Swift",
     description: "SourceKit-LSP — ships with the Swift toolchain.",
     install: { mac: "xcode-select --install" },
@@ -196,6 +215,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "zig",
+    exts: ["zig"],
     name: "Zig",
     description: "zls — the Zig language server.",
     install: {
@@ -207,6 +227,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "html",
+    exts: ["html", "htm"],
     name: "HTML",
     description: "vscode-html-language-server (from vscode-langservers-extracted).",
     install: all("npm install -g vscode-langservers-extracted"),
@@ -214,6 +235,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "css",
+    exts: ["css", "scss", "less"],
     name: "CSS / SCSS / Less",
     description: "vscode-css-language-server (from vscode-langservers-extracted).",
     install: all("npm install -g vscode-langservers-extracted"),
@@ -221,6 +243,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "json",
+    exts: ["json", "jsonc"],
     name: "JSON",
     description: "vscode-json-language-server (from vscode-langservers-extracted).",
     install: all("npm install -g vscode-langservers-extracted"),
@@ -228,6 +251,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "yaml",
+    exts: ["yaml", "yml"],
     name: "YAML",
     description: "yaml-language-server — schema-aware YAML support.",
     install: all("npm install -g yaml-language-server"),
@@ -235,6 +259,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "vue",
+    exts: ["vue"],
     name: "Vue",
     description:
       "Types, diagnostics and completion in .vue files — script block and template alike. Served by typescript-language-server carrying @vue/typescript-plugin, which is how Vue 3's tooling works: the Vue language server holds no TypeScript of its own.",
@@ -243,6 +268,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "svelte",
+    exts: ["svelte"],
     name: "Svelte",
     description: "svelte-language-server.",
     install: all("npm install -g svelte-language-server"),
@@ -250,6 +276,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "solidity",
+    exts: ["sol"],
     name: "Solidity",
     description: "solidity-ls — language server for Solidity smart contracts.",
     install: all("npm install -g solidity-ls"),
@@ -257,6 +284,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "terraform",
+    exts: ["tf", "tfvars"],
     name: "Terraform",
     description: "terraform-ls — HashiCorp's official language server.",
     install: {
@@ -268,6 +296,7 @@ export const LANG_SERVERS: LangServerExt[] = [
   },
   {
     id: "toml",
+    exts: ["toml"],
     name: "TOML",
     description: "Taplo — TOML toolkit and language server.",
     install: {

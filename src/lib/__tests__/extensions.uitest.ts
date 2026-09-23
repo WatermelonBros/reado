@@ -14,6 +14,7 @@ import {
 
 const ext = (install: LangServerExt["install"]): LangServerExt => ({
   id: "x",
+  exts: [],
   name: "X",
   description: "",
   install,

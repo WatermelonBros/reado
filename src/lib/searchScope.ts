@@ -127,6 +127,29 @@ export function countIn(
   return { current: at + 1, total: all.length }
 }
 
+/**
+ * "3 of 17" for the whole document, counting at most `cap` matches: on a very
+ * large document an exact total is not worth a full scan per keystroke. Once the
+ * cap is reached the count stops and `capped` says so; `current` is 0 when the
+ * selection is not a match (or is past the cap).
+ */
+export function countMatches(
+  state: EditorState,
+  query: SearchQuery,
+  cap: number,
+): { current: number; total: number; capped: boolean } {
+  const sel = state.selection.main
+  const cursor = query.getCursor(state)
+  let total = 0
+  let current = 0
+  for (let it = cursor.next(); !it.done; it = cursor.next()) {
+    total++
+    if (it.value.from === sel.from && it.value.to === sel.to) current = total
+    if (total >= cap) return { current, total, capped: true }
+  }
+  return { current, total, capped: false }
+}
+
 const select = (view: EditorView, m: { from: number; to: number }) => {
   view.dispatch({
     selection: { anchor: m.from, head: m.to },

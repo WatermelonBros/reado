@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }))
 vi.mock("../api", () => ({
   agentInstalled: vi.fn(async () => true),
+  onPtyOutput: vi.fn(async () => () => {}),
   ptyDefaultShell: vi.fn(async () => "/bin/zsh"),
   // What the pane is running, straight from its tty. Default: a bare shell.
   ptyForeground: vi.fn(async () => "-zsh"),

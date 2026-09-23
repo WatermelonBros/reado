@@ -9,6 +9,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const invoke = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>(
   async () => null,
 )
+const listen = vi.hoisted(() =>
+  vi.fn<(event: string, cb: (e: { payload: string }) => void) => Promise<() => void>>(
+    async () => () => {},
+  ),
+)
+vi.mock("@tauri-apps/api/event", () => ({ listen }))
 vi.mock("../logger", () => ({
   tracedInvoke: (cmd: string, args?: Record<string, unknown>) =>
     invoke(cmd as never, args as never),
@@ -28,7 +34,14 @@ const RENAMED: Record<string, string> = {
 }
 
 /** Wrappers that aren't a single `invoke` — they're covered separately. */
-const NOT_A_WRAPPER = new Set(["submitToTerminal"])
+const NOT_A_WRAPPER = new Set([
+  "submitToTerminal",
+  // Event subscriptions, not commands: see "the event subscriptions" below.
+  "onPtyOutput",
+  "onPtyExit",
+  "onLspMessage",
+  "onLspExit",
+])
 
 /** Parameters that don't forward under their own name. Like `RENAMED`, each is
  *  a deliberate deviation listed so a new one can't slip in unnoticed. */
@@ -85,6 +98,31 @@ describe("the command boundary", () => {
       expect(names.map((n) => lastArgs()[KEY_ALIAS[name]?.[n] ?? n])).toEqual(args)
     })
   }
+})
+
+describe("the event subscriptions", () => {
+  it("each listens on the event the backend emits for that id", () => {
+    for (const [sub, event] of [
+      [api.onPtyOutput, "pty-output-t1"],
+      [api.onPtyExit, "pty-exit-t1"],
+      [api.onLspMessage, "lsp-t1"],
+      [api.onLspExit, "lsp-exit-t1"],
+    ] as const) {
+      void sub("t1", () => {})
+      expect(listen.mock.lastCall?.[0]).toBe(event)
+    }
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it("hands the callback the payload, not the event", () => {
+    const got = vi.fn()
+    void api.onPtyOutput("t1", got)
+    listen.mock.lastCall?.[1]({ payload: "chunk" })
+    expect(got).toHaveBeenCalledWith("chunk")
+    void api.onLspMessage("t1", got)
+    listen.mock.lastCall?.[1]({ payload: "{}" })
+    expect(got).toHaveBeenLastCalledWith("{}")
+  })
 })
 
 describe("the wrappers that do more than forward", () => {

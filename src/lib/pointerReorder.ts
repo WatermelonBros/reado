@@ -114,11 +114,22 @@ export function usePointerReorder(
       if (tgt?.id && tgt.id !== s.id) commit.current(s.id, tgt.id, tgt.after)
     }
 
+    // Interrupted (no `pointerup` will come): drop the drag without committing.
+    const cancel = () => {
+      start.current = null
+      setDragging(null)
+      setOver(null)
+    }
+
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", up)
+    window.addEventListener("pointercancel", cancel)
+    window.addEventListener("blur", cancel)
     return () => {
       window.removeEventListener("pointermove", move)
       window.removeEventListener("pointerup", up)
+      window.removeEventListener("pointercancel", cancel)
+      window.removeEventListener("blur", cancel)
     }
   }, [dragging, axis])
 

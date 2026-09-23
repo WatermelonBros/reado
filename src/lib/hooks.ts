@@ -318,6 +318,12 @@ export function useGlobalShortcuts(): void {
     }
   }, [])
 
+  useHistoryGestures()
+}
+
+/** Walk Reado's read-history with the mouse's back/forward buttons and a
+ *  two-finger swipe. Part of `useGlobalShortcuts`. */
+export function useHistoryGestures(): void {
   // Mouse back/forward buttons (X1/X2) should walk Reado's read-history, not the
   // webview's page history (which would jump to the launcher). preventDefault on
   // mousedown stops the navigation; we act on mouseup so it fires once.

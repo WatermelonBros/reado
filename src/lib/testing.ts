@@ -27,16 +27,16 @@
  * Machine-readable reporters (`--reporter=json`, libtest's JSON) are the
  * upgrade, and each one costs a parser and a flag older versions do not have.
  */
-import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { t } from "@/i18n"
 import { announce, cue } from "./a11y"
-import { discoverTests, ptyKill, ptySpawn, submitToTerminal, type TestFile } from "./api"
+import { discoverTests, type TestFile } from "./api"
 import { createLogger, safeError } from "./logger"
 import { useMascot } from "./mascot"
+import { runHidden } from "./ptyErrand"
 import { useProject } from "./store"
-import { listenPtyLines, offSafe, plainText, shellQuote } from "./terminals"
+import { plainText, shellQuote } from "./terminals"
 
 const log = createLogger("testing")
 
@@ -370,11 +370,35 @@ export function stopTests(): void {
 const SILENCE_MS = 120_000
 
 /**
- * Run a scope — one test, one file, or every test of one framework — in a
- * hidden PTY, marking what the output reports as it arrives.
+ * The ids a run is about, and the two indexes a printed verdict is looked up in.
  *
- * The shell is told to `exit` after the command, so the run ends on
- * `pty-exit` rather than on a guess about how long silence means "finished".
+ * `byLeaf` maps a test's last segment to its ids, so a printed verdict is a
+ * lookup instead of a scan of every test in the run — which is quadratic on a
+ * real suite. `dynamic` holds the handful whose name is a template, which no
+ * lookup can find. `name` narrows the run to the tests of that name.
+ */
+export function indexTests(
+  files: TestFile[],
+  name?: string,
+): { affected: string[]; byLeaf: Map<string, string[]>; dynamic: Dynamic[] } {
+  const affected: string[] = []
+  const byLeaf = new Map<string, string[]>()
+  const dynamic: Dynamic[] = []
+  for (const f of files)
+    for (const test of f.tests) {
+      if (name && test.name !== name) continue
+      const id = testId(f.path, test.suites, test.name)
+      affected.push(id)
+      byLeaf.set(test.name, [...(byLeaf.get(test.name) ?? []), id])
+      const re = namePattern(test.name)
+      if (re) dynamic.push({ id, re })
+    }
+  return { affected, byLeaf, dynamic }
+}
+
+/**
+ * Run a scope — one test, one file, or every test of one framework — in a
+ * hidden PTY (see `runHidden`), marking what the output reports as it arrives.
  */
 export async function runTests(scope: Scope): Promise<void> {
   const root = useProject.getState().root
@@ -392,21 +416,7 @@ export async function runTests(scope: Scope): Promise<void> {
   const inScope = useTesting
     .getState()
     .files.filter((f) => (scope.file ? f.path === scope.file : f.framework === scope.framework))
-  const affected: string[] = []
-  // Ids by their last segment, so a printed verdict is a lookup instead of a
-  // scan of every test in the run — which is quadratic on a real suite.
-  const byLeaf = new Map<string, string[]>()
-  // …and the handful whose name is a template, which no lookup can find.
-  const dynamic: Dynamic[] = []
-  for (const f of inScope)
-    for (const test of f.tests) {
-      if (scope.name && test.name !== scope.name) continue
-      const id = testId(f.path, test.suites, test.name)
-      affected.push(id)
-      byLeaf.set(test.name, [...(byLeaf.get(test.name) ?? []), id])
-      const re = namePattern(test.name)
-      if (re) dynamic.push({ id, re })
-    }
+  const { affected, byLeaf, dynamic } = indexTests(inScope, scope.name)
   const write = (results: Record<string, Result>) =>
     useTesting.setState((s) => ({
       byRoot: { ...s.byRoot, [root]: { ...(s.byRoot[root] ?? {}), ...results } },
@@ -415,46 +425,6 @@ export async function runTests(scope: Scope): Promise<void> {
   write(Object.fromEntries(affected.map((k) => [k, { status: "running" as const, at: 0 }])))
 
   const command = commandFor(runner, root, inScope, scope)
-  // The tail of what the run printed: with no pane to scroll back through, this
-  // is the only place a failure's stack trace survives.
-  let tail = ""
-  let off: UnlistenFn | null = null
-  let unExit: UnlistenFn | null = null
-  let silent = 0
-  let done = false
-  const stop = () => {
-    if (done) return
-    done = true
-    endRun = null
-    offSafe(off)
-    offSafe(unExit)
-    clearTimeout(silent)
-    void ptyKill(id).catch(() => {})
-    // A test the run ended without judging — stopped, crashed, or filtered out
-    // by the framework — goes back to having no verdict rather than spinning for
-    // the rest of the session. Only one run is ever in flight, so every verdict
-    // still reading "running" belongs to this one.
-    useTesting.setState((s) => ({
-      running: false,
-      byRoot: {
-        ...s.byRoot,
-        [root]: Object.fromEntries(
-          Object.entries(s.byRoot[root] ?? {}).filter(([, v]) => v.status !== "running"),
-        ),
-      },
-    }))
-    // What the run said, for a reader who is not watching the tree redraw.
-    const results = resultsFor(useTesting.getState().byRoot, root)
-    const seen = affected.map((k) => results[k]?.status)
-    const failed = seen.filter((v) => v === "fail").length
-    const passed = seen.filter((v) => v === "pass").length
-    if (failed > 0 || failed + passed === 0) log.warn("run output", { command, output: tail })
-    if (failed + passed === 0) return
-    useMascot.getState().tested(failed)
-    cue(failed > 0 ? "error" : "success")
-    announce(t("tests.finished", { passed, failed }), { assertive: failed > 0 })
-  }
-  endRun = stop
 
   // One template declaration stands for many printed tests, so the same id is
   // written several times in a run. A failure among them is the answer: a later
@@ -464,51 +434,58 @@ export async function runTests(scope: Scope): Promise<void> {
   // stands for. One for an ordinary test; two hundred for a declaration in a
   // loop over two hundred cases.
   const cases = new Map<string, Set<string>>()
-  // Assigned after the await: if `stop()` already ran (a fast failure, a second
-  // run starting), there was nothing for it to unsubscribe and the subscription
-  // outlived the run it belonged to.
-  const subLines = await listenPtyLines(id, (line) => {
-    tail = `${tail}${plainText(line)}\n`.slice(-8000)
+  const onLine = (line: string) => {
     const verdict = runner.read(line)
-    if (verdict) {
-      const at = Date.now()
-      const leaf = verdict.path[verdict.path.length - 1]
-      const keys = idsFor(byLeaf, verdict.path, dynamic)
-      if (verdict.status === "fail") for (const key of keys) failed.add(key)
-      for (const key of keys) {
-        const seen = cases.get(key) ?? new Set<string>()
-        seen.add(leaf)
-        cases.set(key, seen)
-      }
-      write(
-        Object.fromEntries(
-          keys
-            .filter((key) => verdict.status === "fail" || !failed.has(key))
-            .map((key) => [key, { status: verdict.status, at, cases: cases.get(key)?.size }]),
-        ),
-      )
+    if (!verdict) return
+    const at = Date.now()
+    const leaf = verdict.path[verdict.path.length - 1]
+    const keys = idsFor(byLeaf, verdict.path, dynamic)
+    if (verdict.status === "fail") for (const key of keys) failed.add(key)
+    for (const key of keys) {
+      const seen = cases.get(key) ?? new Set<string>()
+      seen.add(leaf)
+      cases.set(key, seen)
     }
-    clearTimeout(silent)
-    silent = window.setTimeout(stop, SILENCE_MS)
-  })
-  const subExit = await listen(`pty-exit-${id}`, () => stop())
-  if (done) {
-    offSafe(subLines)
-    offSafe(subExit)
-    return
+    write(
+      Object.fromEntries(
+        keys
+          .filter((key) => verdict.status === "fail" || !failed.has(key))
+          .map((key) => [key, { status: verdict.status, at, cases: cases.get(key)?.size }]),
+      ),
+    )
   }
-  off = subLines
-  unExit = subExit
-  silent = window.setTimeout(stop, SILENCE_MS)
-  try {
-    await ptySpawn(id, root, 24, 200)
-  } catch (e) {
-    log.error("test shell failed to start", { command, error: safeError(e) })
-    stop()
-    return
-  }
-  submitToTerminal(id, command, 200)
-  // `exit` closes the shell once the run returns, which is what fires
-  // `pty-exit`; it is spelled the same in every shell Reado can be pointed at.
-  submitToTerminal(id, "exit", 400)
+
+  // The tail of what the run printed comes back with its end: with no pane to
+  // scroll back through, it is the only place a failure's stack trace survives.
+  const run = runHidden(id, root, command, { onLine, timeoutMs: SILENCE_MS, idle: true })
+  endRun = run.stop
+  const end = await run.done
+  if (endRun === run.stop) endRun = null
+  if (end.reason === "spawnFailed")
+    log.error("test shell failed to start", { command, error: safeError(end.error) })
+
+  // A test the run ended without judging — stopped, crashed, or filtered out
+  // by the framework — goes back to having no verdict rather than spinning for
+  // the rest of the session. Only one run is ever in flight, so every verdict
+  // still reading "running" belongs to this one.
+  useTesting.setState((s) => ({
+    running: false,
+    byRoot: {
+      ...s.byRoot,
+      [root]: Object.fromEntries(
+        Object.entries(s.byRoot[root] ?? {}).filter(([, v]) => v.status !== "running"),
+      ),
+    },
+  }))
+  // What the run said, for a reader who is not watching the tree redraw.
+  const results = resultsFor(useTesting.getState().byRoot, root)
+  const seen = affected.map((k) => results[k]?.status)
+  const failedCount = seen.filter((v) => v === "fail").length
+  const passed = seen.filter((v) => v === "pass").length
+  if (failedCount > 0 || failedCount + passed === 0)
+    log.warn("run output", { command, output: end.tail })
+  if (failedCount + passed === 0) return
+  useMascot.getState().tested(failedCount)
+  cue(failedCount > 0 ? "error" : "success")
+  announce(t("tests.finished", { passed, failed: failedCount }), { assertive: failedCount > 0 })
 }

@@ -18,40 +18,17 @@ import type { MessageKey } from "@/i18n"
 import { listFiles, listSymbols, type Symbol as WorkspaceSymbol } from "@/lib/api"
 import { useBookmarks } from "@/lib/bookmarks"
 import { baseName, toRelative } from "@/lib/comments"
-import { goToLine, toggleBookmarkAtCursor, useDocInfo } from "@/lib/docInfo"
-import { useGuidedReview } from "@/lib/guidedReview"
+import { goToLine, useDocInfo } from "@/lib/docInfo"
 import { shortcutFor } from "@/lib/keybindings"
 import { lspDocumentSymbols, lspWorkspaceSymbols } from "@/lib/lsp"
-import { enableMcp } from "@/lib/mcp"
 import { runMenuCommand } from "@/lib/menu"
-import { useOnboarding } from "@/lib/onboarding"
 import { extractSymbols, type OutlineSymbol } from "@/lib/outline"
-import { usePreReview } from "@/lib/preReview"
-import { usePreview } from "@/lib/preview"
-import {
-  createProfile,
-  deleteProfile,
-  exportProfile,
-  importProfile,
-  renameProfile,
-  useProfiles,
-} from "@/lib/profiles"
-import { saveSettingsToProject } from "@/lib/projectConfig"
-import { prompt as promptDialog } from "@/lib/prompt"
+import { useProfiles } from "@/lib/profiles"
 import { useReadProgress } from "@/lib/readProgress"
-import { useResolveLoop } from "@/lib/resolveLoop"
-import { useSemanticSearch } from "@/lib/semanticSearch"
-import {
-  exportSettings,
-  exportSettingsToFile,
-  importSettings,
-  importSettingsFromFile,
-} from "@/lib/settingsSync"
-import { THEMES, usePalette, useProject, useRecents, useSettings, useWorkspace } from "@/lib/store"
-import { openTaskList, runBuildTask } from "@/lib/taskCommands"
+import { THEMES, usePalette, useProject, useRecents, useSettings } from "@/lib/store"
 import { commandLine, runTask, useTasks } from "@/lib/tasks"
 import { useTerminals } from "@/lib/terminals"
-import { runTests, useTesting } from "@/lib/testing"
+import { useTesting } from "@/lib/testing"
 import { openProjectHere } from "@/lib/window"
 import { acrossRoots, workspaceRoots } from "@/lib/workspace"
 
@@ -450,204 +427,40 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
     cmd("edit:organizeImports", t("lsp.organizeImports"), { when: hasFile }),
     cmd("go:bracket", t("editor.goToBracket"), { when: hasFile, stayOpen: true }),
     cmd("go:lastEdit", t("editor.lastEdit"), { when: hasFile, stayOpen: true }),
-    {
-      label: t("onboarding.open"),
-      run: () => {
-        useOnboarding.getState().show()
-        close()
-      },
-    },
+    cmd("onboarding:open", t("onboarding.open")),
     cmd("preview:toggle", t("preview.toggle")),
-    {
-      label: t("preview.agentAccess"),
-      run: () => {
-        const p = usePreview.getState()
-        p.setAgentAccess(!p.agentAccess)
-        close()
-      },
-    },
-    {
-      label: t("tours.open"),
-      run: () => {
-        useWorkspace.getState().selectTool("tours")
-        close()
-      },
-    },
-    {
-      label: t("tests.runAll"),
-      when: hasTests,
-      run: () => {
-        for (const framework of new Set(useTesting.getState().files.map((f) => f.framework)))
-          void runTests({ framework })
-        useWorkspace.getState().selectTool("tests")
-        close()
-      },
-    },
-    {
-      label: t("gitGraph.title"),
-      when: isRepo,
-      run: () => {
-        useWorkspace.getState().toggleGitGraph(true)
-        close()
-      },
-    },
-    {
-      label: t("prereview.run"),
-      when: isRepo,
-      run: () => {
-        usePreReview.getState().generate(project.root)
-        useWorkspace.getState().selectTool("prereview")
-        close()
-      },
-    },
-    {
-      label: t("guided.cmd.start"),
-      when: isRepo,
-      run: () => {
-        void useGuidedReview.getState().start(project.root, { kind: "diff" }, "bug_risk")
-        useWorkspace.getState().selectTool("guidedreview")
-        close()
-      },
-    },
-    {
-      label: t("guided.cmd.open"),
-      run: () => {
-        useGuidedReview.getState().load(project.root)
-        useWorkspace.getState().selectTool("guidedreview")
-        close()
-      },
-    },
-    {
-      label: t("loop.cmd.start"),
-      run: () => {
-        void useResolveLoop.getState().start(project.root, [])
-        useWorkspace.getState().selectTool("guidedreview")
-        close()
-      },
-    },
-    {
-      label: t("mcp.enable"),
-      run: () => {
-        void enableMcp(project.root)
-        close()
-      },
-    },
-    {
-      label: t("anywhere.open"),
-      run: () => {
-        usePalette.getState().toggleAnywhere(true)
-        close()
-      },
-    },
+    cmd("preview:agentAccess", t("preview.agentAccess")),
+    cmd("tours:open", t("tours.open")),
+    cmd("tests:runAll", t("tests.runAll"), { when: hasTests }),
+    cmd("git:graph", t("gitGraph.title"), { when: isRepo }),
+    cmd("prereview:run", t("prereview.run"), { when: isRepo }),
+    cmd("guided:start", t("guided.cmd.start"), { when: isRepo }),
+    cmd("guided:open", t("guided.cmd.open")),
+    cmd("loop:start", t("loop.cmd.start")),
+    cmd("mcp:enable", t("mcp.enable")),
+    cmd("anywhere:open", t("anywhere.open")),
     cmd("go:callHierarchy", t("hier.showCall"), { when: hasFile }),
     cmd("go:typeHierarchy", t("hier.showType"), { when: hasFile }),
     cmd("sel:lineEnds", t("editor.cursorsLineEnds"), { when: hasFile, stayOpen: true }),
-    {
-      label: t("bookmarks.toggle"),
-      when: hasFile,
-      run: () => {
-        toggleBookmarkAtCursor()
-        close()
-      },
-    },
-    {
-      label: t("bookmarks.goto"),
-      when: hasBookmarks,
-      run: () => usePalette.getState().open("bookmarks"),
-    },
-    {
-      label: t("tasks.run"),
-      run: () => {
-        void openTaskList()
-        close()
-      },
-    },
-    {
-      label: t("tasks.runBuild"),
-      run: () => {
-        void runBuildTask()
-        close()
-      },
-    },
-    {
-      label: t("profile.create"),
-      run: () => {
-        void createProfile()
-        close()
-      },
-    },
-    {
-      label: t("profile.switch"),
-      // Only worth offering once there is somewhere to switch to.
+    cmd("bookmarks:toggle", t("bookmarks.toggle"), { when: hasFile }),
+    cmd("bookmarks:goto", t("bookmarks.goto"), { when: hasBookmarks, stayOpen: true }),
+    cmd("tasks:run", t("tasks.run")),
+    cmd("tasks:build", t("tasks.runBuild")),
+    cmd("profile:create", t("profile.create")),
+    // Only worth offering once there is somewhere to switch to.
+    cmd("profile:switch", t("profile.switch"), {
       when: useProfiles.getState().profiles.length > 1,
-      run: () => {
-        usePalette.getState().open("profiles")
-      },
-    },
-    {
-      label: t("profile.rename"),
-      run: () => {
-        void renameProfile()
-        close()
-      },
-    },
-    {
-      label: t("profile.delete"),
-      run: () => {
-        void deleteProfile()
-        close()
-      },
-    },
-    {
-      label: t("profile.export"),
-      run: () => {
-        void exportProfile()
-        close()
-      },
-    },
-    {
-      label: t("profile.import"),
-      run: () => {
-        void importProfile()
-        close()
-      },
-    },
-    {
-      label: t("sync.export"),
-      run: () => {
-        void exportSettings()
-        close()
-      },
-    },
-    {
-      label: t("sync.import"),
-      run: () => {
-        void importSettings()
-        close()
-      },
-    },
-    {
-      label: t("sync.exportFile"),
-      run: () => {
-        void exportSettingsToFile()
-        close()
-      },
-    },
-    {
-      label: t("sync.importFile"),
-      run: () => {
-        void importSettingsFromFile()
-        close()
-      },
-    },
-    {
-      label: t("sync.saveToProject"),
-      when: !!project.root,
-      run: () => {
-        void saveSettingsToProject(project.root)
-        close()
-      },
-    },
+      stayOpen: true,
+    }),
+    cmd("profile:rename", t("profile.rename")),
+    cmd("profile:delete", t("profile.delete")),
+    cmd("profile:export", t("profile.export")),
+    cmd("profile:import", t("profile.import")),
+    cmd("sync:export", t("sync.export")),
+    cmd("sync:import", t("sync.import")),
+    cmd("sync:exportFile", t("sync.exportFile")),
+    cmd("sync:importFile", t("sync.importFile")),
+    cmd("sync:saveToProject", t("sync.saveToProject"), { when: !!project.root }),
     cmd("format", t("editor.format"), { when: hasFile, stayOpen: true }),
     // Editor commands run against the buffer and then get out of the way — the
     // palette is a launcher, not a panel, so each of these dismisses it.
@@ -685,16 +498,8 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
     cmd("palette:search", t("search.placeholder")),
     cmd("graph", t("graph.title")),
     cmd("docs", t("kb.title")),
-    {
-      label: t("semantic.search"),
-      run: () => {
-        close()
-        void promptDialog({
-          title: t("semantic.title"),
-          placeholder: t("semantic.placeholder"),
-        }).then((q) => q && useSemanticSearch.getState().run(q))
-      },
-    },
+    // Dismisses the palette itself, before its own dialog opens.
+    cmd("semantic:search", t("semantic.search"), { stayOpen: true }),
     cmd("view:wrap", `${t("editor.wrap")}: ${settings.wrap ? "on" : "off"}`, { stayOpen: true }),
     cmd(
       "view:columnSelection",
@@ -704,10 +509,9 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
     cmd("view:focus", `${t("editor.focus")}: ${settings.focusMode ? "on" : "off"}`, {
       stayOpen: true,
     }),
-    {
-      label: `${t("editor.sticky")}: ${settings.stickyScroll ? "on" : "off"}`,
-      run: () => settings.set({ stickyScroll: !settings.stickyScroll }),
-    },
+    cmd("view:stickyScroll", `${t("editor.sticky")}: ${settings.stickyScroll ? "on" : "off"}`, {
+      stayOpen: true,
+    }),
     cmd("view:ribbon", `${t("editor.ribbon")}: ${settings.showRibbon ? "on" : "off"}`, {
       stayOpen: true,
     }),
@@ -719,19 +523,14 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
         : t("tree.markRead"),
       { when: hasFile, stayOpen: true },
     ),
-    {
-      label: `${t("tree.showHidden")}: ${project.showHidden ? "on" : "off"}`,
-      run: () => project.setShowHidden(!project.showHidden),
-    },
+    cmd("view:showHidden", `${t("tree.showHidden")}: ${project.showHidden ? "on" : "off"}`, {
+      stayOpen: true,
+    }),
     cmd("go:back", t("nav.back"), { when: canBack, stayOpen: true }),
     cmd("go:forward", t("nav.forward"), { when: canForward, stayOpen: true }),
     cmd("reopenClosed", t("tabs.reopen"), { when: hasClosed, stayOpen: true }),
     cmd("view:sidebar", t("sidebar.toggle"), { stayOpen: true }),
-    {
-      label: t("terminal.move"),
-      when: hasTerminal,
-      run: () => useTerminals.getState().togglePosition(),
-    },
+    cmd("terminal:togglePosition", t("terminal.move"), { when: hasTerminal, stayOpen: true }),
     cmd("view:splitToggle", t("split.toggle"), { when: canSplit, stayOpen: true }),
     cmd("workspace:addFolder", t("workspace.addFolder")),
     cmd("workspace:open", t("workspace.openFile")),
@@ -744,10 +543,11 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
   ]
   // Quick theme switches.
   for (const theme of THEMES) {
-    rows.push({
-      label: `${t("settings.theme")}: ${t(`theme.${theme}` as MessageKey)}`,
-      run: () => settings.set({ theme, mode: "manual" }),
-    })
+    rows.push(
+      cmd(`theme:${theme}`, `${t("settings.theme")}: ${t(`theme.${theme}` as MessageKey)}`, {
+        stayOpen: true,
+      }),
+    )
   }
   // Drop commands whose precondition isn't met, so the palette lists only what's
   // actually applicable in the current context.

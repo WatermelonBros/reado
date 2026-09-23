@@ -109,6 +109,11 @@ const h = vi.hoisted(() => {
 })
 
 vi.mock("../docInfo", () => ({ ...h.docInfo, useDocInfo: { getState: () => ({ view: null }) } }))
+// The commands import the editor actions from the modules that define them, not
+// through the `docInfo` barrel, so the doubles go there too.
+vi.mock("../activeEditor", () => h.docInfo)
+vi.mock("../fileActions", () => h.docInfo)
+vi.mock("../save", () => h.docInfo)
 vi.mock("../agents", () => h.agents)
 vi.mock("../window", () => h.window)
 vi.mock("@tauri-apps/plugin-opener", () => h.opener)

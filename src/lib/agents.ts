@@ -3,8 +3,14 @@
  * `READO_AGENT` using the syntax of the active shell (cmd / PowerShell / POSIX),
  * so it works on every platform. Shared by the terminal toolbar and the menu.
  */
-import { listen } from "@tauri-apps/api/event"
-import { agentInstalled, ptyDefaultShell, ptyForeground, ptyWrite, submitToTerminal } from "./api"
+import {
+  agentInstalled,
+  onPtyOutput,
+  ptyDefaultShell,
+  ptyForeground,
+  ptyWrite,
+  submitToTerminal,
+} from "./api"
 import { syncClaudeTheme } from "./claudeTheme"
 import { useDocInfo } from "./docInfo"
 import { useMascot } from "./mascot"
@@ -282,7 +288,7 @@ function waitForQuiet(id: string, idleMs: number, capMs: number): Promise<void> 
       resolve()
     }
     const cap = setTimeout(finish, capMs)
-    void listen<string>(`pty-output-${id}`, () => {
+    void onPtyOutput(id, () => {
       if (quiet) clearTimeout(quiet)
       quiet = setTimeout(finish, idleMs)
     }).then((u) => {
@@ -314,7 +320,7 @@ function sawOutputWithin(id: string, ms: number): Promise<boolean> {
       resolve(v)
     }
     const timer = setTimeout(() => finish(false), ms)
-    void listen<string>(`pty-output-${id}`, () => finish(true)).then((u) => {
+    void onPtyOutput(id, () => finish(true)).then((u) => {
       unlisten = u
       if (done) offSafe(u)
     })

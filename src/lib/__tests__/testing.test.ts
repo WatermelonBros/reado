@@ -10,6 +10,7 @@ import {
   commandFor,
   type Dynamic,
   idsFor,
+  indexTests,
   isStale,
   namePattern,
   RUNNERS,
@@ -234,6 +235,46 @@ describe("choosing which tests a verdict is about", () => {
 
   it("answers nothing for a name no test in the run has", () => {
     expect(idsFor(byLeaf, ["src/c.test.ts", "unknown"])).toEqual([])
+  })
+})
+
+describe("indexing the tests a run is about", () => {
+  const TEMPLATE = `adds \${a} and \${b}`
+  const file = (path: string, tests: Array<[string[], string]>): TestFile => ({
+    path,
+    framework: "vitest",
+    project: "",
+    tests: tests.map(([suites, name], line) => ({ suites, name, line })),
+  })
+  const files = [
+    file("a.test.ts", [
+      [["outer"], "works"],
+      [["other"], "works"],
+      [[], TEMPLATE],
+    ]),
+    file("b.test.ts", [[[], "works"]]),
+  ]
+
+  it("names every test, and groups the ids by their leaf", () => {
+    const { affected, byLeaf, dynamic } = indexTests(files)
+    expect(affected).toEqual([
+      testId("a.test.ts", ["outer"], "works"),
+      testId("a.test.ts", ["other"], "works"),
+      testId("a.test.ts", [], TEMPLATE),
+      testId("b.test.ts", [], "works"),
+    ])
+    // One leaf, three tests: the lookup has to hand back all of them.
+    expect(byLeaf.get("works")).toHaveLength(3)
+    // Only the template is matched as a pattern.
+    expect(dynamic.map((d) => d.id)).toEqual([testId("a.test.ts", [], TEMPLATE)])
+    expect(dynamic[0].re.test("adds 1 and 2")).toBe(true)
+  })
+
+  it("narrows to the tests of one name", () => {
+    const { affected, byLeaf, dynamic } = indexTests(files, "works")
+    expect(affected).toHaveLength(3)
+    expect([...byLeaf.keys()]).toEqual(["works"])
+    expect(dynamic).toEqual([])
   })
 })
 

@@ -13,6 +13,7 @@ import type { EditorView, Panel } from "@codemirror/view"
 import { t } from "@/i18n"
 import {
   countIn,
+  countMatches,
   findNextInScope,
   findPrevInScope,
   replaceAllInScope,
@@ -202,17 +203,10 @@ export function readoSearchPanel(view: EditorView): Panel {
       counter.textContent = total ? t("search.count", { current, total }) : t("search.noResults")
       return
     }
-    const sel = view.state.selection.main
-    const cursor = query.getCursor(view.state)
-    let total = 0
-    let current = 0
-    for (let it = cursor.next(); !it.done; it = cursor.next()) {
-      total++
-      if (it.value.from === sel.from && it.value.to === sel.to) current = total
-      if (total >= COUNT_CAP) {
-        counter.textContent = t("search.countCapped", { cap: COUNT_CAP })
-        return
-      }
+    const { current, total, capped } = countMatches(view.state, query, COUNT_CAP)
+    if (capped) {
+      counter.textContent = t("search.countCapped", { cap: COUNT_CAP })
+      return
     }
     counter.textContent = total ? t("search.count", { current, total }) : t("search.noResults")
   }

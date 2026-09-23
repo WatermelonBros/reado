@@ -66,6 +66,15 @@ vi.mock("../../../lib/docInfo", async (orig) => ({
   ...(await orig<typeof import("../../../lib/docInfo")>()),
   ...doc,
 }))
+// Commands reach these through the modules that define them, not the barrel.
+vi.mock("../../../lib/activeEditor", async (orig) => ({
+  ...(await orig<typeof import("../../../lib/activeEditor")>()),
+  ...doc,
+}))
+vi.mock("../../../lib/save", async (orig) => ({
+  ...(await orig<typeof import("../../../lib/save")>()),
+  ...doc,
+}))
 const agents = vi.hoisted(() => ({
   clearTerminal: vi.fn(),
   restartTerminal: vi.fn(),

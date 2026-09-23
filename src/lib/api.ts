@@ -8,6 +8,7 @@
 // Route every command through the traced wrapper so the IPC boundary (command
 // name, duration, outcome) is logged without changing any call site.
 
+import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type { VaultItem, VaultSecret, VaultStatus } from "@/lib/vault"
 import { tracedInvoke as invoke } from "./logger"
 import { useSettings } from "./store"
@@ -1395,6 +1396,15 @@ export function submitToTerminal(id: string, command: string, delay = 0): void {
   }, delay)
 }
 
+/** Subscribe to a pane's output (`pty-output-{id}`). A chunk is whatever the
+ *  backend read — possibly half a line, or half a character; see `ptyText`. */
+export const onPtyOutput = (id: string, cb: (chunk: string) => void): Promise<UnlistenFn> =>
+  listen<string>(`pty-output-${id}`, (e) => cb(e.payload))
+
+/** Subscribe to a pane's shell exiting (`pty-exit-{id}`). It carries no status. */
+export const onPtyExit = (id: string, cb: () => void): Promise<UnlistenFn> =>
+  listen(`pty-exit-${id}`, () => cb())
+
 /** Resize a terminal's PTY. */
 export const ptyResize = (id: string, rows: number, cols: number) =>
   invoke<void>("pty_resize", { id, rows, cols })
@@ -1421,6 +1431,15 @@ export const lspInitOptions = (server: string, root: string) =>
 
 /** Send a JSON-RPC message to language server `id`. */
 export const lspSend = (id: string, message: string) => invoke<void>("lsp_send", { id, message })
+
+/** Subscribe to what language server `id` writes (`lsp-{id}`): one JSON-RPC
+ *  message per event, unparsed. */
+export const onLspMessage = (id: string, cb: (message: string) => void): Promise<UnlistenFn> =>
+  listen<string>(`lsp-${id}`, (e) => cb(e.payload))
+
+/** Subscribe to language server `id` exiting (`lsp-exit-{id}`). */
+export const onLspExit = (id: string, cb: () => void): Promise<UnlistenFn> =>
+  listen(`lsp-exit-${id}`, () => cb())
 
 /** Stop a language server. */
 export const lspStop = (id: string) => invoke<void>("lsp_stop", { id })

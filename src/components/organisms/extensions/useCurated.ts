@@ -6,7 +6,6 @@
  * the panel needs from here is their standing on this machine and in this
  * project, so it can put them in the same list as everything else.
  */
-import { listen } from "@tauri-apps/api/event"
 import { useCallback, useEffect, useState } from "react"
 import { t } from "@/i18n"
 import {
@@ -16,9 +15,6 @@ import {
   linuxPackageManager,
   lspInstalled,
   lspInstalledAll,
-  ptyKill,
-  ptySpawn,
-  submitToTerminal,
 } from "@/lib/api"
 import {
   currentOS,
@@ -33,8 +29,8 @@ import {
 import { createLogger } from "@/lib/logger"
 import { refreshLspServers } from "@/lib/lsp"
 import { notify } from "@/lib/notice"
+import { runHidden } from "@/lib/ptyErrand"
 import { useProject } from "@/lib/store"
-import { offSafe } from "@/lib/terminals"
 
 const log = createLogger("extensions")
 
@@ -71,20 +67,15 @@ export function runInstall(cmd: string, target?: InstallTarget): void {
   const name = target?.name ?? cmd
   notify("info", t("ext.curatedInstalling", { name }))
 
-  // The tail of what the install printed — the only diagnostic left once the
+  // The tail of what the install printed is the only diagnostic left once the
   // terminal is hidden, so it goes to the log when the tool doesn't appear.
-  let tail = ""
-  const unOut = listen<string>(`pty-output-${id}`, (e) => {
-    tail = (tail + decodeOutput(e.payload)).slice(-4000)
+  const run = runHidden(id, useProject.getState().root || ".", cmd, {
+    timeoutMs: INSTALL_TIMEOUT_MS,
+    tailChars: 4000,
   })
-  let done = false
-  const finish = async () => {
-    if (done) return
-    done = true
-    offSafe(unOut)
-    offSafe(unExit)
-    clearTimeout(timer)
-    void ptyKill(id).catch(() => {})
+  void run.done.then(async ({ reason, tail, error }) => {
+    if (reason === "spawnFailed")
+      log.error("install shell failed to start", { cmd, error: String(error) })
     // The machine changed under every cached probe, whatever the outcome.
     forgetServerProbe()
     // Including the editor's own: a freshly installed server attaches to the file
@@ -98,21 +89,7 @@ export function runInstall(cmd: string, target?: InstallTarget): void {
     }
     log.error("install failed", { id: target.id, cmd, output: tail })
     notify("error", t("ext.curatedInstallFailed", { name }))
-  }
-  const unExit = listen(`pty-exit-${id}`, () => void finish())
-  const timer = setTimeout(() => void finish(), INSTALL_TIMEOUT_MS)
-
-  ptySpawn(id, useProject.getState().root || ".", 24, 200)
-    .then(() => {
-      // `exit` closes the shell when the install returns, which is what fires
-      // `pty-exit`; it is spelled the same in every shell Reado can be pointed at.
-      submitToTerminal(id, cmd, 200)
-      submitToTerminal(id, "exit", 400)
-    })
-    .catch((e) => {
-      log.error("install shell failed to start", { cmd, error: String(e) })
-      void finish()
-    })
+  })
   // The row stops saying "Install" as the tool appears, without waiting for the
   // shell to close (a package manager can linger after the binary is in place).
   for (const after of REPROBE_MS) {
@@ -122,10 +99,6 @@ export function runInstall(cmd: string, target?: InstallTarget): void {
     }, after)
   }
 }
-
-/** PTY output arrives base64-encoded (it is bytes, not text, on the wire). */
-const decodeOutput = (b64: string) =>
-  new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))
 
 /** Is the thing the install was for actually here now? */
 async function verifyInstalled(target: InstallTarget): Promise<boolean> {
