@@ -422,31 +422,34 @@ export function DockRegion({ area }: { area: DockArea }) {
                   zone === "stack" ? "border-accent bg-accent/20" : "border-line"
                 }`}
               >
-                {g.tabs.map((id) => {
-                  const activeTab = g.active === id || g.tabs.length === 1
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      title={t("dock.menu")}
-                      onPointerDown={(e) => startTabDrag(e, id)}
-                      className={`flex cursor-grab items-center rounded px-2 py-0.5 text-xs select-none active:cursor-grabbing ${
-                        activeTab ? "bg-canvas text-ink" : "text-faint hover:text-ink"
-                      }`}
-                    >
-                      {labelOf(id)}
-                      {id === "problems" && problemCount > 0 && (
-                        <Badge
-                          tone="marker"
-                          className="ml-1.5 h-3.5 min-w-3.5 text-[9px] font-bold"
-                        >
-                          {problemCount}
-                        </Badge>
-                      )}
-                    </button>
-                  )
-                })}
-                <span className="flex-1" />
+                {/* The tabs scroll sideways when the group is narrower than they
+                    are, so the last one is reachable and the menu stays put. */}
+                <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+                  {g.tabs.map((id) => {
+                    const activeTab = g.active === id || g.tabs.length === 1
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        title={t("dock.menu")}
+                        onPointerDown={(e) => startTabDrag(e, id)}
+                        className={`flex flex-none cursor-grab items-center rounded px-2 py-0.5 text-xs whitespace-nowrap select-none active:cursor-grabbing ${
+                          activeTab ? "bg-canvas text-ink" : "text-faint hover:text-ink"
+                        }`}
+                      >
+                        {labelOf(id)}
+                        {id === "problems" && problemCount > 0 && (
+                          <Badge
+                            tone="marker"
+                            className="ml-1.5 h-3.5 min-w-3.5 text-[9px] font-bold"
+                          >
+                            {problemCount}
+                          </Badge>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
                 <IconButton
                   size="xs"
                   label={t("dock.menu")}

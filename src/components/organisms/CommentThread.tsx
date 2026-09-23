@@ -94,6 +94,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
       // list came out **24px tall around 145px of content**: the thread was on
       // screen and unreadable. The conversation now keeps at least 5rem and the
       // box scrolls when the chrome no longer fits around it.
+      data-comment-thread=""
       className="absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col overflow-y-auto shadow-[var(--shadow)]"
       style={{
         top,

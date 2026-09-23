@@ -69,7 +69,9 @@ export function OutputPanel() {
       {/* One row, never wrapped: wrapping put the filter field on a line of its
           own where it kept its flex basis and looked like a stub. The field takes
           whatever the controls leave. */}
-      <div className="flex h-9 flex-none items-center gap-2 border-b border-line px-2 py-1">
+      {/* Wraps onto a second row when the pane is narrow (a small window, a large
+          zoom) rather than pushing Follow and the filter off its edge. */}
+      <div className="flex min-h-9 flex-none flex-wrap items-center gap-2 border-b border-line px-2 py-1">
         <Select
           value={channel ?? ""}
           onChange={(v) => setChannel(v || null)}
@@ -80,14 +82,14 @@ export function OutputPanel() {
           ariaLabel={t("output.channel")}
           // Wide enough for a channel name — `lsp:typescript` is the one you
           // come here to read, and a truncated channel list is unusable.
-          className="h-7 w-48 flex-none py-0"
+          className="h-7 w-48 min-w-0 max-w-full shrink py-0"
         />
         <Select
           value={level}
           onChange={(v) => setLevel(v as LogLevel)}
           options={LEVELS.map((l) => ({ value: l, label: l }))}
           ariaLabel={t("output.level")}
-          className="h-7 w-24 flex-none py-0"
+          className="h-7 w-24 min-w-0 max-w-full shrink py-0"
         />
         <input
           value={text}

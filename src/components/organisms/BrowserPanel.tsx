@@ -53,6 +53,7 @@ import {
   previewSetVisible,
   previewSetZoom,
   previewTakeCmd,
+  type WebTarget,
 } from "@/lib/api"
 import { useComments } from "@/lib/comments"
 import { useLayout } from "@/lib/layout"
@@ -97,6 +98,7 @@ function injectCommentBox(c: Comment): void {
     id: c.id,
     x: c.anchor.x ?? 0,
     y: c.anchor.y ?? 0,
+    target: c.anchor.target ?? null,
     type: c.type,
     kind: c.kind,
     resolved: c.state === "done",
@@ -268,7 +270,13 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               logs?: LogEntry[]
               net?: NetEntry[]
               inspect?: number[]
-              commentAt?: { x: number; y: number; url: string; text: string } | null
+              commentAt?: {
+                x: number
+                y: number
+                url: string
+                text: string
+                target: WebTarget | null
+              } | null
               openComment?: string | null
               commentReply?: { id: string; text: string } | null
               commentResolve?: string | null
@@ -317,6 +325,7 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
                 url: c.url,
                 x: c.x,
                 y: c.y,
+                target: c.target ?? undefined,
               })
               .then(({ firstComment }) => {
                 if (firstComment && !useSettings.getState().gitignoreDontAsk)
@@ -392,9 +401,14 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
                 c.anchor.url &&
                 sameDoc(c.anchor.url, usePreview.getState().url),
             )
-            .map((c) => ({ id: c.id, x: c.anchor.x ?? 0, y: c.anchor.y ?? 0 }))
+            .map((c) => ({
+              id: c.id,
+              x: c.anchor.x ?? 0,
+              y: c.anchor.y ?? 0,
+              target: c.anchor.target ?? null,
+            }))
           const marksSig = `${showMarksRef.current}|${webList
-            .map((m) => `${m.id}:${m.x}:${m.y}`)
+            .map((m) => `${m.id}:${m.x}:${m.y}:${m.target?.path.join(".") ?? ""}`)
             .join(",")}`
           if (marksSig !== lastMarksSig.current || !data.hasMarks) {
             lastMarksSig.current = marksSig

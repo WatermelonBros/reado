@@ -19,6 +19,12 @@ directly. The CLI is the stable contract; the on-disk format may change.
 1. **List the work.** Run `reado task list` to see open tasks. Each line shows
    the id, type, anchor (`file:line`) and the first line of the comment.
 2. **Read details** when needed: `reado task show <id>` prints the full thread.
+   A comment left on a web page (in Reado's browser preview) is anchored to the
+   page's URL instead of a line, and `task show` names the element it is about:
+   a CSS `element:` selector, its visible `text:`, the start of its `html:`, and —
+   on a dev build of a React/Vue/Svelte app — the `component:` that rendered it,
+   often with its source file. Start from the component's source when there is one;
+   otherwise find the markup by its text or selector.
 3. **Resolve.** Make the change in the code (edit files normally — comments are
    an external overlay, so editing the code never touches them).
 4. **Close it.** `reado task done <id>` marks the task done (it is archived as

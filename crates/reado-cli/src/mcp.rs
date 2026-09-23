@@ -558,6 +558,7 @@ fn call_tool(
                     url: None,
                     x: None,
                     y: None,
+                    target: None,
                 },
                 "agent",
                 Some(agent_id()),

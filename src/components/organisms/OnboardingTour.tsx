@@ -247,8 +247,8 @@ export function OnboardingTour() {
             it to. The highlight is the backdrop cut-out, not a ring — a ring here
             would also flicker as zag re-parks it between steps. */}
         <Tour.Spotlight className="pointer-events-none invisible" />
-        <Tour.Positioner className="z-[302]">
-          <Tour.Content className="relative flex max-w-[340px] flex-col gap-2 rounded-lg border border-line-strong bg-overlay p-4 text-sm shadow-[var(--shadow),0_2px_10px_oklch(0_0_0/0.35)]">
+        <Tour.Positioner>
+          <Tour.Content className="relative z-[302] flex max-w-[340px] flex-col gap-2 rounded-lg border border-line-strong bg-overlay p-4 text-sm shadow-[var(--shadow),0_2px_10px_oklch(0_0_0/0.35)]">
             <Tour.Title className="pr-6 text-lg font-semibold text-ink" />
             <Tour.Description className="leading-relaxed text-muted" />
             <div className="mt-2 flex items-center justify-between gap-3">

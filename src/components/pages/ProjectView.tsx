@@ -89,6 +89,11 @@ const log = createLogger("project")
 // so a width persisted on a large monitor can't squeeze the editor to nothing
 // on a smaller window.
 const MIN_EDITOR_WIDTH = 360
+// …and the sidebar keeps this much, so the editor's room can't squeeze *it* to
+// nothing either: in a window too small for both (800px at 200% zoom is a 400px
+// layout), the sidebar went down to 40px — file names gone, its header cut.
+// There, the two share the space instead.
+const MIN_SIDEBAR_WIDTH = 180
 
 export function ProjectView({ root }: { root: string }) {
   const init = useProject((s) => s.init)
@@ -540,9 +545,10 @@ export function ProjectView({ root }: { root: string }) {
   // Widths are layout pixels; `innerWidth` is a visual pixel, so convert it to the
   // layout viewport width (innerWidth / zoom) before subtracting the min editor.
   const zoom = useSettings((s) => s.zoom) || 1
-  const appliedSidebarWidth = Math.min(
-    dragWidth ?? sidebarWidth,
-    window.innerWidth / zoom - MIN_EDITOR_WIDTH,
+  const layoutWidth = window.innerWidth / zoom
+  const appliedSidebarWidth = Math.max(
+    Math.min(MIN_SIDEBAR_WIDTH, layoutWidth / 2),
+    Math.min(dragWidth ?? sidebarWidth, layoutWidth - MIN_EDITOR_WIDTH),
   )
 
   // The workbench columns, in the order they appear on screen. `aux` is always

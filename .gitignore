@@ -48,3 +48,7 @@ lcov.info
 # Impeccable critique snapshots — working notes from a design pass, not project
 # state. Regenerated per run; the report that matters ships in the PR body.
 .impeccable/
+
+# vitest browser-mode failure screenshots
+__screenshots__/
+.vitest-attachments/

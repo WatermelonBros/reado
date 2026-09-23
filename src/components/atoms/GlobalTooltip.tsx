@@ -36,7 +36,14 @@ export function GlobalTooltip() {
     }
 
     const onOver = (e: MouseEvent) => {
-      const el = (e.target as HTMLElement | null)?.closest<HTMLElement>("[title]")
+      const target = e.target as HTMLElement | null
+      const el = target?.closest<HTMLElement>("[title]")
+      // A control with a tooltip of its own, inside the titled element — a tab's
+      // close button, inside the tab that titles itself with its path — speaks
+      // for itself: showing the outer title too stacks two bubbles on top of
+      // each other.
+      const own = target?.closest('[data-scope="tooltip"][data-part="trigger"]')
+      if (own && el?.contains(own)) return clear()
       if (!el || el === ref.current.el) return
       clear() // switching targets — reset any pending/shown tip first
       const text = el.getAttribute("title")?.trim()

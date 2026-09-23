@@ -108,6 +108,18 @@
       transition-duration: 0.01ms !important;
     }
   }
+
+  /* A menu or popover never outgrows the window it opens in: zag measures the
+     room between the anchor and the window edge into `--available-height` on
+     every positioner, and a panel taller than that scrolls instead of running
+     off the screen with its first or last rows out of reach. In `base`, so a
+     component's own tighter cap (a utility) still wins. */
+  [data-scope="menu"][data-part="content"],
+  [data-scope="popover"][data-part="content"],
+  [data-scope="select"][data-part="content"] {
+    max-height: var(--available-height, calc(100vh - 16px));
+    overflow-y: auto;
+  }
 }
 
 @layer components {

@@ -5,7 +5,7 @@
  * comment is a task (sent to the AI) or a note, writes Markdown, and saves. The
  * code file is never modified — the comment is an external overlay.
  */
-import { useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { Checkbox } from "@/components/atoms/Checkbox"
@@ -44,6 +44,20 @@ export function CommentComposer({
   const setLastType = useComments((s) => s.setLastType)
   const gitignoreDontAsk = useSettings((s) => s.gitignoreDontAsk)
   const { t } = useTranslation()
+
+  // The editor places the box under the line with a guess at its height; the
+  // real one depends on the language, the zoom and what the fields hold. Pull
+  // the box up by what it actually overflows the editor, so it never runs under
+  // the panel below — and, in an editor shorter than the box, it scrolls
+  // (`max-h`) rather than hanging off it.
+  const ref = useRef<HTMLDivElement>(null)
+  const [fitTop, setFitTop] = useState(top)
+  useLayoutEffect(() => {
+    const el = ref.current
+    const room = (el?.offsetParent as HTMLElement | null)?.clientHeight
+    if (!el || !room) return setFitTop(top)
+    setFitTop(Math.max(8, Math.min(top, room - el.offsetHeight - 8)))
+  }, [top])
 
   // Seed from an explicit initialType, else the last type picked this session.
   const [type, setType] = useState<CommentType>(initialType ?? useComments.getState().lastType)
@@ -89,8 +103,9 @@ export function CommentComposer({
 
   return (
     <div
-      className="absolute right-4 z-30 w-[min(460px,calc(100%-2rem))] rounded-lg border border-line-strong bg-overlay shadow-[var(--shadow)]"
-      style={{ top }}
+      ref={ref}
+      className="absolute right-4 z-30 max-h-[calc(100%-16px)] w-[min(460px,calc(100%-2rem))] overflow-y-auto rounded-lg border border-line-strong bg-overlay shadow-[var(--shadow)]"
+      style={{ top: fitTop }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">

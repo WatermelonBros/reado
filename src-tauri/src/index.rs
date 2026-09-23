@@ -148,6 +148,7 @@ mod tests {
                 url: None,
                 x: None,
                 y: None,
+                target: None,
             },
             "user",
             None,

@@ -605,6 +605,7 @@ pub fn accept_proposal(
                 url: None,
                 x: None,
                 y: None,
+                target: None,
             },
             proposal.author.as_str(),
             proposal.agent.clone(),

@@ -67,9 +67,9 @@ export function Dropdown({
         {trigger}
       </Menu.Trigger>
       <Portal>
-        <Menu.Positioner className="z-[120]">
+        <Menu.Positioner>
           <Menu.Content
-            className={`min-w-[120px] overflow-hidden rounded-md border border-line-strong bg-overlay py-1 shadow-[var(--shadow)] focus:outline-none ${className}`}
+            className={`z-[200] min-w-[120px] rounded-md border border-line-strong bg-overlay py-1 shadow-[var(--shadow)] focus:outline-none ${className}`}
           >
             {children}
           </Menu.Content>

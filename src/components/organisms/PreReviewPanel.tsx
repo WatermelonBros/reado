@@ -20,14 +20,18 @@ export function PreReviewPanel() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex flex-none items-center justify-between border-b border-line px-2 py-1.5">
+      <div className="flex flex-none flex-wrap items-center justify-between gap-1 border-b border-line px-2 py-1.5">
+        {/* Shrinks to an ellipsis in a sidebar narrower than its label. */}
         <Button
           size="sm"
+          className="min-w-0 max-w-full flex-shrink"
           onClick={() => usePreReview.getState().generate(root)}
           disabled={generating}
         >
-          <SparkleIcon className="h-3 w-3" />
-          {generating ? t("prereview.generating") : t("prereview.run")}
+          <SparkleIcon className="h-3 w-3 flex-none" />
+          <span className="truncate">
+            {generating ? t("prereview.generating") : t("prereview.run")}
+          </span>
         </Button>
         {generating && (
           <Button size="sm" onClick={() => usePreReview.getState().cancel()}>

@@ -166,6 +166,34 @@ pub struct Anchor {
     pub x: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub y: Option<f64>,
+    /// For `Scope::Web`: the element under the click, so the pin can follow it
+    /// when the page scrolls, reflows or resizes. `x`/`y` stay as the fallback
+    /// for a page whose element is gone, and for comments made before this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<WebTarget>,
+}
+
+/// Where on a web page a design comment was left: an element, found again by
+/// its index path from `<html>` (each step a child index), and the click's offset
+/// from that element's top-left corner in CSS pixels.
+///
+/// The rest describes the element for whoever resolves the comment — an agent
+/// gets from these what a code comment's `file:line` tells it: a CSS selector,
+/// its visible text, the start of its HTML, and the component that rendered it
+/// (with its source file) when the page is a dev build of an app that says.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WebTarget {
+    pub path: Vec<u32>,
+    pub dx: f64,
+    pub dy: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component: Option<String>,
 }
 
 /// Adaptive snapshot of the anchored code, used to re-locate the anchor after
@@ -280,6 +308,11 @@ pub struct NewComment {
     pub x: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub y: Option<f64>,
+    /// For `Scope::Web`: the element under the click, so the pin can follow it
+    /// when the page scrolls, reflows or resizes. `x`/`y` stay as the fallback
+    /// for a page whose element is gone, and for comments made before this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<WebTarget>,
 }
 
 /// Result of creating a comment.
@@ -567,6 +600,7 @@ pub fn create_comment(
             url: input.url,
             x: input.x,
             y: input.y,
+            target: input.target,
         },
         context,
         links: Vec::new(),
@@ -879,6 +913,7 @@ pub fn upsert_host_comment(
                     url: None,
                     x: None,
                     y: None,
+                    target: None,
                 },
                 context: Context::default(),
                 links: Vec::new(),
@@ -1455,6 +1490,7 @@ mod tests {
                 url: None,
                 x: None,
                 y: None,
+                target: None,
             },
             context: Context::default(),
             links: vec![],
@@ -1488,6 +1524,7 @@ mod tests {
                 url: None,
                 x: None,
                 y: None,
+                target: None,
             },
             "user",
             None,
@@ -1518,6 +1555,30 @@ mod tests {
         assert_eq!(m.id, "c_test");
         assert_eq!(msgs.len(), 2);
         assert_eq!(msgs[1].agent.as_deref(), Some("claude-code"));
+    }
+
+    #[test]
+    fn a_web_comment_keeps_its_element_through_the_round_trip() {
+        let mut meta = sample_meta();
+        meta.anchor.scope = Scope::Web;
+        meta.anchor.url = Some("http://localhost:5173/".into());
+        meta.anchor.x = Some(120.0);
+        meta.anchor.y = Some(340.0);
+        let target = WebTarget {
+            path: vec![1, 0, 3],
+            dx: 10.5,
+            dy: 4.0,
+            selector: Some("#checkout > button.primary".into()),
+            text: Some("Pay now".into()),
+            html: Some("<button class=\"primary\">Pay now</button>".into()),
+            component: Some("Checkout › PayButton (src/PayButton.tsx:12)".into()),
+        };
+        meta.anchor.target = Some(target.clone());
+        let (m, _) = from_markdown(&to_markdown(&meta, &[]).unwrap()).unwrap();
+        assert_eq!(m.anchor.target, Some(target));
+        // A comment written before targets existed still reads, without one.
+        let (old, _) = from_markdown(&to_markdown(&sample_meta(), &[]).unwrap()).unwrap();
+        assert_eq!(old.anchor.target, None);
     }
 
     fn ctx(snippet: &str) -> Context {
@@ -1616,6 +1677,7 @@ mod tests {
             url: None,
             x: None,
             y: None,
+            target: None,
         }
     }
 

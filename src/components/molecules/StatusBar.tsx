@@ -76,7 +76,7 @@ const relativePath = (root: string, path: string | null): string | null =>
 
 /** Shared style for a clickable status-bar item. */
 const ITEM =
-  "inline-flex items-center gap-[5px] whitespace-nowrap rounded-sm px-1 transition-colors hover:bg-overlay hover:text-ink"
+  "inline-flex flex-none items-center gap-[5px] whitespace-nowrap rounded-sm px-1 transition-colors hover:bg-overlay hover:text-ink"
 
 export function StatusBar() {
   const root = useProject((s) => s.root)
@@ -200,7 +200,13 @@ export function StatusBar() {
         setCtx({ x: e.clientX, y: e.clientY })
       }}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-1">
+      {/* When the bar runs out of room (a narrow window, a large interface zoom)
+          the path gives way first, down to nothing; the cursor position never
+          does — this group is never narrower than what it must show. The group
+          on the right absorbs the rest: its items wrap onto a second line that
+          the bar's height hides, so an item that doesn't fit leaves whole
+          instead of being squeezed under its own text or cut in half. */}
+      <div className="flex flex-1 items-center gap-1">
         {/* A prefix you can't see is a prefix that eats your next keystroke for
             reasons you can't account for. */}
         {chordPending && (
@@ -223,8 +229,8 @@ export function StatusBar() {
               Ln {line}, Col {col}
             </Popover.Trigger>
             <Portal>
-              <Popover.Positioner className="z-[120]">
-                <Popover.Content className="rounded-md border border-line-strong bg-overlay p-1 shadow-[var(--shadow)] focus:outline-none">
+              <Popover.Positioner>
+                <Popover.Content className="z-[200] rounded-md border border-line-strong bg-overlay p-1 shadow-[var(--shadow)] focus:outline-none">
                   <Popover.Context>
                     {(api) => (
                       <Input
@@ -255,7 +261,7 @@ export function StatusBar() {
         )}
       </div>
 
-      <div className="flex flex-none items-center gap-1">
+      <div className="flex h-full min-w-0 flex-wrap items-center justify-end gap-x-1 overflow-hidden *:flex *:h-full *:flex-none *:items-center">
         {show("preview") && (
           <button
             type="button"

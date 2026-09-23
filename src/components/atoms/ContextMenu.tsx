@@ -38,18 +38,24 @@ interface Props {
   onClose: () => void
 }
 
+/** Gap kept between the menu and the window edge. */
+const MARGIN = 8
+
 export function ContextMenu({ x, y, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x, y })
 
-  // Keep the menu within the viewport (flip near the right/bottom edges).
+  // Keep the menu within the viewport: pulled back from the right/bottom edges,
+  // and never past the top/left ones — a menu taller than the window used to be
+  // pushed up until its first rows were off-screen. Its height is capped at the
+  // window (below), so there is always room once it's clamped.
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
     const { width, height } = el.getBoundingClientRect()
     setPos({
-      x: Math.min(x, window.innerWidth - width - 8),
-      y: Math.min(y, window.innerHeight - height - 8),
+      x: Math.max(MARGIN, Math.min(x, window.innerWidth - width - MARGIN)),
+      y: Math.max(MARGIN, Math.min(y, window.innerHeight - height - MARGIN)),
     })
   }, [x, y])
 
@@ -94,7 +100,10 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
   // used to close the menu whether the item wanted it or not.
   useEffect(() => {
     const close = (e?: Event) => {
-      if (e?.type === "click" && ref.current?.contains(e.target as Node)) return
+      // Neither a click on an item nor scrolling the menu's own list (a long
+      // one scrolls) is an outside interaction.
+      if ((e?.type === "click" || e?.type === "scroll") && ref.current?.contains(e.target as Node))
+        return
       onClose()
     }
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
@@ -124,7 +133,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     <div
       ref={ref}
       role="menu"
-      className="fixed z-[120] min-w-[200px] overflow-hidden rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]"
+      className="fixed z-[200] max-h-[calc(100vh-16px)] min-w-[200px] overflow-y-auto rounded-md border border-line-strong bg-overlay py-1 text-sm shadow-[var(--shadow)]"
       style={{ left: pos.x, top: pos.y }}
       onClick={(e) => e.stopPropagation()}
       onKeyDown={onKeyDown}

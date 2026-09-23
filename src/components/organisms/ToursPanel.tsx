@@ -30,7 +30,7 @@ export function ToursPanel() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex flex-none items-center gap-1 border-b border-line px-2 py-1.5">
+      <div className="flex flex-none flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
         <Button variant="ghost" size="sm" onClick={newTour}>
           <PlusIcon className="h-3 w-3" /> {t("tours.new")}
         </Button>

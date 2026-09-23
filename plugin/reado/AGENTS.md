@@ -14,6 +14,11 @@ reado comment add --file F --line N [--end M] [--type T] [--note] "<body>"
 reado comment search "<query>"
 ```
 
+A task left on a web page (Reado's browser preview) is anchored to a URL, not a
+line: `reado task show <id>` names the element — its CSS selector, text, HTML and,
+on a dev build of a React/Vue/Svelte app, the component (and source file) that
+rendered it. Start from that component's source, or find the markup by its text.
+
 Workflow: `reado task list` → make the change in the code → verify →
 `reado task done <id>`. Your identity comes from `$READO_AGENT`. Resolve one
 task at a time; never invent ids.

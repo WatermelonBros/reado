@@ -1114,6 +1114,7 @@ fn comment(
                 url: None,
                 x: None,
                 y: None,
+                target: None,
             };
             let res = core::create_comment(root, input, "agent", Some(agent.to_string()))?;
             report(cli, &res.comment, "added");
@@ -1207,12 +1208,37 @@ fn anchor_label(c: &Comment) -> String {
         Scope::Range => format!("{}:{}", c.meta.anchor.file, c.meta.anchor.start_line),
         Scope::File => c.meta.anchor.file.clone(),
         Scope::Project => "(project)".to_string(),
-        Scope::Web => c
-            .meta
-            .anchor
-            .url
-            .clone()
-            .unwrap_or_else(|| "(web)".to_string()),
+        Scope::Web => {
+            let url = c.meta.anchor.url.as_deref().unwrap_or("(web)");
+            match c
+                .meta
+                .anchor
+                .target
+                .as_ref()
+                .and_then(|t| t.selector.as_deref())
+            {
+                Some(selector) => format!("{url} {selector}"),
+                None => url.to_string(),
+            }
+        }
+    }
+}
+
+/// What a design comment was left on, for the agent resolving it — the page's
+/// counterpart of reading the code at `file:line`.
+fn print_web_target(c: &Comment) {
+    let Some(t) = c.meta.anchor.target.as_ref() else {
+        return;
+    };
+    for (label, value) in [
+        ("element", &t.selector),
+        ("component", &t.component),
+        ("text", &t.text),
+        ("html", &t.html),
+    ] {
+        if let Some(v) = value.as_deref().filter(|v| !v.is_empty()) {
+            println!("    {label}: {v}");
+        }
     }
 }
 
@@ -1240,6 +1266,7 @@ fn print_task_line(c: &Comment) {
 
 fn print_task_full(c: &Comment) {
     print_task_line(c);
+    print_web_target(c);
     println!();
     for m in &c.messages {
         let who = match (m.author.as_str(), m.agent.as_deref()) {
@@ -1278,6 +1305,46 @@ fn resolve_root(explicit: Option<&str>) -> Result<String, Box<dyn std::error::Er
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_design_comment_is_labelled_with_its_page_and_element() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_str().unwrap();
+        let input = NewComment {
+            file: String::new(),
+            scope: Scope::Web,
+            start_line: 0,
+            end_line: 0,
+            comment_type: core::CommentType::Note,
+            kind: CommentKind::Task,
+            body: "Make it bigger".into(),
+            context: Default::default(),
+            url: Some("http://localhost:5173/cart".into()),
+            x: Some(10.0),
+            y: Some(20.0),
+            target: Some(core::WebTarget {
+                path: vec![1, 2],
+                dx: 4.0,
+                dy: 3.0,
+                selector: Some("#checkout > button".into()),
+                text: Some("Pay now".into()),
+                html: None,
+                component: Some("Checkout › PayButton".into()),
+            }),
+        };
+        let c = core::create_comment(root, input, "user", None)
+            .unwrap()
+            .comment;
+        // Read back from disk, the way the agent's `reado task list` sees it.
+        let c = core::list_comments(root)
+            .into_iter()
+            .find(|x| x.meta.id == c.meta.id)
+            .unwrap();
+        assert_eq!(
+            anchor_label(&c),
+            "http://localhost:5173/cart #checkout > button"
+        );
+    }
 
     #[test]
     fn a_route_reads_from_an_argument_or_a_file() {

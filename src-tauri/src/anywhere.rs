@@ -1513,6 +1513,7 @@ async fn comments_post(
         url: None,
         x: None,
         y: None,
+        target: None,
     };
     let created = core::create_comment(&root, new, "phone", None)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1673,6 +1674,7 @@ async fn prereview_approve(
                 url: None,
                 x: None,
                 y: None,
+                target: None,
             },
             "human",
             None,

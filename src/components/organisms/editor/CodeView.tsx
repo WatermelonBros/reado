@@ -1037,6 +1037,25 @@ export function CodeView({
     view.dispatch({ effects: setBlock.of(block) })
   }, [activeId, comments])
 
+  // A thread hangs from its line, so one opened near the bottom of the editor ran
+  // past it — under the panel below, most of the box out of sight. Scroll the
+  // code up by what's missing instead: the box stays attached to its line (the
+  // connector depends on it), and the room past the last line
+  // (`--code-scroll-past-end`) is there for exactly this. Waits a frame, for the
+  // box to have laid out its height.
+  useEffect(() => {
+    if (!activeId) return
+    const frame = requestAnimationFrame(() => {
+      const wrap = wrapRef.current
+      const box = wrap?.querySelector<HTMLElement>("[data-comment-thread]")
+      const view = viewRef.current
+      if (!wrap || !box || !view) return
+      const overflow = box.offsetTop + box.offsetHeight + 8 - wrap.clientHeight
+      if (overflow > 0) view.scrollDOM.scrollTop += overflow
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [activeId])
+
   // Re-position overlays as the editor scrolls or the window resizes, and
   // remember the scroll offset (debounced) so the session can restore it.
   useEffect(() => {

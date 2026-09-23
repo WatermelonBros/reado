@@ -46,6 +46,8 @@ jobs:
               - 'vite.config.ts'
               - 'vitest.config.ts'
               - 'biome.jsonc'
+              # The page bridge lives in Rust but is tested in the browser project.
+              - 'src-tauri/src/preview.rs'
             rust:
               - *shared
               - 'crates/**'
@@ -106,11 +108,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - if: env.RUN == 'true'
         run: pnpm typecheck
-      # Same suite (logic + UI, happy-dom) on every OS; Linux additionally
+      # Same suite (logic + UI, happy-dom) on every OS — the real-browser
+      # project runs in its own job below; Linux additionally
       # measures coverage so the PR gets a comment. Still no threshold — the
       # comment is a report, not a gate.
       - if: env.RUN == 'true'
-        run: pnpm ${{ matrix.os == 'ubuntu-latest' && 'test:coverage' || 'test' }}
+        run: pnpm ${{ matrix.os == 'ubuntu-latest' && 'test:coverage' || 'test:unit' }}
       - name: Comment coverage on the PR
         # Fork PRs get a read-only token and can't comment; skip rather than fail.
         if: >-
@@ -120,6 +123,39 @@ jobs:
         uses: davelosert/vitest-coverage-report-action@v2
       - if: env.RUN == 'true'
         run: pnpm build
+
+  # The whole app in real Chromium against a fake backend: the layout checks
+  # happy-dom can't make (a menu under a panel, a popover off the window). One
+  # OS is enough — it's the browser engine under test, not the platform.
+  browser:
+    name: Browser layout (Chromium)
+    needs: changes
+    runs-on: ubuntu-latest
+    env:
+      RUN: ${{ needs.changes.outputs.frontend }}
+    steps:
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        uses: pnpm/action-setup@v4
+      - if: env.RUN == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: env.RUN == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: env.RUN == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: env.RUN == 'true'
+        run: pnpm test:browser
+      # What the page looked like when a check failed.
+      - if: failure() && env.RUN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-screenshots
+          path: src/**/__screenshots__/
+          if-no-files-found: ignore
 
   rust-crates:
     name: Rust crates (${{ matrix.os }})

@@ -857,6 +857,22 @@ export interface Anchor {
   url?: string
   x?: number
   y?: number
+  /** `scope: "web"`: the element under the click, which the pin follows. */
+  target?: WebTarget
+}
+
+/** Where on a page a design comment was left: an element, by its child-index
+ *  path from `<html>`, and the click's offset from its top-left corner — plus
+ *  what the element is, for whoever resolves the comment: a CSS selector, its
+ *  text, the start of its HTML, and the component that rendered it, if known. */
+export interface WebTarget {
+  path: number[]
+  dx: number
+  dy: number
+  selector?: string
+  text?: string
+  html?: string
+  component?: string | null
 }
 
 export interface Context {
@@ -930,6 +946,7 @@ export interface NewComment {
   url?: string
   x?: number
   y?: number
+  target?: WebTarget
 }
 
 export interface CreateResult {

@@ -230,8 +230,8 @@ export function LayoutControls() {
           <LayoutIcon className="h-3.5 w-3.5" />
         </Menu.Trigger>
         <Portal>
-          <Menu.Positioner className="z-[120]">
-            <Menu.Content className="min-w-60 rounded-lg border border-line bg-overlay p-1 shadow-[var(--shadow)] focus:outline-none">
+          <Menu.Positioner>
+            <Menu.Content className="z-[200] min-w-60 rounded-lg border border-line bg-overlay p-1 shadow-[var(--shadow)] focus:outline-none">
               <Menu.ItemGroup>
                 <Menu.ItemGroupLabel className={GROUP}>
                   {t("layout.visibility")}

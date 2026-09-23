@@ -11,6 +11,62 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **A comment on a web page says which element it is about.** A code comment
+  hands the agent `file:line`; a comment left in the browser preview handed it a
+  URL and a pair of coordinates. It now records the element it was left on — a
+  readable CSS selector, its visible text, the start of its HTML and, on a dev
+  build of a React, Vue or Svelte app, the component that rendered it (with its
+  source file when the framework keeps one). The agent reads it from the MCP
+  resources and from `reado task show`; `reado task list` labels the task with
+  the page and the element.
+
+### Fixed
+
+- **Menus and popovers open above notifications and panels.** Their stacking
+  order was set on Ark's positioner, which zag overwrites with the z-index of the
+  panel *inside* it — so every one of them sat at `auto`, and the "language
+  server isn't installed" notice covered the status bar's go-to-line and indent
+  popovers. The order now lives on the panel, where zag reads it.
+- **A menu taller than the window scrolls instead of running off it.** In a
+  small window the file tree's right-click menu was pushed up until its first
+  rows ("Comment on file", "Ask AI for an audit", …) were off-screen and out of
+  reach, and the layout menu ran past the bottom. Every menu, popover and select
+  is now capped at the room it has, and the right-click menu never starts past
+  the top or left edge.
+- **One tooltip at a time on a tab's close button.** Hovering it showed the
+  tab's path and "Close" stacked on top of each other; a control with a tooltip
+  of its own now speaks for itself.
+- **The status bar gives way instead of overlapping.** In a narrow window or at a
+  large interface zoom its items were squeezed under their own text until they
+  covered each other — and the cursor position could no longer be clicked. The
+  path shrinks first, the cursor position never does, and items that don't fit
+  leave whole rather than half-cut.
+- **Nothing is cut off in a small window or at a large zoom.** Checking every
+  screen at three window sizes and three interface zooms found controls sliced
+  at a panel's edge: the Output panel's Follow button and filter, the Tours and
+  AI pre-review headers, the bottom panel's last tab. Toolbars now wrap onto a
+  second row, a long label shortens with an ellipsis, and the panel's tabs
+  scroll. The sidebar no longer collapses to a 40px sliver when the window is too
+  small for it and the editor both (800×600 at 200%): the two share the room.
+- **Comment boxes stay inside the editor.** A thread opened on one of the last
+  visible lines hung past the editor, under the panel below; the code now scrolls
+  up until the box fits, keeping it attached to its line. The new-comment box was
+  placed on a guess at its height, and in a short editor (a small window, a large
+  zoom, Italian labels) ran off the bottom; it measures itself now, and scrolls
+  when the editor is shorter than it.
+- **A comment's pin stays on what it was left on.** Pins in the browser preview
+  were placed at the document point of the click, so on a page that scrolls in a
+  pane of its own (most apps) the content slid out from under them, and a resize
+  that reflowed the page left them pointing at something else. A new comment now
+  remembers the element it was left on and the pin follows that element through
+  scrolling, resizing and reflows; the comment card follows it too. Comments made
+  before keep their old position.
+- **Comments in the browser preview open inside the page.** The comment box, the
+  comment card and the right-click menu opened wherever the click was, and near
+  the right or bottom edge hung out of the visible page; they are pulled back in.
+
 ## [1.23.2] — 2026-09-22
 
 ### Fixed
