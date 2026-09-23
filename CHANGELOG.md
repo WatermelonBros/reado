@@ -11,6 +11,13 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **On Windows and Linux the title bar fits a narrow window.** The search pill in
+  the middle kept a minimum width, so below about 900px it spilled over the
+  Discord button next to the menu bar and covered it. It now takes the space the
+  row leaves and shortens the project name instead.
+
 ## [1.24.0] — 2026-09-23
 
 ### Added

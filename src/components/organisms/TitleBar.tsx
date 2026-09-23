@@ -141,12 +141,18 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
   const paletteKey = shortcutFor("palette:commands", keybindings)
 
   // The Command Center pill (centered): project name + its key, opens the palette.
+  // On macOS it floats over the whole window, so a floor keeps it readable. On
+  // Win/Linux it sits in a row with the menu bar and the window controls, and a
+  // floor there overflowed a narrow window: at 800px the pill spilled over the
+  // Discord button. There it takes what the row leaves and truncates the name.
   const pill = projectName ? (
     <button
       type="button"
       onClick={openPalette}
       title={t("titlebar.search")}
-      className="pointer-events-auto flex h-6 w-[min(560px,52vw)] min-w-[280px] items-center gap-2 rounded-md border border-line bg-surface/70 px-2.5 text-xs text-muted transition-colors hover:border-accent/40 hover:bg-surface hover:text-ink"
+      className={`pointer-events-auto flex h-6 w-[min(560px,52vw)] items-center gap-2 rounded-md border border-line bg-surface/70 px-2.5 text-xs text-muted transition-colors hover:border-accent/40 hover:bg-surface hover:text-ink ${
+        isMac ? "min-w-[280px]" : "min-w-0 max-w-full"
+      }`}
     >
       <SearchIcon className="h-3 w-3 flex-none opacity-70" />
       <span className="truncate">{projectName}</span>

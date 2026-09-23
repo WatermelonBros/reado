@@ -1,8 +1,18 @@
 // The language-server manifests and the disabled-extension store.
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import lspRs from "../../../src-tauri/src/lsp.rs?raw"
 
 vi.mock("../logger", () => ({ createLogger: () => ({ info: vi.fn() }) }))
+// `toggle` asks the marketplace, through a fire-and-forget `import()`, whether
+// the change needs a reload. Left pending, that import could outlive the file: it
+// then loaded the real module graph (marketplace → api → Tauri's event bridge)
+// after the environment was torn down, and the run failed on "cannot load after
+// teardown" — now and then, on a slow runner. The stub keeps it cheap; the
+// afterEach below makes sure it has settled before the file ends.
+vi.mock("../marketplace", () => ({
+  changeNeedsReload: () => false,
+  useMarketplace: { getState: () => ({ byId: () => undefined, noteReloadNeeded: () => {} }) },
+}))
 
 import {
   currentOS,
@@ -21,6 +31,7 @@ const ext = (install: LangServerExt["install"]): LangServerExt => ({
 })
 
 beforeEach(() => useExtensions.setState({ disabled: [] }))
+afterEach(() => vi.dynamicImportSettled())
 
 describe("currentOS", () => {
   it("reads the platform off the user agent", () => {
