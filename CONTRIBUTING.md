@@ -99,6 +99,20 @@ Styling uses Tailwind CSS 4. The OKLCH theme tokens live in
 theme in `src/styles/app.css` via `@theme inline`, so semantic utilities like
 `bg-surface` and `text-muted` stay theme-reactive.
 
+## Open core and the official build
+
+Everything in this repository is MIT and is the whole app you get when you build
+it yourself. The official binaries on the Releases page are built from this code
+plus a few closed modules for paid features that need our servers (accounts,
+cloud sync, team features). Those modules plug in through a handful of extension
+points — `boot()` in `src/boot.tsx`, the UI slots in `src/lib/slots.ts`, and
+`run_with` / `register_arg_handler` in `src-tauri/src/lib.rs` — and never patch
+this code. In a build from this repository the slots stay empty.
+
+Pull requests for anything that works locally are welcome here. Features that
+depend on a hosted service (sign-in, cloud storage, relays) belong to the official
+build, so please open an issue before starting one.
+
 ## Commit messages
 
 Keep them clear and imperative ("Add orphans panel", not "added stuff"). Group

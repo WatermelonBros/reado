@@ -32,7 +32,9 @@ export default defineConfig({
         "src/**/*.test.ts",
         "src/**/*.uitest.{ts,tsx}",
         "src/test/**",
-        "src/main.tsx", // app entry / bootstrap
+        "src/main.tsx", // app entry
+        "src/boot.tsx", // bootstrap
+        "src/lib/slotPreview.tsx", // dev-only slot placeholders
         "src/lib/automation.ts", // dev-only test bridge, never ships
         "src/**/*.d.ts",
         "src/i18n/locales/**", // data

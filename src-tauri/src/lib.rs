@@ -20,6 +20,7 @@ mod fs;
 mod git;
 mod history;
 mod index;
+mod instance_args;
 mod log;
 mod lsp;
 mod mascot;
@@ -39,26 +40,38 @@ mod testing;
 mod vault;
 mod watcher;
 
+pub use instance_args::register_arg_handler;
+
 /// Build and run the Tauri application.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    run_with(|builder| builder)
+}
+
+/// Build and run the application, letting a build that embeds Reado extend it.
+///
+/// `extend` receives the builder with every core plugin, state and handler already
+/// configured, and runs last, so single-instance stays the first plugin. Add
+/// capabilities as *plugins* (each carries its own commands and setup): calling
+/// `invoke_handler`, `setup` or `on_window_event` here would replace the core's.
+/// To receive links the OS opens while Reado runs, call [`register_arg_handler`].
+pub fn run_with(extend: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry>) {
     // Two things in this process speak TLS — the Anywhere server and the
     // extension marketplace's HTTP client — and rustls refuses to guess which
     // crypto provider to use when more than one is compiled in. Pin it once,
     // here, rather than letting whichever initialises first decide.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // Single-instance MUST be the first plugin: a second launch (e.g. the OS
         // opening a file with Reado while it's running) forwards its argv here
         // instead of spawning a rival process, and we open the file(s) in-place.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            for arg in argv.iter().skip(1) {
-                let p = std::path::Path::new(arg);
-                if p.is_file() {
-                    fileopen::open_path(app, p);
-                }
+            let (files, rest) = instance_args::split(argv.get(1..).unwrap_or_default());
+            for p in &files {
+                fileopen::open_path(app, p);
             }
+            instance_args::forward(app, &rest);
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -296,7 +309,8 @@ pub fn run() {
             vault::vault_secret,
             vault::vault_otp,
             vault::vault_create,
-        ])
+        ]);
+    extend(builder)
         .build(tauri::generate_context!())
         .expect("error while building Reado")
         .run(on_run_event);

@@ -12,7 +12,7 @@ agente              ◀──result───────────────
 
 ## Pezzi
 - `vite-plugin.mjs` — relay long-poll dentro il dev server (montato su `/__uidriver`). Caricato da `vite.config.ts`.
-- `../../src/lib/automation.ts` — bridge dev-only iniettato in `main.tsx` sotto `import.meta.env.DEV`. Esegue i comandi nel DOM reale.
+- `../../src/lib/automation.ts` — bridge dev-only iniettato in `boot.tsx` sotto `import.meta.env.DEV`. Esegue i comandi nel DOM reale.
 - `drive.mjs` — CLI: `node scripts/uidriver/drive.mjs <action> '<jsonArgs>'`.
 
 ## Prerequisito

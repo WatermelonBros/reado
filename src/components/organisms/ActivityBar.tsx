@@ -32,6 +32,7 @@ import {
   TourIcon,
   UnlinkIcon,
 } from "@/components/atoms/icons"
+import { Slot } from "@/components/atoms/Slot"
 import type { MessageKey } from "@/i18n"
 import { useBookmarks } from "@/lib/bookmarks"
 import { openCount, useComments } from "@/lib/comments"
@@ -279,6 +280,7 @@ export function ActivityBar() {
           size="lg"
           tooltipPlacement="right"
         />
+        <Slot name="activitybar.account" />
       </div>
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />

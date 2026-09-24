@@ -9,6 +9,7 @@ import { Input } from "@/components/atoms/Input"
 import { CloseIcon, CodeIcon, SearchIcon } from "@/components/atoms/icons"
 import { Modal } from "@/components/atoms/Modal"
 import { SegmentedControl } from "@/components/atoms/SegmentedControl"
+import { Slot } from "@/components/atoms/Slot"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { SettingsJson } from "@/components/organisms/SettingsJson"
 import type { MessageKey } from "@/i18n"
@@ -163,6 +164,7 @@ function AppVersion() {
     <div className="flex flex-none items-center justify-between gap-4 border-t border-line px-6 py-3 text-xs">
       <div className="flex min-w-0 items-center gap-3">
         <span className="flex-none text-faint">Reado {version ? `v${version}` : "—"}</span>
+        <Slot name="settings.footer" />
         <ResetAll />
       </div>
       <div className="flex flex-none items-center gap-2">

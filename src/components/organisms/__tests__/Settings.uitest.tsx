@@ -43,9 +43,11 @@ vi.mock("../../../lib/defaults", () => ({ makeDefaultApp }))
 vi.mock("../../../lib/tour", () => ({ useTourGuide: { getState: () => ({ run: tourRun }) } }))
 
 import { Settings } from "@/components/organisms/Settings"
+import { registerSlot, resetSlotsForTest } from "@/lib/slots"
 import { usePalette, useSettings } from "@/lib/store"
 
 beforeEach(() => {
+  resetSlotsForTest()
   usePalette.setState({ settingsOpen: true })
 })
 
@@ -102,6 +104,12 @@ describe("Settings", () => {
     expect(await screen.findByText("settings.fontSize")).toBeInTheDocument()
     expect(screen.getByText("settings.ruler")).toBeInTheDocument()
     expect(screen.queryByText("settings.themeMode")).not.toBeInTheDocument()
+  })
+
+  it("the footer row shows what a build registered for it", async () => {
+    registerSlot("settings.footer", () => <span>Backend v9</span>)
+    render(<Settings />)
+    expect(await screen.findByText("Backend v9")).toBeInTheDocument()
   })
 
   it("changing a control updates useSettings", async () => {
