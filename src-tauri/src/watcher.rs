@@ -53,8 +53,9 @@ struct FileChanged {
 /// they are kept apart rather than merged into one root-scoped matcher (`/dist`
 /// in `app/.gitignore` means `app/dist`, not `<root>/dist`).
 ///
-/// ponytail: read once, at watch time. A `.gitignore` added or edited later is
-/// picked up on the next project open — reload it here if that ever bites.
+/// Rebuilt whenever a flush carries a [rule file](is_rule_file): a project
+/// opened before its `.gitignore` or `Cargo.toml` existed would otherwise go on
+/// reporting every file its first `vite build` or `cargo build` wrote.
 fn ignore_matchers(root: &Path) -> Vec<Gitignore> {
     let mut builder = GitignoreBuilder::new(root);
     let _ = builder.add(root.join(".gitignore"));
@@ -78,19 +79,23 @@ fn ignore_matchers(root: &Path) -> Vec<Gitignore> {
     let mut matchers = vec![builder.build().unwrap_or_else(|_| Gitignore::empty())];
 
     // The walk honours what it has found so far, so it never descends into an
-    // ignored tree looking for more ignore files.
+    // ignored tree looking for more ignore files. A nested `Cargo.toml` counts
+    // even with no `.gitignore` beside it: `app/src-tauri/target` is Cargo's.
+    let mut dirs = std::collections::BTreeSet::new();
     for entry in WalkBuilder::new(root).hidden(false).build().flatten() {
-        if entry.depth() == 0 || entry.file_name() != ".gitignore" {
+        if entry.depth() == 0 || !is_rule_file(entry.path()) {
             continue;
         }
-        let Some(dir) = entry.path().parent() else {
-            continue;
-        };
-        if dir == root {
-            continue; // already in the root matcher
+        match entry.path().parent() {
+            Some(dir) if dir != root => {
+                dirs.insert(dir.to_path_buf());
+            }
+            _ => {} // the root's are already in the root matcher
         }
-        let mut nested = GitignoreBuilder::new(dir);
-        let _ = nested.add(entry.path());
+    }
+    for dir in dirs {
+        let mut nested = GitignoreBuilder::new(&dir);
+        let _ = nested.add(dir.join(".gitignore"));
         if dir.join("Cargo.toml").is_file() {
             let _ = nested.add_line(None, "target/");
         }
@@ -99,6 +104,15 @@ fn ignore_matchers(root: &Path) -> Vec<Gitignore> {
         }
     }
     matchers
+}
+
+/// True if `path` is a file [`ignore_matchers`] reads: a `.gitignore`, or a
+/// `Cargo.toml` (which makes the `target/` beside it ignored).
+fn is_rule_file(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|n| n.to_str()),
+        Some(".gitignore" | "Cargo.toml")
+    )
 }
 
 /// True if `path` should be ignored (VCS/Reado internals or ignored output).
@@ -319,7 +333,20 @@ impl Batch {
 
     /// Close the window: move comments across a delete+create rename, then sort
     /// every pending path into a signal, a changed file, or nothing.
-    fn flush(&mut self, root: &Path, matchers: &[Gitignore]) -> Flushed {
+    ///
+    /// A rule file created, edited or removed in this window rebuilds `matchers`
+    /// first, so its rules already apply to the rest of the window — the build
+    /// output written right after a new `.gitignore` is ignored, not reported.
+    /// One inside an already-ignored tree (a package's own `.gitignore` under
+    /// `node_modules/`) changes nothing and costs no walk.
+    fn flush(&mut self, root: &Path, matchers: &mut Vec<Gitignore>) -> Flushed {
+        if self
+            .pending
+            .iter()
+            .any(|p| is_rule_file(p) && !is_ignored(matchers, p))
+        {
+            *matchers = ignore_matchers(root);
+        }
         let mut raised: HashSet<&'static str> = HashSet::new();
         if let Some((from, to)) = pair_rename(root, &self.removed, &self.created) {
             if reado_core::rename_comments(&root.to_string_lossy(), &from, &to).unwrap_or(0) > 0 {
@@ -442,7 +469,7 @@ pub fn start_watching(
     std::thread::spawn(move || {
         // Built here, not in the command: collecting the ignore files walks the
         // project, and `start_watching` is a blocking command — on the UI thread.
-        let matchers = ignore_matchers(&root);
+        let mut matchers = ignore_matchers(&root);
         let mut batch = Batch::default();
         loop {
             match rx.recv_timeout(batch.timeout()) {
@@ -468,7 +495,7 @@ pub fn start_watching(
                     );
                 }
                 Err(RecvTimeoutError::Timeout) => {
-                    let flushed = batch.flush(&root, &matchers);
+                    let flushed = batch.flush(&root, &mut matchers);
                     for file in flushed.files {
                         crate::log::debug(
                             "watcher",
@@ -636,7 +663,7 @@ mod tests {
         assert!(batch.window_start.is_some(), "the window must open");
         assert!(batch.created.is_empty() && batch.removed.is_empty());
         assert_eq!(
-            batch.flush(Path::new("/p"), &[]).signals,
+            batch.flush(Path::new("/p"), &mut vec![]).signals,
             vec!["comments-changed"]
         );
     }
@@ -701,7 +728,7 @@ mod tests {
                 &root.join("src/a.ts"),
             ],
         ));
-        let flushed = batch.flush(root, &ignore_matchers(root));
+        let flushed = batch.flush(root, &mut ignore_matchers(root));
         // Two git files, one event; a directory and git's objects are nothing.
         assert_eq!(flushed.files, vec!["src/a.ts".to_string()]);
         assert_eq!(flushed.signals, vec!["sessions-changed", "git-changed"]);
@@ -753,6 +780,57 @@ mod tests {
         let two = HashSet::from([root.join("b.ts"), root.join("c.ts")]);
         assert_eq!(pair_rename(root, &removed, &two), None);
         assert_eq!(pair_rename(root, &HashSet::new(), &created), None);
+    }
+
+    #[test]
+    fn a_gitignore_added_after_the_watch_started_applies_to_its_own_window() {
+        // The flood this guards: a project opened with no `.gitignore`, which
+        // then got one along with its first `vite build`. Rules read only at
+        // watch time let every file in `dist/` through as `file-changed`.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut matchers = ignore_matchers(root);
+        std::fs::create_dir_all(root.join("dist")).unwrap();
+        std::fs::write(root.join("dist/app.js"), "").unwrap();
+        std::fs::write(root.join(".gitignore"), "dist/\n").unwrap();
+
+        let mut batch = Batch::default();
+        let create = EventKind::Create(CreateKind::File);
+        batch.record(event(create, &[&root.join(".gitignore")]));
+        batch.record(event(create, &[&root.join("dist/app.js")]));
+        // The rule file itself is still a change; what it ignores is not.
+        assert_eq!(
+            batch.flush(root, &mut matchers).files,
+            vec![".gitignore".to_string()]
+        );
+        // And the new rules outlive the window.
+        batch.record(event(create, &[&root.join("dist/app.js")]));
+        assert!(batch.flush(root, &mut matchers).files.is_empty());
+    }
+
+    #[test]
+    fn a_cargo_toml_added_after_the_watch_started_ignores_its_target() {
+        // `cargo build` in a crate that appeared after the project was opened,
+        // with no `.gitignore` beside it (`app/src-tauri`).
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut matchers = ignore_matchers(root);
+        std::fs::create_dir_all(root.join("app/src-tauri/target/debug")).unwrap();
+        std::fs::write(root.join("app/src-tauri/Cargo.toml"), "[package]\n").unwrap();
+        std::fs::write(root.join("app/src-tauri/target/debug/x.d"), "").unwrap();
+
+        let mut batch = Batch::default();
+        batch.record(event(
+            EventKind::Create(CreateKind::File),
+            &[
+                &root.join("app/src-tauri/Cargo.toml"),
+                &root.join("app/src-tauri/target/debug/x.d"),
+            ],
+        ));
+        assert_eq!(
+            batch.flush(root, &mut matchers).files,
+            vec!["app/src-tauri/Cargo.toml".to_string()]
+        );
     }
 
     #[test]

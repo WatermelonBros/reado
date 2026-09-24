@@ -11,6 +11,16 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A project whose `.gitignore` or build setup appears after you open it no
+  longer floods Reado with build output.** The ignore rules were read once, when
+  the project opened, so a `.gitignore` or `Cargo.toml` added later went unseen
+  and every file a following `pnpm install`, `vite build` or `cargo build` wrote
+  was treated as an edit — re-indexed, re-anchored and sent to the language
+  server — until the app slowed to a crawl. The rules are now re-read as soon as
+  such a file is created, changed or removed.
+
 ## [1.24.1] — 2026-09-24
 
 ### Fixed
