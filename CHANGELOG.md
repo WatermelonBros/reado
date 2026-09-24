@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.24.1] — 2026-09-24
+
 ### Fixed
 
 - **On Windows and Linux the title bar fits a narrow window.** The search pill in
@@ -2711,7 +2713,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.24.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.24.1...HEAD
+[1.24.1]: https://github.com/WatermelonBros/reado/compare/v1.24.0...v1.24.1
 [1.24.0]: https://github.com/WatermelonBros/reado/compare/v1.23.2...v1.24.0
 [1.23.2]: https://github.com/WatermelonBros/reado/compare/v1.23.1...v1.23.2
 [1.23.1]: https://github.com/WatermelonBros/reado/compare/v1.23.0...v1.23.1
