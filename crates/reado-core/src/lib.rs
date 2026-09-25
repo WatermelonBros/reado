@@ -37,6 +37,7 @@ mod store;
 
 pub use anchor::*;
 pub use error::*;
+pub use format::{parse_comment, render_comment};
 pub use handoff::*;
 pub use model::*;
 pub use project::*;

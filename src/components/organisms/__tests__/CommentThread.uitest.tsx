@@ -23,6 +23,8 @@ import { CommentThread } from "@/components/organisms/CommentThread"
 import type { Comment } from "@/lib/api"
 import { useComments } from "@/lib/comments"
 import { useNotice } from "@/lib/notice"
+import { registerSlot, resetSlotsForTest } from "@/lib/slots"
+import { useProject } from "@/lib/store"
 
 function mkComment(over: Partial<Comment> = {}): Comment {
   return {
@@ -308,5 +310,31 @@ describe("editing the root message", () => {
     seed()
     renderThread(mkComment())
     expect(screen.getAllByRole("button", { name: "comment.edit" })).toHaveLength(1)
+  })
+})
+
+describe("CommentThread — comment.actions slot", () => {
+  beforeEach(() => {
+    cleanup()
+    resetSlotsForTest()
+    seed()
+    useProject.setState({ root: "/p" })
+  })
+
+  it("adds nothing when nothing is registered", () => {
+    renderThread(mkComment())
+    expect(screen.queryByTestId("slot-action")).not.toBeInTheDocument()
+  })
+
+  it("gives the contribution the comment id and the project root, and follows the comment", () => {
+    registerSlot("comment.actions", ({ commentId, root }) => (
+      <span data-testid="slot-action">
+        {commentId}@{root}
+      </span>
+    ))
+    const { rerender } = render(<CommentThread comment={mkComment()} top={0} onClose={vi.fn()} />)
+    expect(screen.getByTestId("slot-action")).toHaveTextContent("c1@/p")
+    rerender(<CommentThread comment={mkComment({ id: "c2" })} top={0} onClose={vi.fn()} />)
+    expect(screen.getByTestId("slot-action")).toHaveTextContent("c2@/p")
   })
 })

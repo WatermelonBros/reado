@@ -5,6 +5,20 @@ use crate::{CommentMeta, Error, Message, Result};
 
 const REPLY_PREFIX: &str = "<!-- reado:reply ";
 
+/// Parse the text of a comment file into its metadata and thread.
+///
+/// Public so tools that work on comment files — the official build's sync engine,
+/// which merges two versions of one comment — use this crate's format instead of a
+/// copy of it.
+pub fn parse_comment(text: &str) -> Result<(CommentMeta, Vec<Message>)> {
+    from_markdown(text)
+}
+
+/// Render metadata and thread back into the comment file format.
+pub fn render_comment(meta: &CommentMeta, messages: &[Message]) -> Result<String> {
+    to_markdown(meta, messages)
+}
+
 pub(crate) fn to_markdown(meta: &CommentMeta, messages: &[Message]) -> Result<String> {
     let front = serde_yaml::to_string(meta).map_err(|e| Error::Yaml(e.to_string()))?;
     let mut out = format!("---\n{front}---\n\n");
@@ -189,5 +203,64 @@ mod tests {
         // A comment written before targets existed still reads, without one.
         let (old, _) = from_markdown(&to_markdown(&sample_meta(), &[]).unwrap()).unwrap();
         assert_eq!(old.anchor.target, None);
+    }
+}
+
+#[cfg(test)]
+mod public_api_tests {
+    use super::*;
+    use crate::{create_comment, reado_dir, CommentKind, CommentType, NewComment, Scope};
+
+    #[test]
+    fn parse_render_parse_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        let c = create_comment(
+            &root,
+            NewComment {
+                file: "src/a.ts".into(),
+                scope: Scope::Range,
+                start_line: 3,
+                end_line: 4,
+                comment_type: CommentType::Bug,
+                kind: CommentKind::Task,
+                body: "First line\n\nSecond paragraph".into(),
+                context: Default::default(),
+                url: None,
+                x: None,
+                y: None,
+                target: None,
+            },
+            "me",
+            None,
+        )
+        .unwrap()
+        .comment;
+        crate::add_reply(
+            &root,
+            &c.meta.id,
+            "agent",
+            Some("claude-code".into()),
+            "Done.".into(),
+        )
+        .unwrap();
+        let path = reado_dir(&root)
+            .join("comments")
+            .join(format!("{}.md", c.meta.id));
+        let text = std::fs::read_to_string(path).unwrap();
+
+        let (meta, messages) = parse_comment(&text).unwrap();
+        let again = render_comment(&meta, &messages).unwrap();
+        let (meta2, messages2) = parse_comment(&again).unwrap();
+
+        assert_eq!(
+            serde_json::to_value(&meta).unwrap(),
+            serde_json::to_value(&meta2).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(&messages).unwrap(),
+            serde_json::to_value(&messages2).unwrap()
+        );
+        assert_eq!(messages2.len(), 2);
     }
 }

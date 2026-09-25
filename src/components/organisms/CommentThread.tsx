@@ -24,6 +24,7 @@ import {
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, SendIcon } from "@/components/atoms/icons"
 import { Select } from "@/components/atoms/Select"
+import { Slot } from "@/components/atoms/Slot"
 import { Textarea } from "@/components/atoms/Textarea"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { dispatchToAgent } from "@/lib/agents"
@@ -31,6 +32,7 @@ import type { Comment, CommentState, CommentType } from "@/lib/api"
 import { useComments } from "@/lib/comments"
 import { notifyError } from "@/lib/notice"
 import { composeSingleTaskPrompt } from "@/lib/review"
+import { useProject } from "@/lib/store"
 
 const fmtTime = (ms: number) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
@@ -44,6 +46,7 @@ interface Props {
 }
 
 export function CommentThread({ comment, top, onClose }: Props) {
+  const root = useProject((s) => s.root)
   const { patch, reply, setState, remove } = useComments()
   const { t } = useTranslation()
   const [replyText, setReplyText] = useState("")
@@ -144,6 +147,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
             icon={<SendIcon className="h-3.5 w-3.5" />}
           />
         )}
+        <Slot name="comment.actions" props={{ commentId: comment.id, root }} />
         <IconButton
           size="sm"
           label={t("settings.close")}

@@ -10,26 +10,44 @@
 import type { ComponentType } from "react"
 
 /**
+ * Each slot, and the context it passes to what fills it:
  * - `activitybar.account` — bottom of the activity bar, under Settings.
  * - `settings.footer` — the settings' bottom row, beside the Reado version.
+ * - `statusbar.left` — the status bar's left group, before the file path.
+ * - `comment.actions` — a comment thread's header, beside its own actions; gets the
+ *   comment's id and the project root it belongs to.
+ *
+ * Registration is typed by this map, so a contribution that needs context cannot be
+ * put in a slot that gives none.
  */
-export type SlotName = "activitybar.account" | "settings.footer"
+export interface SlotProps {
+  "activitybar.account": Record<string, never>
+  "settings.footer": Record<string, never>
+  "statusbar.left": Record<string, never>
+  "comment.actions": { commentId: string; root: string }
+}
+
+export type SlotName = keyof SlotProps
 
 /** A registered component, with an id that is stable for the life of the app. */
-export interface SlotContribution {
+export interface SlotContribution<N extends SlotName = SlotName> {
   id: number
-  Content: ComponentType
+  Content: ComponentType<SlotProps[N]>
 }
 
 const slots = new Map<SlotName, SlotContribution[]>()
 let nextId = 0
 
-export function registerSlot(name: SlotName, Content: ComponentType): void {
-  slots.set(name, [...(slots.get(name) ?? []), { id: nextId++, Content }])
+export function registerSlot<N extends SlotName>(
+  name: N,
+  Content: ComponentType<SlotProps[N]>,
+): void {
+  const entry = { id: nextId++, Content } as unknown as SlotContribution
+  slots.set(name, [...(slots.get(name) ?? []), entry])
 }
 
-export function slotContents(name: SlotName): readonly SlotContribution[] {
-  return slots.get(name) ?? []
+export function slotContents<N extends SlotName>(name: N): readonly SlotContribution<N>[] {
+  return (slots.get(name) ?? []) as unknown as SlotContribution<N>[]
 }
 
 /** Test-only: forget every registration. */

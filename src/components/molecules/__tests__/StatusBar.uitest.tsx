@@ -41,6 +41,7 @@ import { useComments } from "@/lib/comments"
 import { useDocInfo } from "@/lib/docInfo"
 import { useMascot } from "@/lib/mascot"
 import { useNotice } from "@/lib/notice"
+import { registerSlot, resetSlotsForTest } from "@/lib/slots"
 import { useCursor, usePalette, useProject } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
 
@@ -291,5 +292,17 @@ describe("StatusBar branch switcher", () => {
     render(<StatusBar />)
     expect(screen.queryByText("UTF-8")).not.toBeInTheDocument()
     expect(screen.getByText("windows-1252")).toBeInTheDocument()
+  })
+})
+
+describe("StatusBar — statusbar.left slot", () => {
+  it("renders a registered contribution at the start of the left group", () => {
+    resetSlotsForTest()
+    registerSlot("statusbar.left", () => <span data-testid="sync">synced</span>)
+    render(<StatusBar />)
+    const sync = screen.getByTestId("sync")
+    const group = sync.parentElement as HTMLElement
+    expect(group.firstElementChild).toBe(sync)
+    resetSlotsForTest()
   })
 })

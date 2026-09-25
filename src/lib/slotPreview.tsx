@@ -6,9 +6,14 @@
  *
  * `boot()` loads this only under that flag in a dev build; it never ships.
  */
-import { registerSlot, type SlotName } from "./slots"
+import { registerSlot } from "./slots"
 
-const SLOTS: SlotName[] = ["activitybar.account", "settings.footer"]
+const SLOTS = [
+  "activitybar.account",
+  "settings.footer",
+  "statusbar.left",
+  "comment.actions",
+] as const
 
 function Placeholder({ name }: { name: string }) {
   return (

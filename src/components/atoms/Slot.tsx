@@ -5,7 +5,7 @@
  */
 import { Component, type ComponentType, type ErrorInfo, type ReactNode } from "react"
 import { log } from "@/lib/logger"
-import { type SlotName, slotContents } from "@/lib/slots"
+import { type SlotName, type SlotProps, slotContents } from "@/lib/slots"
 
 class SlotBoundary extends Component<{ name: string; children: ReactNode }, { failed: boolean }> {
   state = { failed: false }
@@ -27,19 +27,34 @@ class SlotBoundary extends Component<{ name: string; children: ReactNode }, { fa
   }
 }
 
-function Contained({ name, Content }: { name: string; Content: ComponentType }) {
+function Contained<P extends object>({
+  name,
+  Content,
+  props,
+}: {
+  name: string
+  Content: ComponentType<P>
+  props: P
+}) {
   return (
     <SlotBoundary name={name}>
-      <Content />
+      <Content {...props} />
     </SlotBoundary>
   )
 }
 
-export function Slot({ name }: { name: SlotName }) {
+/** A slot that passes no context takes no `props`; one that does requires them. */
+type SlotArgs<N extends SlotName> =
+  SlotProps[N] extends Record<string, never>
+    ? { name: N; props?: undefined }
+    : { name: N; props: SlotProps[N] }
+
+export function Slot<N extends SlotName>({ name, props }: SlotArgs<N>) {
+  const context = (props ?? {}) as SlotProps[N]
   return (
     <>
       {slotContents(name).map(({ id, Content }) => (
-        <Contained key={id} name={name} Content={Content} />
+        <Contained key={id} name={name} Content={Content} props={context} />
       ))}
     </>
   )

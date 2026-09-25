@@ -10,6 +10,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { Input } from "@/components/atoms/Input"
+import { Slot } from "@/components/atoms/Slot"
 import { useChords } from "@/lib/chords"
 import { toRelative } from "@/lib/comments"
 import { goToLine } from "@/lib/docInfo"
@@ -77,6 +78,7 @@ export function StatusBar() {
           the bar's height hides, so an item that doesn't fit leaves whole
           instead of being squeezed under its own text or cut in half. */}
       <div className="flex flex-1 items-center gap-1">
+        <Slot name="statusbar.left" />
         {/* A prefix you can't see is a prefix that eats your next keystroke for
             reasons you can't account for. */}
         {chordPending && (
