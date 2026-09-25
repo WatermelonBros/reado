@@ -13,12 +13,20 @@ commit.
 
 ### Added
 
-- **Your tasks, readable (Pro).** "Show all" in the account menu opens a window
-  with everything assigned to you and the agent queue: the whole thread, the file
-  and line, its state and due date, who wrote it and who assigned it. "Send to my
-  agent" now works on your own tasks too, not only the agent queue, and "Open in
-  the editor" is right there. Arrow keys move through the list. The account menu
-  keeps a short summary and closes when the window opens.
+- **A Team window (Pro).** "Show all" in the account menu, or the palette, opens
+  it on three tabs. **For me**: what's assigned to you and the agent queue, with
+  the whole thread, file and line, state, due date, who wrote it and who assigned
+  it — reply, mark it done, send it to your agent (your own tasks too, not only
+  the queue) or open the code, without leaving the window. **Assigned by me**:
+  what you handed to teammates or a queue, and who has it. **Activity**: replies,
+  resolutions, blocks and new assignments, which no longer vanish with the toast.
+  Arrow keys move through the list; the account menu closes when the window opens.
+- **Your task count on your avatar (Pro).** The avatar in the activity bar shows
+  how many tasks are yours, or a dot when there's new activity.
+- **Team commands in the palette (Pro).** "Team: My tasks", "Team: Assigned by
+  me", "Team: Activity" and "Team: Send my next task to my agent" — the most
+  pressing one in the open project: overdue first, then the earliest due. Each
+  can be bound to a key.
 - **Organizations, one click away.** The account menu has an "Organizations"
   entry, and the account page on the website lists yours with a way to create one.
 
