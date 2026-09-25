@@ -32,8 +32,14 @@ env:
   CARGO_NET_RETRY: "5"
 
 jobs:
+  # A release never builds pro code that fails its checks.
+  pro-checks:
+    uses: ./.github/workflows/pro-ci.yml
+    secrets: inherit
+
   build:
     name: Build (${{ matrix.platform }})
+    needs: pro-checks
     strategy:
       fail-fast: false
       # Serialize: tauri-action merges each platform into the release's

@@ -1,0 +1,108 @@
+# Checks of the official build's closed modules (WatermelonBros/reado-pro), run
+# here because this repository's Actions minutes are free. reado-pro is checked out
+# with the read-only deploy key held in the `release` environment (usable only from
+# main and v* tags); forks and pull requests get no secrets, so the job skips.
+# No pro source is printed or uploaded.
+#
+# Runs on every push to main (the core changed under the pro modules), nightly on
+# the latest reado-pro, on demand, and before every release (release.yml calls it).
+name: Pro checks
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_HTTP_MULTIPLEXING: "false"
+  CARGO_NET_RETRY: "5"
+
+jobs:
+  pro:
+    name: Pro checks
+    runs-on: ubuntu-22.04
+    environment: release
+    env:
+      PRO: ${{ secrets.READO_PRO_DEPLOY_KEY != '' }}
+      # Backend tests that need a database use this one.
+      DATABASE_URL: postgres://reado:reado@localhost:5432/reado
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: reado
+          POSTGRES_PASSWORD: reado
+          POSTGRES_DB: reado
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U reado" --health-interval 5s --health-retries 10
+    steps:
+      - name: No deploy key here (fork or pull request) — nothing to check
+        if: env.PRO != 'true'
+        run: echo "READO_PRO_DEPLOY_KEY is not available; skipping the pro checks."
+
+      - uses: actions/checkout@v4
+        if: env.PRO == 'true'
+        with:
+          persist-credentials: false
+      - name: Check out reado-pro
+        if: env.PRO == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: WatermelonBros/reado-pro
+          ssh-key: ${{ secrets.READO_PRO_DEPLOY_KEY }}
+          path: pro
+          persist-credentials: false
+      - name: Place this commit as reado-pro's core
+        if: env.PRO == 'true'
+        uses: actions/checkout@v4
+        with:
+          path: pro/reado
+          persist-credentials: false
+
+      - name: Install Linux system dependencies
+        if: env.PRO == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: env.PRO == 'true'
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        if: env.PRO == 'true'
+        with:
+          workspaces: |
+            pro/app/src-tauri
+            pro/pro-client/rust
+
+      - uses: pnpm/action-setup@v4
+        if: env.PRO == 'true'
+        with:
+          package_json_file: pro/package.json
+      - uses: actions/setup-node@v4
+        if: env.PRO == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pro/pnpm-lock.yaml
+      - name: Install
+        if: env.PRO == 'true'
+        run: pnpm install --frozen-lockfile --dir pro
+
+      # The app crate's build script checks the CLI sidecar it bundles exists.
+      - name: Build the CLI sidecar
+        if: env.PRO == 'true'
+        run: bash pro/reado/scripts/bundle-cli.sh
+
+      - name: Run the pro checks
+        if: env.PRO == 'true'
+        run: bash pro/scripts/check.sh
