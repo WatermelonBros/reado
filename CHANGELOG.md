@@ -11,6 +11,35 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Organizations, proven by your forge.** At reado.watermelon-studio.it/account/org
+  you can create an organization, invite people by email, and connect its GitHub,
+  GitLab or Bitbucket organization. Connecting is the proof: on GitHub you install
+  the Reado app on the organization, on GitLab and Bitbucket you have to be an
+  owner. Once connected, colleagues who are members there can join on their own,
+  and leave automatically when they leave it. The app shows which organization
+  owns the open project, from its git remote — matched on your machine, so a
+  personal repository never reaches the service. You can also sign in with GitLab
+  or Bitbucket, and link them to an existing account.
+- **Shared comments (Pro).** In a project owned by an organization, comments are
+  shared with its members as you write them: replies from two people at once both
+  survive, and a comment deleted offline goes when you reconnect. Your comment
+  files stay on disk exactly as before — the agent and the `reado` command read
+  them as always. A small cloud at the start of the status bar says whether
+  everything is shared, what's waiting while you're offline, and anything that
+  couldn't be shared. Opening a project that already has comments asks once
+  whether to share them or keep them as private notes, and any comment can be
+  made a private note that stays on your computer.
+- **Assignments and an inbox (Pro).** Assign a shared comment to a teammate or to
+  your organization's agent queue, with an optional due date. The account menu
+  lists what's assigned to you and what's in the agent queue, across projects;
+  "Send to my agent" takes a queued task and hands it to your agent. You're
+  notified in the app when something is assigned to you, or when a comment you
+  wrote or hold gets a reply, is resolved or is blocked — never about your own
+  actions — and a daily email digest can be turned on. A resolved comment shows
+  which teammate resolved it.
+
 ## [1.25.0] — 2026-09-25
 
 ### Added
