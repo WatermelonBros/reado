@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CheckIcon, CloseIcon, InfoIcon, WarningIcon } from "@/components/atoms/icons"
 import { type Toast, useNotice } from "@/lib/notice"
@@ -55,6 +56,19 @@ function ToastItem({ toast }: { toast: Toast }) {
     >
       <Glyph className={`mt-px h-3.5 w-3.5 flex-none ${tone}`} />
       <span className="min-w-0 flex-1 pt-px leading-snug break-words">{toast.text}</span>
+      {toast.action && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="-my-0.5 flex-none"
+          onClick={() => {
+            toast.action?.run()
+            setLeaving(true)
+          }}
+        >
+          {toast.action.label}
+        </Button>
+      )}
       <IconButton
         size="xs"
         label={t("common.dismiss")}

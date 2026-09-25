@@ -65,4 +65,19 @@ describe("Notice", () => {
     await waitForElementToBeRemoved(toast)
     expect(screen.queryByText("bye soon")).not.toBeInTheDocument()
   })
+
+  it("runs a notice's action and dismisses it", async () => {
+    const run = vi.fn()
+    useNotice.getState().show("info", "Luca assigned you a comment", { label: "Open", run })
+    render(<Notice />)
+    await userEvent.click(screen.getByRole("button", { name: "Open" }))
+    expect(run).toHaveBeenCalledOnce()
+    await waitForElementToBeRemoved(() => screen.queryByText("Luca assigned you a comment"))
+  })
+
+  it("shows no action button on a notice without one", () => {
+    useNotice.getState().show("info", "plain")
+    render(<Notice />)
+    expect(screen.getAllByRole("button")).toHaveLength(1) // dismiss only
+  })
 })

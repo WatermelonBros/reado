@@ -12,10 +12,17 @@ import { createLogger, safeError } from "./logger"
 
 export type NoticeKind = "info" | "success" | "error"
 
+/** Something the person can do from the toast ("Open"); choosing it dismisses the toast. */
+export interface NoticeAction {
+  label: string
+  run: () => void
+}
+
 export interface Toast {
   id: number
   kind: NoticeKind
   text: string
+  action?: NoticeAction
 }
 
 /** Most toasts kept on screen at once; older ones drop off a burst. */
@@ -27,7 +34,7 @@ let seq = 0
 export interface NoticeState {
   notices: Toast[]
   /** Push a toast (newest first, capped). Returns its id. */
-  show: (kind: NoticeKind, text: string) => number
+  show: (kind: NoticeKind, text: string, action?: NoticeAction) => number
   /** Remove one toast by id. */
   dismiss: (id: number) => void
   /** Remove all toasts. */
@@ -36,18 +43,18 @@ export interface NoticeState {
 
 export const useNotice = create<NoticeState>((set) => ({
   notices: [],
-  show: (kind, text) => {
+  show: (kind, text, action) => {
     const id = ++seq
-    set((s) => ({ notices: [{ id, kind, text }, ...s.notices].slice(0, MAX_NOTICES) }))
+    set((s) => ({ notices: [{ id, kind, text, action }, ...s.notices].slice(0, MAX_NOTICES) }))
     return id
   },
   dismiss: (id) => set((s) => ({ notices: s.notices.filter((n) => n.id !== id) })),
   clear: () => set({ notices: [] }),
 }))
 
-/** Surface an info/success message. */
-export function notify(kind: NoticeKind, text: string): void {
-  useNotice.getState().show(kind, text)
+/** Surface an info/success message, optionally with one action. */
+export function notify(kind: NoticeKind, text: string, action?: NoticeAction): void {
+  useNotice.getState().show(kind, text, action)
 }
 
 /**
