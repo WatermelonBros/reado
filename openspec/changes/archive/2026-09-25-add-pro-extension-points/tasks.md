@@ -29,7 +29,7 @@
       modules; the slots are filled only by the official build.
 - [x] 4.2 `CHANGELOG.md` under Unreleased (internal: extension points, no user-facing
       change) if the project records such changes; otherwise skip.
-- [ ] 4.3 `pnpm lint && pnpm typecheck && pnpm test && pnpm build`; `cargo fmt/clippy/
+- [x] 4.3 `pnpm lint && pnpm typecheck && pnpm test && pnpm build`; `cargo fmt/clippy/
       test` for all three crates; run the app and confirm the activity bar and settings
       look unchanged; run with `VITE_PREVIEW_SLOTS=1` and check each placeholder
       sits where intended.
