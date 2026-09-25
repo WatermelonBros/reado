@@ -327,15 +327,18 @@
   .reado-blame-gutter {
     border-right: 1px solid var(--border);
   }
+  /* Block and as tall as the gutter element (the line), text centred by a
+     line-height equal to it — `--code-line-height` alone is a multiplier and
+     would scale with this smaller font, leaving the text off its line. */
   .reado-blame {
-    display: inline-block;
+    display: block;
     max-width: 140px;
     overflow: hidden;
     padding: 0 8px;
     color: var(--text-faint);
     font-family: var(--font-ui);
     font-size: 11px;
-    line-height: var(--code-line-height);
+    line-height: calc(var(--code-line-height) * var(--code-font-size, var(--text-md)));
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -434,14 +437,18 @@
     width: 12px;
     cursor: pointer;
   }
+  /* Centred in the gutter element, which CodeMirror sizes to the line. Not a
+     `line-height`: `--code-line-height` is a multiplier, and on this smaller
+     font it made a row shorter than the code's, so the arrow rode high. */
   .reado-test-marker {
-    display: inline-block;
-    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
     color: var(--text-faint);
     opacity: 0.45;
-    text-align: center;
     font-size: 9px;
-    line-height: var(--code-line-height);
+    line-height: 1;
   }
   .reado-test-gutter:hover .reado-test-marker {
     opacity: 1;

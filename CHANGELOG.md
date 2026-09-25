@@ -40,6 +40,13 @@ commit.
   actions — and a daily email digest can be turned on. A resolved comment shows
   which teammate resolved it.
 
+### Fixed
+
+- **The run arrow beside a test, and the blame column, sit level with their line.**
+  Both use smaller text than the code, and took their line height from it, so
+  they drifted a few pixels off the line they belong to — more with a taller line
+  height.
+
 ## [1.25.0] — 2026-09-25
 
 ### Added
