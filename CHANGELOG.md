@@ -27,6 +27,10 @@ commit.
   what you handed to teammates or a queue, and who has it. **Activity**: replies,
   resolutions, blocks and new assignments, which no longer vanish with the toast.
   Arrow keys move through the list; the account menu closes when the window opens.
+- **Workload (Pro).** A tab in the Team window, and "Team: Workload" in the
+  palette, shows who holds what across your organizations: one group per person
+  with their face, open and overdue counts, the most overdue first, each task
+  readable in full — and who has nothing assigned.
 - **Your task count on your avatar (Pro).** The avatar in the activity bar shows
   how many tasks are yours, or a dot when there's new activity.
 - **Team commands in the palette (Pro).** "Team: My tasks", "Team: Assigned by
