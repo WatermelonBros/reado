@@ -3,6 +3,12 @@
 # Triggered by pushing a version tag (e.g. `v0.1.0`) or manually. Produces
 # native installers for macOS (Apple Silicon + Intel), Linux (AppImage + .deb)
 # and Windows (MSI + NSIS), and publishes them to a draft GitHub Release.
+#
+# The binaries published here are the *official* build: this commit plus the
+# closed Pro modules from the private WatermelonBros/reado-pro, checked out with a
+# read-only deploy key held in the `release` environment (usable only from v* tags
+# and main — never from forks or pull requests, which get no secrets). Without that
+# secret the job builds the open-source app alone, exactly as before.
 name: Release
 
 on:
@@ -10,6 +16,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build everything but publish no release (artifacts only)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -44,8 +55,30 @@ jobs:
             args: ""
             rust_target: ""
     runs-on: ${{ matrix.platform }}
+    environment: release
+    env:
+      PRO: ${{ secrets.READO_PRO_DEPLOY_KEY != '' }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
+
+      # The official build wraps this exact commit: reado-pro, with this checkout
+      # placed where its `reado` submodule goes. No source is printed or uploaded;
+      # only the finished bundles leave the runner.
+      - name: Check out the official build (reado-pro)
+        if: env.PRO == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: WatermelonBros/reado-pro
+          ssh-key: ${{ secrets.READO_PRO_DEPLOY_KEY }}
+          path: pro
+          persist-credentials: false
+      - name: Place this commit as the official build's core
+        if: env.PRO == 'true'
+        uses: actions/checkout@v4
+        with:
+          path: pro/reado
+          persist-credentials: false
 
       - name: Install Linux system dependencies
         if: startsWith(matrix.platform, 'ubuntu')
@@ -61,7 +94,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: ${{ env.PRO == 'true' && 'pro/app/src-tauri' || 'src-tauri' }}
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -69,13 +102,18 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile ${{ env.PRO == 'true' && '--dir pro' || '' }}
 
       # Build the CLI sidecar for this matrix target (externalBin requires the
       # binary named for the exact target triple being built).
       - name: Build the CLI sidecar
         shell: bash
-        run: bash scripts/bundle-cli.sh ${{ matrix.rust_target }}
+        run: bash ${{ env.PRO == 'true' && 'pro/reado/' || '' }}scripts/bundle-cli.sh ${{ matrix.rust_target }}
+
+      # The official app's Tauri config is derived from this commit's own.
+      - name: Derive the official build's config
+        if: env.PRO == 'true'
+        run: node pro/app/scripts/conf.mjs
 
       # The release page describes what actually shipped: the CHANGELOG section
       # for this tag, which the release commit already carries.
@@ -105,8 +143,14 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Baked into the Pro modules at compile time (neither is a secret).
+          READO_API_URL: https://api.reado.watermelon-studio.it
+          READO_ENTITLEMENT_PUBKEY: ZnJc5Ah7sgBv9M9aNqNGH9htC8taUHXiJZ28ikAOt3k
         with:
-          tagName: ${{ github.ref_name }}
+          projectPath: ${{ env.PRO == 'true' && 'pro/app' || '.' }}
+          tauriScript: ${{ env.PRO == 'true' && 'pnpm tauri' || '' }}
+          # A dry run names no tag, so tauri-action builds without releasing.
+          tagName: ${{ env.DRY_RUN != 'true' && github.ref_name || '' }}
           releaseName: "Reado ${{ github.ref_name }}"
           releaseBody: ${{ steps.notes.outputs.body }}
           # Publish immediately (not a draft) so the updater's `latest.json` under
@@ -117,7 +161,18 @@ jobs:
           prerelease: false
           # Emit latest.json (the updater manifest) alongside the installers.
           includeUpdaterJson: true
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} ${{ env.PRO == 'true' && '--config src-tauri/tauri.pro.conf.json' || '' }}
+
+      # Dry run only: the bundles as a short-lived artifact, to check before tagging.
+      - name: Upload the bundles (dry run)
+        if: env.DRY_RUN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundles-${{ matrix.platform }}-${{ matrix.rust_target || 'native' }}
+          path: |
+            ${{ env.PRO == 'true' && 'pro/app/src-tauri' || 'src-tauri' }}/target/**/release/bundle/**
+          retention-days: 3
+          if-no-files-found: error
 
   # Announce the finished release in Discord.
   #
