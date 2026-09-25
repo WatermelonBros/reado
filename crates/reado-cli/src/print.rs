@@ -153,7 +153,13 @@ pub(crate) fn print_task_full(c: &Comment) {
         let who = match (m.author.as_str(), m.agent.as_deref()) {
             ("agent", Some(a)) => a.to_string(),
             ("agent", None) => "agent".to_string(),
-            _ => "you".to_string(),
+            // Name the person when the message says who, so an agent working a
+            // shared task knows whose words it is reading.
+            _ => {
+                m.by.as_ref()
+                    .map(|p| p.name.clone())
+                    .unwrap_or_else(|| "you".to_string())
+            }
         };
         println!("— {who}:");
         for line in m.body.lines() {
