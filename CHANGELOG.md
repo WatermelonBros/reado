@@ -11,17 +11,17 @@ commit.
 
 ## [Unreleased]
 
+## [1.26.0] — 2026-09-25
+
 ### Added
 
-- **Organizations, proven by your forge.** At reado.watermelon-studio.it/account/org
-  you can create an organization, invite people by email, and connect its GitHub,
-  GitLab or Bitbucket organization. Connecting is the proof: on GitHub you install
-  the Reado app on the organization, on GitLab and Bitbucket you have to be an
-  owner. Once connected, colleagues who are members there can join on their own,
-  and leave automatically when they leave it. The app shows which organization
-  owns the open project, from its git remote — matched on your machine, so a
-  personal repository never reaches the service. You can also sign in with GitLab
-  or Bitbucket, and link them to an existing account.
+- **Organizations, proven by GitHub.** At reado.watermelon-studio.it/account/org
+  you can create an organization, invite people by email, and connect its GitHub
+  organization by installing the Reado app on it — installing it is the proof that
+  the organization is yours. Once connected, colleagues who are members on GitHub
+  can join on their own, and leave automatically when they leave it. The app shows
+  which organization owns the open project, from its git remote — matched on your
+  machine, so a personal repository never reaches the service.
 - **Shared comments (Pro).** In a project owned by an organization, comments are
   shared with its members as you write them: replies from two people at once both
   survive, and a comment deleted offline goes when you reconnect. Your comment
@@ -2776,7 +2776,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.25.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.26.0...HEAD
+[1.26.0]: https://github.com/WatermelonBros/reado/compare/v1.25.0...v1.26.0
 [1.25.0]: https://github.com/WatermelonBros/reado/compare/v1.24.1...v1.25.0
 [1.24.1]: https://github.com/WatermelonBros/reado/compare/v1.24.0...v1.24.1
 [1.24.0]: https://github.com/WatermelonBros/reado/compare/v1.23.2...v1.24.0
