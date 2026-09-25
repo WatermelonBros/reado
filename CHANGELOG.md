@@ -25,13 +25,16 @@ commit.
   how many tasks are yours, or a dot when there's new activity.
 - **Team commands in the palette (Pro).** "Team: My tasks", "Team: Assigned by
   me", "Team: Activity" and "Team: Send my next task to my agent" — the most
-  pressing one in the open project: overdue first, then the earliest due. Each
-  can be bound to a key.
+  pressing one in the open project: overdue first, then the earliest due. On a
+  shared comment open in its thread, "Team: Take this comment" and "Team: Put
+  this comment in the agent queue". Each can be bound to a key.
 - **Organizations, one click away.** The account menu has an "Organizations"
   entry, and the account page on the website lists yours with a way to create one.
 
 ### Changed
 
+- Due dates on tasks read the way people say them, in the app's language —
+  "yesterday", "tomorrow", "2 Oct" — instead of 2026-10-02.
 - The account menu no longer says whether the open project is personal. When a
   repository needs a decision (two of your organizations claim it, or you could
   join the one that owns it), the status bar says so and asks there.
