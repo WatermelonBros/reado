@@ -25,6 +25,15 @@
 //!
 //! The agent's reply.
 //! ```
+//!
+//! A human message can name who wrote it — `by: {name, user}` in the front-matter
+//! for the root message, `name=` and `user=` on a reply's marker, `%`-escaped:
+//! ```text
+//! <!-- reado:reply author=user name=Ada%20Lovelace user=u_42 at=1718900000000 -->
+//! ```
+//! `user` is a Reado account id, present only when the writer was signed in. Both
+//! are optional: files written without them read as before, and readers that
+//! predate them ignore them.
 
 mod anchor;
 mod error;

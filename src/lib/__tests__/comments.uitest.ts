@@ -13,10 +13,12 @@ const api = vi.hoisted(() => ({
   deleteComment: vi.fn(),
   setAnchor: vi.fn(),
   forgeResolveThread: vi.fn(() => Promise.resolve()),
+  commentWriter: vi.fn(() => Promise.resolve(null)),
 }))
 vi.mock("../api", () => api)
 
 import { useComments } from "@/lib/comments"
+import { useIdentity } from "@/lib/identity"
 
 const C = () => useComments.getState()
 const mkComment = (over: Partial<Comment> = {}): Comment =>
@@ -75,7 +77,7 @@ describe("create / patch / reply / remove", () => {
     const res = await C().create({} as never)
     expect(res.firstComment).toBe(true)
     expect(C().comments.map((c) => c.id)).toEqual(["new"])
-    expect(api.createComment).toHaveBeenCalledWith("/r", {})
+    expect(api.createComment).toHaveBeenCalledWith("/r", {}, undefined)
   })
   it("patch replaces the comment in place", async () => {
     useComments.setState({ comments: [mkComment({ id: "c1", type: "bug" })] })
@@ -89,7 +91,15 @@ describe("create / patch / reply / remove", () => {
       mkComment({ id: "c1", messages: [{ author: "user", body: "hi", createdAt: 0 }] }),
     )
     await C().reply("c1", "hi")
-    expect(api.addReply).toHaveBeenCalledWith("/r", "c1", "user", "hi")
+    expect(api.addReply).toHaveBeenCalledWith("/r", "c1", "user", "hi", undefined, undefined)
+    // Signed in (the official build sets the account), the reply carries it.
+    useIdentity.setState({ account: { name: "Ada", user: "u1", avatarUrl: null } })
+    await useComments.getState().reply("c1", "again")
+    expect(api.addReply).toHaveBeenLastCalledWith("/r", "c1", "user", "again", undefined, {
+      name: "Ada",
+      user: "u1",
+    })
+    useIdentity.setState({ account: null })
     expect(C().comments[0].messages).toHaveLength(1)
   })
   it("setState moves a resolved comment out of the open list and into history", async () => {

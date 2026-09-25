@@ -6,6 +6,7 @@
 import type { ReactElement } from "react"
 import type { MessageKey } from "@/i18n"
 import type { CommentState, CommentType, Message } from "@/lib/api"
+import { isMe } from "@/lib/identity"
 import { ClaudeIcon, CodexIcon, CopilotIcon } from "./icons"
 
 export const COMMENT_TYPES: CommentType[] = ["bug", "refactor", "performance", "question", "note"]
@@ -64,10 +65,13 @@ export function agentBrand(message: Message) {
   return AGENT_BRAND[message.agent] ?? null
 }
 
-/** Display name for a thread message's author. */
+/** Display name for a thread message's author: an agent's name, `you` for your own
+ *  messages (and for ones written before messages named their writer), else the
+ *  teammate's name. */
 export function authorLabel(message: Message, you: string): string {
-  if (message.author !== "agent") return you
-  return message.agent ? (AGENT_NAMES[message.agent] ?? message.agent) : "AI"
+  if (message.author === "agent")
+    return message.agent ? (AGENT_NAMES[message.agent] ?? message.agent) : "AI"
+  return isMe(message.by) ? you : (message.by?.name ?? you)
 }
 
 /** A small colour dot used in badges. */

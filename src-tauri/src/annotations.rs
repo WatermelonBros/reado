@@ -4,15 +4,38 @@
 //! `reado` CLI. This module only adapts those functions to the Tauri command
 //! boundary (string roots in, JSON out, errors mapped to the app error type).
 
-use reado_core::{self as core, Comment, CommentPatch, CommentState, CreateResult, NewComment};
+use std::path::Path;
+
+use reado_core::{
+    self as core, Comment, CommentPatch, CommentState, CreateResult, NewComment, Person,
+};
 
 use crate::error::Result;
 
+/// Who is writing, for a human message: the person the UI says (the official build
+/// passes the signed-in account), else the project's git `user.name`, else nobody.
+fn writer(root: &str, by: Option<Person>) -> Option<Person> {
+    by.filter(|p| !p.name.trim().is_empty()).or_else(|| {
+        crate::git::run_git(Path::new(root), &["config", "user.name"])
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .map(|name| Person { name, user: None })
+    })
+}
+
+/// Who a human message written now in `root` would be signed by, when the UI
+/// passes nobody: the project's git `user.name` — so the thread can say "you".
 #[tauri::command]
-pub fn create_comment(root: String, input: NewComment) -> Result<CreateResult> {
+pub fn comment_writer(root: String) -> Option<Person> {
+    writer(&root, None)
+}
+
+#[tauri::command]
+pub fn create_comment(root: String, input: NewComment, by: Option<Person>) -> Result<CreateResult> {
     let file = input.file.clone();
     // Comments created from the desktop UI are authored by the user.
-    let result = core::create_comment(&root, input, "user", None)?;
+    let who = writer(&root, by);
+    let result = core::create_comment_by(&root, input, "user", None, who)?;
     crate::log::info(
         "annotations",
         "comment created",
@@ -43,8 +66,15 @@ pub fn add_reply(
     author: String,
     agent: Option<String>,
     body: String,
+    by: Option<Person>,
 ) -> Result<Comment> {
-    Ok(core::add_reply(&root, &id, &author, agent, body)?)
+    // Only a human reply has a person behind it.
+    let who = if author == "agent" {
+        None
+    } else {
+        writer(&root, by)
+    };
+    Ok(core::add_reply_by(&root, &id, &author, agent, who, body)?)
 }
 
 /// Block a task with the reason the agent gave, taking it out of the resolvable
@@ -63,8 +93,14 @@ pub fn block_comment(root: String, id: String, reason: String) -> Result<Comment
 /// Answer a blocked task: the human's note joins the thread and the task returns
 /// to open with its attempt count forgiven.
 #[tauri::command]
-pub fn answer_blocked(root: String, id: String, note: String) -> Result<Comment> {
-    let result = core::answer_blocked(&root, &id, "human", &note)?;
+pub fn answer_blocked(
+    root: String,
+    id: String,
+    note: String,
+    by: Option<Person>,
+) -> Result<Comment> {
+    let who = writer(&root, by);
+    let result = core::answer_blocked_by(&root, &id, "human", who, &note)?;
     crate::log::info(
         "annotations",
         "blocked task answered",
@@ -144,4 +180,39 @@ pub fn reanchor_file(root: String, file: String) -> Result<Vec<Comment>> {
 #[tauri::command]
 pub fn set_anchor(root: String, id: String, file: String, start: u32, end: u32) -> Result<Comment> {
     Ok(core::set_anchor(&root, &id, &file, start, end)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_writer_is_who_the_ui_says_else_gits_user_name_else_nobody() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                .output()
+                .unwrap()
+        };
+        git(&["init", "-q"]);
+        git(&["config", "user.name", "Ada Lovelace"]);
+
+        let account = Person {
+            name: "Ada".into(),
+            user: Some("u1".into()),
+        };
+        assert_eq!(writer(&root, Some(account.clone())), Some(account));
+        let from_git = writer(&root, None).unwrap();
+        assert_eq!(from_git.name, "Ada Lovelace");
+        assert_eq!(from_git.user, None);
+        // A blank name from the UI doesn't hide git's.
+        let blank = Person {
+            name: " ".into(),
+            user: None,
+        };
+        assert_eq!(writer(&root, Some(blank)).unwrap().name, "Ada Lovelace");
+    }
 }

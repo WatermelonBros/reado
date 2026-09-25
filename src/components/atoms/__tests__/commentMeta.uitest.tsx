@@ -16,6 +16,7 @@ import {
   typeKey,
 } from "@/components/atoms/commentMeta"
 import type { Message } from "@/lib/api"
+import { useIdentity } from "@/lib/identity"
 
 const msg = (over: Partial<Message>): Message => ({
   author: "user",
@@ -82,6 +83,17 @@ describe("agentBrand", () => {
 describe("authorLabel", () => {
   it("uses the provided name for user messages", () => {
     expect(authorLabel(msg({ author: "user" }), "Matteo")).toBe("Matteo")
+  })
+
+  it("names a teammate, and still says 'you' for your own named messages", () => {
+    useIdentity.setState({ account: { name: "Matteo", user: "u1" }, git: null })
+    const by = (name: string, user?: string) => msg({ author: "user", by: { name, user } })
+    expect(authorLabel(by("Giulia", "u2"), "Tu")).toBe("Giulia")
+    expect(authorLabel(by("Matteo P.", "u1"), "Tu")).toBe("Tu")
+    // Without an account, git's name decides.
+    useIdentity.setState({ account: null, git: { name: "Matteo" } })
+    expect(authorLabel(by("Matteo"), "Tu")).toBe("Tu")
+    expect(authorLabel(by("Luca"), "Tu")).toBe("Luca")
   })
 
   it("maps a known agent id to its display name", () => {

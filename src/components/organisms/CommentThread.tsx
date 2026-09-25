@@ -23,6 +23,7 @@ import {
 } from "@/components/atoms/commentMeta"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, SendIcon } from "@/components/atoms/icons"
+import { PersonAvatar } from "@/components/atoms/PersonAvatar"
 import { Select } from "@/components/atoms/Select"
 import { Slot } from "@/components/atoms/Slot"
 import { Textarea } from "@/components/atoms/Textarea"
@@ -30,6 +31,7 @@ import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { dispatchToAgent } from "@/lib/agents"
 import type { Comment, CommentState, CommentType } from "@/lib/api"
 import { useComments } from "@/lib/comments"
+import { useIdentity } from "@/lib/identity"
 import { notifyError } from "@/lib/notice"
 import { composeSingleTaskPrompt } from "@/lib/review"
 import { useProject } from "@/lib/store"
@@ -46,6 +48,8 @@ interface Props {
 }
 
 export function CommentThread({ comment, top, onClose }: Props) {
+  // Who "you" is can arrive after the thread (git name, account): re-render then.
+  useIdentity((s) => s.account?.user ?? s.git?.name)
   const root = useProject((s) => s.root)
   const { patch, reply, setState, remove } = useComments()
   const { t } = useTranslation()
@@ -241,6 +245,7 @@ export function CommentThread({ comment, top, onClose }: Props) {
                     style={brand ? { color: brand.color } : undefined}
                   >
                     {brand && <brand.Icon className="h-3 w-3 translate-y-px" />}
+                    {m.author !== "agent" && <PersonAvatar by={m.by} className="self-center" />}
                     {authorLabel(m, t("comment.you"))}
                   </span>
                 )

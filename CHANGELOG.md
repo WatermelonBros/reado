@@ -13,6 +13,12 @@ commit.
 
 ### Added
 
+- **Every message says who wrote it.** A comment or reply you write carries your
+  name — your git `user.name`, or your Reado account when signed in — and the
+  thread shows a teammate's name and face beside their words instead of "You"
+  for everyone. Your own messages still read "You". Older comments are
+  untouched and read as before; older Reado versions ignore the names.
+
 - **A Team window (Pro).** "Show all" in the account menu, or the palette, opens
   it on three tabs. **For me**: what's assigned to you and the agent queue, with
   the whole thread, file and line, state, due date, who wrote it and who assigned

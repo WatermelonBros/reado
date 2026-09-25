@@ -7,6 +7,7 @@
  * backend, so the two never drift.
  */
 import { create } from "zustand"
+import { useIdentity, writerOverride } from "@/lib/identity"
 import {
   addReply,
   answerBlocked,
@@ -138,7 +139,11 @@ export const useComments = create<CommentsState>((set, get) => ({
     // switch resets activeId. Clearing/resetting here would close the thread the
     // user just acted on (our own write trips the watcher too).
     const sameRoot = get().root === root
-    if (!sameRoot) set({ root, comments: [], archived: [], activeId: null })
+    if (!sameRoot) {
+      set({ root, comments: [], archived: [], activeId: null })
+      // Whose messages are "mine" here: the project's git name (an account wins).
+      void useIdentity.getState().loadGit(root)
+    }
     // Load active and resolved (archived) together: done comments are shown
     // inline in the editor too, so the gutter needs them up front.
     const [comments, archived] = await Promise.all([listComments(root), listArchived(root)])
@@ -151,7 +156,7 @@ export const useComments = create<CommentsState>((set, get) => ({
     // created in the previous project can't be injected into a new one after a
     // rapid project switch.
     const root = get().root
-    const { comment, firstComment } = await createComment(root, input)
+    const { comment, firstComment } = await createComment(root, input, writerOverride())
     if (get().root === root) set((s) => ({ comments: [...s.comments, comment] }))
     return { comment, firstComment }
   },
@@ -162,7 +167,7 @@ export const useComments = create<CommentsState>((set, get) => ({
   },
 
   reply: async (id, body) => {
-    const next = await addReply(get().root, id, "user", body)
+    const next = await addReply(get().root, id, "user", body, undefined, writerOverride())
     set((s) => distribute(s, next))
   },
 
@@ -172,7 +177,7 @@ export const useComments = create<CommentsState>((set, get) => ({
   },
 
   answer: async (id, note) => {
-    const next = await answerBlocked(get().root, id, note)
+    const next = await answerBlocked(get().root, id, note, writerOverride())
     set((s) => distribute(s, next))
   },
 

@@ -211,6 +211,7 @@ pub fn run_with(extend: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builde
             annotations::set_comment_state,
             annotations::block_comment,
             annotations::answer_blocked,
+            annotations::comment_writer,
             annotations::delete_comment,
             annotations::add_reado_gitignore,
             annotations::read_project_config,

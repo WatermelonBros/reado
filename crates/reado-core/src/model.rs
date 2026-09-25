@@ -214,6 +214,9 @@ pub struct CommentMeta {
     /// this existed simply has none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolution: Option<Resolution>,
+    /// Who wrote the root message (replies carry their own), when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<Person>,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -246,6 +249,7 @@ impl CommentMeta {
             blocked_reason: None,
             attempts: 0,
             resolution: None,
+            by: None,
             created_at: now,
             updated_at: now,
         }
@@ -260,6 +264,16 @@ fn is_zero(n: &u32) -> bool {
 /// flaky run and few enough that a genuinely stuck task stops early.
 pub const ATTEMPT_BUDGET: u32 = 3;
 
+/// Who wrote a human message: the name to show and, with a Reado account, that
+/// account's id — which the official build turns into an avatar. Absent on agent
+/// messages and on anything written before it existed; readers fall back to "you".
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Person {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+}
+
 /// One message in a comment thread.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -267,6 +281,9 @@ pub struct Message {
     pub author: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// The person behind a human message, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<Person>,
     pub created_at: u64,
     pub body: String,
 }

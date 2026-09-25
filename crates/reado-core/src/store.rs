@@ -180,6 +180,17 @@ pub fn create_comment(
     author: &str,
     agent: Option<String>,
 ) -> Result<CreateResult> {
+    create_comment_by(root, input, author, agent, None)
+}
+
+/// `create_comment`, naming the person who wrote it (see [`Person`]).
+pub fn create_comment_by(
+    root: &str,
+    input: NewComment,
+    author: &str,
+    agent: Option<String>,
+    by: Option<Person>,
+) -> Result<CreateResult> {
     let first_comment = !reado_dir(root).exists();
     let now = now_millis();
 
@@ -206,10 +217,15 @@ pub fn create_comment(
         agent.clone(),
         now,
     );
-    let meta = CommentMeta { context, ..meta };
+    let meta = CommentMeta {
+        context,
+        by: by.clone(),
+        ..meta
+    };
     let messages = vec![Message {
         author: author.to_string(),
         agent,
+        by,
         created_at: now,
         body: input.body,
     }];
@@ -324,10 +340,23 @@ pub fn add_reply(
     agent: Option<String>,
     body: String,
 ) -> Result<Comment> {
+    add_reply_by(root, id, author, agent, None, body)
+}
+
+/// `add_reply`, naming the person who wrote it (see [`Person`]).
+pub fn add_reply_by(
+    root: &str,
+    id: &str,
+    author: &str,
+    agent: Option<String>,
+    by: Option<Person>,
+    body: String,
+) -> Result<Comment> {
     mutate_comment(root, id, |comment| {
         comment.messages.push(Message {
             author: author.to_string(),
             agent,
+            by,
             created_at: now_millis(),
             body,
         });
@@ -411,6 +440,17 @@ pub fn block_comment(root: &str, id: &str, reason: &str) -> Result<Comment> {
 /// open, with the attempt counter reset — the agent is being given something it
 /// did not have before, so the previous failures no longer count against it.
 pub fn answer_blocked(root: &str, id: &str, author: &str, note: &str) -> Result<Comment> {
+    answer_blocked_by(root, id, author, None, note)
+}
+
+/// `answer_blocked`, naming the person who answered (see [`Person`]).
+pub fn answer_blocked_by(
+    root: &str,
+    id: &str,
+    author: &str,
+    by: Option<Person>,
+    note: &str,
+) -> Result<Comment> {
     // Reply and reopen in one write under one lock: done as two, an agent could
     // read the answer while the task still says blocked, or a write in between
     // could be lost.
@@ -418,6 +458,7 @@ pub fn answer_blocked(root: &str, id: &str, author: &str, note: &str) -> Result<
         comment.messages.push(Message {
             author: author.to_string(),
             agent: None,
+            by,
             created_at: now_millis(),
             body: note.to_string(),
         });
@@ -504,6 +545,7 @@ pub fn upsert_host_comment(
                 messages: vec![Message {
                     author: author.to_string(),
                     agent: None,
+                    by: None,
                     created_at: now,
                     body,
                 }],

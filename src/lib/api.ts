@@ -882,9 +882,17 @@ export interface Context {
   after: string
 }
 
+/** Who wrote a human message: a name, and a Reado account id when signed in. */
+export interface Person {
+  name: string
+  user?: string
+}
+
 export interface Message {
   author: string
   agent?: string
+  /** The person behind a human message, when known (absent on older ones). */
+  by?: Person
   createdAt: number
   body: string
 }
@@ -962,8 +970,12 @@ export interface CommentPatch {
   body?: string
 }
 
-export const createComment = (root: string, input: NewComment) =>
-  invoke<CreateResult>("create_comment", { root, input })
+/** `by` names the writer when the UI knows better than the project's git name. */
+export const createComment = (root: string, input: NewComment, by?: Person) =>
+  invoke<CreateResult>("create_comment", { root, input, by })
+
+/** Who a message written now in `root` is signed by, absent a `by`: git's user.name. */
+export const commentWriter = (root: string) => invoke<Person | null>("comment_writer", { root })
 
 export const listComments = (root: string) => invoke<Comment[]>("list_comments", { root })
 
@@ -972,8 +984,14 @@ export const listArchived = (root: string) => invoke<Comment[]>("list_archived",
 export const updateComment = (root: string, id: string, patch: CommentPatch) =>
   invoke<Comment>("update_comment", { root, id, patch })
 
-export const addReply = (root: string, id: string, author: string, body: string, agent?: string) =>
-  invoke<Comment>("add_reply", { root, id, author, agent, body })
+export const addReply = (
+  root: string,
+  id: string,
+  author: string,
+  body: string,
+  agent?: string,
+  by?: Person,
+) => invoke<Comment>("add_reply", { root, id, author, agent, body, by })
 
 /** Block a task with the reason the agent gave. It leaves the resolvable set
  *  until a human answers it. */
@@ -981,8 +999,8 @@ export const blockComment = (root: string, id: string, reason: string) =>
   invoke<Comment>("block_comment", { root, id, reason })
 
 /** Answer a blocked task: the note joins the thread and the task reopens. */
-export const answerBlocked = (root: string, id: string, note: string) =>
-  invoke<Comment>("answer_blocked", { root, id, note })
+export const answerBlocked = (root: string, id: string, note: string, by?: Person) =>
+  invoke<Comment>("answer_blocked", { root, id, note, by })
 
 export const setCommentState = (root: string, id: string, state: CommentState) =>
   invoke<Comment>("set_comment_state", { root, id, state })
