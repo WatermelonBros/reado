@@ -11,6 +11,23 @@ commit.
 
 ## [Unreleased]
 
+## [1.25.0] — 2026-09-25
+
+### Added
+
+- **A Reado account, if you want one.** In the app you download from the Releases
+  page, a new entry at the bottom of the activity bar, under Settings, lets you
+  sign in with GitHub or with an email and password. Signing in happens in your
+  browser, and Reado comes back to the front with your avatar when you're done. The
+  account is optional: without one Reado works exactly as before. Your account,
+  your plan and every place you're signed in live at
+  reado.watermelon-studio.it/account.
+- **Your settings follow you to every machine.** Sign in, turn on "Sync settings"
+  in the account menu, and your theme, fonts, editor and interface preferences,
+  shortcuts and disabled extensions stay the same on every computer you use. The
+  first time, Reado asks whether to keep the account's settings or this
+  computer's. Projects, paths and window layout never leave the machine.
+
 ### Fixed
 
 - **A project whose `.gitignore` or build setup appears after you open it no
@@ -2723,7 +2740,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.24.1...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.25.0...HEAD
+[1.25.0]: https://github.com/WatermelonBros/reado/compare/v1.24.1...v1.25.0
 [1.24.1]: https://github.com/WatermelonBros/reado/compare/v1.24.0...v1.24.1
 [1.24.0]: https://github.com/WatermelonBros/reado/compare/v1.23.2...v1.24.0
 [1.23.2]: https://github.com/WatermelonBros/reado/compare/v1.23.1...v1.23.2
