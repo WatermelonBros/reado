@@ -11,6 +11,28 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Your tasks, readable (Pro).** "Show all" in the account menu opens a window
+  with everything assigned to you and the agent queue: the whole thread, the file
+  and line, its state and due date, who wrote it and who assigned it. "Send to my
+  agent" now works on your own tasks too, not only the agent queue, and "Open in
+  the editor" is right there. Arrow keys move through the list. The account menu
+  keeps a short summary and closes when the window opens.
+- **Organizations, one click away.** The account menu has an "Organizations"
+  entry, and the account page on the website lists yours with a way to create one.
+
+### Changed
+
+- The account menu no longer says whether the open project is personal. When a
+  repository needs a decision (two of your organizations claim it, or you could
+  join the one that owns it), the status bar says so and asks there.
+
+### Fixed
+
+- Pro texts in the account menu showed raw placeholders, like "Assigned to you
+  ({{count}})", instead of the number.
+
 ## [1.26.0] — 2026-09-25
 
 ### Added
