@@ -33,6 +33,32 @@ export const COMMANDS: CommandTable = Object.assign(Object.create(null), {
   ...reviewCommands,
 })
 
+/** A command a build embedding Reado adds, listed in the palette under its label. */
+export interface ExtensionCommand {
+  id: string
+  /** Read when the palette opens, so it follows the active language. */
+  label: () => string
+  /** When given and `false`, the palette hides the command. */
+  when?: () => boolean
+}
+
+export const EXTENSION_COMMANDS: ExtensionCommand[] = []
+
+/**
+ * Add a command from outside the core — the official build's team commands, say.
+ * It joins the one registry, so a keybinding, the palette and `runMenuCommand`
+ * all reach it like any built-in. Call before `boot()`, like `registerSlot`.
+ */
+export function registerCommand(
+  id: string,
+  run: () => void,
+  label: () => string,
+  when?: () => boolean,
+): void {
+  COMMANDS[id] = { run }
+  EXTENSION_COMMANDS.push({ id, label, when })
+}
+
 /**
  * Commands that carry an argument in their id — a theme, an auto-save policy, a
  * fold level, a group number. Matched by pattern rather than listed one by one;

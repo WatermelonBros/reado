@@ -164,6 +164,7 @@ vi.mock("../../../lib/lsp", async (orig) => ({
 import { EditorView } from "@codemirror/view"
 import { Palette } from "@/components/organisms/Palette"
 import { useBookmarks } from "@/lib/bookmarks"
+import { COMMANDS, EXTENSION_COMMANDS, registerCommand } from "@/lib/commands"
 import { useDocInfo } from "@/lib/docInfo"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { useLayout } from "@/lib/layout"
@@ -351,6 +352,33 @@ describe("what the context offers", () => {
 })
 
 describe("running a command", () => {
+  it("lists and runs a command the embedding build registered, honouring its `when`", async () => {
+    const run1 = vi.fn()
+    let on = true
+    registerCommand(
+      "ext:test",
+      run1,
+      () => "Extension test",
+      () => on,
+    )
+    try {
+      const { unmount } = openCommands()
+      await run("Extension test")
+      expect(run1).toHaveBeenCalled()
+      unmount()
+      on = false
+      expect(
+        openCommands()
+          .labels()
+          .some((l) => l.startsWith("Extension test")),
+      ).toBe(false)
+      expect(knownCommands()).toContain("ext:test")
+    } finally {
+      EXTENSION_COMMANDS.length = 0
+      delete COMMANDS["ext:test"]
+    }
+  })
+
   it("dispatches the editor actions", async () => {
     openCommands()
     await run("editor.goToBracket")

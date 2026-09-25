@@ -17,6 +17,7 @@ import { Kbd } from "@/components/atoms/Kbd"
 import type { MessageKey } from "@/i18n"
 import { listFiles, listSymbols, type Symbol as WorkspaceSymbol } from "@/lib/api"
 import { useBookmarks } from "@/lib/bookmarks"
+import { EXTENSION_COMMANDS } from "@/lib/commands"
 import { baseName, toRelative } from "@/lib/comments"
 import { goToLine, useDocInfo } from "@/lib/docInfo"
 import { shortcutFor } from "@/lib/keybindings"
@@ -541,6 +542,8 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
     cmd("help:shortcuts", t("sc.title"), { stayOpen: true }),
     cmd("checkUpdates", t("settings.checkUpdates"), { stayOpen: true }),
   ]
+  // Commands the embedding build registered (the official build's team commands).
+  for (const c of EXTENSION_COMMANDS) rows.push(cmd(c.id, c.label(), { when: c.when?.() }))
   // Quick theme switches.
   for (const theme of THEMES) {
     rows.push(
