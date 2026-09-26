@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.27.0] — 2026-09-26
+
 ### Added
 
 - **Every message says who wrote it.** A comment or reply you write carries your
@@ -2833,7 +2835,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.26.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.27.0...HEAD
+[1.27.0]: https://github.com/WatermelonBros/reado/compare/v1.26.0...v1.27.0
 [1.26.0]: https://github.com/WatermelonBros/reado/compare/v1.25.0...v1.26.0
 [1.25.0]: https://github.com/WatermelonBros/reado/compare/v1.24.1...v1.25.0
 [1.24.1]: https://github.com/WatermelonBros/reado/compare/v1.24.0...v1.24.1
