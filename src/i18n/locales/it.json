@@ -1599,7 +1599,8 @@
     "dismiss": "Ignora",
     "loading": "Caricamento…",
     "error": "Qualcosa è andato storto.",
-    "clear": "Cancella"
+    "clear": "Cancella",
+    "justNow": "poco fa"
   },
   "notice": {
     "saveFailed": "Impossibile salvare il file.",

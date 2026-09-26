@@ -1599,7 +1599,8 @@
     "dismiss": "Ignorer",
     "loading": "Chargement…",
     "error": "Une erreur est survenue.",
-    "clear": "Effacer"
+    "clear": "Effacer",
+    "justNow": "à l'instant"
   },
   "notice": {
     "saveFailed": "Impossible d'enregistrer le fichier.",

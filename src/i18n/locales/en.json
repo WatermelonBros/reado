@@ -1599,7 +1599,8 @@
     "dismiss": "Dismiss",
     "loading": "Loading…",
     "error": "Something went wrong.",
-    "clear": "Clear"
+    "clear": "Clear",
+    "justNow": "just now"
   },
   "notice": {
     "saveFailed": "Couldn't save the file.",

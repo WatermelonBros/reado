@@ -1599,7 +1599,8 @@
     "dismiss": "Verwerfen",
     "loading": "Wird geladen…",
     "error": "Etwas ist schiefgelaufen.",
-    "clear": "Leeren"
+    "clear": "Leeren",
+    "justNow": "gerade eben"
   },
   "notice": {
     "saveFailed": "Die Datei konnte nicht gespeichert werden.",

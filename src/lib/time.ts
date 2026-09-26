@@ -1,11 +1,15 @@
+import i18n from "i18next"
+
 /**
  * "3 minutes ago", "yesterday", in the user's locale — `Intl` already knows every
- * language we ship, so the phrasing is not ours to translate. Past a month the
- * date itself says more than "5 weeks ago".
+ * language we ship, so the phrasing is not ours to translate. Under a minute it is
+ * "just now": `Intl`'s "this minute" reads oddly. Past a month the date itself says
+ * more than "5 weeks ago".
  */
 export function ago(ms: number, locale?: string, now = Date.now()): string {
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
   const mins = (ms - now) / 60_000
+  if (Math.abs(mins) < 1) return i18n.t("common.justNow", { lng: locale })
   if (Math.abs(mins) < 60) return rtf.format(Math.round(mins), "minute")
   const hours = mins / 60
   if (Math.abs(hours) < 24) return rtf.format(Math.round(hours), "hour")

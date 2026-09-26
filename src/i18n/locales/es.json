@@ -1599,7 +1599,8 @@
     "dismiss": "Descartar",
     "loading": "Cargando…",
     "error": "Algo ha salido mal.",
-    "clear": "Vaciar"
+    "clear": "Vaciar",
+    "justNow": "hace un momento"
   },
   "notice": {
     "saveFailed": "No se ha podido guardar el archivo.",
