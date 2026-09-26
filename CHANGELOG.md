@@ -11,6 +11,35 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Share links (Pro).** The link icon in a comment thread copies a link to that
+  comment and the code under it — the commented lines with a little context, the
+  file, branch and commit, and the whole thread. On an organization's project it
+  is for its members by default (they sign in to open it); otherwise anyone with
+  the link can open it in a browser, no account or Reado needed. It expires after
+  1, 7 or 30 days. The same popover lists the comment's live links to copy or
+  revoke them; your account page on the website lists them all.
+- **Members-only share links for an organization (Pro).** An organization's owners
+  and admins can allow only links for its members; public links already made for
+  its code stop opening.
+
+### Fixed
+
+- A message written seconds ago says "just now" instead of "this minute".
+- **The browser panel no longer goes blank for good.** Closing the window from
+  the menu while the page had focus closed the browser itself, leaving an empty
+  panel that nothing re-created; it is now refused, and only the panel opens and
+  closes the browser. Menu shortcuts also work again after clicking into the page
+  (they were sent to the page, which ignored them).
+- **Opening the browser shows it.** It used to stay behind the active tab of its
+  group (or in a hidden region); now it comes to the front. The right-panel toggle
+  on an empty right region brings the browser back there instead of showing an
+  empty strip.
+- **Bitwarden that was never signed in** no longer asks for a master password
+  that can't work: Reado says to run `bw login` in a terminal, and checks again.
+
+
 ## [1.27.0] — 2026-09-26
 
 ### Added
