@@ -57,6 +57,10 @@ commit.
 
 ### Fixed
 
+- A language server's message now appears once, as a notice, instead of a new
+  banner over the editor every time the server repeats it — rust-analyzer's
+  "Failed to discover workspace" could stack up seven times.
+
 - Pro texts in the account menu showed raw placeholders, like "Assigned to you
   ({{count}})", instead of the number.
 

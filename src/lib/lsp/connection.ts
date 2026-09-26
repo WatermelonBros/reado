@@ -330,6 +330,30 @@ export function notifyWatchedFileChanged(root: string, relPath: string): void {
 // at most once until it successfully reconnects (the flag is cleared on connect).
 const crashNotified = new Set<string>()
 
+/** What a server has already told the user this session, by server and text. */
+const shownMessages = new Set<string>()
+
+/**
+ * A server's `window/showMessage`, as a Reado notice — once.
+ *
+ * The library's own handler opens a dialog over the editor for every one, and a
+ * server repeats itself: rust-analyzer re-sends "Failed to discover workspace"
+ * on every reload of a folder with no Cargo project, and the same banner stacked
+ * up seven times. The first says it; the rest would only cover the code.
+ */
+export function showServerMessage(
+  server: string,
+  params: { type: number; message: string },
+): boolean {
+  // 4 is "log": the server's diary, not something to put in front of anyone.
+  if (params.type > 3) return true
+  const key = `${server}\u0000${params.message}`
+  if (shownMessages.has(key)) return true
+  shownMessages.add(key)
+  notify(params.type === 1 ? "error" : "info", `${server}: ${params.message}`)
+  return true
+}
+
 /** When a connection last failed, so a dead server isn't respawned per keystroke. */
 const failedAt = new Map<string, number>()
 const RETRY_COOLDOWN_MS = 30_000
@@ -491,6 +515,10 @@ function connect(server: ServerDef, root: string): Promise<Conn> {
     const client = new LSPClient({
       rootUri: toUri(root),
       extensions: clientExtensions(),
+      notificationHandlers: {
+        "window/showMessage": (_c: LSPClient, params: { type: number; message: string }) =>
+          showServerMessage(server.id, params),
+      },
     }).connect(transport)
     // A server can start and then refuse to initialize — `typescript-language-server`
     // in a project with no TypeScript installed says so and exits. Nobody was
