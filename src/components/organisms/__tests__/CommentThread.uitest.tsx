@@ -22,6 +22,7 @@ vi.mock("../../../lib/review", () => ({ composeSingleTaskPrompt }))
 import { CommentThread } from "@/components/organisms/CommentThread"
 import type { Comment } from "@/lib/api"
 import { useComments } from "@/lib/comments"
+import { useIdentity } from "@/lib/identity"
 import { useNotice } from "@/lib/notice"
 import { registerSlot, resetSlotsForTest } from "@/lib/slots"
 import { useProject } from "@/lib/store"
@@ -78,6 +79,35 @@ describe("CommentThread", () => {
     // attributed to its brand name.
     expect(screen.getByText("comment.you")).toBeInTheDocument()
     expect(screen.getByText("Claude Code")).toBeInTheDocument()
+  })
+
+  it("names a teammate beside their face, and keeps 'you' for your own", () => {
+    seed()
+    useIdentity.setState({
+      account: { name: "Matteo", user: "u1", avatarUrl: null },
+      git: null,
+      avatars: { u2: "https://img.test/giulia.png" },
+    })
+    const { container } = render(
+      <CommentThread
+        comment={mkComment({
+          messages: [
+            { author: "user", by: { name: "Matteo", user: "u1" }, createdAt: 0, body: "why?" },
+            { author: "user", by: { name: "Giulia", user: "u2" }, createdAt: 1, body: "speed" },
+            { author: "user", by: { name: "Luca Bianchi" }, createdAt: 2, body: "agreed" },
+          ],
+        })}
+        top={0}
+        onClose={vi.fn()}
+      />,
+    )
+    expect(screen.getByText("comment.you")).toBeInTheDocument()
+    expect(screen.getByText("Giulia")).toBeInTheDocument()
+    expect(screen.getByText("Luca Bianchi")).toBeInTheDocument()
+    // Giulia's picture from the organization; Luca has none, so his initials.
+    expect(container.querySelector('img[src="https://img.test/giulia.png"]')).toBeTruthy()
+    expect(screen.getByText("LB")).toBeInTheDocument()
+    useIdentity.setState({ account: null, avatars: {} })
   })
 
   it("typing a reply and submitting calls the reply action with the trimmed body", async () => {

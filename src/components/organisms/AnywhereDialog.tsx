@@ -41,23 +41,12 @@ import {
 import { currentOS } from "@/lib/extensions"
 import { usePalette } from "@/lib/store"
 import { offSafe } from "@/lib/terminals"
+import { ago } from "@/lib/time"
 
 /** The QR payload: the address with the pairing secret + fingerprint in the
  * fragment, so neither ever hits a query string (or a server log). */
 const payload = (i: AnywhereInfo) =>
   `${i.url}/#pair=${i.pairing}&fp=${encodeURIComponent(i.fingerprint)}`
-
-/** "3 days ago", in the user's locale. `Intl` already knows every language we
- * ship, so the phrasing is not ours to translate. */
-function lastSeen(seconds: number, locale: string): string {
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
-  const delta = seconds - Date.now() / 1000
-  const mins = delta / 60
-  if (Math.abs(mins) < 60) return rtf.format(Math.round(mins), "minute")
-  const hours = mins / 60
-  if (Math.abs(hours) < 24) return rtf.format(Math.round(hours), "hour")
-  return rtf.format(Math.round(hours / 24), "day")
-}
 
 /** The interface the backend picks when nothing is chosen. */
 const AUTO = "auto"
@@ -286,7 +275,7 @@ export function AnywhereDialog() {
                 >
                   <span className="min-w-0 flex-1 truncate text-sm text-ink">{d.name}</span>
                   <span className="flex-none text-[10px] text-faint">
-                    {lastSeen(d.lastSeen, i18n.language)}
+                    {ago(d.lastSeen * 1000, i18n.language)}
                   </span>
                   <IconButton
                     label={t("anywhere.revoke", { name: d.name })}

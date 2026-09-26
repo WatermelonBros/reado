@@ -43,6 +43,12 @@ commit.
 
 ### Changed
 
+- **Comment threads read like a conversation.** Each message hangs from its
+  writer's face in a margin, with the words lined up under the name; each person
+  gets their own tint, an agent its own mark; consecutive messages from one
+  writer show the name once; times read "5 minutes ago", with the full date on
+  hover.
+
 - Due dates on tasks read the way people say them, in the app's language —
   "yesterday", "tomorrow", "2 Oct" — instead of 2026-10-02.
 - The account menu no longer says whether the open project is personal. When a

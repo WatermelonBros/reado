@@ -29,17 +29,13 @@ import { Slot } from "@/components/atoms/Slot"
 import { Textarea } from "@/components/atoms/Textarea"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { dispatchToAgent } from "@/lib/agents"
-import type { Comment, CommentState, CommentType } from "@/lib/api"
+import type { Comment, CommentState, CommentType, Message } from "@/lib/api"
 import { useComments } from "@/lib/comments"
 import { useIdentity } from "@/lib/identity"
 import { notifyError } from "@/lib/notice"
 import { composeSingleTaskPrompt } from "@/lib/review"
 import { useProject } from "@/lib/store"
-
-const fmtTime = (ms: number) =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(ms),
-  )
+import { ago, when } from "@/lib/time"
 
 interface Props {
   comment: Comment
@@ -47,12 +43,38 @@ interface Props {
   onClose: () => void
 }
 
+/** Who a message is from, for grouping: an agent by name, a person by account or name. */
+const writerKey = (m: Message) =>
+  m.author === "agent" ? `agent:${m.agent ?? ""}` : `user:${m.by?.user ?? m.by?.name ?? ""}`
+
+/** A message continues the previous one's run: same writer, within ten minutes. */
+const continues = (prev: Message | undefined, m: Message) =>
+  !!prev && writerKey(prev) === writerKey(m) && m.createdAt - prev.createdAt < 10 * 60_000
+
+/** The writer's mark in the gutter: a person's face, or an agent's brand. */
+function AuthorMark({ m }: { m: Message }) {
+  if (m.author !== "agent") return <PersonAvatar by={m.by} size="md" />
+  const brand = agentBrand(m)
+  return (
+    <span
+      aria-hidden
+      className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-semibold text-accent"
+      style={{
+        background: `color-mix(in oklch, ${brand?.color ?? "var(--accent)"} 22%, var(--bg-elevated))`,
+        color: brand?.color,
+      }}
+    >
+      {brand ? <brand.Icon className="h-3 w-3" /> : "AI"}
+    </span>
+  )
+}
+
 export function CommentThread({ comment, top, onClose }: Props) {
   // Who "you" is can arrive after the thread (git name, account): re-render then.
   useIdentity((s) => s.account?.user ?? s.git?.name)
   const root = useProject((s) => s.root)
   const { patch, reply, setState, remove } = useComments()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [replyText, setReplyText] = useState("")
   const [answer, setAnswer] = useState("")
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -230,64 +252,82 @@ export function CommentThread({ comment, top, onClose }: Props) {
         </div>
       )}
 
-      {/* Thread — the conversation is the focus; metadata stays quiet. */}
-      <div className="min-h-[5rem] flex-1 space-y-4 overflow-y-auto px-4 py-3">
-        {comment.messages.map((m, i) => (
-          <div key={i} className={`group/msg ${i > 0 ? "border-t border-line pt-3" : ""}`}>
-            <div className="mb-1 flex items-baseline gap-2">
-              {(() => {
-                const brand = agentBrand(m)
-                return (
-                  <span
-                    className={`flex items-center gap-1 text-xs font-semibold ${
-                      brand ? "" : m.author === "agent" ? "text-accent" : "text-ink"
-                    }`}
-                    style={brand ? { color: brand.color } : undefined}
-                  >
-                    {brand && <brand.Icon className="h-3 w-3 translate-y-px" />}
-                    {m.author !== "agent" && <PersonAvatar by={m.by} className="self-center" />}
-                    {authorLabel(m, t("comment.you"))}
-                  </span>
-                )
-              })()}
-              <span className="text-xs text-faint">{fmtTime(m.createdAt)}</span>
-              {i === 0 && editDraft === null && (
-                <Button
-                  size="sm"
-                  className="ml-auto opacity-0 transition-opacity group-hover/msg:opacity-100 group-focus-within/msg:opacity-100 focus-visible:opacity-100"
-                  onClick={() => setEditDraft(m.body)}
-                >
-                  {t("comment.edit")}
-                </Button>
+      {/* Thread — the conversation is the focus; metadata stays quiet. Each
+          message hangs from its writer's mark in a gutter, so the words line up
+          under the name; a run from one writer shows the name once. */}
+      <div className="min-h-[5rem] flex-1 overflow-y-auto px-4 py-3">
+        {comment.messages.map((m, i) => {
+          const run = continues(comment.messages[i - 1], m)
+          return (
+            <div
+              key={i}
+              className={`group/msg grid grid-cols-[1.25rem_minmax(0,1fr)] gap-x-2.5 ${
+                i === 0 ? "" : run ? "mt-1.5" : "mt-4"
+              }`}
+            >
+              {run ? (
+                <span />
+              ) : (
+                <span className="pt-px">
+                  <AuthorMark m={m} />
+                </span>
               )}
+              <div className="min-w-0">
+                {!run && (
+                  <div className="mb-0.5 flex items-baseline gap-2">
+                    <span
+                      className="truncate text-xs font-semibold text-ink"
+                      style={agentBrand(m) ? { color: agentBrand(m)?.color } : undefined}
+                    >
+                      {authorLabel(m, t("comment.you"))}
+                    </span>
+                    <time
+                      dateTime={new Date(m.createdAt).toISOString()}
+                      title={when(m.createdAt, i18n.language)}
+                      className="flex-none text-xs text-faint"
+                    >
+                      {ago(m.createdAt, i18n.language)}
+                    </time>
+                    {i === 0 && editDraft === null && (
+                      <Button
+                        size="sm"
+                        className="ml-auto opacity-0 transition-opacity group-hover/msg:opacity-100 group-focus-within/msg:opacity-100 focus-visible:opacity-100"
+                        onClick={() => setEditDraft(m.body)}
+                      >
+                        {t("comment.edit")}
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {i === 0 && editDraft !== null ? (
+                  <div>
+                    <Textarea
+                      variant="filled"
+                      autoFocus
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onSubmit={saveEdit}
+                      onCancel={() => setEditDraft(null)}
+                      className="max-h-40 min-h-16"
+                    />
+                    <div className="mt-1 flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setEditDraft(null)}>
+                        {t("common.cancel")}
+                      </Button>
+                      <Button variant="primary" size="sm" onClick={saveEdit}>
+                        {t("editor.save")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="prose-reado text-base leading-relaxed text-ink [&_p]:my-1 [&>*:first-child]:mt-0">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.body}</ReactMarkdown>
+                  </div>
+                )}
+              </div>
             </div>
-            {i === 0 && editDraft !== null ? (
-              <div>
-                <Textarea
-                  variant="filled"
-                  autoFocus
-                  value={editDraft}
-                  onChange={(e) => setEditDraft(e.target.value)}
-                  onSubmit={saveEdit}
-                  onCancel={() => setEditDraft(null)}
-                  className="max-h-40 min-h-16"
-                />
-                <div className="mt-1 flex justify-end gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setEditDraft(null)}>
-                    {t("common.cancel")}
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={saveEdit}>
-                    {t("editor.save")}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="prose-reado text-base leading-relaxed text-ink [&_p]:my-1">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.body}</ReactMarkdown>
-              </div>
-            )}
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Footer: reply + task/note + delete. */}
