@@ -510,7 +510,7 @@ pub fn preview_detach<R: Runtime>(
     url: String,
 ) -> Result<(), String> {
     if let Some(wv) = find_preview(&window) {
-        let _ = wv.close();
+        let _ = wv.destroy();
     }
     let parsed = tauri::Url::parse(&url).map_err(|e| e.to_string())?;
     let label = format!("previewwin::{}", window.label());
@@ -575,11 +575,13 @@ pub fn preview_set_visible<R: Runtime>(window: Window<R>, visible: bool) -> Resu
     Ok(())
 }
 
-/// Close the preview pane (remove its webview).
+/// Close the preview pane (remove its webview). `destroy`, not `close`: a close
+/// request on a preview window is refused (see `on_window_event`), so only the
+/// pane itself can take it down.
 #[tauri::command]
 pub fn preview_close<R: Runtime>(window: Window<R>) -> Result<(), String> {
     if let Some(wv) = find_preview(&window) {
-        wv.close().map_err(|e| e.to_string())?;
+        wv.destroy().map_err(|e| e.to_string())?;
     }
     Ok(())
 }

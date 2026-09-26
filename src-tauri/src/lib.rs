@@ -361,7 +361,20 @@ fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     use tauri::Manager;
     // Remember the focused window so menu actions target it (the menu is
     // shared across windows).
+    // The browser preview is a child window that takes focus when clicked; it is
+    // never where a menu action belongs, and closing it natively would leave its
+    // pane empty with nothing to re-create it (only the pane opens and closes it).
+    let preview = window.label().starts_with("preview::");
+    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        if preview {
+            api.prevent_close();
+            return;
+        }
+    }
     if let tauri::WindowEvent::Focused(true) = event {
+        if preview {
+            return;
+        }
         log::debug(
             "app",
             "window focused",
