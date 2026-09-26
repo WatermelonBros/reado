@@ -43,6 +43,10 @@ commit.
 
 ### Changed
 
+- **Being in an organization is Reado Pro (Pro).** A member uses a seat the
+  organization pays for, from the moment they accept its invitation — a pending
+  invitation costs nothing. Starting an organization takes Pro.
+
 - **Comment threads read like a conversation.** Each message hangs from its
   writer's face in a margin, with the words lined up under the name; each person
   gets their own tint, an agent its own mark; consecutive messages from one
