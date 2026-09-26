@@ -1,7 +1,7 @@
 import { foldAllCmd, unfoldAllCmd } from "@/lib/activeEditor"
 import { toRelative } from "@/lib/comments"
 import { focusPane } from "@/lib/liveViews"
-import { toggleDockArea } from "@/lib/panels"
+import { revealPanel, toggleDockArea } from "@/lib/panels"
 import { usePreview } from "@/lib/preview"
 import { useReadProgress } from "@/lib/readProgress"
 import {
@@ -81,8 +81,10 @@ export const viewCommands: CommandTable = {
   "preview:toggle": {
     run: () => {
       const preview = usePreview.getState()
+      // Opening brings it into view: flipping the flag alone left it behind the
+      // active tab of its group, or in a hidden region.
       if (preview.open) preview.close()
-      else preview.openPane()
+      else revealPanel("browser")
     },
   },
   "preview:agentAccess": {

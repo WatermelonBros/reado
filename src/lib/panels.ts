@@ -73,17 +73,23 @@ export function openPanel(id: PanelId): void {
   }
 }
 
+/** Where a panel belongs when it has to be docked again: the browser on the
+ *  right (the default layout's place for it), everything else at the bottom. */
+const HOME: Partial<Record<DockArea, PanelId>> = { right: "browser" }
+const homeOf = (id: PanelId): DockArea =>
+  (Object.entries(HOME).find(([, p]) => p === id)?.[0] as DockArea | undefined) ?? "bottom"
+
 /**
  * Bring one panel to the front: unhide the region it lives in, make it the
  * active tab of its group, and open it if it carries its own flag. A panel that
- * has been closed out of the layout entirely is docked at the bottom again —
+ * has been closed out of the layout entirely is docked at its home again —
  * a command that reveals a panel has to produce a panel.
  */
 export function revealPanel(id: PanelId): void {
   const layout = useLayout.getState()
   const at = findPanel(layout.layout, id)
   if (at) layout.toggleArea(at.area, false)
-  else layout.move(id, "bottom", { targetGroupId: undefined })
+  else layout.move(id, homeOf(id), { targetGroupId: undefined })
   useLayout.getState().activate(id)
   openPanel(id)
 }
@@ -100,6 +106,15 @@ export function toggleDockArea(area: DockArea, show?: boolean): void {
   const next = show ?? !isAreaShowing(area)
   useLayout.getState().toggleArea(area, !next)
   if (!next) return
+  // An empty region has nothing to show: bring its home panel back to it (the
+  // browser, when it was dragged or re-docked elsewhere) rather than reveal an
+  // empty strip.
+  const home = HOME[area]
+  if (home && !useLayout.getState().layout.areas[area].groups.length) {
+    useLayout.getState().move(home, area, { targetGroupId: undefined })
+    revealPanel(home)
+    return
+  }
   // The *active* tab is what the region will show, so it is the one that has to
   // be open. Asking whether any tab is open would be answered by a tool panel
   // sharing the group (a tool is open by virtue of being placed), and the region
