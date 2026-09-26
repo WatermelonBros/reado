@@ -671,6 +671,8 @@
     "checking": "Dein Passwortmanager wird gesucht…",
     "noBackend": "Keine Passwortmanager-CLI gefunden. Installiere `op` von 1Password oder `bw` von Bitwarden, um hier Zugangsdaten einzufüllen.",
     "openExtensions": "Zeig es mir",
+    "signedOut": "Die Bitwarden-CLI ist nicht angemeldet, daher kann kein Master-Passwort sie entsperren. Führe `bw login` in einem Terminal aus und prüfe dann erneut.",
+    "recheck": "Erneut prüfen",
     "locked": "Bitwarden ist gesperrt — Master-Passwort:",
     "masterPassword": "Bitwarden-Master-Passwort",
     "noMatch": "Für diese Seite sind keine Zugangsdaten gespeichert.",

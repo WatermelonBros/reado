@@ -8,7 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { VaultItem, VaultSecret, VaultStatus } from "@/lib/vault"
 
 const api = {
-  vaultStatus: vi.fn<() => Promise<VaultStatus>>(async () => ({ backend: "bw", locked: false })),
+  vaultStatus: vi.fn<() => Promise<VaultStatus>>(async () => ({
+    backend: "bw",
+    locked: false,
+    signedOut: false,
+  })),
   vaultLookup: vi.fn<(url: string) => Promise<VaultItem[]>>(async () => [
     { id: "i1", title: "Example", username: "me@example.com", hasOtp: true },
   ]),
@@ -48,7 +52,7 @@ const page = (result: unknown = { ok: true }) =>
 
 beforeEach(() => {
   vi.clearAllMocks()
-  api.vaultStatus.mockResolvedValue({ backend: "bw", locked: false })
+  api.vaultStatus.mockResolvedValue({ backend: "bw", locked: false, signedOut: false })
   api.vaultLookup.mockResolvedValue([
     { id: "i1", title: "Example", username: "me@example.com", hasOtp: true },
   ])
@@ -59,7 +63,7 @@ afterEach(() => vi.restoreAllMocks())
 
 describe("the credential strip", () => {
   it("says which CLI to install when there is no password manager", async () => {
-    api.vaultStatus.mockResolvedValue({ backend: null, locked: false })
+    api.vaultStatus.mockResolvedValue({ backend: null, locked: false, signedOut: false })
     render(<VaultBar url={URL_} evalInPage={page()} onClose={() => {}} />)
     expect(await screen.findByText(/vault.noBackend/)).toBeTruthy()
     expect(api.vaultLookup).not.toHaveBeenCalled()
@@ -202,14 +206,22 @@ describe("the credential strip", () => {
   })
 
   it("asks for the unlock before listing anything", async () => {
-    api.vaultStatus.mockResolvedValue({ backend: "bw", locked: true })
+    api.vaultStatus.mockResolvedValue({ backend: "bw", locked: true, signedOut: false })
     render(<VaultBar url={URL_} evalInPage={page()} onClose={() => {}} />)
     const field = await screen.findByLabelText("vault.masterPassword")
     expect(api.vaultLookup).not.toHaveBeenCalled()
-    api.vaultStatus.mockResolvedValue({ backend: "bw", locked: false })
+    api.vaultStatus.mockResolvedValue({ backend: "bw", locked: false, signedOut: false })
     await userEvent.type(field, "master{Enter}")
     await waitFor(() => expect(api.vaultUnlock).toHaveBeenCalledWith("master"))
     // The site, not the page — same as the initial lookup (see "once per site").
     await waitFor(() => expect(api.vaultLookup).toHaveBeenCalledWith("https://example.com"))
+  })
+
+  it("sends a never-signed-in Bitwarden to the terminal instead of asking a password", async () => {
+    api.vaultStatus.mockResolvedValue({ backend: "bw", locked: false, signedOut: true })
+    render(<VaultBar url={URL_} evalInPage={page()} onClose={() => {}} />)
+    expect(await screen.findByText("vault.signedOut")).toBeTruthy()
+    expect(screen.queryByLabelText("vault.masterPassword")).toBeNull()
+    expect(api.vaultLookup).not.toHaveBeenCalled()
   })
 })

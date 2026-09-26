@@ -671,6 +671,8 @@
     "checking": "Recherche de votre gestionnaire de mots de passe…",
     "noBackend": "Aucune CLI de gestionnaire de mots de passe trouvée. Installez `op` (1Password) ou `bw` (Bitwarden) pour remplir des identifiants ici.",
     "openExtensions": "Montrez-moi",
+    "signedOut": "La CLI de Bitwarden n'est pas connectée : aucun mot de passe principal ne peut la déverrouiller. Lancez `bw login` dans un terminal, puis vérifiez à nouveau.",
+    "recheck": "Vérifier à nouveau",
     "locked": "Bitwarden est verrouillé — mot de passe maître :",
     "masterPassword": "Mot de passe maître Bitwarden",
     "noMatch": "Aucun identifiant enregistré pour ce site.",

@@ -671,6 +671,8 @@
     "checking": "Buscando tu gestor de contraseñas…",
     "noBackend": "No se ha encontrado ninguna CLI de gestor de contraseñas. Instala `op` de 1Password o `bw` de Bitwarden para rellenar credenciales aquí.",
     "openExtensions": "Muéstramelo",
+    "signedOut": "La CLI de Bitwarden no ha iniciado sesión, así que ninguna contraseña maestra puede desbloquearla. Ejecuta `bw login` en una terminal y vuelve a comprobarlo.",
+    "recheck": "Comprobar de nuevo",
     "locked": "Bitwarden está bloqueado. Contraseña maestra:",
     "masterPassword": "Contraseña maestra de Bitwarden",
     "noMatch": "No hay ninguna credencial guardada para este sitio.",

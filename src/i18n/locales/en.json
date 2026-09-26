@@ -671,6 +671,8 @@
     "checking": "Looking for your password manager…",
     "noBackend": "No password manager CLI found. Install 1Password's `op` or Bitwarden's `bw` to fill credentials here.",
     "openExtensions": "Show me",
+    "signedOut": "Bitwarden's CLI isn't signed in, so no master password can unlock it. Run `bw login` in a terminal, then check again.",
+    "recheck": "Check again",
     "locked": "Bitwarden is locked — master password:",
     "masterPassword": "Bitwarden master password",
     "noMatch": "No saved login for this site.",

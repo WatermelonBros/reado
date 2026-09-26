@@ -28,6 +28,8 @@ export interface VaultStatus {
   /** `"op"` (1Password) or `"bw"` (Bitwarden); null when neither CLI is installed. */
   backend: "op" | "bw" | null
   locked: boolean
+  /** Bitwarden's CLI was never signed in: `bw login` in a terminal first. */
+  signedOut: boolean
 }
 
 /** What a fill script reports back: filled, or which field it could not find. */

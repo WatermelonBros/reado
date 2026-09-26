@@ -86,7 +86,7 @@ export function VaultBar({
       const s = await vaultStatus()
       if (!alive) return
       setStatus(s)
-      if (!s.backend || s.locked) return setItems(null)
+      if (!s.backend || s.locked || s.signedOut) return setItems(null)
       try {
         const found = await vaultLookup(origin)
         if (alive) setItems(found)
@@ -110,6 +110,14 @@ export function VaultBar({
       setBusy(false)
     }
   }
+
+  /** After `bw login` in a terminal: ask again, and list the site's logins if open. */
+  const recheck = () =>
+    guard(async () => {
+      const s = await vaultStatus()
+      setStatus(s)
+      if (s.backend && !s.locked && !s.signedOut) setItems(await vaultLookup(origin))
+    })
 
   const report = (res: FillResult, item?: VaultItem) => {
     const text = res.ok
@@ -192,6 +200,15 @@ export function VaultBar({
             }}
           >
             {t("vault.openExtensions")}
+          </Button>
+        </>
+      )
+    if (status.signedOut)
+      return (
+        <>
+          <span className="min-w-0 flex-1 text-muted">{t("vault.signedOut")}</span>
+          <Button size="sm" variant="secondary" onClick={() => void recheck()}>
+            {t("vault.recheck")}
           </Button>
         </>
       )

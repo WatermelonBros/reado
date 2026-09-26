@@ -83,16 +83,18 @@ impl Backend {
         }
     }
 
-    /// Whether the vault must be unlocked before use. `op` brokers its own unlock
-    /// through the 1Password app, so it is never "locked" from our side; `bw`
-    /// says so itself.
-    fn locked(self) -> bool {
-        self == Self::Bw
-            && run("bw", &["status"], None)
-                .ok()
-                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-                .and_then(|v| v.get("status").and_then(|s| s.as_str()).map(String::from))
-                .is_none_or(|s| s != "unlocked")
+    /// `bw`'s own state: `unauthenticated` (never `bw login`), `locked` or
+    /// `unlocked`. `op` brokers its own unlock through the 1Password app, so from
+    /// our side it is always unlocked.
+    fn state(self) -> String {
+        if self == Self::Op {
+            return "unlocked".into();
+        }
+        run("bw", &["status"], None)
+            .ok()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|v| v.get("status").and_then(|s| s.as_str()).map(String::from))
+            .unwrap_or_else(|| "locked".into())
     }
 
     /// The logins matching `url` (whose host is `host`), best match first.
@@ -157,6 +159,9 @@ pub struct VaultStatus {
     /// `"op"`, `"bw"`, or `None` when neither CLI is installed.
     pub backend: Option<String>,
     pub locked: bool,
+    /// Bitwarden's CLI was never signed in (`bw login`): no password typed here
+    /// can unlock it, so the user is sent to a terminal instead.
+    pub signed_out: bool,
 }
 
 /// A vault login, as offered to the user. Deliberately **carries no secret**: the
@@ -555,17 +560,21 @@ pub async fn vault_status() -> VaultStatus {
             return VaultStatus {
                 backend: None,
                 locked: false,
+                signed_out: false,
             };
         };
+        let state = b.state();
         VaultStatus {
             backend: Some(b.program().to_string()),
-            locked: b.locked(),
+            locked: state == "locked",
+            signed_out: state == "unauthenticated",
         }
     })
     .await
     .unwrap_or(VaultStatus {
         backend: None,
         locked: false,
+        signed_out: false,
     })
 }
 
@@ -774,7 +783,7 @@ mod tests {
         assert_eq!(Backend::Op.program(), "op");
         assert_eq!(Backend::Bw.program(), "bw");
         // 1Password never reads as locked: it brokers its own unlock.
-        assert!(!Backend::Op.locked());
+        assert_eq!(Backend::Op.state(), "unlocked");
     }
 
     #[test]

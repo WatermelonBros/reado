@@ -671,6 +671,8 @@
     "checking": "Cerco il gestore password…",
     "noBackend": "Nessuna CLI di gestore password trovata. Installa `op` di 1Password o `bw` di Bitwarden per inserire credenziali qui.",
     "openExtensions": "Mostrami",
+    "signedOut": "La CLI di Bitwarden non ha fatto l'accesso, quindi nessuna master password può sbloccarla. Esegui `bw login` in un terminale, poi ricontrolla.",
+    "recheck": "Ricontrolla",
     "locked": "Bitwarden è bloccato — password principale:",
     "masterPassword": "Password principale di Bitwarden",
     "noMatch": "Nessun accesso salvato per questo sito.",
