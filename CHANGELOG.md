@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.28.0] — 2026-09-27
+
 ### Added
 
 - **Pair sessions (Pro).** Read an organization's project together: the people
@@ -28,16 +30,6 @@ commit.
   its route, why each file is there, the step they're on — and following them
   walks it. `.env` files are never shared. The tab bar stays while a session is
   on, even with every file closed.
-
-### Fixed
-
-- **Members-only share links** work on an organization's projects: the app didn't
-  see which organization owned the project, so the link was public; and an
-  organization's "members only" rule missed repositories whose owner has capitals
-  in its name.
-
-### Added
-
 - **Share links (Pro).** The link icon in a comment thread copies a link to that
   comment and the code under it — the commented lines with a little context, the
   file, branch and commit, and the whole thread. On an organization's project it
@@ -63,7 +55,6 @@ commit.
   empty strip.
 - **Bitwarden that was never signed in** no longer asks for a master password
   that can't work: Reado says to run `bw login` in a terminal, and checks again.
-
 
 ## [1.27.0] — 2026-09-26
 
@@ -2889,7 +2880,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.27.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.28.0...HEAD
+[1.28.0]: https://github.com/WatermelonBros/reado/compare/v1.27.0...v1.28.0
 [1.27.0]: https://github.com/WatermelonBros/reado/compare/v1.26.0...v1.27.0
 [1.26.0]: https://github.com/WatermelonBros/reado/compare/v1.25.0...v1.26.0
 [1.25.0]: https://github.com/WatermelonBros/reado/compare/v1.24.1...v1.25.0
