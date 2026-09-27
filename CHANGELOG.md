@@ -13,6 +13,31 @@ commit.
 
 ### Added
 
+- **Pair sessions (Pro).** Read an organization's project together: the people
+  icon at the right end of the tab bar invites one or more teammates, who get a
+  notice with "Join". Everyone in the session shows as an avatar in their colour
+  there. You see each other's mouse over the code with a name badge, like in
+  Figma; click an avatar to follow that person — the files they open and their
+  scroll — until you click again, scroll, type or press Esc. The pen draws on the
+  code, and the stroke fades a few seconds later. **Code together**: a file
+  opened during the session is one shared document — what anyone types reaches
+  everyone with it open, merged as they type, no commit needed. Whoever invited
+  the others hosts: the files are theirs, and every change is saved on their
+  computer only; guests type and see, their own copies untouched. **Guided reviews
+  together**: a review running in someone's Reado shows in everyone's pair menu —
+  its route, why each file is there, the step they're on — and following them
+  walks it. `.env` files are never shared. The tab bar stays while a session is
+  on, even with every file closed.
+
+### Fixed
+
+- **Members-only share links** work on an organization's projects: the app didn't
+  see which organization owned the project, so the link was public; and an
+  organization's "members only" rule missed repositories whose owner has capitals
+  in its name.
+
+### Added
+
 - **Share links (Pro).** The link icon in a comment thread copies a link to that
   comment and the code under it — the commented lines with a little context, the
   file, branch and commit, and the whole thread. On an organization's project it
