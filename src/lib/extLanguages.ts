@@ -14,7 +14,7 @@
  */
 import { EditorState, type Extension } from "@codemirror/state"
 import { extRead, type InstalledExt } from "./api"
-import { parseJsonc } from "./extThemes"
+import { parseJsonc } from "./jsonc"
 import { createLogger } from "./logger"
 import { langIdFor } from "./lsp"
 

@@ -10,6 +10,7 @@
  */
 import { type Completion, snippetCompletion } from "@codemirror/autocomplete"
 import { extRead, type InstalledExt } from "./api"
+import { parseJsonc } from "./jsonc"
 import { createLogger } from "./logger"
 
 const log = createLogger("extSnippets")
@@ -145,7 +146,6 @@ async function readSnippetFile(
   const hit = cache.get(key)
   if (hit) return hit
   // Snippet files carry comments as often as themes do.
-  const { parseJsonc } = await import("./extThemes")
   const parsed = parseJsonc(await extRead(ext.namespace, ext.name, path)) as Record<
     string,
     SnippetEntry

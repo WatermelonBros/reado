@@ -20,9 +20,9 @@ import {
   loadExtTheme,
   loadExtThemePreviews,
   parseHex,
-  parseJsonc,
   themesOf,
 } from "@/lib/extThemes"
+import { parseJsonc } from "@/lib/jsonc"
 
 const ext = (contributes: unknown): InstalledExt => ({
   id: "Pub.thing",

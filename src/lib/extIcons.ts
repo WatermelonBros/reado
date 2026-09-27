@@ -14,7 +14,8 @@
 import { create } from "zustand"
 import { extAsset, extRead, type InstalledExt } from "./api"
 import { resolvedLanguageId } from "./extLanguages"
-import { parseJsonc, resolveSibling } from "./extThemes"
+import { resolveSibling } from "./extThemes"
+import { parseJsonc } from "./jsonc"
 import { createLogger } from "./logger"
 import { enabledExtensions, useMarketplace } from "./marketplace"
 
