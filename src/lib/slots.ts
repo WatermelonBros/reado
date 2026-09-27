@@ -16,6 +16,8 @@ import type { ComponentType } from "react"
  * - `statusbar.left` — the status bar's left group, before the file path.
  * - `comment.actions` — a comment thread's header, beside its own actions; gets the
  *   comment's id and the project root it belongs to.
+ * - `editor.tabbar` — the right end of the primary editor group's tab bar, outside
+ *   the scrolling strip of tabs.
  *
  * Registration is typed by this map, so a contribution that needs context cannot be
  * put in a slot that gives none.
@@ -25,6 +27,7 @@ export interface SlotProps {
   "settings.footer": Record<string, never>
   "statusbar.left": Record<string, never>
   "comment.actions": { commentId: string; root: string }
+  "editor.tabbar": Record<string, never>
 }
 
 export type SlotName = keyof SlotProps

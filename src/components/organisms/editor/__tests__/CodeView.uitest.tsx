@@ -1002,3 +1002,24 @@ describe("more of the context menu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument()
   })
 })
+
+describe("editor extensions from an embedding build", () => {
+  it("adds a registered extension to the editor of its file only", async () => {
+    const { registerEditorExtension, resetEditorExtensionsForTest } = await import(
+      "@/lib/editorExtensions"
+    )
+    registerEditorExtension(({ relPath, root }) =>
+      relPath === REL && root === ROOT
+        ? EditorView.editorAttributes.of({ "data-from-build": relPath })
+        : [],
+    )
+    try {
+      const { container } = mount()
+      await waitFor(() =>
+        expect(container.querySelector(`[data-from-build="${REL}"]`)).not.toBeNull(),
+      )
+    } finally {
+      resetEditorExtensionsForTest()
+    }
+  })
+})

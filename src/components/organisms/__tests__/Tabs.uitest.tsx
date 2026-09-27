@@ -189,3 +189,25 @@ describe("Tabs", () => {
     expect(useProject.getState().pinnedTabs).toEqual(["/proj/src/a.ts"])
   })
 })
+
+describe("editor.tabbar slot", () => {
+  it("renders a registered component once, in the primary group's bar only", async () => {
+    const { registerSlot, resetSlotsForTest } = await import("@/lib/slots")
+    registerSlot("editor.tabbar", () => <span>pair-avatars</span>)
+    try {
+      const { unmount } = render(<Tabs />)
+      expect(screen.getAllByText("pair-avatars")).toHaveLength(1)
+      // Outside the tablist: it must not scroll away with the tabs.
+      expect(screen.getByRole("tablist")).not.toContainElement(screen.getByText("pair-avatars"))
+      unmount()
+      render(<Tabs group="g2" />)
+      expect(screen.queryByText("pair-avatars")).toBeNull()
+      // With every tab closed the bar stays for what the slot shows.
+      useProject.setState({ tabs: [], active: null })
+      render(<Tabs />)
+      expect(screen.getByText("pair-avatars")).toBeInTheDocument()
+    } finally {
+      resetSlotsForTest()
+    }
+  })
+})

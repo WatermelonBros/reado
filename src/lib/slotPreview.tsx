@@ -13,6 +13,7 @@ const SLOTS = [
   "settings.footer",
   "statusbar.left",
   "comment.actions",
+  "editor.tabbar",
 ] as const
 
 function Placeholder({ name }: { name: string }) {

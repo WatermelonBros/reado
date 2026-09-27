@@ -321,3 +321,26 @@ describe("submitToTerminal", () => {
     vi.useRealTimers()
   })
 })
+
+describe("writeFile and an embedding build's write guards", () => {
+  it("writes nothing for a file a guard holds back, and everything else as before", async () => {
+    const { registerWriteGuard, resetEditorExtensionsForTest } = await import(
+      "@/lib/editorExtensions"
+    )
+    registerWriteGuard((_root, path) => path === "shared.ts")
+    try {
+      invoke.mockClear()
+      await api.writeFile("/r", "shared.ts", "x")
+      expect(invoke).not.toHaveBeenCalled()
+      await api.writeFile("/r", "mine.ts", "x")
+      expect(invoke).toHaveBeenCalledWith("write_file", {
+        root: "/r",
+        path: "mine.ts",
+        content: "x",
+        encoding: undefined,
+      })
+    } finally {
+      resetEditorExtensionsForTest()
+    }
+  })
+})

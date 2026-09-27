@@ -8,10 +8,12 @@ import { useTranslation } from "react-i18next"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, FileIcon, PinIcon } from "@/components/atoms/icons"
+import { Slot } from "@/components/atoms/Slot"
 import { baseName, toRelative } from "@/lib/comments"
 import { formatDocument } from "@/lib/docInfo"
 import { dirName } from "@/lib/paths"
 import { useFlip, usePointerReorder } from "@/lib/pointerReorder"
+import { slotContents } from "@/lib/slots"
 import { useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
 import { isUntitled, untitledName, useUntitled } from "@/lib/untitled"
@@ -112,7 +114,14 @@ export function Tabs({ group }: { group?: string } = {}) {
   const listRef = useRef<HTMLDivElement>(null)
   useFlip(listRef, tabs.join(" ")) // slide tabs to new positions on reorder
 
-  if (tabs.length === 0 || tabBar === "hidden") return null
+  if (tabs.length === 0 || tabBar === "hidden")
+    // No tabs to show, but what fills the slot (a pair session's people) still
+    // needs its place; the bar collapses when nothing does.
+    return group || !slotContents("editor.tabbar").length ? null : (
+      <div className="flex h-[38px] flex-none items-stretch justify-end border-b border-line bg-surface empty:hidden">
+        <Slot name="editor.tabbar" />
+      </div>
+    )
   // Single-tab mode shows only the active file; switching files (palette/keys)
   // replaces it rather than accumulating a row. No open file is closed.
   // Pinned tabs sort to the front: they are the ones you meant to keep, and the
@@ -189,109 +198,114 @@ export function Tabs({ group }: { group?: string } = {}) {
   ]
 
   return (
-    <div
-      ref={listRef}
-      role="tablist"
-      className="flex h-[38px] flex-none items-stretch overflow-x-auto border-b border-line bg-surface [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    >
-      {shownTabs.map((tabPath) => {
-        const isActive = active === tabPath
-        const dirty = dirtyPaths.includes(toRelative(root, tabPath))
-        const preview = previewPath === tabPath
-        const pinned = pinnedTabs.includes(tabPath)
-        const label = labels.get(tabPath) ?? { name: baseName(tabPath) }
-        return (
-          <div
-            key={tabPath}
-            data-reorder-id={tabPath}
-            onPointerDown={onPointerDown(tabPath)}
-            onContextMenu={(e) => {
-              e.preventDefault()
-              setMenu({ x: e.clientX, y: e.clientY, path: tabPath })
-            }}
-            // Middle-click (mouse wheel) closes the tab, like a browser.
-            onAuxClick={(e) => {
-              if (e.button === 1) {
+    <div className="flex h-[38px] flex-none items-stretch border-b border-line bg-surface">
+      <div
+        ref={listRef}
+        role="tablist"
+        className="flex min-w-0 flex-1 items-stretch overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {shownTabs.map((tabPath) => {
+          const isActive = active === tabPath
+          const dirty = dirtyPaths.includes(toRelative(root, tabPath))
+          const preview = previewPath === tabPath
+          const pinned = pinnedTabs.includes(tabPath)
+          const label = labels.get(tabPath) ?? { name: baseName(tabPath) }
+          return (
+            <div
+              key={tabPath}
+              data-reorder-id={tabPath}
+              onPointerDown={onPointerDown(tabPath)}
+              onContextMenu={(e) => {
                 e.preventDefault()
-                closeTab(tabPath)
-              }
-            }}
-            title={tabPath}
-            className={`group relative flex max-w-[240px] items-stretch gap-2 whitespace-nowrap border-r border-line pr-2 text-sm transition-colors ${
-              isActive
-                ? "bg-canvas text-ink shadow-[inset_0_2px_0_var(--accent)]"
-                : "text-muted hover:bg-canvas/50 hover:text-ink"
-            } ${dragging === tabPath ? "opacity-40" : ""}`}
-          >
-            {over?.id === tabPath && (
-              <span
-                aria-hidden="true"
-                className={`pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-accent ${
-                  over.after ? "right-0" : "left-0"
-                }`}
-              />
-            )}
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => setActive(tabPath)}
-              // A second click on the tab you are already looking at is the
-              // "I mean it" gesture, exactly as a double-click in the tree is.
-              onDoubleClick={() => keepOpen(tabPath)}
-              title={preview ? t("tabs.preview") : tabPath}
-              className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden pl-3 text-left"
+                setMenu({ x: e.clientX, y: e.clientY, path: tabPath })
+              }}
+              // Middle-click (mouse wheel) closes the tab, like a browser.
+              onAuxClick={(e) => {
+                if (e.button === 1) {
+                  e.preventDefault()
+                  closeTab(tabPath)
+                }
+              }}
+              title={tabPath}
+              className={`group relative flex max-w-[240px] items-stretch gap-2 whitespace-nowrap border-r border-line pr-2 text-sm transition-colors ${
+                isActive
+                  ? "bg-canvas text-ink shadow-[inset_0_2px_0_var(--accent)]"
+                  : "text-muted hover:bg-canvas/50 hover:text-ink"
+              } ${dragging === tabPath ? "opacity-40" : ""}`}
             >
-              <FileIcon isDir={false} name={label.name} mode={iconMode} className="flex-none" />
-              <span className={`overflow-hidden text-ellipsis ${preview ? "italic" : ""}`}>
-                {label.name}
-              </span>
-              {label.dir && (
-                <span className="flex-none overflow-hidden text-ellipsis text-[10px] text-faint">
-                  {label.dir}
-                </span>
+              {over?.id === tabPath && (
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-accent ${
+                    over.after ? "right-0" : "left-0"
+                  }`}
+                />
               )}
-            </button>
-            {/* The dot replaces the close button while there are unsaved edits —
+              <button
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActive(tabPath)}
+                // A second click on the tab you are already looking at is the
+                // "I mean it" gesture, exactly as a double-click in the tree is.
+                onDoubleClick={() => keepOpen(tabPath)}
+                title={preview ? t("tabs.preview") : tabPath}
+                className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden pl-3 text-left"
+              >
+                <FileIcon isDir={false} name={label.name} mode={iconMode} className="flex-none" />
+                <span className={`overflow-hidden text-ellipsis ${preview ? "italic" : ""}`}>
+                  {label.name}
+                </span>
+                {label.dir && (
+                  <span className="flex-none overflow-hidden text-ellipsis text-[10px] text-faint">
+                    {label.dir}
+                  </span>
+                )}
+              </button>
+              {/* The dot replaces the close button while there are unsaved edits —
                 the same slot, so the strip doesn't reflow, and hovering swaps it
                 back to the X so the tab is still closable. */}
-            {pinned && (
-              <span
-                role="img"
-                aria-label={t("tabs.pinned")}
-                title={t("tabs.pinned")}
-                className="my-auto flex-none text-faint"
-              >
-                <PinIcon className="h-3 w-3" weight="fill" />
-              </span>
-            )}
-            {dirty && (
-              <span
-                role="img"
-                aria-label={t("tabs.unsaved")}
-                title={t("tabs.unsaved")}
-                className="my-auto h-1.5 w-1.5 flex-none rounded-full bg-accent group-hover:hidden group-focus-within:hidden"
+              {pinned && (
+                <span
+                  role="img"
+                  aria-label={t("tabs.pinned")}
+                  title={t("tabs.pinned")}
+                  className="my-auto flex-none text-faint"
+                >
+                  <PinIcon className="h-3 w-3" weight="fill" />
+                </span>
+              )}
+              {dirty && (
+                <span
+                  role="img"
+                  aria-label={t("tabs.unsaved")}
+                  title={t("tabs.unsaved")}
+                  className="my-auto h-1.5 w-1.5 flex-none rounded-full bg-accent group-hover:hidden group-focus-within:hidden"
+                />
+              )}
+              <IconButton
+                size="xxs"
+                label={`${t("tabs.close")} ${label.name}`}
+                icon={<CloseIcon className="block h-[13px] w-[13px]" />}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  closeTab(tabPath)
+                }}
+                className={`my-auto transition-opacity ${
+                  isActive && !dirty
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                } ${dirty ? "hidden group-hover:block group-focus-within:block" : ""}`}
               />
-            )}
-            <IconButton
-              size="xxs"
-              label={`${t("tabs.close")} ${label.name}`}
-              icon={<CloseIcon className="block h-[13px] w-[13px]" />}
-              onClick={(e) => {
-                e.stopPropagation()
-                closeTab(tabPath)
-              }}
-              className={`my-auto transition-opacity ${
-                isActive && !dirty
-                  ? "opacity-100"
-                  : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-              } ${dirty ? "hidden group-hover:block group-focus-within:block" : ""}`}
-            />
-          </div>
-        )
-      })}
+            </div>
+          )
+        })}
 
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}
+        {menu && <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}
+      </div>
+      {/* Outside the scrolling strip, so it stays at the right end however many
+        tabs are open; the primary group only, so a split doesn't show it twice. */}
+      {!group && <Slot name="editor.tabbar" />}
     </div>
   )
 }

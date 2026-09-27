@@ -10,6 +10,7 @@
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type { VaultItem, VaultSecret, VaultStatus } from "@/lib/vault"
+import { writeBlocked } from "./editorExtensions"
 import { tracedInvoke as invoke } from "./logger"
 import { useSettings } from "./store"
 import { profileFor } from "./terminalProfiles"
@@ -220,8 +221,13 @@ export const historyRead = (root: string, path: string, stamp: string) =>
   invoke<string>("history_read", { root, path, stamp })
 
 /** Write UTF-8 text back to a file (manual editing). */
+/** Write a file — unless the embedding build holds it back (`writeBlocked`): then
+ *  nothing is written and the caller carries on as after a save, since the buffer
+ *  is someone else's to save. */
 export const writeFile = (root: string, path: string, content: string, encoding?: string) =>
-  invoke<void>("write_file", { root, path, content, encoding })
+  writeBlocked(root, path)
+    ? Promise.resolve()
+    : invoke<void>("write_file", { root, path, content, encoding })
 
 /** Create a new empty file (project-relative path); returns its absolute path. */
 export const createFile = (root: string, path: string) =>
