@@ -24,7 +24,7 @@ const BRIDGE: &str = r#"(function(){
   var B = window.__readoBridge = { logs: [], net: [], _id: 0 };
   // Console is drained (cleared each poll); network is a persistent snapshot so
   // request/response bodies (which resolve async) can fill in and be inspected.
-  B.drain = function(){ var l=B.logs, ip=B.inspectPath, ca=B.commentAt, oc=B.openComment, cr=B.commentReply, cs=B.commentResolve, ct=B.commentType, ck=B.commentKind, ce=B.commentEdit, vp=B.vaultPick; B.logs=[]; B.inspectPath=null; B.commentAt=null; B.openComment=null; B.commentReply=null; B.commentResolve=null; B.commentType=null; B.commentKind=null; B.commentEdit=null; B.vaultPick=null; return {logs:l, net:B.net.slice(-300), inspect:ip, commentAt:ca||null, openComment:oc||null, commentReply:cr||null, commentResolve:cs||null, commentType:ct||null, commentKind:ck||null, commentEdit:ce||null, vaultPick:vp||null, hasMarks:!!document.getElementById('__readoMarks'), hasVault:!!document.getElementById('__readoVault'), href:location.href, canBack:history.length>1}; };
+  B.drain = function(){ var l=B.logs, ip=B.inspectPath, ca=B.commentAt, oc=B.openComment, vp=B.vaultPick; B.logs=[]; B.inspectPath=null; B.commentAt=null; B.openComment=null; B.vaultPick=null; return {logs:l, net:B.net.slice(-300), inspect:ip, commentAt:ca||null, openComment:oc||null, vaultPick:vp||null, hasMarks:!!document.getElementById('__readoMarks'), hasVault:!!document.getElementById('__readoVault'), href:location.href, canBack:history.length>1}; };
   B.clear = function(){ B.logs=[]; B.net=[]; };
   // Elements highlight: draw an overlay over the element at the given child-index
   // path (from documentElement), like Chrome's hover highlight.
@@ -63,25 +63,161 @@ const BRIDGE: &str = r#"(function(){
   // comment with no element, or whose element is gone.
   B.at = function(path){ var el=document.documentElement; for(var i=0;el&&i<path.length;i++){ el=el.children[path[i]]; } return el||null; };
   B.where = function(m){ var t=m.target; if(t&&t.path){ var el=B.at(t.path); if(el&&el.isConnected){ var r=el.getBoundingClientRect(); if(r.width||r.height) return {x:r.left+t.dx, y:r.top+t.dy}; } } return {x:(m.x||0)-(window.scrollX||0), y:(m.y||0)-(window.scrollY||0)}; };
-  B.placed = [];
-  B.place = function(){ B.placed = B.placed.filter(function(p){ return p.el.isConnected; }); B.placed.forEach(function(p){ var w=B.where(p.m); var off=w.x<0||w.y<0||w.x>innerWidth||w.y>innerHeight; p.el.style.display=(off&&!p.card)?'none':''; p.el.style.left=(w.x+(p.card?14:0))+'px'; p.el.style.top=w.y+'px'; if(p.card) B.fit(p.el); }); };
-  var placing=0; function schedulePlace(){ if(placing||!B.placed.length) return; placing=requestAnimationFrame(function(){ placing=0; B.place(); }); }
+  // The layer an element lives in when the page floats one over itself — a
+  // dialog, a popover, a menu. Reado's panels for that element open *inside* it:
+  // appended to <body> they were outside it as far as the page could tell, so the
+  // popover closed on the first click, its focus trap took the caret back from
+  // the textarea, and a menu's typeahead ate what was typed there.
+  B.host = function(el){
+    var h = el && el.closest && el.closest('dialog[open],[popover],[role=dialog],[role=alertdialog],[role=menu],[role=listbox],[aria-modal=true]');
+    return h || document.body || document.documentElement;
+  };
+  B.onBody = function(host){ return host === document.body || host === document.documentElement; };
+  // Where (0,0) of a `position:fixed` box lands inside `host`: the viewport's
+  // corner, except under a transformed ancestor — every positioned popover is
+  // one — which re-bases it.
+  B.origin = function(host){
+    if (B.onBody(host)) return {x:0, y:0};
+    var p = document.createElement('div'); p.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0';
+    host.appendChild(p); var r = p.getBoundingClientRect(); p.remove();
+    return {x:r.left, y:r.top};
+  };
+  // The page's own handlers never hear what happens in a panel: a dialog's
+  // Escape, a menu's arrow keys, a "click outside" listener on the document.
+  B.seal = function(el){
+    ['keydown','keyup','keypress','pointerdown','mousedown','mouseup','click','focusin','focusout'].forEach(function(t){
+      el.addEventListener(t, function(e){ e.stopPropagation(); });
+    });
+  };
+  // A dot sits in the host of the element it is about. It outlives the popover
+  // it sits in: it goes back to the page's layer, and into the popover again when
+  // that reopens.
+  B.dots = [];
+  function rehome(p){
+    var t = p.m.target, el = t && t.path && B.at(t.path), h = B.host(el);
+    var parent = B.onBody(h) ? B.layer() : h;
+    if (p.el.parentNode !== parent) parent.appendChild(p.el);
+    p.host = h;
+  }
+  B.place = function(){
+    B.dots.forEach(function(p){
+      rehome(p);
+      var w = B.where(p.m), o = B.origin(p.host);
+      var off = w.x<0 || w.y<0 || w.x>innerWidth || w.y>innerHeight;
+      p.el.style.display = (off || !B.marksOn) ? 'none' : '';
+      p.el.style.left = (w.x - o.x)+'px'; p.el.style.top = (w.y - o.y)+'px';
+    });
+  };
+  var placing=0; function schedulePlace(){ if(placing||!B.dots.length) return; placing=requestAnimationFrame(function(){ placing=0; B.place(); }); }
   window.addEventListener('scroll', schedulePlace, true); window.addEventListener('resize', schedulePlace);
   // Reflows nobody scrolls or resizes for: images arriving, an app re-rendering.
   setInterval(schedulePlace, 500);
-  B.marks = function(list, on){ var layer=document.getElementById('__readoMarks'); if(!layer){ layer=document.createElement('div'); layer.id='__readoMarks'; (document.body||document.documentElement).appendChild(layer); } layer.innerHTML=''; layer.style.display=on?'block':'none'; (list||[]).forEach(function(m){ var d=document.createElement('div'); d.style.cssText='position:fixed;z-index:2147483640;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:#ff2d55;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer'; d.onmousedown=function(ev){ ev.stopPropagation(); ev.preventDefault(); B.openComment=m.id; }; layer.appendChild(d); B.placed.push({el:d, m:m}); }); B.place(); };
+  B.layer = function(){ var layer=document.getElementById('__readoMarks'); if(!layer){ layer=document.createElement('div'); layer.id='__readoMarks'; layer.style.display=B.marksOn?'block':'none'; (document.body||document.documentElement).appendChild(layer); } return layer; };
+  // `ui` is Reado's look — the theme's colours and the labels in the user's
+  // language — handed over with the marks, so it is on the page before any panel.
+  B.marks = function(list, on, ui){
+    if (ui) B.ui = ui;
+    B.marksOn = !!on;
+    var layer = B.layer(); layer.innerHTML = ''; layer.style.display = on ? 'block' : 'none';
+    B.dots.forEach(function(p){ p.el.remove(); });
+    B.dots = (list||[]).map(function(m){
+      var d=document.createElement('div');
+      d.style.cssText='position:fixed;z-index:2147483640;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:#ff2d55;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer';
+      d.onmousedown=function(ev){ ev.stopPropagation(); ev.preventDefault(); B.openComment=m.id; };
+      B.seal(d);
+      return {el:d, m:m};
+    });
+    B.place();
+  };
   // Keep a panel we float over the page inside the visible part of it. Panels open
   // where the user clicked, and a click near the right or bottom edge used to
-  // leave the composer/card hanging past it, half out of reach. Shifts by the
+  // leave the composer hanging past it, half out of reach. Shifts by the
   // overflow, so it works for `fixed` (viewport) and `absolute` (document) boxes alike.
   B.fit = function(el){ var m=8, r=el.getBoundingClientRect(), dx=0, dy=0; if(r.right>innerWidth-m) dx=innerWidth-m-r.right; if(r.left+dx<m) dx=m-r.left; if(r.bottom>innerHeight-m) dy=innerHeight-m-r.bottom; if(r.top+dy<m) dy=m-r.top; if(dx) el.style.left=(parseFloat(el.style.left)||0)+dx+'px'; if(dy) el.style.top=(parseFloat(el.style.top)||0)+dy+'px'; };
-  // In-page comment composer at a document point; Save buffers {x,y,url,text} for Reado to drain.
-  B.compose = function(x, y, target){ B.composeClose(); var box=document.createElement('div'); box.id='__readoCompose'; box.style.cssText='position:absolute;z-index:2147483645;left:'+x+'px;top:'+y+'px;width:260px;background:#20242e;color:#e6e9ef;border:1px solid #3a4150;border-radius:10px;padding:8px;box-shadow:0 12px 34px rgba(0,0,0,.5);font:13px -apple-system,sans-serif'; var ta=document.createElement('textarea'); ta.placeholder='Comment on this spot...'; ta.style.cssText='width:100%;box-sizing:border-box;min-height:56px;resize:none;background:#171b22;color:#e6e9ef;border:1px solid #3a4150;border-radius:6px;padding:6px;font:13px -apple-system,sans-serif;outline:none'; var row=document.createElement('div'); row.style.cssText='display:flex;justify-content:flex-end;gap:6px;margin-top:6px'; var cancel=document.createElement('button'); cancel.textContent='Cancel'; cancel.style.cssText='padding:4px 10px;border-radius:6px;border:0;background:transparent;color:#9aa3b2;cursor:pointer'; var save=document.createElement('button'); save.textContent='Comment'; save.style.cssText='padding:4px 10px;border-radius:6px;border:0;background:#3b82f6;color:#fff;cursor:pointer'; function doSave(){ var v=ta.value.trim(); if(v){ B.commentAt={x:x,y:y,url:location.href,text:v,target:target||null}; } B.composeClose(); } cancel.onmousedown=function(e){ e.preventDefault(); B.composeClose(); }; save.onmousedown=function(e){ e.preventDefault(); doSave(); }; ta.addEventListener('keydown',function(e){ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); doSave(); } if(e.key==='Escape'){ B.composeClose(); } }); row.appendChild(cancel); row.appendChild(save); box.appendChild(ta); box.appendChild(row); (document.body||document.documentElement).appendChild(box); B.fit(box); setTimeout(function(){ ta.focus(); },0); };
+  // The comment composer, drawn to read as the editor's own: the same header of
+  // types, the same Task checkbox and buttons, in the theme's colours. (A comment
+  // then opens in Reado's own thread, docked beside the page.)
+  // Until Reado has sent its look (`B.marks`), the dark theme's.
+  B.ui = {
+    c: { canvas:'oklch(0.2 0.018 250)', surface:'oklch(0.24 0.02 250)', overlay:'oklch(0.27 0.022 250)', line:'oklch(0.32 0.02 250)', strong:'oklch(0.42 0.02 250)', ink:'oklch(0.87 0.012 250)', muted:'oklch(0.73 0.012 250)', faint:'oklch(0.62 0.012 250)', accent:'oklch(0.74 0.11 260)', onAccent:'oklch(0.2 0.02 260)', selection:'oklch(0.74 0.11 260 / 0.28)', font:'-apple-system,BlinkMacSystemFont,sans-serif',
+      types: { bug:'oklch(0.72 0.16 35)', refactor:'oklch(0.79 0.1 260)', performance:'oklch(0.71 0.15 55)', question:'oklch(0.72 0.15 330)', note:'oklch(0.73 0.012 250)' } },
+    t: { placeholder:'Leave a comment… Markdown supported.', save:'Comment', cancel:'Cancel', task:'Task',
+      types: { bug:'Bug', refactor:'Refactor', performance:'Performance', question:'Question', note:'Note' } }
+  };
+  var TYPES = ['bug','refactor','performance','question','note'];
+  function el(tag, css, text){ var e=document.createElement(tag); if(css) e.style.cssText=css; if(text!=null) e.textContent=text; return e; }
+  function panel(width){ var C=B.ui.c; return 'box-sizing:border-box;width:min('+width+'px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow-y:auto;background:'+C.overlay+';color:'+C.ink+';border:1px solid '+C.strong+';border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.45);font:13px/1.45 '+C.font+';text-align:left;letter-spacing:normal;text-transform:none'; }
+  function hover(e, on, off){ e.onmouseenter=function(){ e.style.cssText+=';'+on; }; e.onmouseleave=function(){ e.style.cssText+=';'+off; }; }
+  // A button as the `Button` atom draws it, size sm.
+  function button(label, primary, act){
+    var C=B.ui.c, b=el('button', 'all:unset;box-sizing:border-box;display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:4px;font:12px '+C.font+';cursor:pointer;'+(primary?'background:'+C.accent+';color:'+C.onAccent:'background:transparent;color:'+C.muted), label);
+    b.type='button';
+    if (!primary) hover(b, 'background:'+C.selection+';color:'+C.ink, 'background:transparent;color:'+C.muted);
+    b.onmousedown=function(e){ e.preventDefault(); if(!b.disabled) act(); };
+    b.able=function(on){ b.disabled=!on; b.style.opacity=on?'1':'.5'; b.style.cursor=on?'pointer':'default'; };
+    return b;
+  }
+  // The type chips of the composer's header: a coloured dot and the label.
+  function chips(current, pick){
+    var C=B.ui.c, T=B.ui.t, row=el('div','display:flex;flex:none;justify-content:flex-end;gap:4px');
+    TYPES.forEach(function(tp){
+      var on=tp===current, b=el('button','all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;font:12px '+C.font+';cursor:pointer;'+(on?'background:'+C.selection+';color:'+C.ink:'color:'+C.muted));
+      b.type='button'; b.setAttribute('data-type', tp);
+      b.appendChild(el('span','display:inline-block;width:8px;height:8px;border-radius:50%;flex:none;background:'+C.types[tp]));
+      b.appendChild(document.createTextNode(T.types[tp]));
+      if (!on) hover(b, 'color:'+C.ink, 'color:'+C.muted);
+      b.onmousedown=function(e){ e.preventDefault(); pick(tp); };
+      row.appendChild(b);
+    });
+    return row;
+  }
+  // The Task checkbox, as the `Checkbox` atom draws it.
+  function checkbox(on, toggle){
+    var C=B.ui.c, l=el('span','display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;color:'+C.muted);
+    var box=el('span','display:grid;place-items:center;width:14px;height:14px;box-sizing:border-box;border-radius:3px;font-size:10px;line-height:1;color:'+C.onAccent);
+    function paint(){ box.style.border='1px solid '+(on?C.accent:C.strong); box.style.background=on?C.accent:C.canvas; box.textContent=on?'✓':''; }
+    paint(); l.appendChild(box); l.appendChild(document.createTextNode(B.ui.t.task));
+    l.onmousedown=function(e){ e.preventDefault(); on=!on; paint(); toggle(on); };
+    return l;
+  }
+  function textarea(filled, minH){
+    var C=B.ui.c;
+    return el('textarea','all:unset;box-sizing:border-box;display:block;width:100%;min-height:'+minH+'px;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word;font:13px/1.45 '+C.font+';color:'+C.ink+';'+(filled?'background:'+C.surface+';border-radius:4px;padding:6px 8px':'background:transparent;padding:8px 12px'));
+  }
+  // Open on the host of `target`, at a viewport point: `fixed` there (re-based by
+  // the host's transform), then kept inside the visible page.
+  function mount(box, host, x, y){
+    var o=B.origin(host);
+    box.style.position='fixed'; box.style.zIndex='2147483645';
+    box.style.left=(x-o.x)+'px'; box.style.top=(y-o.y)+'px';
+    B.seal(box); host.appendChild(box); B.fit(box);
+  }
+  // In-page comment composer at a document point; Save buffers {x,y,url,text,type,kind} for Reado to drain.
+  B.compose = function(x, y, target){
+    B.composeClose();
+    var C=B.ui.c, T=B.ui.t, type=B.lastType||'note', task=type!=='note';
+    var host=B.host(target && target.path && B.at(target.path));
+    var box=el('div', panel(460)); box.id='__readoCompose';
+    var head=el('div','display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid '+C.line);
+    var what=target && (target.component || target.selector);
+    head.appendChild(el('span','flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:'+C.faint, what||''));
+    var types, check;
+    function pick(tp){ type=tp; B.lastType=tp; task=tp!=='note'; var n=chips(type, pick); head.replaceChild(n, types); types=n; var k=checkbox(task, function(v){ task=v; }); foot.replaceChild(k, check); check=k; }
+    types=chips(type, pick); head.appendChild(types);
+    var ta=textarea(false, 80); ta.placeholder=T.placeholder;
+    var foot=el('div','display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-top:1px solid '+C.line);
+    check=checkbox(task, function(v){ task=v; }); foot.appendChild(check);
+    var acts=el('div','display:flex;gap:8px');
+    function doSave(){ var v=ta.value.trim(); if(!v) return; B.commentAt={x:x, y:y, url:location.href, text:v, target:target||null, type:type, kind:task?'task':'note'}; B.composeClose(); }
+    var save=button(T.save, true, doSave); save.able(false);
+    ta.addEventListener('input', function(){ save.able(!!ta.value.trim()); });
+    acts.appendChild(button(T.cancel, false, B.composeClose)); acts.appendChild(save); foot.appendChild(acts);
+    ta.addEventListener('keydown',function(e){ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); doSave(); } if(e.key==='Escape'){ e.preventDefault(); B.composeClose(); } });
+    box.appendChild(head); box.appendChild(ta); box.appendChild(foot);
+    mount(box, host, x-(window.scrollX||0), y-(window.scrollY||0));
+    setTimeout(function(){ ta.focus(); },0);
+  };
   B.composeClose = function(){ var b=document.getElementById('__readoCompose'); if(b) b.remove(); };
-  // Rich comment card over the live page: author/type/messages + reply + resolve.
-  // A transparent full-page backdrop closes it; reply/resolve report back via drain.
-  B.showComment = function(c){ B.closeComment(); var TC={bug:'#ff5c5c',refactor:'#c084fc',performance:'#f59e0b',question:'#38bdf8',note:'#94a3b8'}; var TYPES=['bug','refactor','performance','question','note']; var back=document.createElement('div'); back.id='__readoCommentBack'; back.style.cssText='position:fixed;inset:0;z-index:2147483644;background:transparent'; back.onmousedown=function(e){ if(e.target===back) B.closeComment(); }; var card=document.createElement('div'); card.style.cssText='position:absolute;width:330px;box-sizing:border-box;background:#1b1f27;color:#e6e9ef;border:1px solid #3a4150;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);font:13px -apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden'; var chips=''; TYPES.forEach(function(tp){ var on=tp===c.type; chips+='<button data-type="'+tp+'" style="border:1px solid '+(on?TC[tp]:'#333a47')+';background:'+(on?TC[tp]+'22':'transparent')+';color:'+(on?TC[tp]:'#9aa3b2')+';border-radius:999px;padding:2px 8px;font-size:11px;cursor:pointer;text-transform:capitalize">'+tp+'</button>'; }); var kindRow='<button id="__rcTask" style="border:0;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;background:'+(c.kind==='task'?'#3b82f6':'#2b313c')+';color:#fff">Task</button><button id="__rcNote" style="border:0;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;background:'+(c.kind==='note'?'#3b82f6':'#2b313c')+';color:#fff">Note</button>'; var head='<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid #2b313c">'+chips+'<span style="flex:1"></span>'+kindRow+'<span id="__rcClose" style="cursor:pointer;color:#9aa3b2;padding:0 4px">x</span></div>'; var msgs='<div style="max-height:200px;overflow:auto;padding:10px 12px">'; (c.messages||[]).forEach(function(m,i){ var eb=(i===0)?'<span class="__rcEdit" style="cursor:pointer;color:#6b7280;font-size:11px;margin-left:6px">edit</span>':''; msgs+='<div style="margin-bottom:10px"><div style="font-size:11px;color:#9aa3b2;margin-bottom:2px"><b style="color:#cbd3e1">'+B.esc(m.who)+'</b> &middot; '+B.esc(m.when)+eb+'</div><div class="__rcBody" style="white-space:pre-wrap;word-break:break-word;line-height:1.4">'+B.esc(m.body)+'</div></div>'; }); msgs+='</div>'; var foot='<div style="padding:8px 12px;border-top:1px solid #2b313c;display:flex;gap:6px"><input id="__rcReply" placeholder="Reply..." style="flex:1;min-width:0;background:#12151b;color:#e6e9ef;border:1px solid #3a4150;border-radius:6px;padding:6px 8px;font:13px -apple-system;outline:none"><button id="__rcSend" style="border:0;border-radius:6px;background:#3b82f6;color:#fff;padding:0 12px;cursor:pointer">Send</button>'+(c.resolved?'':'<button id="__rcResolve" style="border:0;border-radius:6px;background:#22331f;color:#4ade80;padding:0 10px;cursor:pointer">Resolve</button>')+'</div>'; card.innerHTML=head+msgs+foot; back.appendChild(card); (document.body||document.documentElement).appendChild(back); B.placed.push({el:card, m:c, card:true}); B.place(); card.querySelectorAll('button[data-type]').forEach(function(btn){ btn.onmousedown=function(e){ e.preventDefault(); B.commentType={id:c.id, type:btn.getAttribute('data-type')}; }; }); document.getElementById('__rcTask').onmousedown=function(e){ e.preventDefault(); B.commentKind={id:c.id, kind:'task'}; }; document.getElementById('__rcNote').onmousedown=function(e){ e.preventDefault(); B.commentKind={id:c.id, kind:'note'}; }; document.getElementById('__rcClose').onmousedown=function(e){ e.preventDefault(); B.closeComment(); }; var inp=document.getElementById('__rcReply'); function doSend(){ var v=inp.value.trim(); if(v){ B.commentReply={id:c.id, text:v}; inp.value=''; } } document.getElementById('__rcSend').onmousedown=function(e){ e.preventDefault(); doSend(); }; inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); doSend(); } if(e.key==='Escape'){ B.closeComment(); } }); var rz=document.getElementById('__rcResolve'); if(rz) rz.onmousedown=function(e){ e.preventDefault(); B.commentResolve=c.id; }; var ed=card.querySelector('.__rcEdit'); if(ed){ ed.onmousedown=function(e){ e.preventDefault(); var bodyEl=card.querySelector('.__rcBody'); var ta=document.createElement('textarea'); ta.value=(c.messages[0]&&c.messages[0].body)||''; ta.style.cssText='width:100%;box-sizing:border-box;min-height:54px;background:#12151b;color:#e6e9ef;border:1px solid #3a4150;border-radius:6px;padding:6px;font:13px -apple-system;outline:none'; bodyEl.replaceWith(ta); ta.focus(); ta.addEventListener('keydown',function(ev){ if(ev.key==='Enter'&&(ev.metaKey||ev.ctrlKey)){ ev.preventDefault(); var v=ta.value.trim(); if(v) B.commentEdit={id:c.id, text:v}; } if(ev.key==='Escape'){ B.showComment(c); } }); }; } setTimeout(function(){ inp.focus(); },0); };
-  B.closeComment = function(){ var b=document.getElementById('__readoCommentBack'); if(b) b.remove(); };
   // The credential chip, drawn *in* the page — the pane is a native child window,
   // so Reado's own DOM can never be on top of it. This is the same place a browser
   // extension puts its prompt, and the only place one can be. It carries titles and
@@ -146,8 +282,12 @@ const BRIDGE: &str = r#"(function(){
       ['Comment here', function(){ B.compose(px, py, target); }]
     ];
     items.forEach(function(it){ var d=document.createElement('div'); d.textContent=it[0]; d.style.cssText='padding:5px 10px;border-radius:4px;cursor:default'; d.onmouseenter=function(){ d.style.background='#2c3340'; }; d.onmouseleave=function(){ d.style.background=''; }; d.onmousedown=function(ev){ ev.preventDefault(); closeMenu(); it[1](); }; menuEl.appendChild(d); });
-    (document.body||document.documentElement).appendChild(menuEl);
-    var r=menuEl.getBoundingClientRect(); if(r.right>innerWidth) menuEl.style.left=(x-r.width)+'px'; if(r.bottom>innerHeight) menuEl.style.top=(y-r.height)+'px'; B.fit(menuEl);
+    // On the clicked element's layer, like the panels: a menu on <body> over a
+    // popover closes the popover when an item is picked.
+    var host=B.host(target && B.at(target.path)), o=B.origin(host);
+    menuEl.style.left=(x-o.x)+'px'; menuEl.style.top=(y-o.y)+'px';
+    B.seal(menuEl); host.appendChild(menuEl);
+    var r=menuEl.getBoundingClientRect(); if(r.right>innerWidth) menuEl.style.left=(x-r.width-o.x)+'px'; if(r.bottom>innerHeight) menuEl.style.top=(y-r.height-o.y)+'px'; B.fit(menuEl);
     setTimeout(function(){ document.addEventListener('mousedown', onDoc, true); }, 0);
   }
   document.addEventListener('contextmenu', function(e){ try{ e.preventDefault(); var r=e.target.getBoundingClientRect(); showMenu(e.clientX, e.clientY, pathOf(e.target), e.pageX, e.pageY, Object.assign({path:pathOf(e.target), dx:e.clientX-r.left, dy:e.clientY-r.top}, B.describe(e.target))); }catch(err){} }, true);

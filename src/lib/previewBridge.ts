@@ -7,14 +7,10 @@
  * `callBridge` wrappers (scripts built by `bridgeScript`), so the eval strings
  * live in one place.
  */
-import {
-  type Comment,
-  type CommentKind,
-  type CommentPatch,
-  type CommentType,
-  previewEval,
-  type WebTarget,
-} from "./api"
+
+import { COMMENT_TYPES, TYPE_COLOR, typeKey } from "@/components/atoms/commentMeta"
+import { t } from "@/i18n"
+import { type CommentKind, type CommentType, previewEval, type WebTarget } from "./api"
 import { type BridgeMethods, bridgeScript } from "./bridgeScript"
 import { useComments } from "./comments"
 import { type LogEntry, type NetEntry, usePreview } from "./preview"
@@ -38,13 +34,10 @@ export interface BridgeDrain {
     url: string
     text: string
     target: WebTarget | null
+    type?: CommentType
+    kind?: CommentKind
   } | null
   openComment?: string | null
-  commentReply?: { id: string; text: string } | null
-  commentResolve?: string | null
-  commentType?: { id: string; type: CommentType } | null
-  commentKind?: { id: string; kind: CommentKind } | null
-  commentEdit?: { id: string; text: string } | null
   hasMarks?: boolean
   vaultPick?: VaultPick | null
   href?: string
@@ -56,25 +49,35 @@ export interface BridgeCtx {
   trackHref: (href: string) => void
 }
 
-/** Inject the rich comment card into the page over the live webview (author, type,
- *  messages, reply, resolve). Reado formats the labels; the in-page bridge renders
- *  them and reports reply/resolve back through its drain buffer. */
-export function injectCommentBox(c: Comment): void {
-  const box = {
-    id: c.id,
-    x: c.anchor.x ?? 0,
-    y: c.anchor.y ?? 0,
-    target: c.anchor.target ?? null,
-    type: c.type,
-    kind: c.kind,
-    resolved: c.state === "done",
-    messages: c.messages.map((m) => ({
-      who: m.agent ?? m.author,
-      when: new Date(m.createdAt).toLocaleString(),
-      body: m.body,
-    })),
+/** Reado's look for the comment composer drawn in the page, which has none of its
+ *  CSS: the theme's colours, resolved, and the labels in the user's language. */
+export function pageUi() {
+  const css = getComputedStyle(document.documentElement)
+  const v = (name: string) => css.getPropertyValue(name).trim()
+  return {
+    c: {
+      canvas: v("--bg"),
+      surface: v("--bg-elevated"),
+      overlay: v("--bg-overlay"),
+      line: v("--border"),
+      strong: v("--border-strong"),
+      ink: v("--text"),
+      muted: v("--text-muted"),
+      faint: v("--text-faint"),
+      accent: v("--accent"),
+      onAccent: v("--accent-contrast"),
+      selection: v("--selection"),
+      font: getComputedStyle(document.body).fontFamily,
+      types: Object.fromEntries(COMMENT_TYPES.map((tp) => [tp, v(TYPE_COLOR[tp].slice(4, -1))])),
+    },
+    t: {
+      placeholder: t("comment.bodyPlaceholder"),
+      save: t("comment.save"),
+      cancel: t("common.cancel"),
+      task: t("comment.task"),
+      types: Object.fromEntries(COMMENT_TYPES.map((tp) => [tp, t(typeKey(tp))])),
+    },
   }
-  void callBridge("showComment", box).catch(() => {})
 }
 
 type Handlers = {
@@ -109,8 +112,8 @@ const HANDLERS: Handlers = {
         scope: "web",
         startLine: 0,
         endLine: 0,
-        type: "note",
-        kind: "note",
+        type: c.type ?? "note",
+        kind: c.kind ?? "note",
         body: c.text,
         context: { snippet: "", before: "", after: "" },
         url: c.url,
@@ -124,68 +127,16 @@ const HANDLERS: Handlers = {
       })
       .catch(() => {})
   },
-  // A page dot was clicked → show its comment card over the live page.
-  openComment: (id) => {
-    const c = useComments.getState().comments.find((x) => x.id === id)
-    if (c) injectCommentBox(c)
-  },
-  // Reply typed in the in-page card → post it, then re-render the card.
-  commentReply: ({ id, text }) => {
-    void useComments
-      .getState()
-      .reply(id, text)
-      .then(() => {
-        const c = useComments.getState().comments.find((x) => x.id === id)
-        if (c) injectCommentBox(c)
-      })
-      .catch(() => {})
-  },
-  // Resolve clicked in the card → mark done and dismiss the card.
-  commentResolve: (id) => {
-    void useComments
-      .getState()
-      .setState(id, "done")
-      .catch(() => {})
-    void callBridge("closeComment").catch(() => {})
-  },
+  // A page dot was clicked → open its thread beside the page, the editor's own
+  // (the same one a code comment opens, with everything the thread header holds).
+  openComment: (id) => useComments.getState().setActive(id),
 }
 
-/** Act on one drained message: every handler whose key it carries, in order,
- *  then the card edits it carries, coalesced per comment. */
+/** Act on one drained message: every handler whose key it carries, in order. */
 export function dispatchBridge(data: BridgeDrain, ctx: BridgeCtx): void {
   for (const key of Object.keys(HANDLERS) as (keyof Handlers)[]) {
     const value = data[key]
     // biome-ignore lint/suspicious/noExplicitAny: each handler takes its own key's value
     if (value) (HANDLERS[key] as (v: any, c: BridgeCtx) => void)(value, ctx)
   }
-  // Type / kind / edit changed in the card → patch it, then re-render.
-  // Coalesce fields destined for the same comment into a single patch:
-  // separate read-modify-write calls (backend rewrites the whole comment)
-  // would race and drop a field (last write wins).
-  const patchAndReopen = (id: string, p: CommentPatch) =>
-    void useComments
-      .getState()
-      .patch(id, p)
-      .then(() => {
-        const c = useComments.getState().comments.find((x) => x.id === id)
-        if (c) injectCommentBox(c)
-      })
-      .catch(() => {})
-  const patches = new Map<string, CommentPatch>()
-  if (data.commentType)
-    patches.set(data.commentType.id, {
-      ...patches.get(data.commentType.id),
-      type: data.commentType.type,
-    })
-  if (data.commentKind)
-    patches.set(data.commentKind.id, {
-      ...patches.get(data.commentKind.id),
-      kind: data.commentKind.kind,
-    })
-  if (data.commentEdit)
-    patches.set(data.commentEdit.id, {
-      ...patches.get(data.commentEdit.id),
-      body: data.commentEdit.text,
-    })
-  for (const [id, p] of patches) patchAndReopen(id, p)
 }

@@ -387,38 +387,6 @@ describe("draining the page bridge", () => {
     )
   })
 
-  it("posts a reply typed into the in-page card", async () => {
-    const reply = vi.fn(async () => {})
-    useComments.setState({ reply } as unknown as Parameters<typeof useComments.setState>[0])
-    bridgeReturns({ commentReply: { id: "c1", text: "agreed" } })
-    render(<BrowserPanel />)
-    await tick()
-    expect(reply).toHaveBeenCalledWith("c1", "agreed")
-  })
-
-  it("resolves a comment from the card and dismisses it", async () => {
-    const setState = vi.fn(async () => {})
-    useComments.setState({ setState } as unknown as Parameters<typeof useComments.setState>[0])
-    bridgeReturns({ commentResolve: "c1" })
-    render(<BrowserPanel />)
-    await tick()
-    expect(setState).toHaveBeenCalledWith("c1", "done")
-  })
-
-  it("coalesces type/kind/body edits for one comment into a single patch", async () => {
-    const patch = vi.fn(async () => {})
-    useComments.setState({ patch } as unknown as Parameters<typeof useComments.setState>[0])
-    bridgeReturns({
-      commentType: { id: "c1", type: "bug" },
-      commentKind: { id: "c1", kind: "task" },
-      commentEdit: { id: "c1", text: "sharper" },
-    })
-    render(<BrowserPanel />)
-    await tick()
-    expect(patch).toHaveBeenCalledTimes(1)
-    expect(patch).toHaveBeenCalledWith("c1", { type: "bug", kind: "task", body: "sharper" })
-  })
-
   it("mirrors the capture to .reado/ only while agent access is on", async () => {
     bridgeReturns({ logs: [{ level: "log", text: "x", ts: 1 }], net: [] })
     render(<BrowserPanel />)
@@ -695,7 +663,7 @@ describe("more of the page bridge", () => {
     expect(setGitignorePrompt).not.toHaveBeenCalled()
   })
 
-  it("opens the card for a dot the page reports", async () => {
+  it("opens the comment's own thread beside the page for a dot the page reports", async () => {
     useComments.setState({
       comments: [
         {
@@ -719,9 +687,13 @@ describe("more of the page bridge", () => {
     bridgeReturns({ openComment: "c1" })
     render(<BrowserPanel />)
     await tick()
-    expect(vi.mocked(api.previewEval).mock.calls.some(([s]) => s.includes("showComment"))).toBe(
-      true,
-    )
+    expect(useComments.getState().activeId).toBe("c1")
+    expect(screen.getByText("here")).toBeTruthy()
+    expect(document.querySelector("[data-comment-thread]")).not.toBeNull()
+
+    fireEvent.click(screen.getByLabelText("settings.close"))
+    expect(useComments.getState().activeId).toBeNull()
+    expect(document.querySelector("[data-comment-thread]")).toBeNull()
   })
 
   it("re-draws the page's comment dots when the set changes", async () => {
@@ -845,7 +817,7 @@ describe("resizing the pane", () => {
 })
 
 describe("a comment clicked in the list", () => {
-  it("navigates the preview there and opens its card", async () => {
+  it("navigates the preview there and opens its thread", async () => {
     vi.useFakeTimers()
     useComments.setState({
       comments: [
@@ -872,10 +844,11 @@ describe("a comment clicked in the list", () => {
     await vi.advanceTimersByTimeAsync(1200)
     expect(api.previewNavigate).toHaveBeenCalledWith("http://localhost:5173/x")
     expect(usePreview.getState().pinRequest).toBeNull()
+    expect(useComments.getState().activeId).toBe("c1")
     vi.useRealTimers()
   })
 
-  it("still opens the card when the navigation is refused", async () => {
+  it("still opens the thread when the navigation is refused", async () => {
     vi.useFakeTimers()
     api.previewNavigate.mockRejectedValue(new Error("blocked"))
     useComments.setState({
@@ -903,7 +876,7 @@ describe("a comment clicked in the list", () => {
     await vi.advanceTimersByTimeAsync(1200)
     // The page it wanted didn't load, but the comment still opens on whatever
     // is showing — better than swallowing the click.
-    expect(vi.mocked(api.previewEval).mock.calls.some(([s]) => s.includes("still here"))).toBe(true)
+    expect(screen.getByText("still here")).toBeTruthy()
     expect(usePreview.getState().pinRequest).toBeNull()
     vi.useRealTimers()
   })

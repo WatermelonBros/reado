@@ -2,9 +2,7 @@
 
 /** What each bridge method takes, in order. */
 export interface BridgeMethods {
-  showComment: [box: unknown]
-  closeComment: []
-  marks: [list: unknown[], show: boolean]
+  marks: [list: unknown[], show: boolean, ui: unknown]
   setPick: [on: boolean]
   clear: []
   hi: [idxs: number[]]

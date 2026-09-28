@@ -39,8 +39,12 @@ import { ago, when } from "@/lib/time"
 
 interface Props {
   comment: Comment
-  top: number
+  /** Where it hangs in the editor; ignored when `docked`. */
+  top?: number
   onClose: () => void
+  /** Fills a column of its own (the browser's, beside the page) instead of
+   *  hanging from a line. */
+  docked?: boolean
 }
 
 /** Who a message is from, for grouping: an agent by name, a person by account or name. */
@@ -69,7 +73,7 @@ function AuthorMark({ m }: { m: Message }) {
   )
 }
 
-export function CommentThread({ comment, top, onClose }: Props) {
+export function CommentThread({ comment, top, onClose, docked = false }: Props) {
   // Who "you" is can arrive after the thread (git name, account): re-render then.
   useIdentity((s) => s.account?.user ?? s.git?.name)
   const root = useProject((s) => s.root)
@@ -88,11 +92,13 @@ export function CommentThread({ comment, top, onClose }: Props) {
   }
 
   const lineLabel =
-    comment.anchor.scope !== "range"
-      ? comment.anchor.scope
-      : comment.anchor.startLine === comment.anchor.endLine
-        ? t("comment.line", { line: comment.anchor.startLine })
-        : t("comment.lines", { from: comment.anchor.startLine, to: comment.anchor.endLine })
+    comment.anchor.scope === "web"
+      ? (comment.anchor.target?.component ?? comment.anchor.target?.selector ?? "web")
+      : comment.anchor.scope !== "range"
+        ? comment.anchor.scope
+        : comment.anchor.startLine === comment.anchor.endLine
+          ? t("comment.line", { line: comment.anchor.startLine })
+          : t("comment.lines", { from: comment.anchor.startLine, to: comment.anchor.endLine })
 
   const sendReply = async () => {
     if (!replyText.trim()) return
@@ -124,15 +130,19 @@ export function CommentThread({ comment, top, onClose }: Props) {
       // screen and unreadable. The conversation now keeps at least 5rem and the
       // box scrolls when the chrome no longer fits around it.
       data-comment-thread=""
-      className="absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col overflow-y-auto shadow-[var(--shadow)]"
+      className={
+        docked
+          ? "flex h-full min-h-0 flex-col overflow-y-auto"
+          : "absolute right-4 z-30 flex max-h-[70%] w-[min(460px,calc(100%-2rem))] flex-col overflow-y-auto shadow-[var(--shadow)]"
+      }
       style={{
-        top,
+        top: docked ? undefined : top,
         // No border: the box is just a fill of the connector's colour, so the
         // line flows straight into it as one piece (no seam). The top-left is
         // square (the line enters flat there); the top-right matches the
         // connector's convex corner.
         background: ACCENT(comment.type),
-        borderRadius: "0 8px 8px 8px",
+        borderRadius: docked ? undefined : "0 8px 8px 8px",
       }}
       onMouseDown={(e) => e.stopPropagation()}
     >
@@ -162,7 +172,9 @@ export function CommentThread({ comment, top, onClose }: Props) {
           onChange={(v) => setState(comment.id, v as CommentState)}
           options={COMMENT_STATES.map((st) => ({ value: st, label: t(stateKey(st)) }))}
         />
-        <span className="ml-auto font-mono text-xs text-faint">{lineLabel}</span>
+        <span className="ml-auto min-w-0 truncate font-mono text-xs text-faint" title={lineLabel}>
+          {lineLabel}
+        </span>
         {/* A blocked task is waiting on you, not on the agent: sending it back
           unanswered would just spend another attempt on the same wall. */}
         {comment.kind === "task" && comment.state !== "done" && comment.state !== "blocked" && (

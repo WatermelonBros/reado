@@ -32,6 +32,7 @@ import {
   RobotIcon,
 } from "@/components/atoms/icons"
 import { AccessRequest, VaultBar } from "@/components/molecules/VaultBar"
+import { CommentThread } from "@/components/organisms/CommentThread"
 import {
   hostResolves,
   previewDetach,
@@ -45,7 +46,7 @@ import { useLayout } from "@/lib/layout"
 import { watchOverlays } from "@/lib/overlays"
 import { trackPointer } from "@/lib/pointerDrag"
 import { isLoopbackHost, usePreview } from "@/lib/preview"
-import { type BridgeDrain, callBridge, dispatchBridge, injectCommentBox } from "@/lib/previewBridge"
+import { type BridgeDrain, callBridge, dispatchBridge, pageUi } from "@/lib/previewBridge"
 import { usePalette, useProject, useSettings, useWorkspace } from "@/lib/store"
 import { HAS_LOGIN_JS } from "@/lib/vault"
 import { BrowserInspector } from "./BrowserInspector"
@@ -128,6 +129,12 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   const setBrowserZoom = usePreview((s) => s.setBrowserZoom)
   const root = useProject((s) => s.root)
   const pinRequest = usePreview((s) => s.pinRequest)
+  // The design comment whose thread is open: it docks beside the page — the same
+  // thread a code comment opens, so the Pro header (assign, queue, private, link)
+  // comes with it.
+  const thread = useComments((s) =>
+    s.comments.find((c) => c.id === s.activeId && c.anchor.scope === "web"),
+  )
   const setPinRequest = usePreview((s) => s.setPinRequest)
   // Design-comment dots are injected from the drain tick (it reads the store
   // fresh), so no reactive selector is needed here — just the toggle state.
@@ -224,12 +231,15 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
               y: c.anchor.y ?? 0,
               target: c.anchor.target ?? null,
             }))
-          const marksSig = `${showMarksRef.current}|${webList
+          // The panels' look travels with the marks: a theme or language switch
+          // re-sends them too.
+          const ui = pageUi()
+          const marksSig = `${JSON.stringify(ui)}|${showMarksRef.current}|${webList
             .map((m) => `${m.id}:${m.x}:${m.y}:${m.target?.path.join(".") ?? ""}`)
             .join(",")}`
           if (marksSig !== lastMarksSig.current || !data.hasMarks) {
             lastMarksSig.current = marksSig
-            void callBridge("marks", webList, showMarksRef.current).catch(() => {})
+            void callBridge("marks", webList, showMarksRef.current, ui).catch(() => {})
           }
           const logs = data.logs ?? []
           const net = data.net ?? []
@@ -312,39 +322,23 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
   useEffect(() => watchOverlays(() => bodyRef.current, setCovered), [])
 
   // Hide the preview only while a Reado DOM overlay is open (a native window can't
-  // sit under the DOM). Design comments never hide it — dots, the composer, and
-  // the comment card are all injected *into* the page over the live webview.
+  // sit under the DOM). Design comments never hide it: the dots and the composer
+  // are injected *into* the page, and a thread docks beside it.
   useEffect(() => {
     void previewSetVisible(!overlayOpen)
   }, [overlayOpen])
 
-  // A comment was clicked in the list → navigate there and open its card.
+  // A comment was clicked in the list → navigate there and open its thread.
   useEffect(() => {
     if (!pinRequest) return
     const { url, id } = pinRequest
-    let cancelled = false
-    void (async () => {
-      usePreview.getState().openPane(url)
-      try {
-        await previewNavigate(url)
-        usePreview.getState().setUrl(url)
-      } catch {
-        /* navigation blocked/failed — still try to open the card on the current page */
-      }
-      // ponytail: fixed settle delay before the page (and its bridge) are ready.
-      await new Promise((r) => setTimeout(r, 900))
-      if (cancelled) return
-      const c = useComments.getState().comments.find((x) => x.id === id)
-      if (c) injectCommentBox(c)
-      // Clear the request only after the injection finishes. Clearing it
-      // synchronously here would re-run this effect (dep changed to null) and its
-      // cleanup would set cancelled=true before the 900ms settle, so the card was
-      // never injected. A fresh list click sets a new {url,id} object → re-fires.
-      setPinRequest(null)
-    })()
-    return () => {
-      cancelled = true
-    }
+    setPinRequest(null)
+    usePreview.getState().openPane(url)
+    previewNavigate(url).then(
+      () => usePreview.getState().setUrl(url),
+      () => {}, // navigation blocked/failed — the thread still opens beside the page
+    )
+    useComments.getState().setActive(id)
   }, [pinRequest, setPinRequest])
 
   const fitZoom = () => {
@@ -598,26 +592,39 @@ export function BrowserPanel({ docked = false }: { docked?: boolean } = {}) {
       {/* The native preview webview is parked over the placeholder; the inspector
           docks below (or to the right), and the placeholder shrinks → the webview
           follows via the ResizeObserver above. */}
-      <div className={`flex min-h-0 flex-1 ${inspectorPos === "right" ? "flex-row" : "flex-col"}`}>
+      <div className="flex min-h-0 flex-1">
         <div
-          ref={bodyRef}
-          className={`min-h-0 min-w-0 flex-1 ${device ? "bg-surface" : "bg-canvas"}`}
-        />
-        {inspector && !inspectorDetached && (
-          <>
-            <div
-              onPointerDown={startInspectorResize}
-              className={`flex-none border-line bg-surface hover:bg-accent ${inspectorPos === "right" ? "w-1 cursor-col-resize border-l" : "h-1 cursor-row-resize border-t"}`}
+          className={`flex min-h-0 min-w-0 flex-1 ${inspectorPos === "right" ? "flex-row" : "flex-col"}`}
+        >
+          <div
+            ref={bodyRef}
+            className={`min-h-0 min-w-0 flex-1 ${device ? "bg-surface" : "bg-canvas"}`}
+          />
+          {inspector && !inspectorDetached && (
+            <>
+              <div
+                onPointerDown={startInspectorResize}
+                className={`flex-none border-line bg-surface hover:bg-accent ${inspectorPos === "right" ? "w-1 cursor-col-resize border-l" : "h-1 cursor-row-resize border-t"}`}
+              />
+              <div
+                className="flex-none overflow-hidden"
+                style={
+                  inspectorPos === "right" ? { width: inspectorSize } : { height: inspectorSize }
+                }
+              >
+                <BrowserInspector />
+              </div>
+            </>
+          )}
+        </div>
+        {thread && (
+          <aside className="w-[min(380px,45%)] flex-none overflow-hidden border-l border-line">
+            <CommentThread
+              comment={thread}
+              docked
+              onClose={() => useComments.getState().setActive(null)}
             />
-            <div
-              className="flex-none overflow-hidden"
-              style={
-                inspectorPos === "right" ? { width: inspectorSize } : { height: inspectorSize }
-              }
-            >
-              <BrowserInspector />
-            </div>
-          </>
+          </aside>
         )}
       </div>
     </div>

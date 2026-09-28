@@ -1,5 +1,5 @@
 // Browser test: the script Reado injects into the previewed page, run for real.
-// Its comment composer, comment card and right-click menu open where the user
+// Its comment composer and right-click menu open where the user
 // clicked — near an edge, they must still land inside the visible page. A design
 // comment's pin follows its element, and the comment says what that element is.
 import { render } from "@testing-library/react"
@@ -10,8 +10,7 @@ import source from "../../src-tauri/src/preview.rs?raw"
 
 interface Bridge {
   compose: (x: number, y: number) => void
-  showComment: (c: object) => void
-  marks: (list: object[], on: boolean) => void
+  marks: (list: object[], on: boolean, ui: object | null) => void
   commentAt: { target: (WebTarget & { component: string | null }) | null } | null
 }
 const bridge = () => (window as unknown as { __readoBridge: Bridge }).__readoBridge
@@ -23,8 +22,7 @@ beforeAll(() => {
 })
 
 afterEach(() => {
-  for (const id of ["__readoCompose", "__readoCommentBack", "__readoMarks", "app"])
-    document.getElementById(id)?.remove()
+  for (const id of ["__readoCompose", "__readoMarks", "app"]) document.getElementById(id)?.remove()
 })
 
 const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
@@ -41,7 +39,9 @@ function commentOn(el: Element, text: string) {
   const item = [...document.querySelectorAll("div")].find((d) => d.textContent === "Comment here")
   item?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))
   const box = document.getElementById("__readoCompose") as HTMLElement
-  ;(box.querySelector("textarea") as HTMLTextAreaElement).value = text
+  const ta = box.querySelector("textarea") as HTMLTextAreaElement
+  ta.value = text
+  ta.dispatchEvent(new Event("input", { bubbles: true }))
   const save = [...box.querySelectorAll("button")].find((b) => b.textContent === "Comment")
   save?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))
   return { x: r.left + 10, y: r.top + 5 }
@@ -65,7 +65,7 @@ it("a pin follows its element when the page scrolls inside an inner pane, and on
   expect(at?.target?.text).toBe("Commented")
   expect(at?.target?.html).toMatch(/^<p id="spot"/)
 
-  bridge().marks([{ id: "c1", x: click.x, y: click.y, target: at?.target }], true)
+  bridge().marks([{ id: "c1", x: click.x, y: click.y, target: at?.target }], true, null)
   const dot = document.getElementById("__readoMarks")?.firstElementChild as HTMLElement
   const gap = () => {
     const d = pointOf(dot)
@@ -102,22 +102,6 @@ it("the comment composer opens inside the page at every edge", () => {
   }
 })
 
-it("the comment card opens inside the page at every edge", () => {
-  for (const [x, y] of corners()) {
-    bridge().showComment({
-      id: "c1",
-      x,
-      y,
-      type: "bug",
-      kind: "task",
-      messages: [{ who: "me", when: "now", body: "Too close to the edge" }],
-    })
-    const card = document.getElementById("__readoCommentBack")?.firstElementChild
-    expect(card).toBeTruthy()
-    expect(outsideViewport(card as Element), `card at (${x}, ${y})`).toBeNull()
-  }
-})
-
 it("a comment on a React app names the component that rendered the element", () => {
   function PayButton() {
     return <button type="button">Pay now</button>
@@ -135,4 +119,64 @@ it("a comment on a React app names the component that rendered the element", () 
   expect(target?.component).toBe("Checkout › PayButton")
   expect(target?.selector).toMatch(/section\.checkout > button$/)
   expect(target?.text).toBe("Pay now")
+})
+
+it("a comment can be written inside the page's own popover", () => {
+  // A popover as UI kits build them: portalled to <body>, placed with a transform,
+  // closed by a pointerdown outside it, holding the focus, reading keys for typeahead.
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<div id="app"><div id="pop" role="dialog" style="position:fixed;left:0;top:0;transform:translate(60px,40px);width:220px;padding:10px">
+       <button id="item" type="button">Rename</button>
+     </div></div>`,
+  )
+  const pop = document.getElementById("pop") as HTMLElement
+  const item = document.getElementById("item") as HTMLElement
+  const typed: string[] = []
+  const outside = (e: Event) => {
+    if (!pop.contains(e.target as Node)) pop.remove()
+  }
+  document.addEventListener("pointerdown", outside)
+  const trap = (e: FocusEvent) => {
+    if (!pop.contains(e.target as Node)) item.focus()
+  }
+  document.addEventListener("focusin", trap)
+  pop.addEventListener("keydown", (e) => typed.push(e.key))
+  try {
+    const r = item.getBoundingClientRect()
+    item.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, clientX: r.left + 4, clientY: r.top + 4 }),
+    )
+    const menuItem = [...document.querySelectorAll("div")].find(
+      (d) => d.textContent === "Comment here",
+    ) as HTMLElement
+    menuItem.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))
+    menuItem.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))
+    expect(pop.isConnected, "the popover stays open").toBe(true)
+
+    const box = document.getElementById("__readoCompose") as HTMLElement
+    expect(pop.contains(box), "the composer opens inside the popover").toBe(true)
+    const b = box.getBoundingClientRect()
+    expect(Math.round(b.left), "…where the click was, transform or not").toBe(
+      Math.round(r.left + 4),
+    )
+    expect(Math.round(b.top)).toBe(Math.round(r.top + 4))
+
+    const ta = box.querySelector("textarea") as HTMLTextAreaElement
+    ta.focus()
+    expect(document.activeElement, "the popover lets the textarea keep the caret").toBe(ta)
+    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }))
+    expect(typed, "the popover never sees the keys").toEqual([])
+
+    ta.value = "Too tight"
+    ta.dispatchEvent(new Event("input", { bubbles: true }))
+    const save = [...box.querySelectorAll("button")].find((x) => x.textContent === "Comment")
+    save?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))
+    save?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))
+    expect(pop.isConnected).toBe(true)
+    expect(bridge().commentAt).toMatchObject({ text: "Too tight", type: "note", kind: "note" })
+  } finally {
+    document.removeEventListener("pointerdown", outside)
+    document.removeEventListener("focusin", trap)
+  }
 })
