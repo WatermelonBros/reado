@@ -286,6 +286,11 @@ pub struct Message {
     pub by: Option<Person>,
     pub created_at: u64,
     pub body: String,
+    /// The forge comment this reply mirrors (a GitHub review comment's id), so a
+    /// thread imported again never repeats it. Only replies carry it: the root
+    /// message is the thread's own first comment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_id: Option<String>,
 }
 
 /// A full comment: metadata plus the parsed thread.

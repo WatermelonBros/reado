@@ -901,6 +901,8 @@ export interface Message {
   by?: Person
   createdAt: number
   body: string
+  /** The forge comment this reply mirrors (a GitHub review comment id). */
+  externalId?: string
 }
 
 /** What a verification command reported. */

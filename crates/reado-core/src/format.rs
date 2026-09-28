@@ -41,8 +41,13 @@ pub(crate) fn to_markdown(meta: &CommentMeta, messages: &[Message]) -> Result<St
                     format!(" name={}{user}", escape_attr(&p.name))
                 })
                 .unwrap_or_default();
+            let ext = msg
+                .external_id
+                .as_deref()
+                .map(|x| format!(" ext={}", escape_attr(x)))
+                .unwrap_or_default();
             out.push_str(&format!(
-                "\n\n{REPLY_PREFIX}author={}{agent}{by} at={} -->\n\n",
+                "\n\n{REPLY_PREFIX}author={}{agent}{by} at={}{ext} -->\n\n",
                 msg.author, msg.created_at
             ));
         }
@@ -65,84 +70,72 @@ pub(crate) fn from_markdown(text: &str) -> Result<(CommentMeta, Vec<Message>)> {
     let meta: CommentMeta = serde_yaml::from_str(front).map_err(|e| Error::Yaml(e.to_string()))?;
 
     let mut messages = Vec::new();
-    let mut current_author = meta.author.clone();
-    let mut current_agent = meta.agent.clone();
-    let mut current_by = meta.by.clone();
-    let mut current_time = meta.created_at;
+    // The header of the message being read; the root message's comes from the
+    // front-matter, each reply's from its marker. `body` stays empty here.
+    let mut current = Message {
+        author: meta.author.clone(),
+        agent: meta.agent.clone(),
+        by: meta.by.clone(),
+        created_at: meta.created_at,
+        body: String::new(),
+        external_id: None,
+    };
     let mut buffer = String::new();
 
-    let flush = |messages: &mut Vec<Message>,
-                 author: &str,
-                 agent: &Option<String>,
-                 by: &Option<Person>,
-                 time: u64,
-                 buf: &str| {
+    let flush = |messages: &mut Vec<Message>, head: &Message, buf: &str| {
         let body = buf.trim().to_string();
         if !body.is_empty() || messages.is_empty() {
             messages.push(Message {
-                author: author.to_string(),
-                agent: agent.clone(),
-                by: by.clone(),
-                created_at: time,
                 body,
+                ..head.clone()
             });
         }
     };
 
     for line in body.lines() {
         if let Some(attrs) = line.trim().strip_prefix(REPLY_PREFIX) {
-            flush(
-                &mut messages,
-                &current_author,
-                &current_agent,
-                &current_by,
-                current_time,
-                &buffer,
-            );
+            flush(&mut messages, &current, &buffer);
             buffer.clear();
-            let (author, agent, by, at) = parse_reply_attrs(attrs);
-            current_author = author;
-            current_agent = agent;
-            current_by = by;
-            current_time = at;
+            current = parse_reply_attrs(attrs);
         } else {
             buffer.push_str(line);
             buffer.push('\n');
         }
     }
-    flush(
-        &mut messages,
-        &current_author,
-        &current_agent,
-        &current_by,
-        current_time,
-        &buffer,
-    );
+    flush(&mut messages, &current, &buffer);
 
     Ok((meta, messages))
 }
 
-fn parse_reply_attrs(attrs: &str) -> (String, Option<String>, Option<Person>, u64) {
-    let mut author = "user".to_string();
-    let mut agent = None;
+/// A reply marker's attributes, as a message with an empty body.
+fn parse_reply_attrs(attrs: &str) -> Message {
+    let mut msg = Message {
+        author: "user".to_string(),
+        agent: None,
+        by: None,
+        created_at: 0,
+        body: String::new(),
+        external_id: None,
+    };
     let mut name = None;
     let mut user = None;
-    let mut at = 0;
     for token in attrs.trim_end_matches("-->").split_whitespace() {
         if let Some(v) = token.strip_prefix("author=") {
-            author = v.to_string();
+            msg.author = v.to_string();
         } else if let Some(v) = token.strip_prefix("agent=") {
-            agent = Some(v.to_string());
+            msg.agent = Some(v.to_string());
         } else if let Some(v) = token.strip_prefix("name=") {
             name = Some(unescape_attr(v));
         } else if let Some(v) = token.strip_prefix("user=") {
             user = Some(unescape_attr(v));
         } else if let Some(v) = token.strip_prefix("at=") {
-            at = v.parse().unwrap_or(0);
+            msg.created_at = v.parse().unwrap_or(0);
+        } else if let Some(v) = token.strip_prefix("ext=") {
+            msg.external_id = Some(unescape_attr(v));
         }
     }
-    let by = name.map(|name| Person { name, user });
-    (author, agent, by, at)
+    msg.by = name.map(|name| Person { name, user });
+    msg
 }
 
 /// A reply marker's attributes are space-separated and end at `-->`, so a value
@@ -234,6 +227,7 @@ mod tests {
                 by: None,
                 created_at: 1000,
                 body: "Please simplify this loop.".into(),
+                external_id: None,
             },
             Message {
                 author: "agent".into(),
@@ -241,6 +235,7 @@ mod tests {
                 by: None,
                 created_at: 2000,
                 body: "Done.".into(),
+                external_id: None,
             },
         ];
         let md = to_markdown(&meta, &messages).unwrap();
@@ -248,6 +243,31 @@ mod tests {
         assert_eq!(m.id, "c_test");
         assert_eq!(msgs.len(), 2);
         assert_eq!(msgs[1].agent.as_deref(), Some("claude-code"));
+    }
+
+    #[test]
+    fn a_reply_keeps_the_forge_comment_it_mirrors() {
+        let meta = sample_meta();
+        let msg = |at, ext: Option<&str>| Message {
+            author: "github".into(),
+            agent: None,
+            by: Some(Person {
+                name: "giulia".into(),
+                user: None,
+            }),
+            created_at: at,
+            body: format!("message {at}"),
+            external_id: ext.map(str::to_string),
+        };
+        let md = to_markdown(
+            &meta,
+            &[msg(1000, None), msg(2000, Some("2718-28")), msg(3000, None)],
+        )
+        .unwrap();
+        let (_, msgs) = from_markdown(&md).unwrap();
+        assert_eq!(msgs[1].external_id.as_deref(), Some("2718-28"));
+        assert_eq!(msgs[1].body, "message 2000");
+        assert_eq!(msgs[2].external_id, None, "a reply not posted yet has none");
     }
 
     #[test]
@@ -268,6 +288,7 @@ mod tests {
             by,
             created_at: at,
             body: format!("message {at}"),
+            external_id: None,
         };
         let messages = vec![
             msg("user", Some(accented.clone()), 1000),

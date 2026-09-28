@@ -228,6 +228,7 @@ pub fn create_comment_by(
         by,
         created_at: now,
         body: input.body,
+        external_id: None,
     }];
     write_comment(&comments_dir(root), &meta, &messages)?;
     Ok(CreateResult {
@@ -359,6 +360,7 @@ pub fn add_reply_by(
             by,
             created_at: now_millis(),
             body,
+            external_id: None,
         });
     })
 }
@@ -461,6 +463,7 @@ pub fn answer_blocked_by(
             by,
             created_at: now_millis(),
             body: note.to_string(),
+            external_id: None,
         });
         comment.meta.state = CommentState::Open;
         comment.meta.blocked_reason = None;
@@ -548,6 +551,7 @@ pub fn upsert_host_comment(
                     by: None,
                     created_at: now,
                     body,
+                    external_id: None,
                 }],
                 meta,
                 archived: want_done,
