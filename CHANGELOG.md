@@ -11,6 +11,37 @@ commit.
 
 ## [Unreleased]
 
+## [1.29.0] — 2026-09-28
+
+### Added
+
+- **GitHub pull request reviews in Reado (Pro).** On a project owned by an
+  organization with a connected GitHub organization, the review threads of the
+  repository's pull requests become shared comments. Each is anchored to its file
+  and line and marked GitHub · #PR, and every message carries its GitHub author, or
+  the member behind that GitHub account. They arrive live as reviewers write on
+  GitHub, and threads from before are imported once. On one of these threads a
+  reply written in Reado is posted on GitHub ("**Name** via Reado"), and resolving
+  or reopening it resolves or reopens it there. A comment started in Reado never
+  goes to GitHub. The Reado GitHub App needs the "Pull requests" permission: an
+  organization that installed it before accepts it on GitHub.
+
+### Fixed
+
+- **Browser comments inside a page's popover.** A comment can now be left on
+  something inside a page's own popover, dialog or menu. Before, choosing
+  "Comment here" closed the popover, its focus trap pulled the caret out of the
+  box, or the menu took the keys you typed. The right-click menu, the composer and
+  the comment dots now open inside that popover.
+- **A browser comment opens the same thread as a code comment.** Clicking a dot
+  on the page, or a design comment in the list, opens Reado's own comment thread
+  in a column beside the page, instead of a simplified card drawn over it. It has
+  everything a code comment has: state, send to agent, answering a blocked task,
+  Markdown, delete. With Pro it also has assign, agent queue, due date and private
+  note. The composer on the page has the editor's layout (type chips, Task,
+  Cancel / Comment), follows your theme and language, and keeps the type and Task
+  you pick instead of always saving a note.
+
 ## [1.28.0] — 2026-09-27
 
 ### Added
@@ -2880,7 +2911,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.28.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.29.0...HEAD
+[1.29.0]: https://github.com/WatermelonBros/reado/compare/v1.28.0...v1.29.0
 [1.28.0]: https://github.com/WatermelonBros/reado/compare/v1.27.0...v1.28.0
 [1.27.0]: https://github.com/WatermelonBros/reado/compare/v1.26.0...v1.27.0
 [1.26.0]: https://github.com/WatermelonBros/reado/compare/v1.25.0...v1.26.0
