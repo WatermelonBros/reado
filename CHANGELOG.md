@@ -11,6 +11,13 @@ commit.
 
 ## [Unreleased]
 
+### Changed
+
+- **A shared link shows who wrote each message (Pro).** A link made from Reado to a
+  comment and its code now carries each author's account, so the page it opens
+  shows their picture next to what they wrote, and each agent's own mark. Links
+  made before this show the sharer's picture on their own messages.
+
 ## [1.30.0] — 2026-09-29
 
 ### Changed
