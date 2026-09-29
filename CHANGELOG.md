@@ -11,6 +11,13 @@ commit.
 
 ## [Unreleased]
 
+### Changed
+
+- **A new app icon.** The open book is gone: Reado's mark is now a trefoil knot,
+  one unbroken line looping through three lobes (read, review, commit), in white
+  on indigo. The indigo is the app's own accent hue, so the icon and the interface
+  share one colour.
+
 ## [1.29.0] — 2026-09-28
 
 ### Added
