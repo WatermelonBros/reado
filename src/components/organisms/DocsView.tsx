@@ -19,11 +19,12 @@ import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
 import { ChevronIcon, CloseIcon, DocsIcon, MessageIcon, SpecsIcon } from "@/components/atoms/icons"
 import { Select } from "@/components/atoms/Select"
-import { allowProjectAssets, type Comment, type CommentType, readFile, searchText } from "@/lib/api"
+import { type Comment, type CommentType, readFile, searchText } from "@/lib/api"
 import { baseName, toRelative, useComments } from "@/lib/comments"
 import { stripDocExt, useDocs } from "@/lib/docs"
 import type { DocItem } from "@/lib/knowledge"
 import { markdownRehypeFor, markdownUrlTransform } from "@/lib/markdown"
+import { useProjectAssets } from "@/lib/projectAssets"
 import { useSpecs } from "@/lib/specs"
 import { useProject, useWorkspace } from "@/lib/store"
 
@@ -88,9 +89,7 @@ export function DocsView() {
   // A doc's own images (`<img src="docs/media/reado-loop.gif">` in the README)
   // are paths on disk: they resolve only once the root is in the `asset:` scope
   // and each `src` is rewritten relative to the document's own directory.
-  useEffect(() => {
-    void allowProjectAssets(root).catch(() => {})
-  }, [root])
+  const assetsReady = useProjectAssets(root)
   const baseDir = useMemo(() => {
     if (selection.kind === "notes") return undefined
     const dir = selection.path.replace(/\\/g, "/").replace(/\/[^/]*$/, "")
@@ -357,7 +356,7 @@ export function DocsView() {
                 onJump={jumpToComment}
                 t={t}
               />
-            ) : content === null ? (
+            ) : content === null || !assetsReady ? (
               <p className="text-sm text-faint">{t("common.loading")}</p>
             ) : (
               <div className="prose-reado mx-auto max-w-[680px]">

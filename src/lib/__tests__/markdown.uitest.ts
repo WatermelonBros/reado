@@ -45,6 +45,26 @@ describe("markdown local images", () => {
     }
   })
 
+  // GitHub's recommended light/dark logo markup: <picture><source srcset …><img>.
+  it("resolves a <source>'s srcset candidates, keeping their descriptors", () => {
+    const plugins = markdownRehypeFor(BASE) as unknown[]
+    const factory = plugins[plugins.length - 1] as () => (tree: unknown) => void
+    const source = {
+      type: "element",
+      tagName: "source",
+      properties: {
+        srcSet: ["media/dark.png", "media/dark@2x.png 2x"],
+        media: "(prefers-color-scheme: dark)",
+      },
+      children: [],
+    }
+    factory()({ type: "root", children: [source] })
+    const [a, b] = source.properties.srcSet as string[]
+    expect(decode(a)).toBe("/Users/me/proj/docs/media/dark.png")
+    expect(b.endsWith(" 2x")).toBe(true)
+    expect(decode(b.replace(/ 2x$/, ""))).toBe("/Users/me/proj/docs/media/dark@2x.png")
+  })
+
   it("without a base directory, leaves every src untouched", () => {
     const plugins = markdownRehypeFor(undefined) as unknown[]
     // The plain pipeline is raw + sanitize + katex — no image rewriting.
@@ -100,6 +120,29 @@ describe("the sanitize schema", () => {
     expect(sanitize(el("span", { className: ["math"] })).properties).toMatchObject({
       className: ["math"],
     })
+  })
+
+  it("keeps <picture> and <source>, so light/dark README logos render", () => {
+    const out = sanitize(
+      el("picture", {}, [
+        el("source", {
+          media: "(prefers-color-scheme: dark)",
+          srcSet: ["dark.png"],
+          onError: "x()",
+        }),
+        el("img", { src: "light.png" }),
+      ]),
+    ) as {
+      tagName?: string
+      children?: Array<{ tagName?: string; properties?: Record<string, unknown> }>
+    }
+    expect(out.tagName).toBe("picture")
+    const source = out.children?.find((c) => c.tagName === "source")
+    expect(source?.properties).toMatchObject({
+      media: "(prefers-color-scheme: dark)",
+      srcSet: ["dark.png"],
+    })
+    expect(source?.properties).not.toHaveProperty("onError")
   })
 
   it("still strips what the default schema strips", () => {

@@ -67,22 +67,35 @@ interface HastNode {
  *  The webview would otherwise resolve them against its own origin and 404, so
  *  each relative `src` becomes an `asset:` URL — which only loads for
  *  directories granted via `allowProjectAssets`. Runs *after* sanitize, whose
- *  schema would strip the rewritten protocol. */
+ *  schema would strip the rewritten protocol.
+ *
+ *  `<picture><source srcset …>` counts too: it is GitHub's own light/dark logo
+ *  markup, and the webview picks the `<source>` over the `<img>` whenever its
+ *  media query matches — a relative srcset left as-is is a blank banner. */
 function rehypeLocalImages(baseDir: string) {
+  const local = (url: string): string => {
+    const external = /^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith("//") || url.startsWith("#")
+    if (external) return url
+    try {
+      return convertFileSrc(resolveFrom(baseDir, decodeURI(url.split(/[?#]/)[0])))
+    } catch {
+      return url // leave it if it isn't decodable
+    }
+  }
+  // A srcset candidate is "url [descriptor]"; only the url moves.
+  const candidate = (c: string) => {
+    const [url, ...rest] = c.trim().split(/\s+/)
+    return [local(url), ...rest].join(" ")
+  }
   return () => (tree: unknown) => {
     const visit = (node: HastNode) => {
-      if (node?.tagName === "img" && typeof node.properties?.src === "string") {
-        const src: string = node.properties.src
-        const external =
-          /^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith("//") || src.startsWith("#")
-        if (!external) {
-          const clean = src.split(/[?#]/)[0]
-          try {
-            node.properties.src = convertFileSrc(resolveFrom(baseDir, decodeURI(clean)))
-          } catch {
-            /* leave the original src if it isn't decodable */
-          }
-        }
+      const props = node?.properties
+      if (node?.tagName === "img" && typeof props?.src === "string") props.src = local(props.src)
+      if (node?.tagName === "source" && props?.srcSet) {
+        const set = props.srcSet
+        props.srcSet = Array.isArray(set)
+          ? set.map(String).map(candidate)
+          : String(set).split(",").map(candidate)
       }
       for (const child of node?.children ?? []) visit(child)
     }
