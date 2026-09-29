@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.30.1] — 2026-09-29
+
 ### Changed
 
 - **A shared link shows who wrote each message (Pro).** A link made from Reado to a
@@ -2941,7 +2943,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.30.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.30.1...HEAD
+[1.30.1]: https://github.com/WatermelonBros/reado/compare/v1.30.0...v1.30.1
 [1.30.0]: https://github.com/WatermelonBros/reado/compare/v1.29.0...v1.30.0
 [1.29.0]: https://github.com/WatermelonBros/reado/compare/v1.28.0...v1.29.0
 [1.28.0]: https://github.com/WatermelonBros/reado/compare/v1.27.0...v1.28.0
