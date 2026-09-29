@@ -14,6 +14,7 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { IconButton } from "@/components/atoms/IconButton"
 import { ChevronIcon, CloseIcon, FolderOpenIcon } from "@/components/atoms/icons"
+import { ReadoMark } from "@/components/atoms/ReadoMark"
 import { useRecents } from "@/lib/store"
 import { openProjectHere, pickFolderAndOpen } from "@/lib/window"
 
@@ -90,125 +91,130 @@ export function RecentProjects() {
   }, [hasRecents, projects, sel])
 
   return (
-    <div className="grid h-full place-items-center overflow-y-auto bg-canvas px-8 py-12">
-      <div className="flex w-[min(440px,100%)] flex-col">
-        <Wordmark tagline={t("app.tagline")} />
+    <div className="relative h-full overflow-hidden bg-canvas">
+      {/* The mark as a quiet backdrop behind the launcher: flat, barely off the ground,
+          and outside the scroller so it stays put while the list scrolls. */}
+      <ReadoMark className="pointer-events-none absolute top-1/2 left-1/2 h-[min(82vh,760px)] w-[min(82vh,760px)] -translate-x-1/2 -translate-y-1/2 text-ink/[0.035]" />
+      <div className="relative grid h-full place-items-center overflow-y-auto px-8 py-12">
+        <div className="flex w-[min(440px,100%)] flex-col">
+          <Wordmark tagline={t("app.tagline")} />
 
-        {hasRecents ? (
-          <>
-            <h2
-              className="animate-rise mb-1.5 text-xs tracking-[0.06em] text-faint uppercase"
-              style={{ animationDelay: "40ms", animationFillMode: "backwards" }}
-            >
-              {t("recents.title")}
-            </h2>
-            <ul className="m-0 mb-3 flex list-none flex-col p-0">
-              {projects.map((p, i) => {
-                const selected = i === sel
-                return (
-                  <li
-                    key={p.path}
-                    ref={selected ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
-                    className={`group animate-rise -mx-3 flex items-center overflow-hidden rounded-md pr-1.5 transition-colors ${
-                      selected ? "bg-surface" : "hover:bg-surface"
-                    }`}
-                    style={{
-                      animationDelay: `${80 + i * 40}ms`,
-                      animationFillMode: "backwards",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => launch(p.path)}
-                      onMouseEnter={() => setSel(-1)}
-                      title={p.path}
-                      className="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2 text-left"
+          {hasRecents ? (
+            <>
+              <h2
+                className="animate-rise mb-1.5 text-xs tracking-[0.06em] text-faint uppercase"
+                style={{ animationDelay: "40ms", animationFillMode: "backwards" }}
+              >
+                {t("recents.title")}
+              </h2>
+              <ul className="m-0 mb-3 flex list-none flex-col p-0">
+                {projects.map((p, i) => {
+                  const selected = i === sel
+                  return (
+                    <li
+                      key={p.path}
+                      ref={selected ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
+                      className={`group animate-rise -mx-3 flex items-center overflow-hidden rounded-md pr-1.5 transition-colors ${
+                        selected ? "bg-surface" : "hover:bg-surface"
+                      }`}
+                      style={{
+                        animationDelay: `${80 + i * 40}ms`,
+                        animationFillMode: "backwards",
+                      }}
                     >
-                      <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[15px] leading-tight text-ink">
-                        {p.name}
-                      </span>
-                      <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] leading-tight text-faint">
-                        {prettyPath(p.path)}
-                      </span>
-                    </button>
-                    {/* Fixed-width control rail: a resting chevron (this row opens) that
+                      <button
+                        type="button"
+                        onClick={() => launch(p.path)}
+                        onMouseEnter={() => setSel(-1)}
+                        title={p.path}
+                        className="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2 text-left"
+                      >
+                        <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[15px] leading-tight text-ink">
+                          {p.name}
+                        </span>
+                        <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] leading-tight text-faint">
+                          {prettyPath(p.path)}
+                        </span>
+                      </button>
+                      {/* Fixed-width control rail: a resting chevron (this row opens) that
                         swaps to the remove ✕ on hover — same slot, so the row never
                         reflows when the ✕ appears. */}
-                    <span className="relative grid h-7 w-7 flex-none place-items-center">
-                      <ChevronIcon
-                        className={`pointer-events-none col-start-1 row-start-1 h-4 w-4 transition-opacity group-hover:opacity-0 group-focus-within:opacity-0 ${
-                          selected ? "text-accent" : "text-faint/40"
-                        }`}
-                      />
-                      <IconButton
-                        label={t("recents.remove")}
-                        icon={<CloseIcon className="h-[14px] w-[14px]" />}
-                        onClick={() => {
-                          remove(p.path)
-                          setSel(-1)
-                        }}
-                        className="pointer-events-none col-start-1 row-start-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:opacity-100"
-                      />
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
+                      <span className="relative grid h-7 w-7 flex-none place-items-center">
+                        <ChevronIcon
+                          className={`pointer-events-none col-start-1 row-start-1 h-4 w-4 transition-opacity group-hover:opacity-0 group-focus-within:opacity-0 ${
+                            selected ? "text-accent" : "text-faint/40"
+                          }`}
+                        />
+                        <IconButton
+                          label={t("recents.remove")}
+                          icon={<CloseIcon className="h-[14px] w-[14px]" />}
+                          onClick={() => {
+                            remove(p.path)
+                            setSel(-1)
+                          }}
+                          className="pointer-events-none col-start-1 row-start-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:opacity-100"
+                        />
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
 
-            <button
-              type="button"
-              onClick={pick}
-              style={{
-                animationDelay: `${80 + projects.length * 40}ms`,
-                animationFillMode: "backwards",
-              }}
-              className="animate-rise -mx-3 flex w-[calc(100%+1.5rem)] items-center gap-2.5 rounded-md px-3 py-2 text-left text-muted transition-colors hover:bg-surface hover:text-ink"
-            >
-              <FolderOpenIcon className="h-[18px] w-[18px] flex-none text-accent" />
-              <span className="text-sm">{t("recents.open")}</span>
-              <Kbd />
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={pick}
-              style={{ animationDelay: "40ms", animationFillMode: "backwards" }}
-              className="animate-rise mb-9 flex items-center gap-3.5 rounded-lg border border-accent/30 bg-accent/[0.07] px-4 py-3.5 text-left transition-[border-color,transform] hover:-translate-y-px hover:border-accent/60"
-            >
-              <FolderOpenIcon className="h-[22px] w-[22px] flex-none text-accent" />
-              <span className="flex flex-col">
-                <strong className="text-[15px] text-ink">{t("recents.open")}</strong>
-                <small className="text-xs text-muted">{t("recents.openHint")}</small>
-              </span>
-              <Kbd />
-            </button>
+              <button
+                type="button"
+                onClick={pick}
+                style={{
+                  animationDelay: `${80 + projects.length * 40}ms`,
+                  animationFillMode: "backwards",
+                }}
+                className="animate-rise -mx-3 flex w-[calc(100%+1.5rem)] items-center gap-2.5 rounded-md px-3 py-2 text-left text-muted transition-colors hover:bg-surface hover:text-ink"
+              >
+                <FolderOpenIcon className="h-[18px] w-[18px] flex-none text-accent" />
+                <span className="text-sm">{t("recents.open")}</span>
+                <Kbd />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={pick}
+                style={{ animationDelay: "40ms", animationFillMode: "backwards" }}
+                className="animate-rise mb-9 flex items-center gap-3.5 rounded-lg border border-accent/30 bg-accent/[0.07] px-4 py-3.5 text-left transition-[border-color,transform] hover:-translate-y-px hover:border-accent/60"
+              >
+                <FolderOpenIcon className="h-[22px] w-[22px] flex-none text-accent" />
+                <span className="flex flex-col">
+                  <strong className="text-[15px] text-ink">{t("recents.open")}</strong>
+                  <small className="text-xs text-muted">{t("recents.openHint")}</small>
+                </span>
+                <Kbd />
+              </button>
 
-            {/* Quiet three-step teaching so a first-run user understands what Reado
+              {/* Quiet three-step teaching so a first-run user understands what Reado
                 is for before opening anything. */}
-            <h2
-              className="animate-rise mb-3 text-xs tracking-[0.06em] text-faint uppercase"
-              style={{ animationDelay: "80ms", animationFillMode: "backwards" }}
-            >
-              {t("welcome.how")}
-            </h2>
-            <ol className="m-0 flex list-none flex-col gap-3 p-0">
-              {[t("welcome.step1"), t("welcome.step2"), t("welcome.step3")].map((step, i) => (
-                <li
-                  key={i}
-                  className="animate-rise flex items-baseline gap-3 text-sm text-muted"
-                  style={{ animationDelay: `${120 + i * 40}ms`, animationFillMode: "backwards" }}
-                >
-                  <span className="grid h-5 w-5 flex-none translate-y-0.5 place-items-center rounded-full border border-line text-[11px] text-faint">
-                    {i + 1}
-                  </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ol>
-          </>
-        )}
+              <h2
+                className="animate-rise mb-3 text-xs tracking-[0.06em] text-faint uppercase"
+                style={{ animationDelay: "80ms", animationFillMode: "backwards" }}
+              >
+                {t("welcome.how")}
+              </h2>
+              <ol className="m-0 flex list-none flex-col gap-3 p-0">
+                {[t("welcome.step1"), t("welcome.step2"), t("welcome.step3")].map((step, i) => (
+                  <li
+                    key={i}
+                    className="animate-rise flex items-baseline gap-3 text-sm text-muted"
+                    style={{ animationDelay: `${120 + i * 40}ms`, animationFillMode: "backwards" }}
+                  >
+                    <span className="grid h-5 w-5 flex-none translate-y-0.5 place-items-center rounded-full border border-line text-[11px] text-faint">
+                      {i + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

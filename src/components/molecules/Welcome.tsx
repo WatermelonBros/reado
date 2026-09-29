@@ -5,6 +5,7 @@
  */
 
 import { useTranslation } from "react-i18next"
+import { ReadoMark } from "@/components/atoms/ReadoMark"
 import type { MessageKey } from "@/i18n"
 import { SHORTCUTS } from "@/lib/shortcuts"
 
@@ -13,8 +14,10 @@ const STEPS: MessageKey[] = ["welcome.step1", "welcome.step2", "welcome.step3"]
 export function Welcome() {
   const { t } = useTranslation()
   return (
-    <div className="grid h-full place-items-center p-8">
-      <div className="w-full max-w-[380px]">
+    <div className="relative grid h-full place-items-center overflow-hidden p-8">
+      {/* The letterpress mark, VS Code style: flat, a shade off the ground, behind everything. */}
+      <ReadoMark className="pointer-events-none absolute top-1/2 left-1/2 h-[min(78%,640px)] w-[min(78%,640px)] -translate-x-1/2 -translate-y-1/2 text-ink/[0.045]" />
+      <div className="relative w-full max-w-[380px]">
         <h2 className="m-0 text-xl font-semibold tracking-tight">Reado</h2>
         <p className="mt-1 mb-7 text-sm text-muted">{t("app.tagline")}</p>
 

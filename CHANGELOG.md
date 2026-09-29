@@ -17,6 +17,20 @@ commit.
   one unbroken line looping through three lobes (read, review, commit), in white
   on indigo. The indigo is the app's own accent hue, so the icon and the interface
   share one colour.
+- **The mark as a watermark.** With no file open, the knot sits behind the welcome
+  page, flat and a shade off the background; the project launcher carries a larger,
+  fainter one that stays put while the recent list scrolls.
+
+### Fixed
+
+- **README banners and logos drawn with `<picture>` show up in the preview.**
+  GitHub's light/dark logo markup — a `<source srcset>` per theme — rendered as a
+  blank space: the preview picked the `<source>` for your system theme, but only
+  ever resolved `<img>` paths to the file on disk.
+- **A README opened straight from the launcher shows its images the first time.**
+  They used to stay blank until the file was closed and reopened: the preview
+  asked for the images before the project's files were allowed to load, and never
+  asked again. It now waits for that (a few milliseconds) before rendering.
 
 ## [1.29.0] — 2026-09-28
 
