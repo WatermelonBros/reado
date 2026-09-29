@@ -63,8 +63,9 @@ tasks:
       - cargo fmt --manifest-path {{.APP}} --all
 
   lint:
-    desc: All static checks — frontend types, Rust fmt, Rust clippy (-D warnings)
+    desc: All static checks — Biome, frontend types, Rust fmt, Rust clippy (-D warnings)
     cmds:
+      - pnpm lint
       - pnpm typecheck
       - cargo fmt --manifest-path {{.CORE}} --all --check
       - cargo fmt --manifest-path {{.CLI}} --all --check

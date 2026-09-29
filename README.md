@@ -1,14 +1,15 @@
-<h1 align="center">Reado</h1>
-
-<p align="center"><em>A calm place to read code.</em></p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.png">
+  <img alt="Reado — a calm place to read, and review, code." src="docs/media/banner-light.png" width="100%">
+</picture>
 
 <p align="center">
   <a href="https://github.com/WatermelonBros/reado/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/WatermelonBros/reado/ci.yml?branch=main&style=flat-square&label=CI"></a>
-  <a href="https://github.com/WatermelonBros/reado/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/WatermelonBros/reado?style=flat-square&color=3461AC&label=release"></a>
-  <a href="https://github.com/WatermelonBros/reado/releases"><img alt="Total downloads" src="https://img.shields.io/github/downloads/WatermelonBros/reado/total?style=flat-square&color=3461AC&label=downloads"></a>
-  <img alt="Platforms: macOS, Linux, Windows" src="https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-3461AC?style=flat-square">
-  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/WatermelonBros/reado?style=flat-square&color=3461AC&label=license"></a>
-  <a href="https://discord.gg/HHqT9ucXn4"><img alt="Discord" src="https://img.shields.io/badge/Discord-3461AC?style=flat-square&logo=discord&logoColor=white"></a>
+  <a href="https://github.com/WatermelonBros/reado/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/WatermelonBros/reado?style=flat-square&color=273FC7&label=release"></a>
+  <a href="https://github.com/WatermelonBros/reado/releases"><img alt="Total downloads" src="https://img.shields.io/github/downloads/WatermelonBros/reado/total?style=flat-square&color=273FC7&label=downloads"></a>
+  <img alt="Platforms: macOS, Linux, Windows" src="https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-273FC7?style=flat-square">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/WatermelonBros/reado?style=flat-square&color=273FC7&label=license"></a>
+  <a href="https://discord.gg/HHqT9ucXn4"><img alt="Discord" src="https://img.shields.io/badge/Discord-273FC7?style=flat-square&logo=discord&logoColor=white"></a>
 </p>
 
 <p align="center">
@@ -18,75 +19,92 @@
   <img alt="Rust" src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white">
 </p>
 
-<p align="center"><a href="https://reado.watermelon-studio.it"><strong>reado.watermelon-studio.it</strong></a></p>
-
 <p align="center">
-  <img src="docs/media/reado-loop.gif" alt="Reado's loop: annotate a line, send the review, the agent resolves the task" width="900">
+  <a href="https://github.com/WatermelonBros/reado/releases/latest"><b>Download</b></a> ·
+  <a href="https://reado.watermelon-studio.it"><b>Website</b></a> ·
+  <a href="https://discord.gg/HHqT9ucXn4"><b>Discord</b></a> ·
+  <a href="CONTRIBUTING.md"><b>Contribute</b></a>
 </p>
 
-<p align="center"><sub><b>The loop:</b> leave a comment on a line → <b>Send review</b> → the agent resolves it and marks the task done.</sub></p>
+<p align="center">
+  <img src="docs/media/reado-tour.gif" alt="A guided review in Reado: the agent plans a route, proposes a bug, you approve it and comment by hand, and the agent resolves the tasks" width="100%">
+</p>
+<p align="center"><sub>A full guided review on a real branch — unedited, in real time. The agent proposes, you decide, the agent fixes.</sub></p>
 
-Most IDEs are built for **writing** code. Reado inverts that: the primary
-experience is **reading**, and the primary action is leaving durable comments
-anchored to precise points in the code. Those comments are not throwaway notes —
-they are persistent, lifecycle-bearing artifacts that an AI agent (Claude Code,
-Codex or Copilot) resolves, and that accumulate into a consultable knowledge base.
+## Most IDEs are built for writing code. Reado is built for reading it.
 
-> The mental model is an **inverted code review**: you are the reviewer (read,
-> annotate), the AI is the committer (implements the fixes).
+Your agent writes more code than you do now. The job that's left is **reading it
+and deciding** — and that deserves a tool of its own. In Reado you read, and you
+leave comments anchored to the exact lines that matter; your agent (Claude Code,
+Codex, Copilot, Gemini or OpenCode) resolves them, and you review what changed.
 
-Reado is built with [Tauri 2](https://tauri.app), React 19 and a Rust backend.
-It runs on macOS, Linux and Windows.
+> **Inverted code review:** you are the reviewer, the AI is the committer.
+
+## A guided review, with an AI pair
+
+Pick what to review — your working changes, a branch, a pull request — and a
+focus: bug risk, security, performance, test coverage. The agent plans a route
+through the change, reviews it file by file and **proposes**; nothing is final
+until you approve it.
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><img src="docs/media/tour/01.jpg" alt="Choosing what to review"><br><sub><b>1 · Point it at your changes.</b> Compare a branch, pick a focus — bug risk, security, performance.</sub></td>
+    <td width="33%" valign="top"><img src="docs/media/tour/02.jpg" alt="The agent plans a route"><br><sub><b>2 · The agent plans a route.</b> It reads the diff in your terminal and orders the files, riskiest first.</sub></td>
+    <td width="33%" valign="top"><img src="docs/media/tour/03.jpg" alt="A proposed comment"><br><sub><b>3 · It proposes — never final.</b> Findings land on the line as proposals. Nothing touches your code yet.</sub></td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top"><img src="docs/media/tour/04.jpg" alt="Leaving your own comment"><br><sub><b>4 · You review too.</b> Select any line and leave your own comment — Reado is a reading tool first.</sub></td>
+    <td width="33%" valign="top"><img src="docs/media/tour/05.jpg" alt="A second opinion"><br><sub><b>5 · Ask for a second opinion.</b> The agent challenges its own pass; you approve what holds up.</sub></td>
+    <td width="33%" valign="top"><img src="docs/media/tour/06.jpg" alt="The fix lands"><br><sub><b>6 · Hand it back.</b> Send the approved tasks; the fix lands and the comments resolve.</sub></td>
+  </tr>
+</table>
+
+## Comments that stay where you left them
+
+A Reado comment is not a sticky note. It is anchored to a line range, typed
+(bug, refactor, performance, question, note), threaded, and either a **task** for
+the agent or a **note** for the next reader. Comments live next to your code as
+plain Markdown in `.reado/`, and they survive edits: when the code moves, they
+re-anchor with it — and one whose code is gone becomes an orphan instead of
+quietly pointing at the wrong line.
+
+## Your agent does the work — you watch it happen
+
+**Send review** hands your open tasks to the agent running in Reado's terminal.
+It works through the `reado` CLI and MCP server — reading your comments, consulting
+the project's docs and specs, resolving each task — and Reado reflects every step
+live: the reasoning, the files it touches, the task closing. When it's done, a
+Δ on the file tree takes you straight to **what changed since you last read it**.
+
+## An IDE that reads like a book
+
+- **Built for reading:** a calm CodeMirror 6 viewer with comfortable line length,
+  sticky scope headers, an outline, go-to-definition and code intelligence.
+- **Reading coverage:** Reado knows what you have actually read, and what changed
+  underneath you since.
+- **A knowledge base that grows as you read:** the project's docs, specs
+  (OpenSpec, Spec Kit) and your notes in one searchable place, plus a graph linking
+  comments, files, specs and docs.
+- **A browser your agent can drive:** preview your app inside Reado, comment on the
+  page itself, and let the agent inspect the DOM, console and network.
+- **Reado Anywhere:** pair your phone to follow a review, comment from it, and get
+  pinged when the agent is done.
+- **Four research-grounded themes** — dark, light, high contrast, sepia — and a UI
+  in English, Italian, Spanish, French and German.
+
+## Local-first, open source
+
+Reado is MIT and runs on macOS, Linux and Windows. Your code and your comments
+stay on your machine as plain files; an account is optional and never gates the
+app.
 
 ## Download
 
-Grab the latest signed build for your platform from the
-[**Releases**](https://github.com/WatermelonBros/reado/releases/latest) page —
-macOS (`.dmg`, signed & notarized), Linux (`.AppImage` / `.deb` / `.rpm`) and
-Windows (`.exe` / `.msi`). Reado updates itself from signed releases after that.
-
-## Status
-
-Reado is in active development. The current focus is the **read → annotate →
-AI-resolve** loop. See [`openspec/changes/add-reado-mvp`](openspec/changes/add-reado-mvp)
-for the full specification and the sequenced task list.
-
-What works today:
-
-- Open any local folder (git repository or not) from a recent-projects launcher.
-- Gitignore-aware file tree with a "show hidden" toggle.
-- A read-first CodeMirror 6 viewer with broad syntax highlighting, large-file
-  virtualization, a line-wrap toggle, comfortable reading width, and a soft
-  landing highlight when you jump to a location.
-- Dedicated rendering for markdown, images and foldable JSON.
-- Fuzzy file open (`Cmd/Ctrl+P`), full-text project search (ripgrep when
-  present, with a built-in pure-Rust fallback), and a command palette
-  (`Cmd/Ctrl+K`).
-- Code reading aids: an outline of file symbols, sticky scope headers,
-  go-to-definition (`Cmd/Ctrl+click` / `F12`), go-to-line, and Format Document
-  through the project's own formatters (Biome/Prettier/rustfmt/…).
-- Git introspection with stage/unstage/discard/commit, inline blame, and a
-  local diff view.
-- Four research-grounded themes (dark, light, high-contrast, sepia) with manual,
-  follow-system, and time-of-day selection.
-- Italian and English UI.
-- Anchored comments as an external overlay: leave a comment on a line range
-  (hover the `+` or press the shortcut), with types, states, task/note, threads,
-  and a gutter marker. Comments are stored as `.md` files under `.reado/` and
-  survive external edits (git-diff-free fuzzy re-anchoring; orphans never point
-  at the wrong line).
-- An integrated terminal (real PTYs, multiple tabs) with one-click launch of
-  `claude`, `codex` and `copilot`, and **Send review** to hand your open tasks to
-  the agent.
-- A knowledge base unifying the project's **docs**, **specs** (OpenSpec /
-  speckit), and the **notes** captured while reading, with full-text search and
-  a knowledge graph linking comments, files, specs and docs.
-- An **MCP server** and a **`reado` CLI** — how agents reach Reado. The MCP
-  server (auto-wired into each agent) exposes your tasks, comments, reading
-  progress and bookmarks as read-only context, plus `browser_*` tools to inspect
-  and drive the in-app browser preview; the CLI is how the agent *acts* —
-  resolving tasks, consulting the knowledge base, proposing review artifacts.
-  Both are the same `reado` binary, which **must be on the agent's `PATH`**.
+Grab the latest signed build from
+[**Releases**](https://github.com/WatermelonBros/reado/releases/latest) — macOS
+(`.dmg`, signed & notarized), Linux (`.AppImage` / `.deb` / `.rpm`) and Windows
+(`.exe` / `.msi`). Reado updates itself from signed releases after that.
 
 ## The AI loop
 
@@ -138,34 +156,13 @@ the `reado` CLI is installed.
 | `Cmd/Ctrl + Shift+F` | Search & replace in project |
 | `Cmd/Ctrl + ,`       | Settings                 |
 
-## Development
-
-Prerequisites: [Node.js](https://nodejs.org) 22+, [pnpm](https://pnpm.io),
-the [Rust toolchain](https://rustup.rs), and the
-[Tauri system dependencies](https://tauri.app/start/prerequisites/) for your OS.
-[ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) on your `PATH` makes
-full-text search faster; without it Reado falls back to a built-in scanner.
-
-```bash
-pnpm install        # install frontend dependencies
-pnpm tauri dev      # run the app in development
-pnpm tauri build    # produce a native installer for the current platform
-```
-
-Useful checks:
-
-```bash
-pnpm typecheck                                   # TypeScript
-cargo test    --manifest-path src-tauri/Cargo.toml
-cargo clippy  --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-```
-
 ## Contributing
 
-Reado aims to be a friendly open-source project. Contributions are welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md).
-Security issues: see [SECURITY.md](SECURITY.md). All code, comments and
-documentation are written in English.
+Reado aims to be a friendly open-source project, and contributions are welcome.
+Everything you need to build, test and send a change — prerequisites, the dev
+loop, the checks CI runs, conventions — is in [CONTRIBUTING.md](CONTRIBUTING.md).
+Please read our [Code of Conduct](CODE_OF_CONDUCT.md); security issues go through
+[SECURITY.md](SECURITY.md).
 
 ## License
 

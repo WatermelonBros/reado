@@ -1,0 +1,50 @@
+[
+  {
+    "label": "intro",
+    "t": 1
+  },
+  {
+    "label": "open-review",
+    "t": 3.2
+  },
+  {
+    "label": "start",
+    "t": 5.5
+  },
+  {
+    "label": "plan",
+    "t": 8.83
+  },
+  {
+    "label": "review-file",
+    "t": 16.96
+  },
+  {
+    "label": "proposal",
+    "t": 24.96
+  },
+  {
+    "label": "approve",
+    "t": 27.56
+  },
+  {
+    "label": "comment",
+    "t": 30.09
+  },
+  {
+    "label": "second-opinion",
+    "t": 36.58
+  },
+  {
+    "label": "send",
+    "t": 48.58
+  },
+  {
+    "label": "resolved",
+    "t": 56.97
+  },
+  {
+    "label": "phone",
+    "t": 61.4
+  }
+]
