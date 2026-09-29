@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.30.0] — 2026-09-29
+
 ### Changed
 
 - **A new app icon.** The open book is gone: Reado's mark is now a trefoil knot,
@@ -2932,7 +2934,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.29.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.30.0...HEAD
+[1.30.0]: https://github.com/WatermelonBros/reado/compare/v1.29.0...v1.30.0
 [1.29.0]: https://github.com/WatermelonBros/reado/compare/v1.28.0...v1.29.0
 [1.28.0]: https://github.com/WatermelonBros/reado/compare/v1.27.0...v1.28.0
 [1.27.0]: https://github.com/WatermelonBros/reado/compare/v1.26.0...v1.27.0
