@@ -1,0 +1,166 @@
+#!/usr/bin/env node
+// A scripted stand-in for Claude Code, for filming the guided-review tour.
+//
+// Reado recognises an agent by its foreground process: `node …/agent/claude` reads
+// as Claude Code (a macOS framework Python re-execs as "Python" and would not). So
+// Start review, Review this file, Second opinion and Send tasks paste their real
+// prompts here, and this script answers each one by running the real `reado` CLI —
+// every panel update in the footage is the app reacting to real writes. Only the
+// reasoning is scripted. The story matches scripts/demo/fixtures/make-shop.sh.
+//
+// Env: READO_CLI (path to the reado CLI; default: the dev sidecar in this repo).
+import { execFileSync } from "node:child_process"
+import { readFileSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+const CLI = process.env.READO_CLI ?? join(HERE, "../../../src-tauri/binaries/reado-cli-aarch64-apple-darwin")
+const ROOT = process.cwd()
+
+const DIM = "\x1b[2m"
+const BOLD = "\x1b[1m"
+const RESET = "\x1b[0m"
+const DOT = "\x1b[38;5;209m⏺\x1b[0m" // Claude's orange bullet
+const OK = "\x1b[32m"
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const out = (s = "") => process.stdout.write(`${s.replaceAll("\n", "\r\n")}\r\n`)
+const say = (text) => out(`${DOT} ${text}`)
+
+/** A spinner line that clears itself when the "thinking" is over. */
+async function think(label, ms) {
+  const frames = "·✢✳✶✻✽"
+  const end = Date.now() + ms
+  for (let i = 0; Date.now() < end; i++) {
+    process.stdout.write(`\r\x1b[38;5;209m${frames[i % frames.length]}\x1b[0m ${label}… `)
+    await sleep(120)
+  }
+  process.stdout.write("\r\x1b[2K")
+}
+
+/** Run a real reado CLI command and show it the way Claude Code shows a tool call. */
+async function run(args, shown, result) {
+  out(`${DOT} ${BOLD}Bash${RESET}(${shown})`)
+  let text = result
+  try {
+    const stdout = execFileSync(CLI, ["--root", ROOT, "--agent", "claude-code", ...args], { encoding: "utf8" })
+    text ??= stdout.trim().split("\n")[0]
+  } catch (e) {
+    text = `${e.stderr ?? e.message}`.trim().split("\n")[0]
+  }
+  out(`  ${DIM}⎿  ${text}${RESET}`)
+  await sleep(500)
+}
+
+const short = (id) => `${id.slice(0, 10)}…`
+
+async function plan(sid) {
+  await think("Reading the diff against main", 2200)
+  say("Two files changed. The money path goes first: `applyDiscount` is new and does the arithmetic.")
+  const route = [
+    {
+      file: "src/cart.ts",
+      priority: 1,
+      reason: "core money path — discount math",
+      suggestedReviewMode: "deep",
+      relatedFiles: ["src/discounts.ts"],
+    },
+    { file: "src/discounts.ts", priority: 2, reason: "the lookup table it reads", suggestedReviewMode: "normal" },
+  ]
+  await run(["review", "plan", sid, "--route", JSON.stringify(route)], `reado review plan ${short(sid)} --route '[…]'`, "route set: 2 files")
+}
+
+async function reviewFile(sid, file) {
+  await run(["review", "context", sid, "--file", file], `reado review context ${short(sid)} --file ${file}`, "deep pass · related: src/discounts.ts")
+  await think(`Reading ${file} — checking the discount path`, 2600)
+  say("`total * rule.percent` is never rounded to cents, and nothing bounds `percent`:")
+  out(`  ${DIM}VIP is 1.2 in discounts.ts, so a VIP cart owes a negative amount.${RESET}`)
+  await run(
+    ["review", "propose-comment", sid, "Discount isn't rounded to cents or clamped — VIP (1.2) makes the amount due negative.", "--file", file, "--line", "11", "--type", "bug"],
+    "reado review propose-comment … --line 11 --type bug",
+    "proposed · waiting for your decision",
+  )
+}
+
+async function secondOpinion(sid, file) {
+  await think("Challenging the first pass", 2400)
+  say("The bug stands. One more thing worth asking before the fix:")
+  await run(
+    ["review", "propose-comment", sid, "Is `percent` meant to be a fraction ≤ 1? The VIP label says 20% but the value is 1.2 — fix the data, and clamp here anyway.", "--file", file, "--line", "7", "--type", "question"],
+    "reado review propose-comment … --line 7 --type question",
+    "proposed · waiting for your decision",
+  )
+}
+
+const FIXED_CART = `import type { CartItem } from "./types.js"
+import { DISCOUNTS } from "./discounts.js"
+import { clamp, roundCents } from "./money.js"
+
+// Apply a discount code to the cart and return the amount due.
+export function applyDiscount(items: CartItem[], code: string): number {
+  const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
+  const rule = DISCOUNTS[code.trim().toUpperCase()]
+  if (!rule) return roundCents(total)
+
+  // percent off, clamped to 0–100% and rounded to cents
+  return roundCents(total * (1 - clamp(rule.percent, 0, 1)))
+}
+
+/** Sum of every line: unit price times quantity. */
+export function subtotal(items: CartItem[]): number {
+  return items.reduce((sum, i) => sum + i.price * i.qty, 0)
+}
+
+export function itemCount(items: CartItem[]): number {
+  return items.reduce((n, i) => n + i.qty, 0)
+}
+`
+
+async function resolve(ids) {
+  for (const id of ids) await run(["task", "show", id], `reado task show ${id.slice(0, 12)}…`, "open task")
+  await think("Editing applyDiscount: round + clamp", 2400)
+  writeFileSync(join(ROOT, "src/cart.ts"), FIXED_CART)
+  out(`${DOT} ${BOLD}Update${RESET}(src/cart.ts)`)
+  out(`  ${DIM}⎿  round to cents, clamp percent to 0–1${RESET}`)
+  await sleep(400)
+  const path = join(ROOT, "src/discounts.ts")
+  writeFileSync(path, readFileSync(path, "utf8").replace("percent: 1.2", "percent: 0.2"))
+  out(`${DOT} ${BOLD}Update${RESET}(src/discounts.ts)`)
+  out(`  ${DIM}⎿  VIP: 1.2 → 0.2${RESET}`)
+  await sleep(600)
+  for (const id of ids)
+    await run(["task", "done", id, "--capture", "--model", "claude-opus"], `reado task done ${id.slice(0, 12)}… --capture`, "done")
+  out(`${OK}✓${RESET} done — review the delta`)
+}
+
+async function handle(prompt) {
+  const first = prompt.trim().split("\n")[0] ?? ""
+  out(`${DIM}> ${first.length < 88 ? first : `${first.slice(0, 85)}…`}${RESET}`)
+  out()
+  let m = prompt.match(/planning pass for session (\S+?)[ (]/)
+  if (m) return plan(m[1])
+  m = prompt.match(/second opinion for session (\S+) on `([^`]+)`/)
+  if (m) return secondOpinion(m[1], m[2])
+  m = prompt.match(/review `([^`]+)` for session (\S+?) \(/)
+  if (m) return reviewFile(m[2], m[1])
+  m = prompt.match(/resolve these tasks: ([^.]+)\./)
+  if (m) return resolve(m[1].split(",").map((s) => s.trim()))
+  say("Nothing scripted for that prompt.")
+}
+
+// Reado pastes the prompt, waits for the render to settle, then sends a lone "\r".
+process.stdin.setRawMode(true)
+process.stdin.setEncoding("utf8")
+out(`${DOT} ${BOLD}Claude Code${RESET} ${DIM}· acme-shop · ready${RESET}`)
+out()
+let buf = ""
+let busy = Promise.resolve()
+process.stdin.on("data", (chunk) => {
+  if (chunk.includes("\x03")) process.exit(0) // Ctrl-C
+  buf += chunk
+  if (!buf.endsWith("\r")) return
+  const prompt = buf.replace(/\r$/, "").replaceAll("\x1b[200~", "").replaceAll("\x1b[201~", "")
+  buf = ""
+  if (prompt.trim()) busy = busy.then(() => handle(prompt)).then(() => out())
+})

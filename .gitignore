@@ -23,8 +23,9 @@ src-tauri/binaries/
 # Reado's own local annotations (gitignored by default, per the product)
 .reado/
 
-# Local AI/agent tooling config
-.claude/
+# Local AI/agent tooling config (project skills are shared, the rest is local)
+.claude/*
+!.claude/skills/
 .codex/
 
 # Editor directories and files
