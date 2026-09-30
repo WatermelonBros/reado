@@ -105,8 +105,12 @@ const editorTheme = EditorView.theme({
     backgroundColor: "color-mix(in oklch, var(--accent) 9%, transparent)",
     boxShadow: "inset 2px 0 0 0 var(--accent)",
   },
+  // `!important`: CodeMirror's base theme paints selection with fixed light-mode
+  // colours (`&light.cm-focused > .cm-scroller > .cm-selectionLayer …`) whose
+  // selectors outrank ours, which left light text on a pale lavender block in
+  // every dark theme.
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection": {
-    backgroundColor: "var(--selection)",
+    backgroundColor: "var(--selection) !important",
   },
   ".cm-cursor": { borderLeftColor: "var(--accent)" },
   ".cm-foldPlaceholder": {
