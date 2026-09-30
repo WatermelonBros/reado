@@ -11,6 +11,14 @@ commit.
 
 ## [Unreleased]
 
+## [1.30.2] — 2026-10-01
+
+### Fixed
+
+- **Selected text in the editor is readable again in dark themes.** The selection
+  showed as a pale lavender block under light text; it now uses the theme's own
+  selection colour.
+
 ## [1.30.1] — 2026-09-29
 
 ### Changed
@@ -2943,7 +2951,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.30.1...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.30.2...HEAD
+[1.30.2]: https://github.com/WatermelonBros/reado/compare/v1.30.1...v1.30.2
 [1.30.1]: https://github.com/WatermelonBros/reado/compare/v1.30.0...v1.30.1
 [1.30.0]: https://github.com/WatermelonBros/reado/compare/v1.29.0...v1.30.0
 [1.29.0]: https://github.com/WatermelonBros/reado/compare/v1.28.0...v1.29.0
