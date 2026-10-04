@@ -1,6 +1,7 @@
 import { t } from "@/i18n"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { usePreReview } from "@/lib/preReview"
+import { onboardingTour, useProjectTours } from "@/lib/projectTours"
 import { prompt as promptDialog } from "@/lib/prompt"
 import { useResolveLoop } from "@/lib/resolveLoop"
 import { useSemanticSearch } from "@/lib/semanticSearch"
@@ -11,6 +12,12 @@ import type { CommandTable } from "./types"
 /** Reviewing and understanding a project: tours, tests, the review flows, search by meaning. */
 export const reviewCommands: CommandTable = {
   "tours:open": { run: () => useWorkspace.getState().selectTool("tours") },
+  "projectTour:start": {
+    run: () => {
+      const tour = onboardingTour(useProjectTours.getState().tours)
+      if (tour) useProjectTours.getState().play(tour.id)
+    },
+  },
   "tests:runAll": {
     run: () => {
       for (const framework of new Set(useTesting.getState().files.map((f) => f.framework)))

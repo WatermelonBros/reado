@@ -167,6 +167,11 @@ export const DEFAULT_BINDINGS: Record<Combo, string> = Object.fromEntries(
   Object.entries(SHIPPED).map(([combo, command]) => [normalizeCombo(combo) ?? combo, command]),
 )
 
+/** Ship one more default binding — for a command an embedding build registers. */
+export function addDefaultBinding(combo: string, command: string): void {
+  DEFAULT_BINDINGS[normalizeCombo(combo) ?? combo] = command
+}
+
 /** One parsed override. A `command` of "" means "unbind this key". `when` is the
  *  context clause that has to hold for it to apply; absent means always. */
 export interface Keybinding {

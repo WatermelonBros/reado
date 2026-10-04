@@ -102,17 +102,20 @@ describe("Tabs", () => {
     expect(screen.queryByRole("tab", { name: "b.ts" })).not.toBeInTheDocument()
   })
 
-  it('renders nothing when tabBar is "hidden"', () => {
+  // The bar stays for what fills its end (a project tour, a pair session) and
+  // collapses by CSS (`empty:hidden`) when nothing does.
+  it('shows no tabs, and an empty bar, when tabBar is "hidden"', () => {
     useSettings.setState({ tabBar: "hidden" })
     const { container } = render(<Tabs />)
-    expect(container).toBeEmptyDOMElement()
+    expect(container.firstElementChild).toBeEmptyDOMElement()
+    expect(container.firstElementChild).toHaveClass("empty:hidden")
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument()
   })
 
-  it("renders nothing when there are no open tabs", () => {
+  it("shows an empty bar when there are no open tabs", () => {
     useProject.setState({ tabs: [], active: null })
     const { container } = render(<Tabs />)
-    expect(container).toBeEmptyDOMElement()
+    expect(container.firstElementChild).toBeEmptyDOMElement()
   })
 
   it("marks a tab with unsaved edits", () => {

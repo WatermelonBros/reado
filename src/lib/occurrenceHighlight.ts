@@ -14,9 +14,9 @@ import {
   ViewPlugin,
   type ViewUpdate,
 } from "@codemirror/view"
+import { escapeRegExp } from "./strings"
 
 const occurrence = Decoration.mark({ class: "cm-occurrence" })
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 function build(view: EditorView): DecorationSet {
   const sel = view.state.selection.main
@@ -28,7 +28,7 @@ function build(view: EditorView): DecorationSet {
   const name = view.state.doc.sliceString(word.from, word.to)
   if (name.length < 2) return Decoration.none
 
-  const re = new RegExp(`\\b${escapeRe(name)}\\b`, "g")
+  const re = new RegExp(`\\b${escapeRegExp(name)}\\b`, "g")
   const builder = new RangeSetBuilder<Decoration>()
   for (const { from, to } of view.visibleRanges) {
     const text = view.state.doc.sliceString(from, to)

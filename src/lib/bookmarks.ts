@@ -23,7 +23,8 @@ export const useBookmarks = create<BookmarksState>((set, get) => ({
   bookmarks: [],
   load: async (root) => {
     const bookmarks = await getBookmarks(root).catch(() => [] as Bookmark[])
-    set({ bookmarks })
+    // A reload after our own write finds the same set: keep the old array.
+    if (JSON.stringify(bookmarks) !== JSON.stringify(get().bookmarks)) set({ bookmarks })
   },
   toggle: (root, b) => {
     const existing = get().bookmarks.find((x) => x.path === b.path && x.line === b.line)

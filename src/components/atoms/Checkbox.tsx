@@ -14,15 +14,25 @@ interface CheckboxProps {
   /** Extra classes for the root (e.g. text size/colour). */
   className?: string
   title?: string
+  /** Shown but not changeable (a setting the plan doesn't include, say). */
+  disabled?: boolean
 }
 
-export function Checkbox({ checked, onChange, label, className = "", title }: CheckboxProps) {
+export function Checkbox({
+  checked,
+  onChange,
+  label,
+  className = "",
+  title,
+  disabled,
+}: CheckboxProps) {
   return (
     <ArkCheckbox.Root
       checked={checked}
       onCheckedChange={(d) => onChange(d.checked === true)}
       title={title}
-      className={`flex cursor-pointer items-center gap-2 select-none ${className}`}
+      disabled={disabled}
+      className={`flex cursor-pointer items-center gap-2 select-none data-[disabled]:cursor-default data-[disabled]:opacity-50 ${className}`}
     >
       <ArkCheckbox.Control className="grid h-3.5 w-3.5 flex-none place-items-center rounded-[3px] border border-line-strong bg-canvas text-on-accent transition-colors data-[state=checked]:border-accent data-[state=checked]:bg-accent">
         <ArkCheckbox.Indicator>

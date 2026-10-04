@@ -5,7 +5,7 @@
  * state controls, the task/note flag, a reply box, and edit/delete. Anchored
  * near its line; positioned by the editor via the `top` prop.
  */
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -27,10 +27,12 @@ import { PersonAvatar } from "@/components/atoms/PersonAvatar"
 import { Select } from "@/components/atoms/Select"
 import { Slot } from "@/components/atoms/Slot"
 import { Textarea } from "@/components/atoms/Textarea"
+import { CompletingTextarea } from "@/components/molecules/CompletingTextarea"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { dispatchToAgent } from "@/lib/agents"
 import type { Comment, CommentState, CommentType, Message } from "@/lib/api"
 import { useComments } from "@/lib/comments"
+import { messageRendering } from "@/lib/contributions"
 import { useIdentity } from "@/lib/identity"
 import { notifyError } from "@/lib/notice"
 import { composeSingleTaskPrompt } from "@/lib/review"
@@ -80,6 +82,8 @@ export function CommentThread({ comment, top, onClose, docked = false }: Props) 
   const { patch, reply, setState, remove } = useComments()
   const { t, i18n } = useTranslation()
   const [replyText, setReplyText] = useState("")
+  // Fixed per build, so computed once per thread rather than per message.
+  const rendering = useMemo(messageRendering, [])
   const [answer, setAnswer] = useState("")
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   // When non-null, the root message is being edited (holds the draft text).
@@ -333,7 +337,12 @@ export function CommentThread({ comment, top, onClose, docked = false }: Props) 
                   </div>
                 ) : (
                   <div className="prose-reado text-base leading-relaxed text-ink [&_p]:my-1 [&>*:first-child]:mt-0">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.body}</ReactMarkdown>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, ...rendering.remarkPlugins]}
+                      components={rendering.components}
+                    >
+                      {m.body}
+                    </ReactMarkdown>
                   </div>
                 )}
               </div>
@@ -344,10 +353,11 @@ export function CommentThread({ comment, top, onClose, docked = false }: Props) 
 
       {/* Footer: reply + task/note + delete. */}
       <div className="border-t border-line p-2">
-        <Textarea
+        <CompletingTextarea
           variant="filled"
           value={replyText}
-          onChange={(e) => setReplyText(e.target.value)}
+          onValueChange={setReplyText}
+          completion={{ root, commentId: comment.id }}
           onSubmit={sendReply}
           placeholder={t("comment.replyPlaceholder")}
           className="max-h-32 min-h-9"

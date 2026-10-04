@@ -7,114 +7,15 @@
  * positioner anchor to the viewport.
  */
 import { Portal, Tour, useTour } from "@ark-ui/react"
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
+import { TourCard, tourTranslations } from "@/components/molecules/TourCard"
+import { TourScrim } from "@/components/molecules/TourScrim"
 import { mod, shift } from "@/lib/shortcuts"
 import { useProject } from "@/lib/store"
 import { useTourGuide } from "@/lib/tour"
 
 const SEEN_KEY = "reado.tour.seen"
-
-/** SVG path for a rounded rectangle (one subpath). Exported for its own test:
- *  the radius clamp only bites on targets too small to drive through the tour. */
-export function roundedRect(x: number, y: number, w: number, h: number, r: number) {
-  r = Math.max(0, Math.min(r, w / 2, h / 2))
-  const X = Math.round(x),
-    Y = Math.round(y),
-    W = Math.round(w),
-    H = Math.round(h)
-  return (
-    `M${X + r} ${Y} H${X + W - r} A${r} ${r} 0 0 1 ${X + W} ${Y + r} ` +
-    `V${Y + H - r} A${r} ${r} 0 0 1 ${X + W - r} ${Y + H} ` +
-    `H${X + r} A${r} ${r} 0 0 1 ${X} ${Y + H - r} ` +
-    `V${Y + r} A${r} ${r} 0 0 1 ${X + r} ${Y} Z`
-  )
-}
-
-function intersects(a: DOMRect, b: DOMRect) {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
-}
-
-/** Build the clip-path (outer viewport rect + cut-outs) for the current step. */
-function scrimPath(): string | null {
-  const q = (part: string) =>
-    document.querySelector<HTMLElement>(`[data-scope="tour"][data-part="${part}"]`)
-  const card = q("content")
-  if (!card) return null
-  const cr = card.getBoundingClientRect()
-  // Reject the garbage rect zag reports for a frame before it applies the
-  // transform — the real card is never zero-sized nor pinned to the corner.
-  if (cr.width <= 1 || cr.height <= 1 || (cr.x < 2 && cr.y < 2)) return null
-  const W = window.innerWidth,
-    H = window.innerHeight
-  const holes: string[] = []
-  const spot = q("spotlight")
-  const sr = spot?.getBoundingClientRect()
-  // Spotlight is hidden on target-less (dialog) steps.
-  const hasTarget = !!spot && !spot.hasAttribute("hidden") && !!sr && sr.width > 1 && sr.height > 1
-  if (hasTarget) holes.push(roundedRect(sr!.x - 4, sr!.y - 4, sr!.width + 8, sr!.height + 8, 8))
-  // Skip the card hole when it's inside the target hole: overlapping holes cancel
-  // under even-odd and would re-dim the card (the comment step targets the whole
-  // editor, with the card inside it).
-  if (!(hasTarget && intersects(cr, sr!))) {
-    holes.push(roundedRect(cr.x - 6, cr.y - 6, cr.width + 12, cr.height + 12, 12))
-  }
-  return `M0 0 H${W} V${H} H0 Z ${holes.join(" ")}`
-}
-
-/**
- * Full-screen scrim with cut-outs. Unlike Ark's backdrop (one hole, none on
- * dialog steps), this dims the whole app on *every* step and punches holes around
- * the card and the highlighted target — both read as lit while the rest recedes.
- *
- * Re-cut is event-driven (step change, resize, scroll), NOT a 60fps loop: polling
- * getBoundingClientRect every frame forced reflows that fought zag's positioning
- * and made the card flash at the origin. After each trigger we poll only until the
- * path holds steady for two frames, then stop touching the DOM.
- */
-function TourScrim({ open, stepIndex }: { open: boolean; stepIndex: number }) {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    let raf = 0
-    let prev = ""
-    let tries = 0
-    const settle = () => {
-      const el = ref.current
-      const path = scrimPath()
-      if (el && path) {
-        if (path === prev) {
-          el.style.clipPath = `path(evenodd, "${path}")`
-          return // stable for two frames — stop polling
-        }
-        prev = path
-      }
-      if (tries++ < 40) raf = requestAnimationFrame(settle)
-    }
-    const restart = () => {
-      cancelAnimationFrame(raf)
-      prev = ""
-      tries = 0
-      raf = requestAnimationFrame(settle)
-    }
-    restart()
-    window.addEventListener("resize", restart)
-    window.addEventListener("scroll", restart, true)
-    return () => {
-      cancelAnimationFrame(raf)
-      window.removeEventListener("resize", restart)
-      window.removeEventListener("scroll", restart, true)
-    }
-  }, [open, stepIndex])
-  return (
-    <div
-      ref={ref}
-      aria-hidden="true"
-      className="pointer-events-none fixed inset-0 z-[300]"
-      style={{ display: open ? "block" : "none", background: "oklch(0.13 0.02 250 / 0.55)" }}
-    />
-  )
-}
 
 export function OnboardingTour() {
   const { t } = useTranslation()
@@ -212,7 +113,7 @@ export function OnboardingTour() {
     [t],
   )
 
-  const tour = useTour({ steps })
+  const tour = useTour({ steps, translations: tourTranslations(t) })
 
   // Auto-start once, the first time a project is open (so the targets exist).
   // Mark "seen" only when the timer actually fires — not synchronously — so
@@ -236,44 +137,20 @@ export function OnboardingTour() {
   return (
     <Tour.Root tour={tour}>
       <Portal>
-        {/* Our own scrim (see TourScrim): backdrop on every step with a hole
+        <div data-tour-scope="app-tour">
+          {/* Our own scrim (see TourScrim): backdrop on every step with a hole
             around the card AND a hole around the target. Replaces Ark's backdrop,
             which only cuts the target (and nothing on dialog steps). The spotlight
             stays as the accent ring on the target; both it and the scrim must NOT
             capture pointer events, or — because zag isolates the positioner into
             its own stacking context — they'd intercept clicks meant for the card. */}
-        <TourScrim open={tour.open} stepIndex={tour.stepIndex} />
-        {/* Invisible: kept only so TourScrim can read the target rect zag sizes
+          <TourScrim open={tour.open} stepIndex={tour.stepIndex} scope="app-tour" />
+          {/* Invisible: kept only so TourScrim can read the target rect zag sizes
             it to. The highlight is the backdrop cut-out, not a ring — a ring here
             would also flicker as zag re-parks it between steps. */}
-        <Tour.Spotlight className="pointer-events-none invisible" />
-        <Tour.Positioner>
-          <Tour.Content className="relative z-[302] flex max-w-[340px] flex-col gap-2 rounded-lg border border-line-strong bg-overlay p-4 text-sm shadow-[var(--shadow),0_2px_10px_oklch(0_0_0/0.35)]">
-            <Tour.Title className="pr-6 text-lg font-semibold text-ink" />
-            <Tour.Description className="leading-relaxed text-muted" />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <Tour.ProgressText className="text-xs tabular-nums text-faint" />
-              <Tour.Actions>
-                {(actions) => (
-                  <div className="flex gap-1.5">
-                    {actions.map((a) => (
-                      <Tour.ActionTrigger
-                        key={a.label}
-                        action={a}
-                        className="rounded-md border border-line px-2.5 py-1 text-xs text-ink transition-colors hover:border-accent hover:bg-surface"
-                      >
-                        {a.label}
-                      </Tour.ActionTrigger>
-                    ))}
-                  </div>
-                )}
-              </Tour.Actions>
-            </div>
-            <Tour.CloseTrigger className="absolute top-2.5 right-2.5 grid h-5 w-5 place-items-center rounded text-faint hover:text-ink">
-              ×
-            </Tour.CloseTrigger>
-          </Tour.Content>
-        </Tour.Positioner>
+          <Tour.Spotlight className="pointer-events-none invisible" />
+          <TourCard className="max-w-[340px]" titleClassName="text-lg" />
+        </div>
       </Portal>
     </Tour.Root>
   )

@@ -9,11 +9,11 @@ import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMen
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, FileIcon, PinIcon } from "@/components/atoms/icons"
 import { Slot } from "@/components/atoms/Slot"
+import { ProjectTourButton } from "@/components/molecules/ProjectTourButton"
 import { baseName, toRelative } from "@/lib/comments"
 import { formatDocument } from "@/lib/docInfo"
 import { dirName } from "@/lib/paths"
 import { useFlip, usePointerReorder } from "@/lib/pointerReorder"
-import { slotContents } from "@/lib/slots"
 import { useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTerminals } from "@/lib/terminals"
 import { isUntitled, untitledName, useUntitled } from "@/lib/untitled"
@@ -115,10 +115,11 @@ export function Tabs({ group }: { group?: string } = {}) {
   useFlip(listRef, tabs.join(" ")) // slide tabs to new positions on reorder
 
   if (tabs.length === 0 || tabBar === "hidden")
-    // No tabs to show, but what fills the slot (a pair session's people) still
-    // needs its place; the bar collapses when nothing does.
-    return group || !slotContents("editor.tabbar").length ? null : (
+    // No tabs to show, but what fills the bar's end (a pair session's people, the project tour) still
+    // needs its place; `empty:hidden` collapses the bar when nothing does.
+    return group ? null : (
       <div className="flex h-[38px] flex-none items-stretch justify-end border-b border-line bg-surface empty:hidden">
+        <ProjectTourButton />
         <Slot name="editor.tabbar" />
       </div>
     )
@@ -305,6 +306,7 @@ export function Tabs({ group }: { group?: string } = {}) {
       </div>
       {/* Outside the scrolling strip, so it stays at the right end however many
         tabs are open; the primary group only, so a split doesn't show it twice. */}
+      {!group && <ProjectTourButton />}
       {!group && <Slot name="editor.tabbar" />}
     </div>
   )

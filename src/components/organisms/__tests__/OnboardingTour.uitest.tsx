@@ -97,7 +97,7 @@ describe("walking the steps", () => {
   it("closes from the × without finishing", async () => {
     render(<OnboardingTour />)
     await settle()
-    fireEvent.click(screen.getByText("×"))
+    fireEvent.click(screen.getByLabelText("projectTour.close"))
     await vi.advanceTimersByTimeAsync(50)
     expect(screen.queryByText("tour.welcomeTitle")).not.toBeInTheDocument()
   })

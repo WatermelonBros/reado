@@ -1742,5 +1742,23 @@
     "show": "Bring the mascot back",
     "toggle": "Show or hide the mascot",
     "tuck": "Send it to the edge"
+  },
+  "projectTour": {
+    "button": "Project tour",
+    "hint": "Play “{name}”",
+    "start": "Start",
+    "offer": "Start here: {name} — a guided tour of this project ({count} steps)",
+    "resume": "Continue from step {step}",
+    "restart": "Start from the beginning",
+    "steps_one": "{count} step",
+    "steps_other": "{count} steps",
+    "newer": "This project's tours use a newer format. Update Reado to play them.",
+    "invalid_one": "One tour in tour.json couldn't be read.",
+    "invalid_other": "{count} tours in tour.json couldn't be read.",
+    "moved": "This code has changed since the step was written.",
+    "close": "Close tour",
+    "command": "Tour: Start project tour",
+    "drafting": "Project tour draft",
+    "progress": "{current} of {total}"
   }
 }

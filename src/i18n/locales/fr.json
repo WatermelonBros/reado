@@ -1742,5 +1742,23 @@
     "show": "Rappeler la mascotte",
     "toggle": "Afficher ou masquer la mascotte",
     "tuck": "L'envoyer sur le bord"
+  },
+  "projectTour": {
+    "button": "Visite du projet",
+    "hint": "Lancer « {name} »",
+    "start": "Commencer",
+    "offer": "Commencez ici : {name} — une visite guidée de ce projet ({count} étapes)",
+    "resume": "Reprendre à l'étape {step}",
+    "restart": "Recommencer depuis le début",
+    "steps_one": "{count} étape",
+    "steps_other": "{count} étapes",
+    "newer": "Les visites de ce projet utilisent un format plus récent. Mettez Reado à jour pour les lancer.",
+    "invalid_one": "Une visite de tour.json n'a pas pu être lue.",
+    "invalid_other": "{count} visites de tour.json n'ont pas pu être lues.",
+    "moved": "Ce code a changé depuis l'écriture de l'étape.",
+    "close": "Fermer la visite",
+    "command": "Visite : lancer la visite du projet",
+    "drafting": "Brouillon de la visite du projet",
+    "progress": "{current} sur {total}"
   }
 }

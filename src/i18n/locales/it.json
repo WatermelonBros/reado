@@ -1742,5 +1742,23 @@
     "show": "Richiama la mascotte",
     "toggle": "Mostra o nascondi la mascotte",
     "tuck": "Mandala al bordo"
+  },
+  "projectTour": {
+    "button": "Tour del progetto",
+    "hint": "Avvia “{name}”",
+    "start": "Inizia",
+    "offer": "Parti da qui: {name} — un tour guidato del progetto ({count} passi)",
+    "resume": "Riprendi dal passo {step}",
+    "restart": "Ricomincia dall'inizio",
+    "steps_one": "{count} passo",
+    "steps_other": "{count} passi",
+    "newer": "I tour di questo progetto usano un formato più recente. Aggiorna Reado per vederli.",
+    "invalid_one": "Un tour in tour.json non si può leggere.",
+    "invalid_other": "{count} tour in tour.json non si possono leggere.",
+    "moved": "Questo codice è cambiato da quando il passo è stato scritto.",
+    "close": "Chiudi il tour",
+    "command": "Tour: avvia il tour del progetto",
+    "drafting": "Bozza del tour di progetto",
+    "progress": "{current} di {total}"
   }
 }

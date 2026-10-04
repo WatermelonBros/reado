@@ -6,7 +6,7 @@
  * sits at the bottom. New tools (Git, Orphans, Graph, History) slot in here as
  * their capabilities land.
  */
-import { useRef, useState } from "react"
+import { type ComponentType, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
@@ -36,8 +36,11 @@ import { Slot } from "@/components/atoms/Slot"
 import type { MessageKey } from "@/i18n"
 import { useBookmarks } from "@/lib/bookmarks"
 import { openCount, useComments } from "@/lib/comments"
+import { panelContributions } from "@/lib/contributions"
 import { openProposals, useGuidedReview } from "@/lib/guidedReview"
 import { useHierarchy } from "@/lib/hierarchy"
+import { findPanel, useLayout } from "@/lib/layout"
+import { revealPanel } from "@/lib/panels"
 import { useFlip, usePointerReorder } from "@/lib/pointerReorder"
 import { usePreReview } from "@/lib/preReview"
 import { useQa } from "@/lib/qa"
@@ -258,6 +261,9 @@ export function ActivityBar() {
       </div>
 
       <div className="mt-2 flex flex-none flex-col items-center gap-1">
+        {panelContributions().map(
+          (p) => p.icon && <PanelToggle key={p.id} id={p.id} title={p.title()} Icon={p.icon} />,
+        )}
         <IconButton
           label={t("kb.title")}
           icon={<DocsIcon className="h-[18px] w-[18px]" />}
@@ -286,5 +292,30 @@ export function ActivityBar() {
         <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
       )}
     </nav>
+  )
+}
+
+/** A registered panel's button: shows it (docking it at home) or puts it away. */
+function PanelToggle({
+  id,
+  title,
+  Icon,
+}: {
+  id: string
+  title: string
+  Icon: ComponentType<{ className?: string }>
+}) {
+  // Primitives only: a selector that builds an object re-renders forever.
+  const area = useLayout((s) => findPanel(s.layout, id)?.area ?? null)
+  const showing = useLayout((s) => area !== null && !s.hidden[area])
+  return (
+    <IconButton
+      label={title}
+      active={showing}
+      icon={<Icon className="h-[18px] w-[18px]" />}
+      onClick={() => (showing ? useLayout.getState().remove(id) : revealPanel(id))}
+      size="lg"
+      tooltipPlacement="right"
+    />
   )
 }

@@ -6,6 +6,7 @@
  * it needs (`when`), which the dispatcher checks first.
  */
 import { foldLevel } from "@/lib/activeEditor"
+import { addDefaultBinding } from "@/lib/keybindings"
 import { type SettingsState, THEMES, type ThemeName, useProject, useSettings } from "@/lib/store"
 import { appCommands } from "./app"
 import { editCommands } from "./edit"
@@ -54,9 +55,12 @@ export function registerCommand(
   run: () => void,
   label: () => string,
   when?: () => boolean,
+  /** A default shortcut (`Mod+Alt+T`), which the person can rebind like any other. */
+  combo?: string,
 ): void {
   COMMANDS[id] = { run }
   EXTENSION_COMMANDS.push({ id, label, when })
+  if (combo) addDefaultBinding(combo, id)
 }
 
 /**

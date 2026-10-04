@@ -15,6 +15,7 @@ import { type ReactNode, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { IconButton } from "@/components/atoms/IconButton"
 import { CloseIcon, DiscordIcon, MinusIcon, SearchIcon } from "@/components/atoms/icons"
+import { Slot } from "@/components/atoms/Slot"
 import { LayoutControls } from "@/components/molecules/LayoutControls"
 import { MenuBar } from "@/components/molecules/MenuBar"
 import { UpdateIndicator } from "@/components/organisms/UpdatePrompt"
@@ -40,6 +41,14 @@ function DiscordButton({ className = "" }: { className?: string }) {
     />
   )
 }
+
+/** What the embedding build adds beside Discord (the official build's bell). The
+ *  macOS row is click-through, so the contributions opt back in. */
+const TitlebarSlot = () => (
+  <span className="pointer-events-auto flex items-center">
+    <Slot name="titlebar.actions" />
+  </span>
+)
 
 /** Overlapping-squares glyph for "restore"; a single square for "maximize". */
 const MaximizeGlyph = ({ maximized }: { maximized: boolean }) =>
@@ -184,6 +193,7 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
           <div className="pointer-events-none absolute inset-x-0 flex justify-center">{pill}</div>
           <div className="ml-auto flex flex-none items-center gap-0.5">
             <UpdateIndicator />
+            <TitlebarSlot />
             <DiscordButton />
             {projectName && <LayoutControls />}
           </div>
@@ -197,6 +207,7 @@ export function TitleBar({ projectName }: { projectName: string | null }) {
         <>
           <MenuBar />
           <UpdateIndicator />
+          <TitlebarSlot />
           <DiscordButton />
           <div data-tauri-drag-region className="flex min-w-0 flex-1 justify-center px-3">
             {pill}

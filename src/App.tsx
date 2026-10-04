@@ -15,6 +15,7 @@ import { DefaultAppPrompt } from "./components/organisms/DefaultAppPrompt"
 import { OnboardingModal } from "./components/organisms/OnboardingModal"
 import { OnboardingTour } from "./components/organisms/OnboardingTour"
 import { Palette } from "./components/organisms/Palette"
+import { ProjectTourPlayer } from "./components/organisms/ProjectTourPlayer"
 import { PromptDialog } from "./components/organisms/PromptDialog"
 import { QaModal } from "./components/organisms/QaModal"
 import { SemanticModal } from "./components/organisms/SemanticModal"
@@ -190,6 +191,7 @@ export default function App() {
           own backdrop/positioner OUTSIDE it (a transform ancestor breaks fixed
           positioning), so it lives at the root like Palette/Settings. */}
       <OnboardingTour />
+      <ProjectTourPlayer />
       <UpdatePrompt />
       <EditMenu />
       {/* Settings and Reado Anywhere live at the app root so they open from the

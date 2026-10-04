@@ -13,6 +13,7 @@
  * Tool panels have no flag of their own: being placed in the layout *is* being
  * open, which is why they always report open here.
  */
+import { panelContribution } from "./contributions"
 import { type DockArea, findPanel, type PanelId, useLayout } from "./layout"
 import { usePreview } from "./preview"
 import { useReasoning } from "./reasoning"
@@ -77,7 +78,9 @@ export function openPanel(id: PanelId): void {
  *  right (the default layout's place for it), everything else at the bottom. */
 const HOME: Partial<Record<DockArea, PanelId>> = { right: "browser" }
 const homeOf = (id: PanelId): DockArea =>
-  (Object.entries(HOME).find(([, p]) => p === id)?.[0] as DockArea | undefined) ?? "bottom"
+  (Object.entries(HOME).find(([, p]) => p === id)?.[0] as DockArea | undefined) ??
+  panelContribution(id)?.home ??
+  "bottom"
 
 /**
  * Bring one panel to the front: unhide the region it lives in, make it the

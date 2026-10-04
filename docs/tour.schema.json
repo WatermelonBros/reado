@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reado.watermelon-studio.it/schema/tour/v1.json",
+  "title": "tour.json",
+  "description": "Guided tours through a project's code. Open format, CC0: see docs/tour-format.md.",
+  "type": "object",
+  "required": ["version", "tours"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1, "description": "The format's major version." },
+    "tours": { "type": "array", "items": { "$ref": "#/$defs/tour" } }
+  },
+  "patternProperties": { "^x-": true },
+  "$defs": {
+    "pos": {
+      "type": "object",
+      "required": ["line"],
+      "properties": {
+        "line": { "type": "integer", "minimum": 1 },
+        "col": { "type": "integer", "minimum": 1, "description": "In Unicode code points." }
+      }
+    },
+    "tour": {
+      "type": "object",
+      "required": ["id", "name", "steps"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "onboarding": { "type": "boolean" },
+        "author": { "type": "string" },
+        "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } }
+      },
+      "patternProperties": { "^x-": true }
+    },
+    "step": {
+      "type": "object",
+      "required": ["file", "title", "body"],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Relative to the project root, forward slashes, never leaving it."
+        },
+        "span": {
+          "type": "object",
+          "required": ["from", "to"],
+          "properties": { "from": { "$ref": "#/$defs/pos" }, "to": { "$ref": "#/$defs/pos" } }
+        },
+        "text": { "type": "string", "description": "The exact code of the span." },
+        "title": { "type": "string" },
+        "body": { "type": "string", "description": "CommonMark with GFM tables and lists." },
+        "placement": { "enum": ["auto", "right", "left", "top", "bottom"] }
+      },
+      "patternProperties": { "^x-": true }
+    }
+  }
+}

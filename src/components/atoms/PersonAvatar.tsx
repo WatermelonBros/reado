@@ -26,16 +26,19 @@ export const personTint = (hue: number) =>
 
 export function PersonAvatar({
   by,
+  image,
   size = "sm",
   className,
 }: {
   by?: Person
+  /** A picture known from elsewhere (someone outside the open project's people). */
+  image?: string | null
   size?: keyof typeof SIZE
   className?: string
 }) {
   // Subscribe so a picture that arrives later (members load after the thread) shows.
   const s = useIdentity()
-  const url = avatarFor(by, s)
+  const url = image ?? avatarFor(by, s)
   const name = by?.name ?? s.account?.name ?? s.git?.name ?? ""
   const base = cn("inline-block flex-none rounded-full", SIZE[size], className)
   if (url) return <img src={url} alt="" className={cn(base, "object-cover")} />
@@ -48,7 +51,7 @@ export function PersonAvatar({
   return (
     <span
       aria-hidden
-      className={cn(base, "grid place-items-center leading-none font-semibold text-ink")}
+      className={cn(base, "inline-grid place-items-center leading-none font-semibold text-ink")}
       style={{ background: personTint(personHue(by?.user ?? name)) }}
     >
       {initials || "·"}

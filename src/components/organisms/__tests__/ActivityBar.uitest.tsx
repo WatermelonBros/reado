@@ -285,3 +285,29 @@ describe("the custom tool order", () => {
     vi.restoreAllMocks()
   })
 })
+
+describe("a registered panel's button", () => {
+  it("shows the panel and puts it away", async () => {
+    const { registerPanel, resetContributionsForTest } = await import("@/lib/contributions")
+    const { findPanel, useLayout } = await import("@/lib/layout")
+    resetContributionsForTest()
+    registerPanel({
+      id: "tour-editor",
+      title: () => "Tour editor",
+      home: "right",
+      Component: () => null,
+      icon: () => <svg />,
+    })
+    render(<ActivityBar />)
+    const button = screen.getByRole("button", { name: "Tour editor" })
+    // The drag tests above end without the click a browser sends after a pointerup,
+    // so the rail's "swallow the click after a drag" listener is still waiting.
+    fireEvent.click(document.body)
+    await userEvent.click(button)
+    expect(findPanel(useLayout.getState().layout, "tour-editor")?.area).toBe("right")
+    expect(button).toHaveAttribute("aria-pressed", "true")
+    await userEvent.click(button)
+    expect(findPanel(useLayout.getState().layout, "tour-editor")).toBeNull()
+    resetContributionsForTest()
+  })
+})

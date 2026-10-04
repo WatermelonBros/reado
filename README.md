@@ -83,6 +83,10 @@ live: the reasoning, the files it touches, the task closing. When it's done, a
   sticky scope headers, an outline, go-to-definition and code intelligence.
 - **Reading coverage:** Reado knows what you have actually read, and what changed
   underneath you since.
+- **Project tours:** ship a `tour.json` with your repository and anyone who opens it
+  in Reado can walk the code you'd explain to a newcomer, the exact lines lit up and
+  explained step by step. The format is [open](docs/tour-format.md) — any tool can
+  read and write it.
 - **A knowledge base that grows as you read:** the project's docs, specs
   (OpenSpec, Spec Kit) and your notes in one searchable place, plus a graph linking
   comments, files, specs and docs.

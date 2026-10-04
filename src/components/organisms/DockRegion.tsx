@@ -22,6 +22,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMen
 import { IconButton } from "@/components/atoms/IconButton"
 import { MoreVerticalIcon } from "@/components/atoms/icons"
 import type { MessageKey } from "@/i18n"
+import { panelContribution } from "@/lib/contributions"
 import { useDiagnostics } from "@/lib/diagnostics"
 import { type DockArea, findPanel, type Group, type PanelId, useLayout } from "@/lib/layout"
 import { trackPointer } from "@/lib/pointerDrag"
@@ -50,13 +51,18 @@ function panelLabel(id: PanelId): MessageKey | undefined {
   return PANEL_LABEL[id] ?? (isTool(id) ? TOOL_TITLE[id] : undefined)
 }
 
+/** Open by being placed in the layout, closed by being removed: tool panels and
+ *  the panels an embedding build registers. */
+const isPlaced = (id: PanelId) => isTool(id) || !!panelContribution(id)
+
 function renderPanel(id: PanelId) {
   if (id === "terminal") return <TerminalPanel docked />
   if (id === "browser") return <BrowserPanel docked />
   if (id === "inspector") return <BrowserInspector docked />
   if (id === "reasoning") return <ReasoningPanel docked />
   if (isTool(id)) return <ToolPanelBody tool={id} />
-  return null
+  const contributed = panelContribution(id)
+  return contributed ? <contributed.Component /> : null
 }
 
 /** Turn a panel off (visibility lives in each panel's own store; the layout only
@@ -75,7 +81,7 @@ function closePanel(id: PanelId) {
   // A tool panel has no visibility store of its own: it exists where it is
   // placed, so closing it is removing it from the layout. It stays reachable
   // from the activity bar, which puts it back in the sidebar.
-  if (isTool(id)) useLayout.getState().remove(id)
+  if (isPlaced(id)) useLayout.getState().remove(id)
 }
 
 /** Smallest area (px) the dock will shrink to — mirrors the store's own floor. */
@@ -120,12 +126,12 @@ export function DockRegion({ area }: { area: DockArea }) {
           ? inspectorOpen
           : id === "reasoning"
             ? reasoningOpen
-            : isTool(id)
+            : isPlaced(id)
 
   /** A panel's translated name — the label the strip and the menus show. */
   const labelOf = (id: PanelId) => {
     const key = panelLabel(id)
-    return key ? t(key) : id
+    return key ? t(key) : (panelContribution(id)?.title() ?? id)
   }
 
   const regionRef = useRef<HTMLDivElement>(null)

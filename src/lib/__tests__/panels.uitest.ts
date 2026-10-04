@@ -70,3 +70,18 @@ describe("showing the browser", () => {
     expect(isAreaShowing("right")).toBe(true)
   })
 })
+
+describe("a registered panel", () => {
+  it("opens as a tab beside the browser's", async () => {
+    const { registerPanel, resetContributionsForTest } = await import("@/lib/contributions")
+    resetContributionsForTest()
+    registerPanel({ id: "tour-editor", title: () => "Tours", home: "right", Component: () => null })
+    useLayout.getState().move("browser", "right", { targetGroupId: undefined })
+    revealPanel("tour-editor")
+    const groups = useLayout.getState().layout.areas.right.groups
+    expect(groups).toHaveLength(1)
+    expect(groups[0].tabs).toEqual(["browser", "tour-editor"])
+    expect(groups[0].active).toBe("tour-editor")
+    resetContributionsForTest()
+  })
+})

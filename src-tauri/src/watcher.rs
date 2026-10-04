@@ -164,6 +164,13 @@ fn is_mascot_say(path: &Path) -> bool {
     is_reado_file(path, reado_core::MASCOT_FILE)
 }
 
+/// True if `path` is the reading state — what's read, and the bookmarks. It
+/// changes under us when another machine's copy is synced in (official build).
+fn is_reading_store(path: &Path) -> bool {
+    is_reado_file(path, reado_core::READ_PROGRESS_FILE)
+        || is_reado_file(path, reado_core::BOOKMARKS_FILE)
+}
+
 /// True if `path` is the agent's end-of-turn handoff (`session_done` over MCP).
 /// A change means the agent said it is done, blocked or stuck — the moment to
 /// get the attention of a user who walked away.
@@ -228,6 +235,7 @@ const SIGNALS: &[(PathTest, &str)] = &[
     // The agent handed the turn back via `session_done`.
     (is_agent_done, "agent-done"),
     (is_mascot_say, "mascot-say"),
+    (is_reading_store, "reading-changed"),
     // Git state moved under us — a commit, checkout, stage or merge in the
     // terminal. `.git/` is otherwise ignored.
     (is_git_state, "git-changed"),
@@ -600,6 +608,11 @@ mod tests {
         assert!(!is_mascot_say(Path::new("/p/.reado/done.json")));
         assert!(!is_mascot_say(Path::new("/p/src/mascot.json")));
         assert!(is_agent_done(Path::new("/p/.reado/done.json")));
+        assert!(is_reading_store(Path::new("/p/.reado/read.json")));
+        assert!(is_reading_store(Path::new("/p/.reado/bookmarks.json")));
+        assert!(!is_reading_store(Path::new(
+            "/p/.reado/read-snapshots.json"
+        )));
         assert!(!is_agent_done(Path::new("/p/.reado/sessions/s1.json")));
         assert!(!is_comment_store(Path::new("/p/.reado/done.json")));
         assert!(!is_session_store(Path::new("/p/.reado/done.json")));

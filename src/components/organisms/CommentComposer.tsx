@@ -11,11 +11,11 @@ import { Button } from "@/components/atoms/Button"
 import { Checkbox } from "@/components/atoms/Checkbox"
 import { COMMENT_TYPES, Dot, TYPE_COLOR, typeKey } from "@/components/atoms/commentMeta"
 import { Select } from "@/components/atoms/Select"
-import { Textarea } from "@/components/atoms/Textarea"
+import { CompletingTextarea } from "@/components/molecules/CompletingTextarea"
 import type { MessageKey } from "@/i18n"
 import type { CommentType, Context, Scope } from "@/lib/api"
 import { useComments } from "@/lib/comments"
-import { useSettings } from "@/lib/store"
+import { useProject, useSettings } from "@/lib/store"
 
 interface Props {
   relPath: string
@@ -43,6 +43,7 @@ export function CommentComposer({
   const setGitignorePrompt = useComments((s) => s.setGitignorePrompt)
   const setLastType = useComments((s) => s.setLastType)
   const gitignoreDontAsk = useSettings((s) => s.gitignoreDontAsk)
+  const root = useProject((s) => s.root)
   const { t } = useTranslation()
 
   // The editor places the box under the line with a guess at its height; the
@@ -139,11 +140,12 @@ export function CommentComposer({
         </div>
       </div>
 
-      <Textarea
+      <CompletingTextarea
         variant="plain"
         autoFocus
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onValueChange={setBody}
+        completion={{ root }}
         onSubmit={save}
         onCancel={onClose}
         placeholder={t("comment.bodyPlaceholder")}

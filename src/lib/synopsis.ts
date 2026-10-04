@@ -9,6 +9,7 @@ import { create } from "zustand"
 import { runAgentTask, useAgentTasks } from "./agentTask"
 import { createFile, readFile, writeFile } from "./api"
 import { useProject } from "./store"
+import { contentHash } from "./strings"
 
 type Status = "loading" | "ready" | "error"
 
@@ -28,13 +29,6 @@ interface SynopsisState {
 const synopsisPath = (relPath: string) => `.reado/synopsis/${relPath.replace(/[\\/]/g, "__")}.md`
 /** Sidecar storing a hash of the source when the synopsis was made (freshness). */
 const freshPath = (relPath: string) => `.reado/synopsis/${relPath.replace(/[\\/]/g, "__")}.hash`
-
-/** Small, fast non-crypto content hash (freshness only, not security). */
-function contentHash(s: string): string {
-  let h = 5381
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-  return (h >>> 0).toString(16)
-}
 
 /** Record the current source hash so future opens can detect staleness. */
 async function recordFreshness(root: string, relPath: string) {

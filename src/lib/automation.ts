@@ -35,6 +35,7 @@ import { useOnboarding } from "./onboarding"
 import { overlayRects } from "./overlays"
 import { usePreReview } from "./preReview"
 import { usePreview } from "./preview"
+import { useProjectTours } from "./projectTours"
 import { useQa } from "./qa"
 import { useReadProgress } from "./readProgress"
 import { useSemanticSearch } from "./semanticSearch"
@@ -69,6 +70,7 @@ import { useUpdate } from "./update"
   useSemanticSearch,
   useSpecs,
   useTours,
+  useProjectTours,
   usePreReview,
   useHierarchy,
   useLayout,

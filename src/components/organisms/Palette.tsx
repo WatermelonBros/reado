@@ -25,6 +25,7 @@ import { lspDocumentSymbols, lspWorkspaceSymbols } from "@/lib/lsp"
 import { runMenuCommand } from "@/lib/menu"
 import { extractSymbols, type OutlineSymbol } from "@/lib/outline"
 import { useProfiles } from "@/lib/profiles"
+import { onboardingTour, useProjectTours } from "@/lib/projectTours"
 import { useReadProgress } from "@/lib/readProgress"
 import { THEMES, usePalette, useProject, useRecents, useSettings } from "@/lib/store"
 import { commandLine, runTask, useTasks } from "@/lib/tasks"
@@ -432,6 +433,9 @@ function commandRows(t: TFunction, { project, settings, close }: CommandCtx): Ro
     cmd("preview:toggle", t("preview.toggle")),
     cmd("preview:agentAccess", t("preview.agentAccess")),
     cmd("tours:open", t("tours.open")),
+    cmd("projectTour:start", t("projectTour.command"), {
+      when: !!onboardingTour(useProjectTours.getState().tours),
+    }),
     cmd("tests:runAll", t("tests.runAll"), { when: hasTests }),
     cmd("git:graph", t("gitGraph.title"), { when: isRepo }),
     cmd("prereview:run", t("prereview.run"), { when: isRepo }),

@@ -1742,5 +1742,23 @@
     "show": "Traer de vuelta la mascota",
     "toggle": "Mostrar u ocultar la mascota",
     "tuck": "Enviarla al borde"
+  },
+  "projectTour": {
+    "button": "Tour del proyecto",
+    "hint": "Reproducir «{name}»",
+    "start": "Empezar",
+    "offer": "Empieza aquí: {name} — un tour guiado por este proyecto ({count} pasos)",
+    "resume": "Continuar desde el paso {step}",
+    "restart": "Empezar desde el principio",
+    "steps_one": "{count} paso",
+    "steps_other": "{count} pasos",
+    "newer": "Los tours de este proyecto usan un formato más reciente. Actualiza Reado para verlos.",
+    "invalid_one": "Un tour de tour.json no se pudo leer.",
+    "invalid_other": "{count} tours de tour.json no se pudieron leer.",
+    "moved": "Este código ha cambiado desde que se escribió el paso.",
+    "close": "Cerrar el tour",
+    "command": "Tour: iniciar el tour del proyecto",
+    "drafting": "Borrador del tour del proyecto",
+    "progress": "{current} de {total}"
   }
 }

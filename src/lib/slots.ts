@@ -18,6 +18,7 @@ import type { ComponentType } from "react"
  *   comment's id and the project root it belongs to.
  * - `editor.tabbar` — the right end of the primary editor group's tab bar, outside
  *   the scrolling strip of tabs.
+ * - `titlebar.actions` — the title bar, right before the Discord button.
  *
  * Registration is typed by this map, so a contribution that needs context cannot be
  * put in a slot that gives none.
@@ -28,6 +29,7 @@ export interface SlotProps {
   "statusbar.left": Record<string, never>
   "comment.actions": { commentId: string; root: string }
   "editor.tabbar": Record<string, never>
+  "titlebar.actions": Record<string, never>
 }
 
 export type SlotName = keyof SlotProps

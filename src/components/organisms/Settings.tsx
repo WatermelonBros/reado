@@ -1,7 +1,7 @@
 /** Settings drawer with a sidebar of tabs: Appearance, Editor, Files, System. */
 
 import { getVersion } from "@tauri-apps/api/app"
-import { useEffect, useState } from "react"
+import { type ComponentType, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { IconButton } from "@/components/atoms/IconButton"
@@ -13,6 +13,7 @@ import { Slot } from "@/components/atoms/Slot"
 import { InlineConfirm } from "@/components/molecules/InlineConfirm"
 import { SettingsJson } from "@/components/organisms/SettingsJson"
 import type { MessageKey } from "@/i18n"
+import { settingsTabs } from "@/lib/contributions"
 import { notify } from "@/lib/notice"
 import { usePalette, useSettings } from "@/lib/store"
 import { useTourGuide } from "@/lib/tour"
@@ -24,14 +25,12 @@ import { InterfaceTab } from "./settings/InterfaceTab"
 import { SystemTab } from "./settings/SystemTab"
 import { findSettings, type SettingEntry } from "./settingsIndex"
 
-type TabId = "appearance" | "editor" | "interface" | "files" | "system"
-
-const TABS: { id: TabId; labelKey: MessageKey }[] = [
-  { id: "appearance", labelKey: "settings.tabs.appearance" },
-  { id: "editor", labelKey: "settings.tabs.editor" },
-  { id: "interface", labelKey: "settings.tabs.interface" },
-  { id: "files", labelKey: "settings.tabs.files" },
-  { id: "system", labelKey: "settings.tabs.system" },
+const TABS: { id: string; labelKey: MessageKey; Component: ComponentType }[] = [
+  { id: "appearance", labelKey: "settings.tabs.appearance", Component: AppearanceTab },
+  { id: "editor", labelKey: "settings.tabs.editor", Component: EditorTab },
+  { id: "interface", labelKey: "settings.tabs.interface", Component: InterfaceTab },
+  { id: "files", labelKey: "settings.tabs.files", Component: FilesTab },
+  { id: "system", labelKey: "settings.tabs.system", Component: SystemTab },
 ]
 
 export function Settings() {
@@ -40,7 +39,13 @@ export function Settings() {
   const jsonOpen = usePalette((s) => s.settingsJsonOpen)
   const toggleJson = usePalette((s) => s.toggleSettingsJson)
   const { t } = useTranslation()
-  const [tab, setTab] = useState<TabId>("appearance")
+  const [tab, setTab] = useState("appearance")
+  // The built-in tabs, then those an embedding build registered.
+  const tabs = [
+    ...TABS.map(({ id, labelKey, Component }) => ({ id, label: t(labelKey), Component })),
+    ...settingsTabs().map(({ id, label, Component }) => ({ id, label: label(), Component })),
+  ]
+  const Active = tabs.find((x) => x.id === tab)?.Component
   // The section a search result asked for. Cleared once it has been revealed,
   // so re-picking the same result flashes it again.
   const [jumpTo, setJumpTo] = useState<string | null>(null)
@@ -113,7 +118,7 @@ export function Settings() {
               setTab(id)
             }}
             orientation="vertical"
-            segments={TABS.map(({ id, labelKey }) => ({ id, label: t(labelKey) }))}
+            segments={tabs.map(({ id, label }) => ({ id, label }))}
             ariaLabel={t("settings.title")}
             className="gap-0.5"
             segmentClassName="rounded-md px-3 py-1.5 text-left text-sm"
@@ -134,13 +139,7 @@ export function Settings() {
                 }}
               />
             ) : (
-              <>
-                {tab === "appearance" && <AppearanceTab />}
-                {tab === "editor" && <EditorTab />}
-                {tab === "interface" && <InterfaceTab />}
-                {tab === "files" && <FilesTab />}
-                {tab === "system" && <SystemTab />}
-              </>
+              Active && <Active />
             )}
           </div>
           <AppVersion />

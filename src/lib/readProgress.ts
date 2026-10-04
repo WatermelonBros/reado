@@ -35,6 +35,9 @@ interface ReadProgressState {
   /** Read files that changed externally since being read (have a delta to review). */
   changed: Set<string>
   load: (root: string) => Promise<void>
+  /** Re-read what's read after `read.json` changed on disk (a sync), keeping the
+   *  changed-since-read flags, which live in this session only. */
+  reload: (root: string) => Promise<void>
   /** Mark a path read/unread, optimistically + persisted. When marking read,
    *  the content is snapshotted (passed in, or read from disk) so a later change
    *  can be reviewed as a delta. */
@@ -54,6 +57,12 @@ export const useReadProgress = create<ReadProgressState>((set, get) => ({
   load: async (root) => {
     const paths = await listRead(root).catch(() => [] as string[])
     set({ read: new Set(paths), changed: new Set() })
+  },
+  reload: async (root) => {
+    const paths = await listRead(root).catch(() => null)
+    // Our own writes come back as changes too: only a real difference re-renders.
+    const same = paths?.length === get().read.size && paths.every((p) => get().read.has(p))
+    if (paths && !same) set({ read: new Set(paths) })
   },
   mark: (root, relPath, read, content) => {
     const next = new Set(get().read)

@@ -5,6 +5,7 @@ import { baseName, useComments } from "@/lib/comments"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { createLogger, safeError } from "@/lib/logger"
 import { usePreReview } from "@/lib/preReview"
+import { offerProjectTour, useProjectTours } from "@/lib/projectTours"
 import { useQa } from "@/lib/qa"
 import { useReadProgress } from "@/lib/readProgress"
 import { useResolveLoop } from "@/lib/resolveLoop"
@@ -79,7 +80,11 @@ export function useProjectSession(root: string): number {
     }
     setWindowTitle(baseName(root))
     useComments.getState().load(root)
-    useReadProgress.getState().load(root)
+    // The project tour is offered once to someone who hasn't read anything here.
+    void Promise.all([
+      useReadProgress.getState().load(root),
+      useProjectTours.getState().load(root),
+    ]).then(() => offerProjectTour(root))
     useBookmarks.getState().load(root)
     useQa.getState().load(root)
     useTours.getState().load(root)

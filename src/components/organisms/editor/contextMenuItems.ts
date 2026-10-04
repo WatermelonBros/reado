@@ -8,9 +8,11 @@ import {
 import type { TFunction } from "i18next"
 import type { CommentType } from "@/lib/api"
 import { organizeImports } from "@/lib/codeActions"
+import { editorMenuContributions } from "@/lib/contributions"
 import { compareWithSaved, formatDocument } from "@/lib/docInfo"
 import { hasServer, renameSymbolAt } from "@/lib/lsp"
 import { useEditorActions, useProject } from "@/lib/store"
+import { rootFor } from "@/lib/workspace"
 import {
   findReferencesAt,
   goToDefinitionAt,
@@ -191,5 +193,10 @@ export function editorContextMenuItems(
       label: t("diff.toggle"),
       run: () => useEditorActions.getState().setDiffing(!useEditorActions.getState().diffing),
     },
+    // What the embedding build adds (the official build's "Add to tour"), last.
+    ...editorMenuContributions({ view, root: rootFor(path), relPath }).map((item, i) => ({
+      ...item,
+      separatorBefore: i === 0,
+    })),
   ].filter(Boolean) as EditorMenuItem[]
 }

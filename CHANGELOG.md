@@ -11,6 +11,43 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Project tours.** A project can ship guided tours through its own code in a
+  `tour.json` at its root. "Project tour" at the end of the tab bar plays the
+  project's onboarding tour: each step opens its file, lights exactly the code it
+  is about — a line, a block, or one expression — and explains it beside it. It
+  resumes where you left off, finds code that moved, says so when code is gone,
+  and marks the files you walk through as read. Opening a project for the first
+  time offers its tour once. Every build plays them, with no account.
+- **`tour.json` is an open format.** Specification and JSON Schema in
+  `docs/tour-format.md` and `docs/tour.schema.json`, public domain, so any editor
+  can read and write the same file.
+- **Mentions (Pro).** Type `@` in a shared comment to pull a teammate in: they get
+  a notification, and replies on the thread from then on.
+- **Notifications in the title bar (Pro).** A bell beside Discord counts what's
+  unread and lists it; open one, mark them read, or mute a thread you no longer
+  want to hear about.
+- **Your reading on every machine (Pro).** Reading progress and bookmarks follow
+  you between computers; so do comments on personal projects and, if you turn it
+  on in Settings › Sync, your private notes. A new computer offers to restore a
+  project's from your account, and the account page lets you download it all.
+- **Tour editor (Pro).** Record a project tour by selecting code, or ask the
+  agent for a first draft of the places a newcomer most needs explained.
+- **Who knows what (Pro).** In the Team window, a map of which parts of the code
+  several members have read, which only one has, and which nobody has — built
+  from the reading of members who choose to share it in Settings › Sync.
+
+### Changed
+
+- **Reading progress and bookmarks reload when their files change on disk**, so
+  a sync from another machine shows at once.
+- **Extension points for the official build:** dock panels (with an optional
+  activity-bar button), a settings tab, editor context-menu items, entries in the
+  "Project tour" menu, comment-composer completions, message renderers, a title-bar
+  slot, and default shortcuts for registered commands. A registered panel opens as a
+  tab beside what's already in its dock area.
+
 ## [1.30.2] — 2026-10-01
 
 ### Fixed

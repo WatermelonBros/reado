@@ -10,6 +10,7 @@ import {
   semanticReindexFile,
   startWatching,
 } from "@/lib/api"
+import { useBookmarks } from "@/lib/bookmarks"
 import { toRelative, useComments } from "@/lib/comments"
 import { useGuidedReview } from "@/lib/guidedReview"
 import { createLogger, safeError } from "@/lib/logger"
@@ -17,6 +18,7 @@ import { notifyWatchedFileChanged } from "@/lib/lsp"
 import { moodOf, useMascot } from "@/lib/mascot"
 import { notifyError } from "@/lib/notice"
 import { notifyAgentDone } from "@/lib/notify"
+import { TOUR_FILE, useProjectTours } from "@/lib/projectTours"
 import { useReadProgress, wasSelfWrite } from "@/lib/readProgress"
 import { useReasoning } from "@/lib/reasoning"
 import { useResolveLoop } from "@/lib/resolveLoop"
@@ -54,6 +56,7 @@ export function useProjectWatcher(root: string): void {
     const offs = [
       listen<{ file: string }>("file-changed", (event) => {
         const { file } = event.payload
+        if (file === TOUR_FILE) void useProjectTours.getState().load(root)
         // An external change (e.g. an agent's edit) to a file marked read means
         // there's new content to look at — flag the delta *before* unmarking
         // (mark(read=false) keeps the snapshot), then flip it to unread. Our own
@@ -107,6 +110,11 @@ export function useProjectWatcher(root: string): void {
       }),
       // A guided review advanced (the agent planned a route or proposed an
       // artifact via the CLI) — reload sessions so the Review Guide stays live.
+      // Another machine's reading was synced in (official build).
+      listen("reading-changed", () => {
+        void useReadProgress.getState().reload(root)
+        void useBookmarks.getState().load(root)
+      }),
       listen("sessions-changed", () => {
         useGuidedReview.getState().load(root)
       }),

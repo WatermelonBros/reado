@@ -2,7 +2,7 @@
 // makes a self-intersecting path, so the highlight renders mangled or not at
 // all — on exactly the small targets (an activity-bar icon) the tour points at.
 import { describe, expect, it } from "vitest"
-import { roundedRect } from "@/components/organisms/OnboardingTour"
+import { roundedRect } from "@/components/molecules/TourScrim"
 
 /** The arc radii in the path, in order: `A<r> <r> …`. The sign is captured too
  *  — without it a negative radius yields no matches and `every()` on an empty

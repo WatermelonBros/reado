@@ -1742,5 +1742,23 @@
     "show": "Maskottchen zurückholen",
     "toggle": "Maskottchen ein- oder ausblenden",
     "tuck": "An den Rand schicken"
+  },
+  "projectTour": {
+    "button": "Projekttour",
+    "hint": "„{name}“ abspielen",
+    "start": "Starten",
+    "offer": "Hier anfangen: {name} — eine geführte Tour durch dieses Projekt ({count} Schritte)",
+    "resume": "Bei Schritt {step} fortsetzen",
+    "restart": "Von vorn beginnen",
+    "steps_one": "{count} Schritt",
+    "steps_other": "{count} Schritte",
+    "newer": "Die Touren dieses Projekts nutzen ein neueres Format. Aktualisiere Reado, um sie abzuspielen.",
+    "invalid_one": "Eine Tour in tour.json konnte nicht gelesen werden.",
+    "invalid_other": "{count} Touren in tour.json konnten nicht gelesen werden.",
+    "moved": "Dieser Code hat sich geändert, seit der Schritt geschrieben wurde.",
+    "close": "Tour schließen",
+    "command": "Tour: Projekttour starten",
+    "drafting": "Entwurf der Projekttour",
+    "progress": "{current} von {total}"
   }
 }
