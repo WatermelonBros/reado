@@ -13,6 +13,9 @@ import { type EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view"
 export interface OverviewMark {
   /** A document position on the marked line. */
   pos: number
+  /** The end of the marked range, for a mark that spans lines: the tick is then as
+   *  tall as the lines it covers (500 changed lines are not one changed line). */
+  to?: number
   /** CSS colour for the tick. */
   color: string
 }
@@ -46,8 +49,14 @@ export function overviewRuler(getMarks: (view: EditorView) => OverviewMark[]) {
         const marks = getMarks(view)
         const ticks = marks
           .map((m) => {
-            const top = view.lineBlockAt(m.pos).top / total
-            return `<div class="cm-overviewRuler-tick" style="top:${(top * 100).toFixed(3)}%;background:${m.color}"></div>`
+            const first = view.lineBlockAt(m.pos)
+            const bottom = m.to === undefined ? first.bottom : view.lineBlockAt(m.to).bottom
+            const top = first.top / total
+            const height =
+              m.to === undefined
+                ? ""
+                : `height:${(((bottom - first.top) / total) * 100).toFixed(3)}%;`
+            return `<div class="cm-overviewRuler-tick" style="top:${(top * 100).toFixed(3)}%;${height}background:${m.color}"></div>`
           })
           .join("")
         this.dom.innerHTML = ticks
@@ -83,5 +92,11 @@ export const diffRuler = overviewRuler((view) => {
   const chunks = getChunks(view.state)?.chunks ?? []
   // Clamp to the doc end: a deletion's chunk can point just past the last line.
   const end = view.state.doc.length
-  return chunks.map((c) => ({ pos: Math.min(c.fromB, end), color: "var(--accent)" }))
+  return chunks.map((c) => {
+    const pos = Math.min(c.fromB, end)
+    // `toB` is past the chunk (the next line's start); its last line is one before.
+    // A pure deletion covers no line of the new text: a plain tick.
+    const to = c.toB > c.fromB ? Math.min(Math.max(pos, c.toB - 1), end) : undefined
+    return { pos, to, color: "var(--accent)" }
+  })
 })

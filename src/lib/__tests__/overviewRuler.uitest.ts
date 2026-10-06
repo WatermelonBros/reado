@@ -77,6 +77,31 @@ describe("diffRuler", () => {
     }
   })
 
+  it("sizes a changed chunk to the lines it covers", () => {
+    // A new file of 400 lines is one chunk covering the whole document: its tick
+    // runs the length of the ruler, not the 3px of a one-line change.
+    const doc = Array.from({ length: 400 }, (_, i) => `line ${i}`).join("\n") + "\n"
+    view = new EditorView({
+      doc,
+      extensions: [unifiedMergeView({ original: "", mergeControls: false }), diffRuler],
+      parent: document.body,
+    })
+    const [whole] = ticks(draw(view))
+    expect(Number.parseFloat(whole.style.height)).toBeGreaterThan(95)
+
+    view.destroy()
+    const lines = Array.from({ length: 400 }, (_, i) => `line ${i}`)
+    const original = lines.join("\n") + "\n"
+    lines[200] = "CHANGED"
+    view = new EditorView({
+      doc: lines.join("\n") + "\n",
+      extensions: [unifiedMergeView({ original, mergeControls: false }), diffRuler],
+      parent: document.body,
+    })
+    const [one] = ticks(draw(view))
+    expect(Number.parseFloat(one.style.height)).toBeLessThan(2)
+  })
+
   it("draws nothing when the two sides agree", () => {
     view = new EditorView({
       doc: "same\n",

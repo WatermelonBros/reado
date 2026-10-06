@@ -873,7 +873,11 @@
     right: 1px;
     width: 5px;
     height: 3px;
+    /* A range's tick sets its own height in %; never thinner than a single line's. */
+    min-height: 3px;
     border-radius: 1px;
-    opacity: 0.85;
+    /* One shade for every tick, faint enough that the scrollbar thumb stays
+       visible on top of one that spans the whole bar. */
+    opacity: 0.35;
   }
 }
