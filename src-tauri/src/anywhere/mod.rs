@@ -12,6 +12,7 @@
 //! owns the trust model. Failed attempts are rate-limited per peer address.
 
 mod auth;
+pub(crate) mod remote;
 mod review;
 mod routes;
 mod server;
@@ -70,6 +71,7 @@ type Terminals = Arc<Mutex<HashMap<String, Arc<TermSession>>>>;
 
 /// What the desktop shows (encoded into the pairing QR) and the phone needs.
 #[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct AnywhereInfo {
     /// `https://<lan-ip>:<port>` — where the phone connects.
     pub url: String,
@@ -78,12 +80,28 @@ pub struct AnywhereInfo {
     /// Single-use pairing secret. The phone spends it at `/api/pair` to mint its
     /// own credential; it is never itself an API credential.
     pub pairing: String,
+    /// `https://<hostname>` when the build made the desk reachable from outside
+    /// the network (see [`remote`]); the QR then points there.
+    pub remote_url: Option<String>,
+}
+
+impl AnywhereInfo {
+    /// This info with the current public address, which can change while the
+    /// server runs.
+    fn current(mut self) -> Self {
+        self.remote_url = remote::remote_host().map(|h| format!("https://{h}"));
+        self
+    }
 }
 
 /// A running server: the info we handed out, plus the handle that shuts it down.
 struct Running {
     handle: Handle,
     info: AnywhereInfo,
+    /// The listener's TLS and routes, for connections handed over by
+    /// [`remote::serve`].
+    tls: Arc<rustls::ServerConfig>,
+    router: axum::Router,
 }
 
 /// The latest resolve-loop state (raw JSON), published by the desktop for paired
@@ -147,6 +165,7 @@ pub struct AnywhereState {
     loop_state: Loop,
     agent: Agent,
     notices: Notices,
+    confirms: remote::Confirms,
 }
 
 /// The shared state the server needs, cloned out of `AnywhereState` in one go —
@@ -160,6 +179,7 @@ struct Deps {
     loop_state: Loop,
     agent: Agent,
     notices: Notices,
+    confirms: remote::Confirms,
 }
 
 impl AnywhereState {
@@ -174,6 +194,7 @@ impl AnywhereState {
             loop_state: self.loop_state.clone(),
             agent: self.agent.clone(),
             notices: self.notices.clone(),
+            confirms: self.confirms.clone(),
         }
     }
 }
@@ -191,6 +212,9 @@ struct Api {
     loop_state: Loop,
     agent: Agent,
     notices: Notices,
+    confirms: remote::Confirms,
+    /// When each remote device was last announced to the desktop.
+    seen: Arc<Mutex<HashMap<String, std::time::Instant>>>,
     app: AppHandle,
 }
 
@@ -255,16 +279,14 @@ pub async fn anywhere_enable(
     state: TauriState<'_, AnywhereState>,
 ) -> Result<AnywhereInfo, String> {
     if let Some(running) = state.running.lock().map_err(|e| e.to_string())?.as_ref() {
-        return Ok(running.info.clone());
+        return Ok(running.info.clone().current());
     }
     let devices = devices(&app, &state)?;
     let deps = state.deps(devices);
-    let (handle, info) = start_server(app, deps).await?;
-    *state.running.lock().map_err(|e| e.to_string())? = Some(Running {
-        handle,
-        info: info.clone(),
-    });
-    Ok(info)
+    let running = start_server(app, deps).await?;
+    let info = running.info.clone();
+    *state.running.lock().map_err(|e| e.to_string())? = Some(running);
+    Ok(info.current())
 }
 
 /// Dev convenience: when `READO_ANYWHERE_AUTOSTART` is set, start the server at
@@ -308,7 +330,8 @@ pub fn dev_autostart(app: &AppHandle) {
         }
     }
     match tauri::async_runtime::block_on(start_server(app.clone(), deps)) {
-        Ok((handle, info)) => {
+        Ok(running) => {
+            let info = running.info.clone();
             crate::log::info(
                 "anywhere",
                 "dev autostart up",
@@ -323,7 +346,7 @@ pub fn dev_autostart(app: &AppHandle) {
                 pairing_url(&info)
             );
             if let Ok(mut g) = state.running.lock() {
-                *g = Some(Running { handle, info });
+                *g = Some(running);
             }
         }
         Err(e) => crate::log::error(
@@ -375,7 +398,7 @@ pub fn anywhere_status(
         .lock()
         .map_err(|e| e.to_string())?
         .as_ref()
-        .map(|r| r.info.clone()))
+        .map(|r| r.info.clone().current()))
 }
 
 /// Register (or update) an open project so the phone can pick it.
@@ -509,7 +532,7 @@ pub fn anywhere_new_pairing(state: TauriState<'_, AnywhereState>) -> Result<Anyw
     let (secret, clear) = PairingSecret::mint();
     *state.pairing.lock().map_err(|e| e.to_string())? = Some(secret);
     r.info.pairing = clear;
-    Ok(r.info.clone())
+    Ok(r.info.clone().current())
 }
 
 /// How long a credential lives: idle days, then absolute days. 0 turns a check
@@ -575,6 +598,29 @@ pub fn anywhere_set_bind(
     bind: Option<String>,
 ) -> Result<(), String> {
     with_devices(&app, &state, |store| store.set_bind(bind))
+}
+
+/// Let a phone that reaches the desk remotely open its own shell, or not.
+/// Takes effect on the next connection.
+#[tauri::command]
+pub fn anywhere_set_remote_terminal(
+    app: AppHandle,
+    state: TauriState<'_, AnywhereState>,
+    on: bool,
+) -> Result<(), String> {
+    with_devices(&app, &state, |store| store.set_remote_terminal(on))
+}
+
+/// The desktop's Allow or Deny for a phone pairing remotely. Returns whether the
+/// request was still waiting.
+#[tauri::command]
+pub fn anywhere_pair_answer(
+    app: AppHandle,
+    state: TauriState<'_, AnywhereState>,
+    id: String,
+    allow: bool,
+) -> Result<bool, String> {
+    remote::answer(&app, &state, &id, allow)
 }
 
 /// Turn mDNS advertisement on or off. Applies at the next enable.

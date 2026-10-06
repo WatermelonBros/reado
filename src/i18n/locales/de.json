@@ -291,7 +291,16 @@
     "lifetimeHint": "Ein gekoppeltes Handy muss nach so langer Nichtnutzung — oder nach so langer Gesamtzeit — erneut gekoppelt werden. 0 schaltet die Grenze aus.",
     "mdns": "Im lokalen Netz ankündigen (mDNS)",
     "mdnsHint": "Lässt ein gekoppeltes Handy diesen Rechner ohne neuen QR-Code wiederfinden. Die Ankündigung trägt nur die Adresse — das Handy braucht weiterhin seine Zugangsdaten.",
-    "revokeAll": "Alle widerrufen"
+    "revokeAll": "Alle widerrufen",
+    "scanHintRemote": "Mit der Handykamera scannen, aus jedem Netz. Beim ersten Mal fragt Reado hier, ob du das Handy zulassen willst.",
+    "remoteTag": "remote",
+    "remoteTerminal": "Terminal von außerhalb des Netzes erlauben",
+    "remoteTerminalHint": "Ein über das Relay verbundenes Handy kann nur damit eine eigene Shell auf diesem Rechner öffnen. Das Terminal des Agenten bleibt so oder so sichtbar.",
+    "confirmTitle": "{name} koppeln?",
+    "confirmBody": "Ein Handy koppelt sich von außerhalb deines Netzes. Erlaube es nur, wenn es denselben Code zeigt.",
+    "allow": "Erlauben",
+    "deny": "Ablehnen",
+    "remoteNow": "Remote: {name}"
   },
   "prereview": {
     "panel": "KI-Review",

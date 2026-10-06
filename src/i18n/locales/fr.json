@@ -291,7 +291,16 @@
     "lifetimeHint": "Un téléphone appairé doit se réappairer après cette durée d'inactivité, ou après cette durée totale. 0 désactive la limite.",
     "mdns": "S'annoncer sur le réseau local (mDNS)",
     "mdnsHint": "Permet à un téléphone appairé de retrouver ce poste sans nouveau QR. L'annonce ne contient que l'adresse — le téléphone a toujours besoin de ses identifiants.",
-    "revokeAll": "Tout révoquer"
+    "revokeAll": "Tout révoquer",
+    "scanHintRemote": "Scannez avec l'appareil photo du téléphone, depuis n'importe quel réseau. La première fois, Reado vous demande ici d'autoriser le téléphone.",
+    "remoteTag": "distant",
+    "remoteTerminal": "Autoriser le terminal hors du réseau",
+    "remoteTerminalHint": "Un téléphone connecté via le relais ne peut ouvrir son propre shell sur cette machine que si cette option est activée. Le terminal de l'agent reste visible dans tous les cas.",
+    "confirmTitle": "Associer {name} ?",
+    "confirmBody": "Un téléphone s'associe depuis l'extérieur de votre réseau. Autorisez-le seulement s'il affiche ce même code.",
+    "allow": "Autoriser",
+    "deny": "Refuser",
+    "remoteNow": "Distant : {name}"
   },
   "prereview": {
     "panel": "Revue IA",

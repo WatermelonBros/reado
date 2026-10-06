@@ -19,6 +19,8 @@ import type { ComponentType } from "react"
  * - `editor.tabbar` — the right end of the primary editor group's tab bar, outside
  *   the scrolling strip of tabs.
  * - `titlebar.actions` — the title bar, right before the Discord button.
+ * - `anywhere.remote` — the Reado Anywhere dialog, under the QR: reaching the desk
+ *   from outside the network; gets whether the Anywhere server is running.
  *
  * Registration is typed by this map, so a contribution that needs context cannot be
  * put in a slot that gives none.
@@ -30,6 +32,7 @@ export interface SlotProps {
   "comment.actions": { commentId: string; root: string }
   "editor.tabbar": Record<string, never>
   "titlebar.actions": Record<string, never>
+  "anywhere.remote": { running: boolean }
 }
 
 export type SlotName = keyof SlotProps

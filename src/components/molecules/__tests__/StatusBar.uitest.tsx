@@ -26,6 +26,7 @@ const api = vi.hoisted(() => ({
   listEncodings: vi.fn(async () => ["utf-8", "utf-8-bom", "windows-1252"]),
 }))
 vi.mock("../../../lib/api", () => api)
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => {})) }))
 
 // The editor-command edges the status bar drives (go to line, convert line
 // endings) are no-ops without a live CodeMirror view, so we spy on them at the

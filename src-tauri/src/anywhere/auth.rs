@@ -1,3 +1,4 @@
+use super::remote::{Remote, WaitEnd};
 use super::{Api, Devices};
 use crate::pairing::{Denied, RateLimiter};
 use std::net::{IpAddr, SocketAddr};
@@ -7,7 +8,7 @@ use axum::extract::{ConnectInfo, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
+use axum::{Extension, Json};
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
@@ -69,6 +70,7 @@ impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, RateLimiter>>> for De
 pub(super) async fn auth(
     State(api): State<Api>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    remote: Option<Extension<Remote>>,
     req: Request,
     next: Next,
 ) -> Response {
@@ -79,7 +81,12 @@ pub(super) async fn auth(
         .and_then(|v| v.strip_prefix("Bearer "))
         .unwrap_or("");
     match api.authenticate(presented, peer.ip()) {
-        Ok(_) => next.run(req).await,
+        Ok(device) => {
+            if remote.is_some() {
+                api.remote_seen(&device);
+            }
+            next.run(req).await
+        }
         Err(denied) => {
             crate::log::warn(
                 "anywhere",
@@ -111,24 +118,36 @@ pub(super) struct PairedBody {
     token: String,
 }
 
+/// A remote pairing waiting for the desktop: the phone shows `code` and polls
+/// `/api/pair-wait` with `pending`.
+#[derive(Serialize)]
+pub(super) struct PendingBody {
+    pending: String,
+    code: String,
+}
+
+/// Whether `peer` may try now; a locked-out peer gets the response to send.
+fn throttled(api: &Api, peer: IpAddr) -> Option<Response> {
+    let Ok(limiter) = api.limiter.lock() else {
+        return Some(StatusCode::SERVICE_UNAVAILABLE.into_response());
+    };
+    (!limiter.allowed(peer)).then(|| StatusCode::TOO_MANY_REQUESTS.into_response())
+}
+
 /// Redeem the pairing secret from the QR for a device credential of the phone's
 /// own. The secret is single-use and short-lived, so a photographed QR stops
 /// being useful once a phone has spent it.
 pub(super) async fn pair(
     State(api): State<Api>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    remote: Option<Extension<Remote>>,
     Json(body): Json<PairBody>,
 ) -> Response {
     let peer = peer.ip();
     // Pairing is unauthenticated by nature, so it is rate-limited like auth —
     // otherwise it would be the one endpoint free to guess against.
-    {
-        let Ok(limiter) = api.limiter.lock() else {
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
-        };
-        if !limiter.allowed(peer) {
-            return StatusCode::TOO_MANY_REQUESTS.into_response();
-        }
+    if let Some(refused) = throttled(&api, peer) {
+        return refused;
     }
 
     let Ok(mut slot) = api.pairing.lock() else {
@@ -145,6 +164,25 @@ pub(super) async fn pair(
     // Spend it: one QR, one device.
     *slot = None;
     drop(slot);
+
+    // From outside the network a valid QR is not enough: the desktop has to say
+    // yes. The secret is spent either way — Deny means scanning a new QR.
+    if remote.is_some() {
+        let req = api.request_pair(&body.name);
+        crate::log::info(
+            "anywhere",
+            "remote pairing waits for the desktop",
+            serde_json::Value::Null,
+        );
+        return (
+            StatusCode::ACCEPTED,
+            Json(PendingBody {
+                pending: req.id,
+                code: req.code,
+            }),
+        )
+            .into_response();
+    }
 
     let Ok(mut store) = api.devices.lock() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
@@ -163,6 +201,47 @@ pub(super) async fn pair(
     crate::log::info("anywhere", "device paired", serde_json::Value::Null);
     let _ = api.app.emit("anywhere-devices-changed", ());
     Json(PairedBody { token }).into_response()
+}
+
+/// What a phone sends to collect a remote pairing's answer.
+#[derive(Deserialize)]
+pub(super) struct WaitBody {
+    pending: String,
+}
+
+/// Wait for the desktop's answer to a remote pairing: the credential once it's
+/// allowed, 202 while undecided (poll again), 403 on Deny, 410 once it's gone.
+pub(super) async fn pair_wait(
+    State(api): State<Api>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(body): Json<WaitBody>,
+) -> Response {
+    let peer = peer.ip();
+    if let Some(refused) = throttled(&api, peer) {
+        return refused;
+    }
+    match api.wait_pair(&body.pending).await {
+        Ok(Some(token)) => Json(PairedBody { token }).into_response(),
+        Ok(None) => {
+            let code = api.pending_code(&body.pending).unwrap_or_default();
+            (
+                StatusCode::ACCEPTED,
+                Json(PendingBody {
+                    pending: body.pending,
+                    code,
+                }),
+            )
+                .into_response()
+        }
+        Err(WaitEnd::Denied) => StatusCode::FORBIDDEN.into_response(),
+        Err(WaitEnd::Gone) => {
+            // An unknown id is a guess, and counts like one.
+            if let Ok(mut l) = api.limiter.lock() {
+                l.fail(peer);
+            }
+            StatusCode::GONE.into_response()
+        }
+    }
 }
 
 #[cfg(test)]

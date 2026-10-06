@@ -193,7 +193,23 @@
       body: JSON.stringify({ secret, name: deviceName() }),
     });
     if (!res.ok) return false;
-    const { token } = await res.json();
+    let body = await res.json();
+    // From outside the network the desktop has to allow us: show its code and
+    // wait for the answer.
+    while (res.status === 202 || body.pending) {
+      if (!body.pending) return false;
+      gate("Check your desktop and allow this phone. The code there should read " + body.code + ".");
+      const wait = await fetch("/api/pair-wait", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pending: body.pending }),
+      });
+      if (wait.status === 202) { body = await wait.json(); continue; }
+      if (!wait.ok) return false;
+      body = await wait.json();
+      break;
+    }
+    const { token } = body;
     if (!token) return false;
     localStorage.setItem(KEY, token);
     return true;
@@ -726,8 +742,12 @@
     ws.binaryType = "arraybuffer";
     ws.onopen = () => { if (attempt) term.write("\r\n\x1b[2m[reconnected]\x1b[0m\r\n"); try { fit.fit(); } catch (_) {} sendSize(); };
     ws.onmessage = (e) => term.write(new Uint8Array(e.data));
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       if (termClosing) return;
+      if (e.code === 4403) {
+        term.write("\r\n\x1b[2mThe terminal is off for connections from outside your network. Turn it on in Reado Anywhere on the desktop.\x1b[0m\r\n");
+        return;
+      }
       const n = (attempt || 0) + 1;
       term.write("\r\n\x1b[2m[disconnected — reconnecting…]\x1b[0m\r\n");
       clearTimeout(reconnectT);

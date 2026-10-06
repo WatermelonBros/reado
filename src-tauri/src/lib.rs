@@ -42,6 +42,13 @@ mod watcher;
 
 pub use instance_args::register_arg_handler;
 
+/// Reado Anywhere's hooks for a build that carries it beyond the local network:
+/// hand over a connection that came another way, serve a public hostname's
+/// certificate, and revoke what paired remotely. See `anywhere/remote.rs`.
+pub mod anywhere_remote {
+    pub use crate::anywhere::remote::{is_running, remote_host, revoke_remote, serve, set_remote};
+}
+
 /// Build and run the Tauri application.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -283,6 +290,8 @@ pub fn run_with(extend: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builde
             anywhere::anywhere_interfaces,
             anywhere::anywhere_set_bind,
             anywhere::anywhere_set_mdns,
+            anywhere::anywhere_set_remote_terminal,
+            anywhere::anywhere_pair_answer,
             log::log_record,
             log::log_path,
             log::log_set_config,

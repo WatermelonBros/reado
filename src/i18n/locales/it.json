@@ -291,7 +291,16 @@
     "lifetimeHint": "Un telefono associato deve riassociarsi dopo questo tempo senza usarlo, o dopo questo tempo in totale. 0 disattiva il limite.",
     "mdns": "Annuncia sulla rete locale (mDNS)",
     "mdnsHint": "Permette a un telefono già associato di ritrovare questo desktop senza un nuovo QR. L'annuncio porta solo l'indirizzo — al telefono serve comunque la sua credenziale.",
-    "revokeAll": "Revoca tutti"
+    "revokeAll": "Revoca tutti",
+    "scanHintRemote": "Inquadra con la fotocamera del telefono, da qualsiasi rete. La prima volta Reado ti chiede qui di autorizzare il telefono.",
+    "remoteTag": "remoto",
+    "remoteTerminal": "Consenti il terminale da fuori rete",
+    "remoteTerminalHint": "Un telefono collegato tramite il relay può aprire una shell su questo computer solo se è attivo. Il terminale dell'agente resta visibile comunque.",
+    "confirmTitle": "Abbinare {name}?",
+    "confirmBody": "Un telefono si sta abbinando da fuori dalla tua rete. Consentilo solo se mostra questo stesso codice.",
+    "allow": "Consenti",
+    "deny": "Rifiuta",
+    "remoteNow": "Remoto: {name}"
   },
   "prereview": {
     "panel": "Revisione AI",

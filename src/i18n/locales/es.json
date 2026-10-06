@@ -291,7 +291,16 @@
     "lifetimeHint": "Un móvil emparejado debe volver a emparejarse tras este tiempo sin usarse, o tras este tiempo en total. 0 desactiva el límite.",
     "mdns": "Anunciarse en la red local (mDNS)",
     "mdnsHint": "Permite que un móvil emparejado vuelva a encontrar este escritorio sin un QR nuevo. El anuncio solo lleva la dirección: el móvil sigue necesitando su credencial.",
-    "revokeAll": "Revocar todo"
+    "revokeAll": "Revocar todo",
+    "scanHintRemote": "Escanea con la cámara del teléfono, desde cualquier red. La primera vez, Reado te pide aquí que autorices el teléfono.",
+    "remoteTag": "remoto",
+    "remoteTerminal": "Permitir el terminal desde fuera de la red",
+    "remoteTerminalHint": "Un teléfono conectado a través del relay solo puede abrir su propia shell en este equipo con esto activado. El terminal del agente sigue visible en cualquier caso.",
+    "confirmTitle": "¿Vincular {name}?",
+    "confirmBody": "Un teléfono se está vinculando desde fuera de tu red. Permítelo solo si muestra este mismo código.",
+    "allow": "Permitir",
+    "deny": "Denegar",
+    "remoteNow": "Remoto: {name}"
   },
   "prereview": {
     "panel": "Revisión con IA",

@@ -11,6 +11,7 @@ import { Announcer } from "./components/molecules/Announcer"
 import { EditMenu } from "./components/molecules/EditMenu"
 import { Notice } from "./components/molecules/Notice"
 import { AnywhereDialog } from "./components/organisms/AnywhereDialog"
+import { AnywherePairConfirm } from "./components/organisms/AnywherePairConfirm"
 import { DefaultAppPrompt } from "./components/organisms/DefaultAppPrompt"
 import { OnboardingModal } from "./components/organisms/OnboardingModal"
 import { OnboardingTour } from "./components/organisms/OnboardingTour"
@@ -198,6 +199,7 @@ export default function App() {
           launcher too (no project / no tabs), not only inside a project. */}
       <Settings />
       <AnywhereDialog />
+      <AnywherePairConfirm />
       <ShortcutsDialog />
       <PromptDialog />
       <SynopsisModal />

@@ -4596,6 +4596,8 @@ dependencies = [
  "encoding_rs",
  "futures-util",
  "globset",
+ "hyper",
+ "hyper-util",
  "ignore",
  "image",
  "libc",
@@ -4627,6 +4629,8 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-rustls",
+ "tower",
  "xcap",
  "zip 2.4.2",
 ]

@@ -291,7 +291,16 @@
     "lifetimeHint": "A paired phone must pair again after this long unused, or this long in total. 0 turns a limit off.",
     "mdns": "Announce on the local network (mDNS)",
     "mdnsHint": "Lets a paired phone find this desktop again without a fresh QR. The announcement carries the address only — a phone still needs its credential.",
-    "revokeAll": "Revoke all"
+    "revokeAll": "Revoke all",
+    "scanHintRemote": "Scan with your phone's camera, on any network. The first time, Reado asks you here to allow the phone.",
+    "remoteTag": "remote",
+    "remoteTerminal": "Allow the terminal from outside the network",
+    "remoteTerminalHint": "A phone connected through the relay can open its own shell on this machine only with this on. The agent's terminal stays visible either way.",
+    "confirmTitle": "Pair {name}?",
+    "confirmBody": "A phone is pairing from outside your network. Allow it only if it shows this same code.",
+    "allow": "Allow",
+    "deny": "Deny",
+    "remoteNow": "Remote: {name}"
   },
   "prereview": {
     "panel": "AI Review",

@@ -149,8 +149,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Baked into the Pro modules at compile time (neither is a secret).
+          # Baked into the Pro modules at compile time (none is a secret).
           READO_API_URL: https://api.reado.watermelon-studio.it
+          READO_RELAY_URL: https://relay.anywhere.watermelon-studio.it
           READO_ENTITLEMENT_PUBKEY: ZnJc5Ah7sgBv9M9aNqNGH9htC8taUHXiJZ28ikAOt3k
         with:
           projectPath: ${{ env.PRO == 'true' && 'pro/app' || '.' }}

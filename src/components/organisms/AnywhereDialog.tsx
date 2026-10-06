@@ -20,6 +20,7 @@ import { TrashIcon } from "@/components/atoms/icons"
 import { Modal } from "@/components/atoms/Modal"
 import { QrCode } from "@/components/atoms/QrCode"
 import { Select } from "@/components/atoms/Select"
+import { Slot } from "@/components/atoms/Slot"
 import {
   type AnywhereConfig,
   type AnywhereDevice,
@@ -36,6 +37,7 @@ import {
   anywhereSetBind,
   anywhereSetLifetimes,
   anywhereSetMdns,
+  anywhereSetRemoteTerminal,
   anywhereStatus,
 } from "@/lib/api"
 import { currentOS } from "@/lib/extensions"
@@ -44,9 +46,12 @@ import { offSafe } from "@/lib/terminals"
 import { ago } from "@/lib/time"
 
 /** The QR payload: the address with the pairing secret + fingerprint in the
- * fragment, so neither ever hits a query string (or a server log). */
+ * fragment, so neither ever hits a query string (or a server log). The public
+ * address needs no fingerprint: its certificate is signed by a public CA. */
 const payload = (i: AnywhereInfo) =>
-  `${i.url}/#pair=${i.pairing}&fp=${encodeURIComponent(i.fingerprint)}`
+  i.remoteUrl
+    ? `${i.remoteUrl}/#pair=${i.pairing}`
+    : `${i.url}/#pair=${i.pairing}&fp=${encodeURIComponent(i.fingerprint)}`
 
 /** The interface the backend picks when nothing is chosen. */
 const AUTO = "auto"
@@ -99,8 +104,15 @@ export function AnywhereDialog() {
   useEffect(() => {
     if (!open) return
     const pending = listen("anywhere-devices-changed", refresh)
+    // The public address can arrive (or go) while the dialog is open.
+    const remote = listen("anywhere-remote-changed", () => {
+      anywhereStatus()
+        .then(setInfo)
+        .catch(() => setInfo(null))
+    })
     return () => {
       offSafe(pending)
+      offSafe(remote)
     }
   }, [open, refresh])
 
@@ -177,7 +189,7 @@ export function AnywhereDialog() {
 
   const copyUrl = () => {
     if (!info) return
-    void clipboardWriteText(info.url).then(() => {
+    void clipboardWriteText(info.remoteUrl ?? info.url).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
     })
@@ -208,7 +220,7 @@ export function AnywhereDialog() {
               <QrCode value={payload(info)} size={216} />
             </div>
             <p className="mt-5 max-w-[34ch] text-sm leading-relaxed text-muted">
-              {t("anywhere.scanHint")}
+              {t(info.remoteUrl ? "anywhere.scanHintRemote" : "anywhere.scanHint")}
             </p>
 
             <button
@@ -217,11 +229,13 @@ export function AnywhereDialog() {
               title={t("anywhere.copy")}
               className="mt-4 max-w-full truncate rounded-md border border-line bg-canvas px-3 py-1.5 font-mono text-xs text-ink transition-colors hover:border-line-strong"
             >
-              {copied ? t("anywhere.copied") : info.url}
+              {copied ? t("anywhere.copied") : (info.remoteUrl ?? info.url)}
             </button>
-            <p className="mt-3 font-mono text-[10px] leading-relaxed break-all text-faint">
-              {t("anywhere.fingerprint")}: {info.fingerprint}
-            </p>
+            {!info.remoteUrl && (
+              <p className="mt-3 font-mono text-[10px] leading-relaxed break-all text-faint">
+                {t("anywhere.fingerprint")}: {info.fingerprint}
+              </p>
+            )}
           </>
         ) : (
           <>
@@ -253,6 +267,8 @@ export function AnywhereDialog() {
           </Button>
         )}
 
+        <Slot name="anywhere.remote" props={{ running: !!info }} />
+
         <section className="mt-6 w-full border-t border-line pt-5 text-left">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="m-0 text-xs font-medium tracking-wide text-faint uppercase">
@@ -274,6 +290,11 @@ export function AnywhereDialog() {
                   className="flex items-center gap-2 border-b border-line/60 py-1.5 last:border-b-0"
                 >
                   <span className="min-w-0 flex-1 truncate text-sm text-ink">{d.name}</span>
+                  {d.remote && (
+                    <span className="flex-none rounded border border-line px-1 text-[10px] text-faint">
+                      {t("anywhere.remoteTag")}
+                    </span>
+                  )}
                   <span className="flex-none text-[10px] text-faint">
                     {ago(d.lastSeen * 1000, i18n.language)}
                   </span>
@@ -352,6 +373,22 @@ export function AnywhereDialog() {
               label={t("anywhere.mdns")}
             />
             <p className="mt-1 text-[10px] leading-relaxed text-faint">{t("anywhere.mdnsHint")}</p>
+
+            {(info?.remoteUrl || config.remoteTerminal) && (
+              <>
+                <Checkbox
+                  className="mt-4 text-sm text-ink"
+                  checked={config.remoteTerminal}
+                  onChange={(on) =>
+                    void patch({ remoteTerminal: on }, () => anywhereSetRemoteTerminal(on))
+                  }
+                  label={t("anywhere.remoteTerminal")}
+                />
+                <p className="mt-1 text-[10px] leading-relaxed text-faint">
+                  {t("anywhere.remoteTerminalHint")}
+                </p>
+              </>
+            )}
           </section>
         )}
       </div>

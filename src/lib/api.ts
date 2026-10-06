@@ -1495,6 +1495,9 @@ export interface AnywhereInfo {
   url: string
   fingerprint: string
   pairing: string
+  /** `https://<hostname>` when this desk is reachable from outside the network
+   * (the official build's relay); the QR points there instead. */
+  remoteUrl: string | null
 }
 
 /** A phone paired with this desktop. No credential material crosses this
@@ -1505,6 +1508,8 @@ export interface AnywhereDevice {
   /** Unix seconds. */
   created: number
   lastSeen: number
+  /** Paired through the relay, from outside the network. */
+  remote: boolean
 }
 
 /** Anywhere's persisted preferences (the device list is fetched separately). */
@@ -1516,6 +1521,8 @@ export interface AnywhereConfig {
   /** Interface address to bind, or null for the machine's LAN address. */
   bind: string | null
   mdns: boolean
+  /** Whether a phone reaching the desk remotely may open its own shell. */
+  remoteTerminal: boolean
 }
 
 /** A network interface Anywhere can bind to. */
@@ -1560,6 +1567,22 @@ export const anywhereSetBind = (bind: string | null) => invoke<void>("anywhere_s
 
 /** Toggle mDNS advertisement; applies at the next enable. */
 export const anywhereSetMdns = (on: boolean) => invoke<void>("anywhere_set_mdns", { on })
+
+/** Let a phone that reaches the desk remotely open its own shell, or not. */
+export const anywhereSetRemoteTerminal = (on: boolean) =>
+  invoke<void>("anywhere_set_remote_terminal", { on })
+
+/** A phone pairing from outside the network, waiting for Allow on the desktop. */
+export interface AnywherePairRequest {
+  id: string
+  name: string
+  /** Six digits, shown on the phone too. */
+  code: string
+}
+
+/** Allow or deny a remote pairing; false when it was no longer waiting. */
+export const anywherePairAnswer = (id: string, allow: boolean) =>
+  invoke<boolean>("anywhere_pair_answer", { id, allow })
 
 /** Register this window's open project so a paired phone can pick it. */
 export const anywhereSetProject = (id: string, root: string, name: string) =>

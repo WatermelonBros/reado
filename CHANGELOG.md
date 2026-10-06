@@ -11,6 +11,26 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Reado Anywhere from anywhere (Pro).** The desk can be reachable from any
+  network at its own public address, through a relay that only forwards the
+  encrypted connection: the phone opens the same page as on the LAN, in its
+  browser, with no certificate warning.
+- **A phone pairing from outside your network needs your OK.** The desktop asks
+  "Pair iPhone?" with a six-digit code the phone shows too; a valid QR alone is
+  no longer enough from there.
+- **The status bar says when a phone is connected remotely** ("Remote: iPhone"),
+  and paired devices from outside the network are marked as such.
+- **The phone's own terminal is off for remote connections** unless you turn it
+  on in Reado Anywhere. The agent's terminal stays visible.
+
+### Fixed
+
+- Reado Anywhere's paired-device list shows when each phone was last seen again.
+- In a diff, the marks along the scrollbar are as tall as the change they stand for:
+  a new file of 500 lines fills the bar instead of showing one small tick.
+
 ## [1.31.0] — 2026-10-04
 
 ### Added

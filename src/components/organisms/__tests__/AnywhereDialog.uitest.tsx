@@ -101,6 +101,17 @@ describe("AnywhereDialog", () => {
     expect(screen.queryByRole("img", { name: "anywhere.qrLabel" })).not.toBeInTheDocument()
   })
 
+  it("points at the public address when the desk is reachable from anywhere", async () => {
+    anywhereStatus.mockResolvedValue({ ...info, remoteUrl: "https://abc.anywhere.test" })
+    usePalette.setState({ anywhereOpen: true })
+    render(<AnywhereDialog />)
+    expect(await screen.findByText("https://abc.anywhere.test")).toBeInTheDocument()
+    expect(screen.getByText("anywhere.scanHintRemote")).toBeInTheDocument()
+    // A publicly trusted certificate needs no fingerprint to compare.
+    expect(screen.queryByText(/anywhere\.fingerprint/)).not.toBeInTheDocument()
+    expect(await screen.findByText("anywhere.remoteTerminal")).toBeInTheDocument()
+  })
+
   it("enabling the server renders the QR and the stop control", async () => {
     usePalette.setState({ anywhereOpen: true })
     render(<AnywhereDialog />)

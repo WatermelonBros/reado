@@ -1,10 +1,11 @@
 //! The TLS server itself: certificate, bind address, the router, mDNS.
 
-use super::auth::{auth, pair};
+use super::auth::{auth, pair, pair_wait};
+use super::remote::Resolver;
 use super::review::*;
 use super::routes::*;
 use super::term::term;
-use super::{AnywhereInfo, Api, Deps};
+use super::{AnywhereInfo, Api, Deps, Running};
 use crate::pairing::{PairingSecret, RateLimiter};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex, Once};
@@ -111,10 +112,7 @@ fn bind_address(chosen: Option<&str>) -> Result<IpAddr, String> {
 
 /// Build the cert, bind the TLS server, spawn it, and return its handle + info.
 /// Shared by the `anywhere_enable` command and the dev autostart.
-pub(super) async fn start_server(
-    app: AppHandle,
-    deps: Deps,
-) -> Result<(Handle, AnywhereInfo), String> {
+pub(super) async fn start_server(app: AppHandle, deps: Deps) -> Result<Running, String> {
     let Deps {
         devices,
         pairing: pairing_slot,
@@ -124,6 +122,7 @@ pub(super) async fn start_server(
         loop_state,
         agent,
         notices,
+        confirms,
     } = deps;
     install_crypto();
 
@@ -134,7 +133,8 @@ pub(super) async fn start_server(
     let ip = bind_address(bind.as_deref())?;
     let port = free_port().map_err(|e| e.to_string())?;
 
-    let (config, fp) = tls_config(ip).await?;
+    let (tls, fp) = tls_config(ip)?;
+    let config = RustlsConfig::from_config(tls.clone());
 
     // A fresh single-use secret per server start; the desktop can mint another
     // to pair a second device.
@@ -145,6 +145,7 @@ pub(super) async fn start_server(
         url: format!("https://{ip}:{port}"),
         fingerprint: fp,
         pairing: clear,
+        remote_url: None,
     };
 
     let api = Api {
@@ -157,10 +158,13 @@ pub(super) async fn start_server(
         loop_state,
         agent,
         notices,
+        confirms,
+        seen: Arc::default(),
         app,
     };
 
     let router = router(api);
+    let serve_router = router.clone();
 
     let handle = Handle::new();
     let serve_handle = handle.clone();
@@ -178,7 +182,7 @@ pub(super) async fn start_server(
         // rate-limit per source rather than globally.
         let _ = axum_server::bind_rustls(addr, config)
             .handle(serve_handle)
-            .serve(router.into_make_service_with_connect_info::<SocketAddr>())
+            .serve(serve_router.into_make_service_with_connect_info::<SocketAddr>())
             .await;
     });
 
@@ -186,22 +190,28 @@ pub(super) async fn start_server(
         advertise(ip, port);
     }
 
-    Ok((handle, info))
+    Ok(Running {
+        handle,
+        info,
+        tls,
+        router,
+    })
 }
 
-/// A self-signed certificate for `ip` (and `localhost`), as the rustls config to
-/// serve with plus its fingerprint for the QR.
-async fn tls_config(ip: IpAddr) -> Result<(RustlsConfig, String), String> {
+/// A self-signed certificate for `ip` (and `localhost`) as the default of a
+/// resolver that serves a public hostname's certificate by SNI, once one is set
+/// (see `remote`). Returns the TLS config and the LAN certificate's fingerprint
+/// for the QR.
+fn tls_config(ip: IpAddr) -> Result<(Arc<rustls::ServerConfig>, String), String> {
     let cert = rcgen::generate_simple_self_signed(vec![ip.to_string(), "localhost".into()])
         .map_err(|e| e.to_string())?;
     let fp = fingerprint(cert.cert.der());
-    let config = RustlsConfig::from_pem(
-        cert.cert.pem().into_bytes(),
-        cert.key_pair.serialize_pem().into_bytes(),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok((config, fp))
+    let lan = super::remote::certified(&cert.cert.pem(), &cert.key_pair.serialize_pem())?;
+    let mut config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_cert_resolver(Arc::new(Resolver { lan }));
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    Ok((Arc::new(config), fp))
 }
 
 /// Every route the server answers: the page and its vendored assets, the two
@@ -267,6 +277,7 @@ fn router(api: Api) -> Router {
         // Pairing is necessarily unauthenticated — it is how a phone gets its
         // credential — but it demands the single-use secret from the QR.
         .route("/api/pair", post(pair))
+        .route("/api/pair-wait", post(pair_wait))
         .merge(protected)
         .with_state(api)
 }
@@ -351,6 +362,7 @@ mod tests {
             url: "https://192.168.1.10:4443".into(),
             fingerprint: "AA:BB".into(),
             pairing: "s3cr3t".into(),
+            remote_url: None,
         }
     }
 

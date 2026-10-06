@@ -12,6 +12,9 @@ use serde::Deserialize;
 
 // ---- Interactive terminal (WebSocket ↔ PTY) -------------------------------
 
+/// The close code that tells the phone its shell is off for remote connections.
+const REMOTE_TERMINAL_OFF: u16 = 4403;
+
 #[derive(Deserialize)]
 pub(super) struct TermQuery {
     project: String,
@@ -101,6 +104,7 @@ fn get_or_create_term(terminals: &Terminals, key: &str, root: &str) -> Option<Ar
 pub(super) async fn term(
     State(api): State<Api>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    remote: Option<axum::Extension<super::remote::Remote>>,
     Query(q): Query<TermQuery>,
     ws: WebSocketUpgrade,
 ) -> Response {
@@ -117,6 +121,24 @@ pub(super) async fn term(
         } else {
             StatusCode::UNAUTHORIZED.into_response()
         };
+    }
+    // Over the internet the phone's own shell is a remote login: only when the
+    // user turned it on for remote connections. Said with a close code rather
+    // than a refused upgrade, which a browser reports as nothing but a drop.
+    let remote_shell = api
+        .devices
+        .lock()
+        .map(|s| s.config().remote_terminal)
+        .unwrap_or(false);
+    if remote.is_some() && !remote_shell {
+        return ws.on_upgrade(|mut socket| async move {
+            let _ = socket
+                .send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: REMOTE_TERMINAL_OFF,
+                    reason: "terminal off for remote connections".into(),
+                })))
+                .await;
+        });
     }
     let root = match api.root(&q.project) {
         Some(r) => r,

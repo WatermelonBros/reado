@@ -4,6 +4,7 @@
  * off; the rest (the document's indentation, endings and language) show
  * whenever there is a document to describe.
  */
+import { listen } from "@tauri-apps/api/event"
 import { type ComponentType, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Dropdown, MenuRow } from "@/components/atoms/Dropdown"
@@ -23,7 +24,7 @@ import { usePreview } from "@/lib/preview"
 import { DEFAULT_PROFILE_ID, useProfiles } from "@/lib/profiles"
 import { mod } from "@/lib/shortcuts"
 import { usePalette, useSettings } from "@/lib/store"
-import { useTerminals } from "@/lib/terminals"
+import { offSafe, useTerminals } from "@/lib/terminals"
 import { BranchItem } from "./BranchItem"
 import { EncodingGroup } from "./EncodingGroup"
 import { ITEM, type StatusItemProps } from "./shared"
@@ -203,6 +204,7 @@ function AgentItem() {
 function AnywhereItem() {
   const anywhereOpen = usePalette((s) => s.anywhereOpen)
   const [anywhereOn, setAnywhereOn] = useState(false)
+  const remote = useRemoteDevice()
   const { t } = useTranslation()
   useEffect(() => {
     anywhereStatus()
@@ -223,8 +225,31 @@ function AnywhereItem() {
         className="h-1.5 w-1.5 rounded-full"
         style={{ background: anywhereOn ? "var(--syn-string)" : "var(--border-strong)" }}
       />
+      {remote && <span className="text-ink">{t("anywhere.remoteNow", { name: remote })}</span>}
     </button>
   )
+}
+
+/** How long after its last request a remote device still counts as connected
+ *  (a phone polls every few seconds while the page is open). */
+const REMOTE_FRESH_MS = 60_000
+
+/** The name of the device using the desk from outside the network right now, if
+ *  any — so a remote session is never invisible on the desktop. */
+function useRemoteDevice(): string | null {
+  const [seen, setSeen] = useState<{ name: string; at: number } | null>(null)
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const pending = listen<{ id: string; name: string | null }>("anywhere-remote-activity", (e) =>
+      setSeen({ name: e.payload.name ?? "Phone", at: Date.now() }),
+    )
+    const timer = setInterval(() => tick((n) => n + 1), 15_000)
+    return () => {
+      offSafe(pending)
+      clearInterval(timer)
+    }
+  }, [])
+  return seen && Date.now() - seen.at < REMOTE_FRESH_MS ? seen.name : null
 }
 
 /** Right-clicking the companion sends it away; without this the only way back

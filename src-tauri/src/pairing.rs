@@ -46,16 +46,22 @@ pub struct Device {
     /// Unix seconds.
     pub created: i64,
     pub last_seen: i64,
+    /// Paired through a relay rather than on the local network. These are the
+    /// devices a remote kill switch revokes.
+    #[serde(default)]
+    pub remote: bool,
 }
 
 /// A device as the desktop UI sees it — deliberately without the hash, so the
 /// credential material has no path to the webview.
 #[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
     pub id: String,
     pub name: String,
     pub created: i64,
     pub last_seen: i64,
+    pub remote: bool,
 }
 
 impl From<&Device> for DeviceInfo {
@@ -65,6 +71,7 @@ impl From<&Device> for DeviceInfo {
             name: d.name.clone(),
             created: d.created,
             last_seen: d.last_seen,
+            remote: d.remote,
         }
     }
 }
@@ -83,6 +90,9 @@ pub struct Config {
     pub bind: Option<String>,
     /// Advertise over mDNS so a paired phone can find the desk without the QR.
     pub mdns: bool,
+    /// Whether a phone reaching the desk through a relay may open its own shell.
+    /// Off by default: over the internet that shell is a remote login.
+    pub remote_terminal: bool,
 }
 
 impl Default for Config {
@@ -93,6 +103,7 @@ impl Default for Config {
             max_days: DEFAULT_MAX_DAYS,
             bind: None,
             mdns: false,
+            remote_terminal: false,
         }
     }
 }
@@ -254,6 +265,15 @@ impl Store {
     /// Register a freshly paired device and return the secret to hand it. The
     /// secret is returned once and never stored in the clear.
     pub fn pair(&mut self, name: &str) -> String {
+        self.pair_as(name, false)
+    }
+
+    /// [`Store::pair`] for a device that paired through a relay.
+    pub fn pair_remote(&mut self, name: &str) -> String {
+        self.pair_as(name, true)
+    }
+
+    fn pair_as(&mut self, name: &str, remote: bool) -> String {
         let secret = mint_secret();
         let at = now();
         let name = sanitize_name(name);
@@ -263,6 +283,7 @@ impl Store {
             secret_hash: hash_secret(&secret),
             created: at,
             last_seen: at,
+            remote,
         });
         secret
     }
@@ -280,6 +301,23 @@ impl Store {
         let count = self.config.devices.len();
         self.config.devices.clear();
         count
+    }
+
+    /// Revoke every device that paired through a relay — the remote kill switch.
+    /// Devices paired on the local network stay.
+    pub fn revoke_remote(&mut self) -> usize {
+        let before = self.config.devices.len();
+        self.config.devices.retain(|d| !d.remote);
+        before - self.config.devices.len()
+    }
+
+    /// The name of a device, by id.
+    pub fn name_of(&self, id: &str) -> Option<String> {
+        self.config
+            .devices
+            .iter()
+            .find(|d| d.id == id)
+            .map(|d| d.name.clone())
     }
 
     /// Drop every credential whose lifetime has run out. Called on start so the
@@ -313,11 +351,15 @@ impl Store {
     pub fn set_mdns(&mut self, on: bool) {
         self.config.mdns = on;
     }
+
+    pub fn set_remote_terminal(&mut self, on: bool) {
+        self.config.remote_terminal = on;
+    }
 }
 
 /// Keep a device name short, single-line and free of control characters — it is
 /// proposed by the phone, so it is untrusted text that the desktop renders.
-fn sanitize_name(name: &str) -> String {
+pub(crate) fn sanitize_name(name: &str) -> String {
     let cleaned: String = name
         .chars()
         .filter(|c| !c.is_control())
@@ -422,6 +464,26 @@ mod tests {
         assert_eq!(s.verify(&a), Err(Denied::Unknown));
         assert_eq!(s.verify(&b), Err(Denied::Unknown));
         assert!(s.devices().is_empty());
+    }
+
+    #[test]
+    fn the_remote_kill_switch_keeps_lan_devices() {
+        let mut s = store();
+        let lan = s.pair("Desk phone");
+        let remote = s.pair_remote("Train phone");
+        assert_eq!(s.revoke_remote(), 1);
+        assert!(s.verify(&lan).is_ok());
+        assert_eq!(s.verify(&remote), Err(Denied::Unknown));
+    }
+
+    #[test]
+    fn devices_from_before_remote_load_as_lan() {
+        let c: Config = serde_json::from_str(
+            r#"{"devices":[{"id":"a","name":"P","secret_hash":"h","created":1,"last_seen":1}]}"#,
+        )
+        .unwrap();
+        assert!(!c.devices[0].remote);
+        assert!(!c.remote_terminal);
     }
 
     #[test]
