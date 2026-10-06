@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.32.0] — 2026-10-06
+
 ### Added
 
 - **Reado Anywhere from anywhere (Pro).** The desk can be reachable from any
@@ -29,7 +31,8 @@ commit.
 
 - Reado Anywhere's paired-device list shows when each phone was last seen again.
 - In a diff, the marks along the scrollbar are as tall as the change they stand for:
-  a new file of 500 lines fills the bar instead of showing one small tick.
+  a new file of 500 lines fills the bar instead of showing one small tick, and
+  all of them are translucent so the scrollbar stays visible over them.
 
 ## [1.31.0] — 2026-10-04
 
@@ -3010,7 +3013,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.31.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.32.0...HEAD
+[1.32.0]: https://github.com/WatermelonBros/reado/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/WatermelonBros/reado/compare/v1.30.2...v1.31.0
 [1.30.2]: https://github.com/WatermelonBros/reado/compare/v1.30.1...v1.30.2
 [1.30.1]: https://github.com/WatermelonBros/reado/compare/v1.30.0...v1.30.1
