@@ -226,78 +226,286 @@ fn read_resource(root: &str, uri: &str) -> Result<String, RpcError> {
     }
 }
 
-/// Browser-preview tools: the agent reads the console/network the desktop pane
-/// captured (mirrored to `.reado/`). Read-only; a specific error can also be
-/// pushed from Reado's inspector via "send to agent".
+/// Every tool the server offers. A definition is what an agent chooses by, so
+/// each one says what the tool does, when to pick it over its siblings, what it
+/// changes and what it answers; every parameter is described in the schema, and
+/// the annotations tell the client which tools only read. (Glama's TDQS grades
+/// exactly these definitions.)
 fn tool_list() -> serde_json::Value {
-    let empty = serde_json::json!({ "type": "object", "properties": {} });
-    let sel = serde_json::json!({ "type": "object", "properties": { "selector": { "type": "string" } }, "required": ["selector"] });
+    use serde_json::json;
+
+    // Nothing here reaches past the project and the user's own preview pane.
+    let ann = |title: &str, read_only: bool, destructive: bool, idempotent: bool| {
+        json!({ "title": title, "readOnlyHint": read_only, "destructiveHint": destructive,
+                "idempotentHint": idempotent, "openWorldHint": false })
+    };
+    // Said once, appended to every tool that talks to the live pane.
+    const LIVE: &str = "Needs Reado's browser preview open with agent access on: without it the call fails after about 6 s with \"no preview pane running\". On a page holding a credential it is refused until the user grants access.";
+    const CAPTURED: &str = "Reads what Reado captured without touching the page; when no preview is open it answers that none is running.";
+
+    let none = json!({ "type": "object", "properties": {} });
+    let selector = json!({ "type": "object", "properties": {
+        "selector": { "type": "string", "description": "CSS selector; the first matching element is used (document.querySelector)." }
+    }, "required": ["selector"] });
+    let session_id = json!({ "type": "string", "description": "The session id from the READO GUIDED REVIEW prompt. Omit it to use the newest session still open." });
+    let file =
+        json!({ "type": "string", "description": "Project-relative path, e.g. `src/lib/api.ts`." });
+    let line = json!({ "type": "integer", "minimum": 1, "description": "First line of the range, 1-based." });
+    let end = json!({ "type": "integer", "minimum": 1, "description": "Last line of the range, inclusive. Defaults to `line`." });
+    let task_id =
+        json!({ "type": "string", "description": "The task's id, from `reado://tasks`." });
+    let comment_type = json!({ "type": "string", "enum": ["bug", "refactor", "performance", "question", "note"], "description": "What the comment is about. Defaults to note." });
+    let markdown =
+        |what: &str| json!({ "type": "string", "description": format!("{what}, in Markdown.") });
+
     // One route entry, spelled out so the agent does not have to guess the
     // field names from a prose description of the JSON.
-    let route_entry = serde_json::json!({
+    let route_entry = json!({
         "type": "object",
         "properties": {
             "file": { "type": "string", "description": "Project-relative path." },
             "priority": { "type": "number", "description": "Rank; lower comes first." },
             "reason": { "type": "string", "description": "One line: why this file, and what moved it up." },
-            "suggestedReviewMode": { "type": "string", "enum": ["quick", "normal", "deep"] },
-            "relatedFiles": { "type": "array", "items": { "type": "string" } }
+            "suggestedReviewMode": { "type": "string", "enum": ["quick", "normal", "deep"], "description": "How closely the file deserves reading." },
+            "relatedFiles": { "type": "array", "items": { "type": "string" }, "description": "Project-relative paths worth reading alongside it." }
         },
         "required": ["file", "reason"]
     });
-    let route_schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "sessionId": { "type": "string" },
-            "route": { "type": "array", "items": route_entry.clone() }
+
+    json!([
+        // ---- Preview perception: the buffers the pane mirrors to `.reado/` ----
+        {
+            "name": "browser_console",
+            "description": format!("Read everything the preview page logged, as JSON: each entry's level (log/info/warn/error), message, source and stack. Use it to follow what the app is doing; for only what broke, browser_errors is shorter. {CAPTURED}"),
+            "inputSchema": none,
+            "annotations": ann("Preview console", true, false, true)
         },
-        "required": ["route"]
-    });
-    let route_change_schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "sessionId": { "type": "string" },
-            "route": { "type": "array", "items": route_entry, "description": "The whole proposed route, not just what changes." },
-            "reason": { "type": "string" }
+        {
+            "name": "browser_network",
+            "description": format!("Read the preview page's network activity, as JSON: method, URL, status and timing per request, with failures flagged. Use it to check API calls, failed fetches and slow responses. {CAPTURED}"),
+            "inputSchema": none,
+            "annotations": ann("Preview network", true, false, true)
         },
-        "required": ["route", "reason"]
-    });
-    serde_json::json!([
-        // Perception (read the captured buffers mirrored to `.reado/`).
-        { "name": "browser_console", "description": "The preview page's captured console output (log/info/warn/error, with source and stack).", "inputSchema": empty },
-        { "name": "browser_network", "description": "The preview page's captured network activity (method, URL, status, timing; failures flagged).", "inputSchema": empty },
-        { "name": "browser_errors", "description": "Only the preview page's console errors and unhandled rejections — what broke.", "inputSchema": empty },
-        // Live perception + drive (routed to the running pane over the control queue).
-        { "name": "browser_eval", "description": "Evaluate a JS expression in the preview page; returns its JSON result.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "js": { "type": "string" } }, "required": ["js"] }) },
-        { "name": "browser_navigate", "description": "Navigate the preview to a URL (confined to localhost + the user's allowlist).", "inputSchema": serde_json::json!({ "type": "object", "properties": { "url": { "type": "string" } }, "required": ["url"] }) },
-        { "name": "browser_dom", "description": "Inspect an element: tag, outerHTML (truncated), box, and key computed styles.", "inputSchema": sel.clone() },
-        { "name": "browser_animation", "description": "Read an element's animations: keyframes + computed timing (duration, easing, delay).", "inputSchema": sel.clone() },
-        { "name": "browser_click", "description": "Click an element (scrolls it into view first).", "inputSchema": sel.clone() },
-        { "name": "browser_hover", "description": "Hover an element (dispatch mouseenter/mouseover).", "inputSchema": sel.clone() },
-        { "name": "browser_type", "description": "Set an input's value and fire input/change.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "selector": { "type": "string" }, "text": { "type": "string" } }, "required": ["selector", "text"] }) },
-        { "name": "browser_scroll", "description": "Scroll the page to (x, y).", "inputSchema": serde_json::json!({ "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } }) },
-        { "name": "browser_frame", "description": "Capture the current preview render as a PNG image.", "inputSchema": empty },
-        // Mutating: the review loop's own verbs, so an agent can close the loop
-        // through MCP instead of shelling out to the CLI. Each returns the id and
-        // the resulting state, not just "ok".
-        { "name": "task_done", "description": "Resolve a task, recording how. With `verify` the command decides: passing marks it done, otherwise it stays resolved-but-unverified for a human.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "diffRef": { "type": "string" }, "verify": { "type": "string" }, "model": { "type": "string" } }, "required": ["id"] }) },
-        { "name": "task_fail", "description": "Record a failed attempt on a task, with a note. Past the attempt budget the task blocks itself.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "note": { "type": "string" } }, "required": ["id"] }) },
-        { "name": "task_block", "description": "Block a task: you cannot proceed without a human answering first.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "reason": { "type": "string" } }, "required": ["id", "reason"] }) },
-        { "name": "comment_add", "description": "Add a comment anchored to a file and line. `kind` is task (the default: it joins the user task queue) or note.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "file": { "type": "string" }, "line": { "type": "number" }, "end": { "type": "number" }, "type": { "type": "string" }, "kind": { "type": "string" }, "body": { "type": "string" } }, "required": ["file", "line", "body"] }) },
-        { "name": "mascot_say", "description": "Say one line through Reado's mascot — the small companion in the corner of the user's screen. For the moment the user must know about while they are away from the desk: what you need from them, or what just landed. Not narration, not progress, not a running commentary: it interrupts a human, and a companion that chatters gets turned off. `mood` is done, ask, think or talk (default talk); use `ask` only when you are actually waiting for them.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "text": { "type": "string" }, "mood": { "type": "string" } }, "required": ["text"] }) },
-        { "name": "session_done", "description": "Call this when your next act is to wait for the user — the request is finished, you are blocked, or you need an answer. NOT after a command returns or a step completes: if you will do anything else before stopping, it is too early. Reado alerts a user who has walked away, so a premature call fetches them back for nothing. `summary` is one line on what happened; `status` is done (default), blocked or failed.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "summary": { "type": "string" }, "status": { "type": "string" } } }) },
-        { "name": "comment_reply", "description": "Reply in a comment's thread.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "id": { "type": "string" }, "body": { "type": "string" } }, "required": ["id", "body"] }) },
-        // Guided Pair Review: the session verbs, typed. The CLI carries the same
-        // ones for agents without MCP, but a route is an array of objects and a
-        // TUI prompt is a line of text — this is the channel where it survives.
-        { "name": "session_show", "description": "The guided-review session in full: scope, objective, route, per-file state, proposals, summaries, the files the scope is expected to contain, and any pending route change. Omit `sessionId` for the newest session still open.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" } } }) },
-        { "name": "review_context", "description": "One file's context inside a session: its route entry (why it was ranked, related files), its state, its running summary, and the proposals already on it. Read this before reviewing the file.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "file": { "type": "string" } }, "required": ["file"] }) },
-        { "name": "review_plan", "description": "Set the session's ranked review route (the planning pass). Answers with the expected files your route left out — route those or mark them out of scope. Refused if the session already has a route: propose a change instead.", "inputSchema": route_schema.clone() },
-        { "name": "review_propose_route_change", "description": "Propose a different route mid-session (a file you found that must be reviewed, a reorder). The current route keeps running until the human accepts your proposal in Reado. `reason` is what they read to decide.", "inputSchema": route_change_schema },
-        { "name": "review_propose_comment", "description": "Propose an anchored review comment. It is a proposal: the human accepts, edits or discards it. Never final on your own.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "file": { "type": "string" }, "line": { "type": "number" }, "end": { "type": "number" }, "type": { "type": "string", "enum": ["bug", "refactor", "performance", "question", "note"] }, "body": { "type": "string" } }, "required": ["file", "line", "body"] }) },
-        { "name": "review_propose", "description": "Propose a non-comment artifact: an open question, a follow-up, or a needs-context marker when you cannot judge the code without more context. Prefer this over guessing.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "kind": { "type": "string", "enum": ["question", "follow-up", "needs-context"] }, "file": { "type": "string" }, "line": { "type": "number" }, "body": { "type": "string" } }, "required": ["kind", "body"] }) },
-        { "name": "review_summarize_file", "description": "Record a file's mini-summary when you finish it: what you checked, what the risks are, what comes next.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "file": { "type": "string" }, "text": { "type": "string" } }, "required": ["file", "text"] }) },
-        { "name": "session_summarize", "description": "Record the session-level recap — what the review found overall.", "inputSchema": serde_json::json!({ "type": "object", "properties": { "sessionId": { "type": "string" }, "text": { "type": "string" } }, "required": ["text"] }) },
+        {
+            "name": "browser_errors",
+            "description": format!("Read only the preview's error-level console entries — errors and unhandled rejections — as JSON: the part of browser_console that answers \"what broke?\". Answers `No errors captured.` when there are none. {CAPTURED}"),
+            "inputSchema": none,
+            "annotations": ann("Preview errors", true, false, true)
+        },
+        // ---- Preview live perception + drive: over the pane's control queue ----
+        {
+            "name": "browser_eval",
+            "description": format!("Run a JavaScript expression in the preview page and answer its value, JSON-serialized. The escape hatch for what the other browser_* tools don't cover — reading app state, calling page functions, scrolling a nested container; prefer them when they fit. Evaluated synchronously (a Promise is not awaited), and it can change the page. {LIVE}"),
+            "inputSchema": { "type": "object", "properties": {
+                "js": { "type": "string", "description": "A JavaScript expression; wrap statements in an IIFE, e.g. `(() => { …; return x })()`." }
+            }, "required": ["js"] },
+            "annotations": ann("Run JavaScript in the preview", false, true, false)
+        },
+        {
+            "name": "browser_navigate",
+            "description": format!("Load a URL in the preview, replacing the current page. Only localhost and the origins the user allowlisted can be opened; anything else is refused with \"origin not allowed\". Answers the URL loaded. {LIVE}"),
+            "inputSchema": { "type": "object", "properties": {
+                "url": { "type": "string", "description": "Absolute (`http://localhost:5173/settings`) or relative to the current page (`/settings`)." }
+            }, "required": ["url"] },
+            "annotations": ann("Navigate the preview", false, false, true)
+        },
+        {
+            "name": "browser_dom",
+            "description": format!("Inspect one element of the preview: its tag, outerHTML (first 2000 characters), box (x, y, width, height in CSS px, relative to the viewport) and key computed styles (display, color, background, font), as JSON; null when nothing matches. Use it to check structure and layout; for a picture use browser_frame, for anything else browser_eval. {LIVE}"),
+            "inputSchema": selector.clone(),
+            "annotations": ann("Inspect an element", true, false, true)
+        },
+        {
+            "name": "browser_animation",
+            "description": format!("Read the animations running on one element of the preview, as JSON: for each, its name, keyframes and computed timing (duration, delay, easing, progress). Answers an empty list when it has none, null when nothing matches. {LIVE}"),
+            "inputSchema": selector.clone(),
+            "annotations": ann("Inspect an element's animations", true, false, true)
+        },
+        {
+            "name": "browser_click",
+            "description": format!("Click an element in the preview: scrolls it to the middle of the viewport, then fires a DOM click(). Answers `clicked`, or `not found` when nothing matches. It does not wait for what the click sets off — check the outcome with browser_dom, browser_errors or browser_frame. {LIVE}"),
+            "inputSchema": selector.clone(),
+            "annotations": ann("Click an element", false, false, false)
+        },
+        {
+            "name": "browser_hover",
+            "description": format!("Hover an element in the preview by dispatching mouseover and mouseenter — to open a menu or tooltip before inspecting it. Answers `hovered` or `not found`. These are synthetic events, so CSS :hover styles do not apply. {LIVE}"),
+            "inputSchema": selector,
+            "annotations": ann("Hover an element", false, false, true)
+        },
+        {
+            "name": "browser_type",
+            "description": format!("Fill a form field in the preview: focuses it, replaces its whole value with `text`, then fires input and change. Answers `typed` or `not found`. No key events are sent, so keydown handlers and Enter-to-submit don't fire — click the submit button instead. {LIVE}"),
+            "inputSchema": { "type": "object", "properties": {
+                "selector": { "type": "string", "description": "CSS selector of an input, textarea or select; the first match is used." },
+                "text": { "type": "string", "description": "The field's new value. It replaces the old one; an empty string clears it." }
+            }, "required": ["selector", "text"] },
+            "annotations": ann("Type into a field", false, false, true)
+        },
+        {
+            "name": "browser_scroll",
+            "description": format!("Scroll the preview's window to an absolute position (window.scrollTo) — to bring content into view before browser_frame. Answers `scrolled`. browser_click already scrolls its target; a nested scroll container needs browser_eval. {LIVE}"),
+            "inputSchema": { "type": "object", "properties": {
+                "x": { "type": "number", "minimum": 0, "description": "CSS pixels from the document's left edge. Defaults to 0." },
+                "y": { "type": "number", "minimum": 0, "description": "CSS pixels from the document's top. Defaults to 0." }
+            } },
+            "annotations": ann("Scroll the preview", false, false, true)
+        },
+        {
+            "name": "browser_frame",
+            "description": format!("Screenshot the preview as it renders right now, answered as a PNG image. Use it to see layout and visual bugs, or the result of a click; for exact sizes and styles use browser_dom. Not available on Linux. {LIVE}"),
+            "inputSchema": none,
+            "annotations": ann("Screenshot the preview", true, false, true)
+        },
+        // ---- The review loop's verbs: each answers the id and resulting state ----
+        {
+            "name": "task_done",
+            "description": "Mark a task resolved once your change addresses it, recording how. With `verify`, Reado runs that command in the project root: exit 0 marks the task done and archives it; a failure — or no `verify` at all — leaves it resolved-but-unverified, visible for the human to check. Answers the task's id, state and resolution as JSON. If the attempt didn't work use task_fail; if you need the human, task_block.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": task_id,
+                "diffRef": { "type": "string", "description": "The commit or ref holding the change, e.g. a SHA, shown to the reviewer." },
+                "verify": { "type": "string", "description": "A shell command that proves the fix, e.g. `pnpm test src/lib/api.test.ts`." },
+                "model": { "type": "string", "description": "The model that made the change, for provenance. Defaults to $READO_MODEL." }
+            }, "required": ["id"] },
+            "annotations": ann("Resolve a task", false, false, false)
+        },
+        {
+            "name": "task_fail",
+            "description": "Record a failed attempt at a task. The task goes back to open for another try; the third failed attempt blocks it until the human answers. Answers the task's id, state and attempt count as JSON. When you already know you need the human, use task_block instead.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": task_id,
+                "note": markdown("What you tried and why it didn't work; posted as a reply in the task's thread")
+            }, "required": ["id"] },
+            "annotations": ann("Record a failed attempt", false, false, false)
+        },
+        {
+            "name": "task_block",
+            "description": "Block a task you cannot finish without the human — a decision, a credential or context you don't have. It stays blocked with your reason until they answer in Reado, which reopens it with a fresh attempt count. Blocking again replaces the reason. Answers the task's id, state and reason as JSON.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": task_id,
+                "reason": { "type": "string", "description": "The question or missing piece, written for the human who has to answer it." }
+            }, "required": ["id", "reason"] },
+            "annotations": ann("Block a task", false, false, true)
+        },
+        {
+            "name": "comment_add",
+            "description": "Anchor a new comment to a line range, signed by the agent. A `task` (the default) joins the user's task queue as work to do; a `note` explains something to the next reader without asking for action. Answers the new comment's id and state as JSON. To answer an existing comment use comment_reply; during a guided review use review_propose_comment, which the human approves first.",
+            "inputSchema": { "type": "object", "properties": {
+                "file": file,
+                "line": line,
+                "end": end,
+                "type": comment_type,
+                "kind": { "type": "string", "enum": ["task", "note"], "description": "`task` asks for work (default); `note` only informs." },
+                "body": markdown("The comment")
+            }, "required": ["file", "line", "body"] },
+            "annotations": ann("Add a comment", false, false, false)
+        },
+        {
+            "name": "comment_reply",
+            "description": "Reply in an existing comment's thread, signed by the agent — to answer a question the user asked, or to explain what you changed. It does not change the comment's state: use task_done, task_fail or task_block for that. Answers the comment's id and state as JSON.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": { "type": "string", "description": "The comment's id, from `reado://comments` or `reado://tasks`." },
+                "body": markdown("The reply")
+            }, "required": ["id", "body"] },
+            "annotations": ann("Reply to a comment", false, false, false)
+        },
+        {
+            "name": "mascot_say",
+            "description": "Say one line through Reado's mascot — the small companion in the corner of the user's screen. For the moment the user must know about while they are away from the desk: what you need from them, or what just landed. Not narration, not progress, not a running commentary: it interrupts a human, and a companion that chatters gets turned off. Use `ask` only when you are actually waiting for them. Text over 280 characters is refused, not truncated. Answers `said: <text>`.",
+            "inputSchema": { "type": "object", "properties": {
+                "text": { "type": "string", "maxLength": 280, "description": "One line, at most 280 characters." },
+                "mood": { "type": "string", "enum": ["done", "ask", "think", "talk"], "description": "The mascot's expression. Defaults to talk." }
+            }, "required": ["text"] },
+            "annotations": ann("Speak through the mascot", false, false, false)
+        },
+        {
+            "name": "session_done",
+            "description": "Call this when your next act is to wait for the user — the request is finished, you are blocked, or you need an answer. NOT after a command returns or a step completes: if you will do anything else before stopping, it is too early. Reado alerts a user who has walked away, so a premature call fetches them back for nothing. Answers an acknowledgement.",
+            "inputSchema": { "type": "object", "properties": {
+                "summary": { "type": "string", "description": "One line on what happened; it becomes the notification's text." },
+                "status": { "type": "string", "enum": ["done", "blocked", "failed"], "description": "How the request ended. Defaults to done." }
+            } },
+            "annotations": ann("Hand the turn back", false, false, false)
+        },
+        // ---- Guided Pair Review: the session verbs, typed. The CLI carries the
+        // same ones for agents without MCP, but a route is an array of objects
+        // and a TUI prompt is a line of text — this is the channel where it
+        // survives. Every one fails if no session is open.
+        {
+            "name": "session_show",
+            "description": "Read a guided-review session in full, as JSON: scope, objective, route, per-file state and summaries, proposals and their decisions, the files the scope is expected to contain, and any pending route change. Call it first on a READO GUIDED REVIEW prompt, or to find your place after losing context; for a single file, review_context is smaller.",
+            "inputSchema": { "type": "object", "properties": { "sessionId": session_id } },
+            "annotations": ann("Show a review session", true, false, true)
+        },
+        {
+            "name": "review_context",
+            "description": "Read one file's context in a guided review before reviewing it, as JSON: the session objective, the file's route entry (why it was ranked, related files), its state, its running summary and the proposals already on it. For the whole session use session_show.",
+            "inputSchema": { "type": "object", "properties": { "sessionId": session_id, "file": file }, "required": ["file"] },
+            "annotations": ann("Read a file's review context", true, false, true)
+        },
+        {
+            "name": "review_plan",
+            "description": "Set a guided review's ranked route — the planning pass, once per session, before you review any file. Answers how many files you routed and the `uncovered` ones: files the scope contains that your route left out. Route each with review_propose_route_change, or declare it out of scope with `reado session set-file <id> --file <path> --state out-of-scope`. Refused if the session already has a route; propose a change instead.",
+            "inputSchema": { "type": "object", "properties": {
+                "sessionId": session_id,
+                "route": { "type": "array", "items": route_entry.clone(), "description": "Every file to review, riskiest first." }
+            }, "required": ["route"] },
+            "annotations": ann("Plan the review route", false, false, false)
+        },
+        {
+            "name": "review_propose_route_change",
+            "description": "Propose a new route for a guided review already under way — a file you found that must be reviewed, a reorder, a file to drop. Nothing changes until the human accepts it in Reado: the current route keeps running, so carry on with the file you were on. A new proposal replaces one still pending. Answers a confirmation; refused without a `reason`.",
+            "inputSchema": { "type": "object", "properties": {
+                "sessionId": session_id,
+                "route": { "type": "array", "items": route_entry, "description": "The whole proposed route, not just what changes." },
+                "reason": { "type": "string", "description": "Why the route should change — what the human reads to decide." }
+            }, "required": ["route", "reason"] },
+            "annotations": ann("Propose a route change", false, false, true)
+        },
+        {
+            "name": "review_propose_comment",
+            "description": "Propose a finding on the code during a guided review — a bug, a refactor, a performance issue — anchored to a line range. Only a proposal: the human accepts, edits or discards it, and only an accepted one becomes a comment. Answers the proposal's id. For a question or missing context rather than a finding use review_propose; outside a guided review, comment_add.",
+            "inputSchema": { "type": "object", "properties": {
+                "sessionId": session_id,
+                "file": file,
+                "line": line,
+                "end": end,
+                "type": comment_type,
+                "body": markdown("The finding: what is wrong and why")
+            }, "required": ["file", "line", "body"] },
+            "annotations": ann("Propose a review comment", false, false, false)
+        },
+        {
+            "name": "review_propose",
+            "description": "Propose a guided-review item that is not a finding on the code: a `question` for the human, a `follow-up` to do after the review, or `needs-context` when you cannot judge the code without information you don't have — prefer it to guessing. The human accepts or discards it. Answers the proposal's id. For a finding on specific lines use review_propose_comment.",
+            "inputSchema": { "type": "object", "properties": {
+                "sessionId": session_id,
+                "kind": { "type": "string", "enum": ["question", "follow-up", "needs-context"], "description": "What you are raising." },
+                "file": { "type": "string", "description": "Project-relative path it concerns, if any." },
+                "line": { "type": "integer", "minimum": 1, "description": "Line it concerns, if any, 1-based." },
+                "body": markdown("The question, follow-up or missing context")
+            }, "required": ["kind", "body"] },
+            "annotations": ann("Propose a question or follow-up", false, false, false)
+        },
+        {
+            "name": "review_summarize_file",
+            "description": "Record a file's mini-summary when you finish reviewing it in a guided review: what you checked, the risks you see, what comes next. It replaces the file's earlier summary, and marks a file with no state yet as reviewed. Answers a confirmation. For the whole review use session_summarize.",
+            "inputSchema": { "type": "object", "properties": {
+                "sessionId": session_id,
+                "file": file,
+                "text": markdown("The summary, a few lines")
+            }, "required": ["file", "text"] },
+            "annotations": ann("Summarize a reviewed file", false, false, true)
+        },
+        {
+            "name": "session_summarize",
+            "description": "Record a guided review's overall recap once the routed files are done: what the review found, the risks that matter most, what is left. It replaces any earlier recap. Answers a confirmation. For one file's notes use review_summarize_file.",
+            "inputSchema": { "type": "object", "properties": {
+                "sessionId": session_id,
+                "text": markdown("The recap")
+            }, "required": ["text"] },
+            "annotations": ann("Summarize the review", false, false, true)
+        },
     ])
 }
 
@@ -989,6 +1197,39 @@ mod tests {
                 })
                 .collect(),
         )
+    }
+
+    /// The definition is what an agent chooses a tool by: a parameter it has to
+    /// guess at, or a tool that does not say whether it only reads, is a call
+    /// that goes wrong. Glama grades the same definitions (TDQS).
+    #[test]
+    fn every_tool_is_annotated_and_every_parameter_described() {
+        fn described(schema: &serde_json::Value, at: &str) {
+            let Some(props) = schema["properties"].as_object() else {
+                return;
+            };
+            for (name, prop) in props {
+                let at = format!("{at}.{name}");
+                assert!(
+                    prop["description"].as_str().is_some_and(|d| !d.is_empty()),
+                    "{at} has no description"
+                );
+                described(&prop["items"], &at);
+            }
+        }
+        for tool in tool_list().as_array().unwrap() {
+            let name = tool["name"].as_str().unwrap();
+            assert!(
+                tool["description"].as_str().unwrap().len() > 80,
+                "{name}'s description is too thin to choose by"
+            );
+            let ann = &tool["annotations"];
+            for hint in ["readOnlyHint", "destructiveHint", "idempotentHint"] {
+                assert!(ann[hint].is_boolean(), "{name} lacks {hint}");
+            }
+            assert!(ann["title"].is_string(), "{name} lacks a title");
+            described(&tool["inputSchema"], name);
+        }
     }
 
     #[test]

@@ -62,7 +62,7 @@ pub(super) fn review_plan(root: &str, a: Args) -> Result<String, RpcError> {
         "note": if uncovered.is_empty() {
             "Route set. Review the files in order."
         } else {
-            "Route set, but these files are in the scope and not in your route. Propose a route change that includes them, or mark each out of scope with session_show's file states — leaving them out in silence is not an answer."
+            "Route set, but these files are in the scope and not in your route. Propose a route change that includes them, or declare each out of scope with `reado session set-file <id> --file <path> --state out-of-scope` — leaving them out in silence is not an answer."
         },
     }))
     .map_err(internal)

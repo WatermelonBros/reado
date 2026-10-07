@@ -11,6 +11,19 @@ commit.
 
 ## [Unreleased]
 
+### Changed
+
+- **Your agent picks Reado's tools more reliably.** Every MCP tool now says when
+  to use it rather than its siblings, what it changes and what it returns; every
+  parameter is described, fixed choices (comment type, task or note, mascot
+  mood) are spelled out, and the client is told which tools only read.
+
+### Fixed
+
+- **A review route that leaves files out now names the right fix.** It pointed
+  at a tool that cannot change a file's state; it now gives the
+  `reado session set-file … --state out-of-scope` command.
+
 ## [1.32.0] — 2026-10-06
 
 ### Added
