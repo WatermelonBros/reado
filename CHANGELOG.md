@@ -11,6 +11,21 @@ commit.
 
 ## [Unreleased]
 
+## [1.33.0] — 2026-10-08
+
+### Added
+
+- **The beta, told in the app.** Signed out, Reado tells you a few seconds after
+  launch that the first 50 testers who answer a short questionnaire get Reado Pro
+  free for 12 months — and that taking part needs an account, with a button to
+  sign in. Closing it lasts until the next launch; signing in ends it. Signed in
+  without Pro, the account menu links to the questionnaire.
+
+- **Cursor joins the agents.** Launch Cursor's CLI from the terminal's agent row
+  or Terminal › Launch Cursor; Reado wires its MCP server into `.cursor/mcp.json`
+  like the other agents', recognises a running `agent` (or `cursor-agent`) in a
+  pane, and names Cursor on the messages it writes.
+
 ### Changed
 
 - **Your agent picks Reado's tools more reliably.** Every MCP tool now says when
@@ -19,6 +34,9 @@ commit.
   mood) are spelled out, and the client is told which tools only read.
 
 ### Fixed
+
+- A message written by Gemini or OpenCode is signed with the agent's name, not
+  its internal id.
 
 - **A review route that leaves files out now names the right fix.** It pointed
   at a tool that cannot change a file's state; it now gives the
@@ -3026,7 +3044,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.32.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.33.0...HEAD
+[1.33.0]: https://github.com/WatermelonBros/reado/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/WatermelonBros/reado/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/WatermelonBros/reado/compare/v1.30.2...v1.31.0
 [1.30.2]: https://github.com/WatermelonBros/reado/compare/v1.30.1...v1.30.2
