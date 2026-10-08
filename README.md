@@ -26,6 +26,11 @@
   <a href="CONTRIBUTING.md"><b>Contribute</b></a>
 </p>
 
+<p align="center"><sub>
+  If Reado earns it, a <a href="https://github.com/WatermelonBros/reado/stargazers">star</a> is how a small open-source project gets found.
+  The first 50 testers who send feedback get <a href="https://reado.watermelon-studio.it/beta">Reado Pro free for 12 months</a>.
+</sub></p>
+
 <p align="center">
   <img src="docs/media/reado-tour.gif" alt="A guided review in Reado: the agent plans a route, proposes a bug, you approve it and comment by hand, and the agent resolves the tasks" width="100%">
 </p>
