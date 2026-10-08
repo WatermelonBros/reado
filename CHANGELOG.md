@@ -11,6 +11,11 @@ commit.
 
 ## [Unreleased]
 
+### Changed
+
+- The browser page shown after signing in from Reado stays open and asks, once,
+  for a star on GitHub.
+
 ## [1.33.0] — 2026-10-08
 
 ### Added
