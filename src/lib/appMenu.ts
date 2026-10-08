@@ -290,6 +290,7 @@ export const APP_MENUS: Menu[] = [
       { id: "terminal:launch:copilot", label: "Launch Copilot" },
       { id: "terminal:launch:gemini", label: "Launch Gemini" },
       { id: "terminal:launch:opencode", label: "Launch OpenCode" },
+      { id: "terminal:launch:cursor", label: "Launch Cursor" },
       { id: "terminal:sendReview", label: "Send Review" },
     ],
   },

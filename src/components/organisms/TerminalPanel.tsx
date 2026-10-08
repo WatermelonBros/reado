@@ -26,6 +26,7 @@ import {
   CloseIcon,
   CodexIcon,
   CopilotIcon,
+  CursorBrandIcon,
   GeminiIcon,
   LayoutIcon,
   OpenCodeIcon,
@@ -64,6 +65,7 @@ const AGENT_LOOK: Record<Agent, { name: string; Icon: typeof ClaudeIcon; color?:
   copilot: { name: "Copilot", Icon: CopilotIcon, color: COPILOT_VIOLET },
   gemini: { name: "Gemini", Icon: GeminiIcon },
   opencode: { name: "OpenCode", Icon: OpenCodeIcon, color: OPENCODE_GREY },
+  cursor: { name: "Cursor", Icon: CursorBrandIcon },
 }
 
 // Below this panel width the labelled buttons collapse to icon-only.

@@ -56,13 +56,14 @@ describe("ensureMcp", () => {
 
   it("configures every installed agent in its own format", async () => {
     noFiles()
-    installed("gemini", "copilot", "opencode", "codex")
+    installed("gemini", "copilot", "opencode", "agent", "codex")
     await ensureMcp("/root")
     const paths = vi.mocked(writeFile).mock.calls.map(([, p]) => p)
     expect(paths).toEqual([
       "/root/.gemini/settings.json",
       "/root/.copilot/mcp-config.json",
       "/root/opencode.json",
+      "/root/.cursor/mcp.json",
       "/root/.codex/config.toml",
     ])
     // Copilot needs the type/tools keys; OpenCode nests under `mcp` with an
@@ -77,6 +78,10 @@ describe("ensureMcp", () => {
       enabled: true,
     })
     expect(opencode.$schema).toBe("https://opencode.ai/config.json")
+    expect(JSON.parse(writtenTo("/root/.cursor/mcp.json") as string).mcpServers.reado).toEqual({
+      command: "reado",
+      args: ["mcp"],
+    })
     expect(writtenTo("/root/.codex/config.toml")).toContain("[mcp_servers.reado]")
   })
 

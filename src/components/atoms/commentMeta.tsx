@@ -46,6 +46,9 @@ const AGENT_NAMES: Record<string, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   copilot: "Copilot",
+  gemini: "Gemini",
+  opencode: "OpenCode",
+  cursor: "Cursor",
 }
 
 /** Brand colour + glyph per agent, for attributing thread messages. */

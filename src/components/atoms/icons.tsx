@@ -4,7 +4,7 @@
  * The named UI glyphs are thin wrappers over Phosphor Icons, exported under the
  * names the rest of the app already imports — so the whole codebase keeps
  * working while the underlying set becomes consistent and complete. Brand marks
- * (Claude, Codex, Copilot, Gemini, OpenCode, Discord) have no Phosphor
+ * (Claude, Codex, Copilot, Gemini, OpenCode, Cursor, Discord) have no Phosphor
  * equivalent and stay as inline SVG below.
  *
  * `FileIcon` renders a per-extension glyph for the file tree (Phosphor's File*
@@ -414,6 +414,20 @@ export const OpenCodeIcon = ({ className }: IconProps) => (
     aria-hidden="true"
   >
     <path d="M22 24H2V0h20zM17 4.8H7v14.4h10z" />
+  </svg>
+)
+
+/** Cursor's mark (Simple Icons). Monochrome via currentColor, like Gemini's. */
+export const CursorBrandIcon = ({ className }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    width={16}
+    height={16}
+    className={className}
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23" />
   </svg>
 )
 

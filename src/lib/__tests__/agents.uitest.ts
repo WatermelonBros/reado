@@ -107,6 +107,7 @@ describe("agentLaunchCommand", () => {
       ["gemini", "gemini"],
       ["copilot", "copilot"],
       ["opencode", "opencode"],
+      ["cursor", "agent"],
     ] as const) {
       expect(agentLaunchCommand("posix", agent, bin)).toBe(`READO_AGENT=${agent} ${bin}`)
     }
@@ -272,6 +273,12 @@ describe("reading what a pane is running", () => {
     // Usually a script run by its interpreter.
     expect(agentInCommand("node /Users/u/.local/bin/claude")).toBe("claude-code")
     expect(agentInCommand("codex")).toBe("codex")
+    // Cursor: `agent`, its legacy `cursor-agent` link, or its bundled node.
+    expect(agentInCommand("agent")).toBe("cursor")
+    expect(agentInCommand("/Users/u/.local/bin/cursor-agent")).toBe("cursor")
+    expect(
+      agentInCommand("/Users/u/.local/share/cursor-agent/versions/2026.10.01/node index.js"),
+    ).toBe("cursor")
   })
 
   it("is not fooled by a shell that merely mentions one", () => {
@@ -280,6 +287,7 @@ describe("reading what a pane is running", () => {
     expect(agentInCommand("-zsh")).toBeNull()
     expect(agentInCommand("cat claude")).toBeNull()
     expect(agentInCommand("vim /notes/claude.md")).toBeNull()
+    expect(agentInCommand("vim /x/cursor-agent/notes.md")).toBeNull()
     expect(agentInCommand("")).toBeNull()
     expect(agentInCommand(null)).toBeNull()
   })

@@ -10,6 +10,7 @@
  *   - Copilot CLI : .copilot/mcp-config.json → mcpServers.reado {type,command,args,tools}
  *   - OpenCode    : opencode.json            → mcp.reado {type,command:[…],enabled}
  *   - Codex       : .codex/config.toml       → [mcp_servers.reado] (TOML)
+ *   - Cursor CLI  : .cursor/mcp.json         → mcpServers.reado {command,args}
  */
 
 import { ask } from "@tauri-apps/plugin-dialog"
@@ -97,6 +98,13 @@ const TARGETS: McpTarget[] = [
         o.$schema ??= "https://opencode.ai/config.json"
         setServer(o, "mcp", { type: "local", command: ["reado", "mcp"], enabled: true })
       }),
+  },
+  {
+    label: "Cursor",
+    bin: "agent",
+    path: ".cursor/mcp.json",
+    merge: (e) =>
+      mergeJson(e, (o) => setServer(o, "mcpServers", { command: "reado", args: ["mcp"] })),
   },
   {
     label: "Codex",

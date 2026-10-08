@@ -18,7 +18,7 @@ import { useNotice } from "./notice"
 import { useProject } from "./store"
 import { offSafe, useTerminals } from "./terminals"
 
-export type Agent = "claude-code" | "codex" | "copilot" | "gemini" | "opencode"
+export type Agent = "claude-code" | "codex" | "copilot" | "gemini" | "opencode" | "cursor"
 type ShellFamily = "cmd" | "powershell" | "posix"
 
 /** The binary that runs each agent. Exported because the terminal's launcher row
@@ -30,6 +30,8 @@ export const AGENT_BIN: Record<Agent, string> = {
   copilot: "copilot",
   gemini: "gemini",
   opencode: "opencode",
+  // Cursor's CLI; its installer also links the legacy `cursor-agent` name.
+  cursor: "agent",
 }
 
 function shellFamily(shell: string | null): ShellFamily {
@@ -64,6 +66,9 @@ const HANDOFF_RULE =
 const SYSTEM_PROMPT_FLAG: Partial<Record<Agent, string>> = {
   "claude-code": "--append-system-prompt",
 }
+
+/** Other names an agent's process runs under. */
+const AGENT_ALIASES: Partial<Record<Agent, string[]>> = { cursor: ["cursor-agent"] }
 
 /** The shell-correct command to run `bin` with `READO_AGENT` set. */
 export function agentLaunchCommand(family: ShellFamily, agent: Agent, bin: string): string {
@@ -198,9 +203,15 @@ export function agentInCommand(line: unknown): Agent | null {
   if (typeof line !== "string") return null
   const base = (tok: string) => tok.split(/[\\/]/).pop() ?? ""
   const toks = line.trim().split(/\s+/)
-  const names = [base(toks[0] ?? "")]
-  if (/^(node|bun|deno|python3?|npx|env)$/.test(names[0]) && toks[1]) names.push(base(toks[1]))
-  return AGENT_ORDER.find((a) => names.includes(AGENT_BIN[a])) ?? null
+  const exe = [toks[0] ?? ""]
+  if (/^(node|bun|deno|python3?|npx|env)$/.test(base(exe[0])) && toks[1]) exe.push(toks[1])
+  const names = exe.map(base)
+  // Cursor's CLI runs as `cursor-agent`, often as its bundled node from
+  // `~/.local/share/cursor-agent/…`, so its name can be a directory on the path.
+  const is = (a: Agent) =>
+    names.includes(AGENT_BIN[a]) ||
+    (AGENT_ALIASES[a] ?? []).some((n) => names.includes(n) || exe.some((e) => e.includes(`/${n}/`)))
+  return AGENT_ORDER.find(is) ?? null
 }
 
 /**
@@ -247,7 +258,14 @@ const DEFAULT_AGENT: Agent = "claude-code"
 
 /** Every agent, in the order they are offered — the preference order when
  *  auto-picking for the first dispatch, and the order of the launcher row. */
-export const AGENT_ORDER: Agent[] = ["claude-code", "codex", "copilot", "gemini", "opencode"]
+export const AGENT_ORDER: Agent[] = [
+  "claude-code",
+  "codex",
+  "copilot",
+  "gemini",
+  "opencode",
+  "cursor",
+]
 
 /** The first installed agent (probed on PATH), so a dev who only has codex or
  *  copilot isn't dead-ended by the Claude default on their first AI action. */

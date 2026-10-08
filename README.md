@@ -36,7 +36,8 @@
 Your agent writes more code than you do now. The job that's left is **reading it
 and deciding** — and that deserves a tool of its own. In Reado you read, and you
 leave comments anchored to the exact lines that matter; your agent (Claude Code,
-Codex, Copilot, Gemini or OpenCode) resolves them, and you review what changed.
+Codex, Copilot, Gemini, OpenCode or Cursor) resolves them, and you review what
+changed.
 
 > **Inverted code review:** you are the reviewer, the AI is the committer.
 

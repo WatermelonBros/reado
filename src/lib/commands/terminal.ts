@@ -36,6 +36,7 @@ export const terminalCommands: CommandTable = {
   "terminal:launch:copilot": launch("copilot", "copilot"),
   "terminal:launch:gemini": launch("gemini", "gemini"),
   "terminal:launch:opencode": launch("opencode", "opencode"),
+  "terminal:launch:cursor": launch("cursor", "agent"),
   "terminal:sendReview": {
     run: () => {
       const count = openCount(useComments.getState().comments)

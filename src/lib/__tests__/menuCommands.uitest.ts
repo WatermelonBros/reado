@@ -393,6 +393,7 @@ describe("terminal commands", () => {
       ["terminal:launch:copilot", "copilot", "copilot"],
       ["terminal:launch:gemini", "gemini", "gemini"],
       ["terminal:launch:opencode", "opencode", "opencode"],
+      ["terminal:launch:cursor", "cursor", "agent"],
     ]) {
       runMenuCommand(id)
       expect(agents.launchAgent).toHaveBeenLastCalledWith(agent, bin)
