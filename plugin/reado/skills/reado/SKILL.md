@@ -57,8 +57,11 @@ new comments are attributed to you automatically.
 - Never invent ids — always start from `reado task list`.
 - Keep the user's code style; comments are specs anchored to the code, so honour
   the intent of each task precisely.
-- If `reado` is not found, tell the user to run `pnpm cli:install` in the Reado
-  repo (or otherwise put the `reado` binary on PATH).
+- If `reado` is not found: the Reado app puts it on PATH when it starts, so ask
+  the user to open Reado once, or reinstall it from Settings › System ›
+  Command-line tool. No Reado yet? It's free at
+  https://reado.watermelon-studio.it (developers working on Reado itself:
+  `pnpm cli:install` in the repo).
 
 ## Guided Pair Review
 
