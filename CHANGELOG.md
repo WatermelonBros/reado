@@ -17,6 +17,14 @@ commit.
   `io.github.WatermelonBros/reado`: an MCP bundle with the `reado` binary for macOS,
   Linux and Windows, published again with every release.
 
+### Fixed
+
+- **Security:** opening a folder whose `.git/config` sets `core.fsmonitor` no longer
+  runs that program. Reado calls git on its own as soon as a project opens (status,
+  diff, blame), so a repository received as a zip or from a shared drive could run
+  code just by being opened in Reado ("GitSpawn"). Every git call Reado makes now
+  overrides that setting.
+
 ## [1.33.1] — 2026-10-09
 
 ### Added

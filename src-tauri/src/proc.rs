@@ -120,11 +120,23 @@ pub fn agent_installed(bin: String) -> bool {
 /// with the login-shell PATH (see [`login_shell_path`]) so brew/nvm/winget tools
 /// resolve. Every external tool the app spawns should go through this.
 pub fn command(program: impl AsRef<OsStr>) -> Command {
+    let program = program.as_ref();
     let mut cmd = Command::new(program);
     no_window(&mut cmd);
     cmd.env("PATH", login_shell_path());
+    if Path::new(program).file_stem() == Some(OsStr::new("git")) {
+        cmd.args(GIT_HARDENING);
+    }
     cmd
 }
+
+/// Overrides for settings a repository's own `.git/config` can use to run a program
+/// whenever git reads the work tree — and Reado runs `git status`/`diff`/`blame` on
+/// its own as soon as a folder is opened. A folder received as a zip could otherwise
+/// run code just by being opened ("GitSpawn", Manifold Security, Oct 2026).
+/// ponytail: covers core.fsmonitor, the published vector; clean/smudge filter drivers
+/// and diff textconv are the remaining sinks — a trust prompt on first open if needed.
+const GIT_HARDENING: [&str; 2] = ["-c", "core.fsmonitor=false"];
 
 /// Apply the no-window flag to an existing command (Windows only; no-op elsewhere).
 pub fn no_window(cmd: &mut Command) {
@@ -141,6 +153,44 @@ pub fn no_window(cmd: &mut Command) {
 
 #[cfg(test)]
 mod tests {
+    /// A repository that ships `core.fsmonitor = <command>` must not get to run it
+    /// when Reado asks git for its status.
+    #[cfg(unix)]
+    #[test]
+    fn a_repositorys_fsmonitor_never_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path();
+        let marker = repo.join("pwned");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(repo)
+                .args(args)
+                .output()
+                .unwrap()
+        };
+        git(&["init", "-q"]);
+        std::fs::write(repo.join("a.txt"), "a").unwrap();
+        let hook = format!("touch {}; false", marker.display());
+        git(&["config", "core.fsmonitor", &hook]);
+
+        // Stock git runs it: the test can see the attack.
+        git(&["status", "--porcelain"]);
+        assert!(
+            marker.exists(),
+            "this git does not run fsmonitor; the test proves nothing"
+        );
+        std::fs::remove_file(&marker).unwrap();
+
+        let out = super::command("git")
+            .arg("-C")
+            .arg(repo)
+            .args(["status", "--porcelain"])
+            .output();
+        assert!(out.unwrap().status.success());
+        assert!(!marker.exists(), "the repository's fsmonitor ran");
+    }
+
     use super::*;
 
     #[test]
