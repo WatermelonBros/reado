@@ -11,6 +11,16 @@ commit.
 
 ## [Unreleased]
 
+## [1.33.1] — 2026-10-09
+
+### Added
+
+- **Crash reports, if you want them.** Settings › System › Crash reports sends an
+  error or a crash, with the app version, to our own error tracker so it gets fixed.
+  It is off until you turn it on, it carries no code, file contents or personal
+  data (paths in your home folder become `~`), and builds from source never send
+  anything.
+
 ### Changed
 
 - The browser page shown after signing in from Reado stays open and asks, once,
@@ -3049,7 +3059,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.33.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.33.1...HEAD
+[1.33.1]: https://github.com/WatermelonBros/reado/compare/v1.33.0...v1.33.1
 [1.33.0]: https://github.com/WatermelonBros/reado/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/WatermelonBros/reado/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/WatermelonBros/reado/compare/v1.30.2...v1.31.0
