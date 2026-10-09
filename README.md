@@ -136,7 +136,10 @@ breaking the agents. It serves both the **MCP server** (`reado mcp`, auto-wired
 into each agent's config on project open) and the **CLI** the agent calls, so it
 must be on the agent's `PATH` for the AI loop to work. The packaged app bundles
 it: install from **Settings → Command-line tool** (links `reado` into
-`~/.local/bin`, VS Code style). From a source checkout, build and link it
+`~/.local/bin`, VS Code style). The MCP server is also listed in the
+[official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.WatermelonBros/reado)
+as `io.github.WatermelonBros/reado`, as a bundle with the binary for macOS, Linux and
+Windows. From a source checkout, build and link it
 directly:
 
 ```bash

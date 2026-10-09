@@ -11,6 +11,12 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Reado's MCP server is in the official MCP Registry** as
+  `io.github.WatermelonBros/reado`: an MCP bundle with the `reado` binary for macOS,
+  Linux and Windows, published again with every release.
+
 ## [1.33.1] — 2026-10-09
 
 ### Added
