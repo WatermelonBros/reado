@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.33.2] — 2026-10-09
+
 ### Added
 
 - **Reado's MCP server is in the official MCP Registry** as
@@ -3073,7 +3075,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.33.1...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.33.2...HEAD
+[1.33.2]: https://github.com/WatermelonBros/reado/compare/v1.33.1...v1.33.2
 [1.33.1]: https://github.com/WatermelonBros/reado/compare/v1.33.0...v1.33.1
 [1.33.0]: https://github.com/WatermelonBros/reado/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/WatermelonBros/reado/compare/v1.31.0...v1.32.0
