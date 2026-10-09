@@ -11,6 +11,7 @@ import ReactDOM from "react-dom/client"
 import App from "./App"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { MascotWindow } from "./components/pages/MascotWindow"
+import { reportCrash, startCrashReports } from "./lib/crashReports"
 import { log } from "./lib/logger"
 import { guardNavigationKeys } from "./lib/navGuard"
 import "./i18n" // initialize i18next before any component renders
@@ -51,6 +52,7 @@ export function boot() {
   // file the user can send back to us.
   window.addEventListener("error", (e) => {
     log.error("uncaught error", { message: e.message, stack: e.error?.stack })
+    reportCrash(e.message, e.error?.stack, "error")
   })
   window.addEventListener("unhandledrejection", (e) => {
     const reason = e.reason as { message?: string; stack?: string } | undefined
@@ -64,7 +66,12 @@ export function boot() {
       return
     }
     log.error("unhandled rejection", { message, stack: reason?.stack })
+    reportCrash(message, reason?.stack, "promise")
   })
+
+  // Crash reports, only if the person turned them on (Settings › System). The
+  // companion window shares the setting but not this switch: the main window owns it.
+  if (!isMascot) startCrashReports()
 
   const render = () =>
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

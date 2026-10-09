@@ -151,6 +151,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # Baked into the Pro modules at compile time (none is a secret).
           READO_API_URL: https://api.reado.watermelon-studio.it
+          # Where crash reports go — only if the user turns them on (src-tauri/src/crash.rs).
+          READO_ERRORS_DSN: https://dc5c6f6e94e349fd83949528477ca56c@errors.reado.watermelon-studio.it/3
           READO_RELAY_URL: https://relay.anywhere.watermelon-studio.it
           READO_ENTITLEMENT_PUBKEY: ZnJc5Ah7sgBv9M9aNqNGH9htC8taUHXiJZ28ikAOt3k
         with:

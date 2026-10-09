@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/atoms/Checkbox"
 import { Input } from "@/components/atoms/Input"
 import { Select } from "@/components/atoms/Select"
 import { cliInstalled, installCli, mascotMonitors } from "@/lib/api"
+import { crashReportsAvailable } from "@/lib/crashReports"
 import { makeDefaultApp } from "@/lib/defaults"
 import { logPath } from "@/lib/logger"
 import { notify, notifyError } from "@/lib/notice"
@@ -93,6 +94,7 @@ export function SystemTab() {
       <TerminalSettings />
       <DefaultApp />
       <LoggingSettings />
+      <CrashReports />
       <CliInstall />
     </>
   )
@@ -339,6 +341,32 @@ function CliInstall() {
           {result.text}
         </p>
       )}
+    </Section>
+  )
+}
+
+/** Crash reports: the user's choice, shown only where they can work (official builds). */
+function CrashReports() {
+  const { t } = useTranslation()
+  const crashReports = useSettings((s) => s.crashReports)
+  const [available, setAvailable] = useState(false)
+
+  useEffect(() => {
+    crashReportsAvailable()
+      .then(setAvailable)
+      .catch(() => setAvailable(false))
+  }, [])
+
+  if (!available) return null
+  return (
+    <Section id="crashReports" title={t("settings.crashReports")}>
+      <ToggleField
+        settingKey="crashReports"
+        checked={crashReports}
+        onChange={(v) => useSettings.getState().set({ crashReports: v })}
+        label={t("settings.crashReportsSend")}
+        hint={t("settings.crashReportsHint")}
+      />
     </Section>
   )
 }

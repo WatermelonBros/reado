@@ -292,6 +292,8 @@ export interface SettingsState {
   reviewObjective: string
   /** The user dismissed the "make Reado the default app for text files" prompt. */
   defaultAppsDismissed: boolean
+  /** Send crash reports to us (official builds only). Off unless the user says yes. */
+  crashReports: boolean
   set: (patch: Partial<SettingsState>) => void
   /** Put every preference back to how Reado ships. Choices that record a past
    *  interaction rather than a preference are kept — see {@link REMEMBERED}. */
@@ -305,6 +307,8 @@ export interface SettingsState {
  */
 const REMEMBERED = [
   "defaultAppsDismissed",
+  // Consent, not a preference: a reset must not decide it for the user.
+  "crashReports",
   "gitignoreDontAsk",
   "reviewObjective",
   "zenMode",
@@ -402,6 +406,7 @@ export const DEFAULTS = {
   terminalShellArgs: [],
   reviewObjective: "bug_risk",
   defaultAppsDismissed: false,
+  crashReports: false,
 } satisfies Omit<SettingsState, "set" | "reset">
 
 /** Whether a setting still holds the value Reado ships. Arrays are compared by

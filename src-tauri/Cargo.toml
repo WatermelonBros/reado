@@ -65,6 +65,15 @@ portable-pty = "0.8"
 thiserror = "2"
 # Rebuildable SQLite index of comments (a cache; the `.md` files stay the truth).
 rusqlite = { version = "0.32", features = ["bundled"] }
+# Crash reports to our own GlitchTip, only when the person turns them on and only in
+# official builds (src/crash.rs). reqwest + rustls with the ring provider pinned at start.
+sentry = { version = "0.49", default-features = false, features = [
+  "backtrace",
+  "contexts",
+  "panic",
+  "reqwest",
+  "rustls-no-provider",
+] }
 
 # --- Reado Anywhere: opt-in LAN server (phone review over the local network) ---
 # HTTP/WebSocket server (axum) served over TLS (axum-server) so the mobile PWA

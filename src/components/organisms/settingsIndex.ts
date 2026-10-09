@@ -140,6 +140,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     "settings.defaultTerminalProfile",
   ]),
   ...group("system", "logging", "settings.logging", ["settings.logEnabled"]),
+  ...group("system", "crashReports", "settings.crashReports", ["settings.crashReportsSend"]),
   ...group("system", "cli", "settings.cli", ["settings.cliInstall"]),
 ]
 

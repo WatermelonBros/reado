@@ -9,6 +9,7 @@ mod annotations;
 mod anywhere;
 mod bookmarks;
 mod cli;
+mod crash;
 mod defaults;
 mod editorconfig;
 mod encoding;
@@ -101,6 +102,9 @@ pub fn run_with(extend: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builde
         .manage(watcher::WatcherState::default())
         .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
+            crash::crash_reports_available,
+            crash::set_crash_reports,
+            crash::report_error,
             fs::list_dir,
             fs::list_files,
             fs::read_file,
@@ -353,6 +357,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }),
         );
     }
+    // Crash reports next, so a failure in the rest of setup can still be reported
+    // (only if the person turned them on; see crash.rs).
+    crash::init(app.handle());
     menu::init(app)?;
     // Watches the cursor so the companion window can let clicks through
     // everywhere except the character. Harmless while it doesn't exist.

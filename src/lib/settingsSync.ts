@@ -40,6 +40,8 @@ export const SETTINGS_EXCLUDED: ReadonlySet<keyof SettingsState> = new Set([
   "set",
   "reset",
   "defaultAppsDismissed",
+  // Consent given on this machine: another machine asks its own question.
+  "crashReports",
   // Zen is a session mode, and `zenRestore` is a snapshot of *this* machine's
   // chrome. Carrying them over would land the other machine in zen with a
   // restore point it never chose.
