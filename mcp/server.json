@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.WatermelonBros/reado",
+  "title": "Reado",
+  "description": "Your code review comments from Reado, the read-first IDE, as context and tools for your agent.",
+  "websiteUrl": "https://reado.watermelon-studio.it",
+  "repository": {
+    "url": "https://github.com/WatermelonBros/reado",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/WatermelonBros/reado/releases/download/v0.0.0/reado.mcpb",
+      "fileSha256": "",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+# Publishes Reado's MCP server (`reado mcp`, the open-source CLI) to the official MCP
+# Registry, after each release: builds the CLI for macOS (universal), Linux and
+# Windows, packs them into one MCP bundle (mcp/manifest.json), attaches it to the
+# GitHub Release, and publishes mcp/server.json pointing at it. Ownership of the
+# io.github.WatermelonBros namespace is proven by this workflow's OIDC token.
+name: MCP Registry
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish (e.g. v1.33.1)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            name: reado-macos
+          - os: ubuntu-22.04
+            name: reado-linux
+          - os: windows-latest
+            name: reado.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ startsWith(matrix.os, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/reado-cli
+      - name: Build the CLI
+        shell: bash
+        run: |
+          M=crates/reado-cli/Cargo.toml
+          mkdir -p out
+          case "${{ matrix.os }}" in
+            macos-*)
+              cargo build --release --manifest-path $M --target aarch64-apple-darwin
+              cargo build --release --manifest-path $M --target x86_64-apple-darwin
+              lipo -create -output out/${{ matrix.name }} \
+                crates/reado-cli/target/aarch64-apple-darwin/release/reado \
+                crates/reado-cli/target/x86_64-apple-darwin/release/reado ;;
+            windows-*)
+              cargo build --release --manifest-path $M
+              cp crates/reado-cli/target/release/reado.exe out/${{ matrix.name }} ;;
+            *)
+              cargo build --release --manifest-path $M
+              cp crates/reado-cli/target/release/reado out/${{ matrix.name }} ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: out/${{ matrix.name }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # attach the bundle to the release
+      id-token: write # prove the namespace to the MCP Registry
+    env:
+      TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # The templates come from this workflow's own commit (an older tag has none).
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: bin
+      - name: Pack the MCP bundle
+        run: |
+          VERSION="${TAG#v}"
+          mkdir -p bundle/server
+          for f in reado-macos reado-linux reado.exe; do cp "bin/$f/$f" bundle/server/; done
+          chmod +x bundle/server/reado-macos bundle/server/reado-linux
+          cp src-tauri/icons/icon.png bundle/icon.png
+          jq --arg v "$VERSION" '.version = $v' mcp/manifest.json > bundle/manifest.json
+          (cd bundle && zip -qr -X ../reado.mcpb .)
+          SHA=$(sha256sum reado.mcpb | cut -d' ' -f1)
+          jq --arg v "$VERSION" --arg tag "$TAG" --arg sha "$SHA" '
+            .version = $v
+            | .packages[0].identifier = "https://github.com/WatermelonBros/reado/releases/download/\($tag)/reado.mcpb"
+            | .packages[0].fileSha256 = $sha' mcp/server.json > server.json
+          cat server.json
+      - name: Attach the bundle to the release
+        run: gh release upload "$TAG" reado.mcpb --clobber --repo "$GITHUB_REPOSITORY"
+      - name: Publish to the MCP Registry
+        run: |
+          curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

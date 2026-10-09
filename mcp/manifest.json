@@ -1,0 +1,38 @@
+{
+  "manifest_version": "0.3",
+  "name": "reado",
+  "display_name": "Reado",
+  "version": "0.0.0",
+  "description": "Your code review comments from Reado, as context and tools for your coding agent.",
+  "long_description": "Reado is a read-first desktop IDE: you read the code your AI agent wrote and leave comments on the exact lines, and the agent resolves them. This server gives the agent those comments, tasks and reading progress as structured resources, plus tools to drive a Guided Pair Review and Reado's live browser preview. It reads the project's .reado folder, so it works best alongside the Reado app (free, open source, macOS / Linux / Windows): https://reado.watermelon-studio.it",
+  "author": {
+    "name": "Matteo Poli",
+    "url": "https://reado.watermelon-studio.it"
+  },
+  "homepage": "https://reado.watermelon-studio.it",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WatermelonBros/reado"
+  },
+  "support": "https://github.com/WatermelonBros/reado/issues",
+  "icon": "icon.png",
+  "license": "MIT",
+  "keywords": ["code review", "ai agent", "claude code", "comments", "ide"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/reado-linux",
+    "mcp_config": {
+      "command": "${__dirname}/server/reado-linux",
+      "args": ["mcp"],
+      "env": {},
+      "platform_overrides": {
+        "darwin": { "command": "${__dirname}/server/reado-macos" },
+        "win32": { "command": "${__dirname}/server/reado.exe" }
+      }
+    }
+  },
+  "tools_generated": false,
+  "compatibility": {
+    "platforms": ["darwin", "linux", "win32"]
+  }
+}
