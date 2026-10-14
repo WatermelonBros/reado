@@ -551,6 +551,9 @@ export interface SpecializedDiff {
 export const gitDiffTools = (root: string, file: string) =>
   invoke<DiffTool[]>("git_diff_tools", { root, file })
 
+export const gitConfirmDiffTool = (root: string, file: string, id: string) =>
+  invoke<void>("git_confirm_diff_tool", { root, file, id })
+
 export const gitSpecializedDiff = (
   root: string,
   file: string,

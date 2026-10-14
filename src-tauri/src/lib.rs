@@ -97,6 +97,7 @@ pub fn run_with(extend: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builde
         .manage(anywhere::AnywhereState::default())
         .manage(lsp::LspState::default())
         .manage(git::BlameCache::default())
+        .manage(git::DiffToolApprovals::default())
         .manage(symbols::SymbolCache::default())
         .manage(menu::LastFocused::default())
         .manage(watcher::WatcherState::default())
@@ -132,6 +133,7 @@ pub fn run_with(extend: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builde
             git::git_diff_base,
             git::git_diff_lines,
             git::git_diff_tools,
+            git::git_confirm_diff_tool,
             git::git_specialized_diff,
             git::git_working_diff_lines,
             git::git_file_hunks,

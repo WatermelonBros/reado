@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { Modal } from "@/components/atoms/Modal"
-import { type DiffTool, gitDiffTools, gitSpecializedDiff, type SpecializedDiff } from "@/lib/api"
+import {
+  type DiffTool,
+  gitConfirmDiffTool,
+  gitDiffTools,
+  gitSpecializedDiff,
+  type SpecializedDiff,
+} from "@/lib/api"
 
 interface Props {
   root: string
@@ -63,6 +69,7 @@ function Panel({ root, file, base, head }: Props) {
     setError(null)
     setBusy(true)
     try {
+      await gitConfirmDiffTool(root, file, tool.id)
       const value = await gitSpecializedDiff(root, file, base, head, tool.id)
       if (alive.current) setResult({ ...value, kind: tool.kind })
     } catch (cause) {

@@ -5,10 +5,12 @@ import type { DiffTool } from "@/lib/api"
 
 const api = vi.hoisted(() => ({
   inspect: vi.fn(),
+  confirm: vi.fn(),
   preview: vi.fn(),
 }))
 vi.mock("@/lib/api", () => ({
   gitDiffTools: api.inspect,
+  gitConfirmDiffTool: api.confirm,
   gitSpecializedDiff: api.preview,
 }))
 
@@ -25,10 +27,38 @@ const PROPS = { root: "/project", file: "docs/report.pdf", base: "HEAD", head: n
 beforeEach(() => {
   vi.resetAllMocks()
   api.inspect.mockResolvedValue([TOOL])
+  api.confirm.mockResolvedValue(undefined)
   api.preview.mockResolvedValue({ text: "converted output", truncated: false })
 })
 
 describe("specialized diff consent", () => {
+  it("waits for backend confirmation before executing", async () => {
+    let confirm = () => {}
+    api.confirm.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        confirm = resolve
+      }),
+    )
+    render(<SpecializedDiffPanel {...PROPS} />)
+    await userEvent.click(await screen.findByRole("button", { name: "diff.tools.view" }))
+    expect(api.confirm).not.toHaveBeenCalled()
+    await userEvent.click(await screen.findByRole("button", { name: "diff.tools.run" }))
+    expect(api.confirm).toHaveBeenCalledExactlyOnceWith(PROPS.root, PROPS.file, TOOL.id)
+    expect(api.preview).not.toHaveBeenCalled()
+    await act(async () => confirm())
+    await waitFor(() => expect(api.preview).toHaveBeenCalledTimes(1))
+  })
+
+  it("does not execute when backend confirmation fails", async () => {
+    api.confirm.mockRejectedValue("diff-tool-changed")
+    render(<SpecializedDiffPanel {...PROPS} />)
+    await userEvent.click(await screen.findByRole("button", { name: "diff.tools.view" }))
+    await userEvent.click(await screen.findByRole("button", { name: "diff.tools.run" }))
+    await screen.findByText("diff.tools.changed")
+    expect(api.preview).not.toHaveBeenCalled()
+    await waitFor(() => expect(api.inspect).toHaveBeenCalledTimes(2))
+  })
+
   it("reveals direction controls in the command being approved", async () => {
     api.inspect.mockResolvedValue([{ ...TOOL, command: "pdftotext \u202e-layout" }])
     render(<SpecializedDiffPanel {...PROPS} />)
@@ -49,6 +79,7 @@ describe("specialized diff consent", () => {
     render(<SpecializedDiffPanel {...PROPS} />)
     await screen.findByRole("button", { name: "diff.tools.view" })
     expect(api.inspect).toHaveBeenCalledWith(PROPS.root, PROPS.file)
+    expect(api.confirm).not.toHaveBeenCalled()
     expect(api.preview).not.toHaveBeenCalled()
   })
 
@@ -61,6 +92,7 @@ describe("specialized diff consent", () => {
     expect(within(dialog).getByText(TOOL.command)).toBeInTheDocument()
     expect(api.preview).not.toHaveBeenCalled()
     await userEvent.click(within(dialog).getByRole("button", { name: "common.cancel" }))
+    expect(api.confirm).not.toHaveBeenCalled()
     expect(api.preview).not.toHaveBeenCalled()
   })
 
