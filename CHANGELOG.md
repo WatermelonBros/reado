@@ -11,6 +11,11 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
+  no longer executes external diff drivers or text converters configured by a repository.
+
 ## [1.33.2] — 2026-10-09
 
 ### Added

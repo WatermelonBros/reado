@@ -1,4 +1,4 @@
-use super::run_git_raw;
+use super::{diff_command, run_git_raw};
 use crate::proc::command;
 use std::path::Path;
 
@@ -70,12 +70,10 @@ fn ref_exists(root: &Path, reference: &str) -> bool {
 /// copy's numbering, which is what the editor is showing.
 #[tauri::command]
 pub fn git_working_diff_lines(root: String, file: String) -> Vec<[u32; 2]> {
-    let output = match command("git")
-        .arg("-C")
-        .arg(&root)
+    let output = match diff_command(Path::new(&root))
         // `HEAD` (not `--cached`) so both staged and unstaged edits are marked:
         // the gutter answers "is this line different from the last commit".
-        .args(["diff", "--unified=0", "HEAD", "--", &file])
+        .args(["--unified=0", "HEAD", "--", &file])
         .output()
     {
         Ok(o) if o.status.success() => o,
@@ -92,10 +90,8 @@ pub fn git_working_diff_lines(root: String, file: String) -> Vec<[u32; 2]> {
 #[tauri::command]
 pub fn git_diff_lines(root: String, file: String, base: String, head: String) -> Vec<[u32; 2]> {
     let range = format!("{base}...{head}");
-    let output = match command("git")
-        .arg("-C")
-        .arg(&root)
-        .args(["diff", "--unified=0", &range, "--", &file])
+    let output = match diff_command(Path::new(&root))
+        .args(["--unified=0", &range, "--", &file])
         .output()
     {
         Ok(o) if o.status.success() => o,

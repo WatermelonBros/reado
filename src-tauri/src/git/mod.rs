@@ -9,6 +9,8 @@ mod blame;
 mod branch;
 mod conflict;
 mod diff;
+#[cfg(test)]
+pub(crate) mod diff_tests;
 mod graph;
 mod hunk;
 mod remote;
@@ -33,6 +35,16 @@ pub use worktree::*;
 
 use crate::proc::command;
 use std::path::Path;
+use std::process::Command;
+
+/// Build a diff without executable drivers or text conversion.
+pub(crate) fn diff_command(root: &Path) -> Command {
+    let mut cmd = command("git");
+    cmd.arg("-C")
+        .arg(root)
+        .args(["diff", "--no-ext-diff", "--no-textconv"]);
+    cmd
+}
 
 /// Reado's own files inside the project: `.reado/` (local history, index,
 /// bookmarks, reading progress) and the `.mcp.json` it writes to register its
@@ -57,17 +69,17 @@ pub(crate) fn run_git(root: &Path, args: &[&str]) -> Option<String> {
 
 /// Run git and return raw stdout (no trimming), or `None` on failure.
 fn run_git_raw(root: &Path, args: &[&str]) -> Option<String> {
-    let output = command("git")
-        // Reado polls `status`/`info` in the background. Without this, each poll
-        // may take `index.lock` to refresh the index — colliding with the git the
-        // user is running in the terminal (either side then fails), and with the
-        // other poll now that these commands run off the UI thread.
-        .arg("--no-optional-locks")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .ok()?;
+    let mut cmd = if let Some(options) = args.strip_prefix(&["diff"]) {
+        let mut cmd = diff_command(root);
+        cmd.args(options);
+        cmd
+    } else {
+        let mut cmd = command("git");
+        cmd.arg("-C").arg(root).args(args);
+        cmd
+    };
+    // Background reads must not contend with the user's index lock.
+    let output = cmd.env("GIT_OPTIONAL_LOCKS", "0").output().ok()?;
     output
         .status
         .success()
