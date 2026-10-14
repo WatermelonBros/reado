@@ -4766,7 +4766,6 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower",
- "windows-sys 0.61.2",
  "xcap",
  "zip 2.4.2",
 ]

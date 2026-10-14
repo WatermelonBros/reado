@@ -13,8 +13,8 @@ commit.
 
 ### Added
 
-- Specialized diff previews on the desktop: inspect a configured text converter or
-  external diff command, then approve it for one preview. Results are read-only;
+- Specialized diff previews on macOS and Linux: inspect a configured text converter
+  or external diff command, then approve it for one preview. Results are read-only;
   standard diffs and staging keep using the original contents with drivers disabled.
 
 ### Fixed

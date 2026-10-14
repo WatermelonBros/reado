@@ -13,8 +13,6 @@ mod diff;
 pub(crate) mod diff_tests;
 mod graph;
 mod hunk;
-#[cfg(windows)]
-mod process_job;
 mod remote;
 mod rewrite;
 mod signing;
