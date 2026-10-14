@@ -215,6 +215,30 @@ fn pipe<R: Read + Send + 'static>(mut source: R) -> Receiver<Result<(Vec<u8>, bo
     rx
 }
 
+/// Check for exit without reaping.
+fn child_exited(pid: u32) -> std::io::Result<bool> {
+    loop {
+        // SAFETY: siginfo_t permits zero initialization.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // SAFETY: info is writable; WNOWAIT does not reap.
+        let result = unsafe {
+            libc::waitid(
+                libc::P_PID,
+                pid as libc::id_t,
+                &mut info,
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            )
+        };
+        if result == 0 {
+            return Ok(info.si_signo == libc::SIGCHLD);
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted {
+            return Err(error);
+        }
+    }
+}
+
 fn run(mut cmd: Command, timeout: Duration) -> Result<SpecializedDiff, String> {
     use std::os::unix::process::CommandExt;
     cmd.process_group(0);
@@ -227,39 +251,39 @@ fn run(mut cmd: Command, timeout: Duration) -> Result<SpecializedDiff, String> {
     let out = pipe(child.stdout.take().ok_or("missing stdout")?);
     let err = pipe(child.stderr.take().ok_or("missing stderr")?);
     let deadline = Instant::now() + timeout;
-    let result = (|| {
-        let status = loop {
-            if Instant::now() >= deadline {
-                return Err("diff-tool-timeout".into());
-            }
-            if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
-                break status;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        };
-        let (stdout, truncated) = out
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-            .map_err(|_| "diff-tool-timeout")??;
-        let (stderr, _) = err
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-            .map_err(|_| "diff-tool-timeout")??;
-        if !status.success() && status.code() != Some(1) {
-            return Err(String::from_utf8_lossy(&stderr).into_owned());
+    let exited = loop {
+        if Instant::now() >= deadline {
+            break Err("diff-tool-timeout".into());
         }
-        Ok(SpecializedDiff {
-            text: String::from_utf8_lossy(&stdout).into_owned(),
-            truncated,
-        })
-    })();
+        match child_exited(child.id()) {
+            Ok(true) => break Ok(()),
+            Ok(false) => std::thread::sleep(Duration::from_millis(10)),
+            Err(error) => break Err(error.to_string()),
+        }
+    };
+    // ECHILD must prevent signalling a reused PID.
+    child_exited(child.id()).map_err(|e| e.to_string())?;
     // SAFETY: this child was started in its own process group.
+    // The leader is still unreaped, so its PGID cannot be reused.
     unsafe {
         libc::kill(-(child.id() as i32), libc::SIGKILL);
     }
-    if result.is_err() {
-        let _ = child.kill();
-        let _ = child.wait();
+    let status = child.wait().map_err(|e| e.to_string());
+    exited?;
+    let status = status?;
+    let (stdout, truncated) = out
+        .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        .map_err(|_| "diff-tool-timeout")??;
+    let (stderr, _) = err
+        .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        .map_err(|_| "diff-tool-timeout")??;
+    if !status.success() && status.code() != Some(1) {
+        return Err(String::from_utf8_lossy(&stderr).into_owned());
     }
-    result
+    Ok(SpecializedDiff {
+        text: String::from_utf8_lossy(&stdout).into_owned(),
+        truncated,
+    })
 }
 
 pub(super) fn git_specialized_diff(
@@ -434,6 +458,46 @@ mod tests {
         cmd.args(["-c", "sleep 5"]);
         let result = run(cmd, Duration::from_millis(100));
         assert_eq!(result.unwrap_err(), "diff-tool-timeout");
+    }
+
+    #[test]
+    fn observing_exit_leaves_the_leader_waitable() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exit 7"])
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !child_exited(child.id()).unwrap() {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(child_exited(child.id()).unwrap());
+        assert_eq!(child.wait().unwrap().code(), Some(7));
+    }
+
+    #[test]
+    fn preview_preserves_exit_status_and_stderr_after_group_cleanup() {
+        for (code, expected) in [
+            (0, Ok("result".into())),
+            (1, Ok("result".into())),
+            (2, Err("failed".into())),
+        ] {
+            let mut cmd = Command::new("/bin/sh");
+            cmd.args([
+                "-c",
+                &format!("printf result; printf failed >&2; exit {code}"),
+            ]);
+            let result = run(cmd, TIMEOUT).map(|diff| diff.text);
+            assert_eq!(result, expected, "exit {code}");
+        }
+    }
+
+    #[test]
+    fn successful_previews_stop_children_that_keep_output_pipes_open() {
+        let mut cmd = Command::new("/bin/sh");
+        cmd.args(["-c", "sleep 5 & printf result"]);
+        let result = run(cmd, Duration::from_millis(500)).unwrap();
+        assert_eq!(result.text, "result");
     }
 
     #[test]
