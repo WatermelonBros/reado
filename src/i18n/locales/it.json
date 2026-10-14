@@ -747,7 +747,29 @@
     "noChanges": "Nessuna modifica rispetto alla base selezionata.",
     "prevChange": "Modifica precedente (Alt+Su)",
     "nextChange": "Modifica successiva (Alt+Giù)",
-    "changes": "{count} modifiche"
+    "changes": "{count} modifiche",
+    "tools": {
+      "available": "Un comando di diff configurato è disabilitato nella vista standard.",
+      "view": "Anteprima specializzata",
+      "textconv": "Conversione del testo",
+      "external": "Diff esterno",
+      "confirm": "Eseguire un diff specializzato?",
+      "consent": "Questo comando viene eseguito con i permessi del tuo account. Autorizzalo solo per questa anteprima.",
+      "project": "Progetto",
+      "file": "File",
+      "savedHint": "Il comando confronta copie temporanee delle revisioni Git selezionate o del file salvato. Le modifiche non salvate sono escluse.",
+      "run": "Esegui anteprima",
+      "running": "Anteprima in esecuzione…",
+      "result": "Diff specializzato",
+      "readOnly": "Risultato di sola lettura. Staging e annotazioni usano i file originali.",
+      "truncated": "Risultato limitato ai primi 2 MiB.",
+      "changed": "Il comando configurato è cambiato. Controllalo nuovamente prima di eseguirlo.",
+      "timeout": "L’anteprima ha superato il limite di 20 secondi.",
+      "tooLarge": "Il file supera il limite di 64 MiB per l’anteprima.",
+      "failed": "Impossibile eseguire il diff specializzato.",
+      "inspectFailed": "Impossibile verificare i comandi di diff configurati.",
+      "noOutput": "Il comando è terminato senza produrre testo."
+    }
   },
   "conflict": {
     "remaining_one": "{count} conflitto rimasto in questo file",

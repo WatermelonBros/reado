@@ -536,6 +536,29 @@ export const gitDiffBase = (root: string, file: string, base: string) =>
 export const gitDiffLines = (root: string, file: string, base: string, head: string) =>
   invoke<[number, number][]>("git_diff_lines", { root, file, base, head })
 
+export interface DiffTool {
+  id: string
+  kind: "textconv" | "external"
+  source: string
+  command: string
+}
+
+export interface SpecializedDiff {
+  text: string
+  truncated: boolean
+}
+
+export const gitDiffTools = (root: string, file: string) =>
+  invoke<DiffTool[]>("git_diff_tools", { root, file })
+
+export const gitSpecializedDiff = (
+  root: string,
+  file: string,
+  base: string,
+  head: string | null,
+  id: string,
+) => invoke<SpecializedDiff>("git_specialized_diff", { root, file, base, head, id })
+
 export interface FileCommit {
   hash: string
   author: string

@@ -747,7 +747,29 @@
     "noChanges": "Aucune différence avec la base choisie.",
     "prevChange": "Modification précédente (Alt+Haut)",
     "nextChange": "Modification suivante (Alt+Bas)",
-    "changes": "{count} modifications"
+    "changes": "{count} modifications",
+    "tools": {
+      "available": "Une commande de diff configurée est désactivée dans la vue standard.",
+      "view": "Aperçu spécialisé",
+      "textconv": "Conversion de texte",
+      "external": "Diff externe",
+      "confirm": "Exécuter un diff spécialisé ?",
+      "consent": "Cette commande utilise les permissions de votre compte. Autorisez-la uniquement pour cet aperçu.",
+      "project": "Projet",
+      "file": "Fichier",
+      "savedHint": "La commande compare des copies temporaires des versions Git sélectionnées ou du fichier enregistré. Les modifications non enregistrées sont exclues.",
+      "run": "Exécuter l’aperçu",
+      "running": "Aperçu en cours…",
+      "result": "Diff spécialisé",
+      "readOnly": "Résultat en lecture seule. L’indexation et les annotations utilisent les fichiers originaux.",
+      "truncated": "Résultat limité aux 2 premiers Mio.",
+      "changed": "La commande configurée a changé. Vérifiez-la à nouveau avant de l’exécuter.",
+      "timeout": "L’aperçu a dépassé la limite de 20 secondes.",
+      "tooLarge": "Le fichier dépasse la limite de 64 Mio pour l’aperçu.",
+      "failed": "Impossible d’exécuter le diff spécialisé.",
+      "inspectFailed": "Impossible de vérifier les commandes de diff configurées.",
+      "noOutput": "La commande s’est terminée sans produire de texte."
+    }
   },
   "conflict": {
     "remaining_one": "{count} conflit restant dans ce fichier",

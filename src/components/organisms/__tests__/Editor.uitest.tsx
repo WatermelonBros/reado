@@ -45,6 +45,14 @@ vi.mock("../editor/RenderedMarkdown", () => ({
 vi.mock("../DiffView", () => ({
   DiffView: ({ base }: { base?: string }) => <div data-testid="diff">{base ?? "HEAD"}</div>,
 }))
+vi.mock("../../molecules/SpecializedDiffPanel", () => ({
+  SpecializedDiffPanel: (props: {
+    root: string
+    file: string
+    base: string
+    head: string | null
+  }) => <div data-testid="diff-tools" data-scope={JSON.stringify(props)} />,
+}))
 vi.mock("../ConflictView", () => ({ ConflictView: () => <div data-testid="conflict" /> }))
 vi.mock("../ImageView", () => ({ ImageView: () => <div data-testid="image" /> }))
 vi.mock("../PdfView", () => ({ PdfView: () => <div data-testid="pdf" /> }))
@@ -53,7 +61,7 @@ vi.mock("../../molecules/Welcome", () => ({ Welcome: () => <div data-testid="wel
 import { Editor } from "@/components/organisms/Editor"
 import { useComments } from "@/lib/comments"
 import { useGuidedReview } from "@/lib/guidedReview"
-import { useEditorActions, useProject, useSettings } from "@/lib/store"
+import { SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTextView } from "@/lib/textView"
 import { useUntitled } from "@/lib/untitled"
 
@@ -67,7 +75,12 @@ beforeEach(() => {
   gitShowRef.mockResolvedValue(null)
   useProject.setState({ root: ROOT, active: FILE, landing: null })
   useComments.setState({ comments: [], archived: [], reanchoringId: null })
-  useEditorActions.setState({ diffing: false, resolvingConflict: false, dirtyPaths: [] })
+  useEditorActions.setState({
+    diffing: false,
+    diffBase: "HEAD",
+    resolvingConflict: false,
+    dirtyPaths: [],
+  })
   useSettings.setState({ largeFileGuardMb: 5, showResolvedComments: false })
   useTextView.setState({ force: new Set() })
   useGuidedReview.setState({ sessions: [], currentId: null })
@@ -82,6 +95,39 @@ describe("with no file open", () => {
 })
 
 describe("choosing a viewer", () => {
+  it.each<FileContent>([
+    { kind: "image", dataUrl: "data:," },
+    { kind: "pdf", dataUrl: "data:," },
+    { kind: "binary", size: 200 },
+    { kind: "text", text: "code" },
+  ])("offers specialized tools in a Git diff for $kind files", async (content) => {
+    readFile.mockResolvedValue(content)
+    render(<Editor />)
+    if (content.kind === "binary") await screen.findByText("editor.binary")
+    else await screen.findByTestId(content.kind === "text" ? "code-view" : content.kind)
+    act(() => useEditorActions.setState({ diffing: true }))
+    const panel = await screen.findByTestId("diff-tools")
+    expect(JSON.parse(panel.getAttribute("data-scope") ?? "null")).toEqual({
+      root: ROOT,
+      file: "src/a.ts",
+      base: "HEAD",
+      head: null,
+    })
+  })
+
+  it("does not offer executable tools for saved-buffer comparisons", async () => {
+    render(<Editor />)
+    await screen.findByTestId("code-view")
+    act(() => useEditorActions.setState({ diffing: true, diffBase: SAVED_BASE }))
+    await screen.findByTestId("diff")
+    expect(screen.queryByTestId("diff-tools")).not.toBeInTheDocument()
+  })
+
+  it("does not inspect executable tools while just reading a file", async () => {
+    render(<Editor />)
+    await screen.findByTestId("code-view")
+    expect(screen.queryByTestId("diff-tools")).not.toBeInTheDocument()
+  })
   it("shows a loading placeholder until the bytes arrive", () => {
     readFile.mockReturnValue(new Promise(() => {}))
     render(<Editor />)

@@ -11,6 +11,12 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- Specialized diff previews on the desktop: inspect a configured text converter or
+  external diff command, then approve it for one preview. Results are read-only;
+  standard diffs and staging keep using the original contents with drivers disabled.
+
 ### Fixed
 
 - **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere

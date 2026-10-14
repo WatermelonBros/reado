@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
 import { Button } from "@/components/atoms/Button"
 import { DocsIcon, EditIcon } from "@/components/atoms/icons"
+import { SpecializedDiffPanel } from "@/components/molecules/SpecializedDiffPanel"
 import { Welcome } from "@/components/molecules/Welcome"
 import { ConflictView } from "@/components/organisms/ConflictView"
 import { DiffView } from "@/components/organisms/DiffView"
@@ -238,18 +239,33 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
     return <div className={PLACEHOLDER}>{t("common.loading")}</div>
   }
   const content = loaded.content
+  const relPath = toRelative(root, active)
+  const base = prRefs?.base ?? diffBase
+  const tools =
+    diffing && !base.startsWith("reado:") ? (
+      <SpecializedDiffPanel root={root} file={relPath} base={base} head={prRef} />
+    ) : null
+  const withSpecializedDiffPanel = (view: React.ReactNode) =>
+    tools ? (
+      <div className="flex h-full w-full flex-col">
+        {tools}
+        <div className="min-h-0 flex-1">{view}</div>
+      </div>
+    ) : (
+      view
+    )
 
   if (content.kind === "image") {
-    return <ImageView dataUrl={content.dataUrl} name={active} />
+    return withSpecializedDiffPanel(<ImageView dataUrl={content.dataUrl} name={active} />)
   }
   if (content.kind === "pdf") {
-    return <PdfView dataUrl={content.dataUrl} name={active} />
+    return withSpecializedDiffPanel(<PdfView dataUrl={content.dataUrl} name={active} />)
   }
   if (content.kind === "binary") {
-    return (
+    return withSpecializedDiffPanel(
       <div className={PLACEHOLDER} role="status">
         {t("editor.binary", { size: human(content.size) })}
-      </div>
+      </div>,
     )
   }
   // Past the guard: say how big it is and let the user overrule it. Opening is
@@ -269,8 +285,6 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
       </div>
     )
   }
-
-  const relPath = toRelative(root, active)
 
   // Two kinds render as something other than their bytes: markdown as prose, a
   // notebook as its cells. Both keep the same toggle to the source view, where
@@ -340,7 +354,9 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
     // Comparing with saved is the one case where the document is *not* what was
     // read from disk: it's the unsaved buffer, captured when the compare ran.
     const doc = compareBuffer ?? content.text
-    return <DiffView key={relPath} relPath={relPath} text={doc} base={prRefs?.base} />
+    return withSpecializedDiffPanel(
+      <DiffView key={relPath} relPath={relPath} text={doc} base={prRefs?.base} />,
+    )
   }
   // Open comments inline; resolved ones too when the setting allows (see
   // `inlineCommentSource`), so a finished task stays readable unless hidden.
