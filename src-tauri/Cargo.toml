@@ -16,9 +16,6 @@ edition = "2021"
 name = "reado_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[dev-dependencies]
-tempfile = "3"
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -28,6 +25,7 @@ default = []
 mdns = ["dep:mdns-sd"]
 
 [dependencies]
+tempfile = "3"
 # `protocol-asset` serves project files (markdown-preview images) to the webview
 # through `asset:`; the scope stays empty until a project grants its own root.
 tauri = { version = "2", features = ["unstable", "protocol-asset", "macos-private-api"] }
@@ -128,6 +126,9 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # Signal the PTY's process group on close so dev servers don't orphan (Unix only).
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 # OS-window pixel capture for the preview `browser_frame` tool. Off on Linux: xcap
 # there pulls in PipeWire (libspa-sys), which needs system dev libs to build and
