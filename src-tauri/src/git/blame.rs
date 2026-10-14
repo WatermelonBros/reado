@@ -59,14 +59,9 @@ pub fn git_blame(cache: State<BlameCache>, root: String, file: String) -> Vec<Bl
         }
     }
 
-    let Some(out) = run_git_raw(
-        Path::new(&root),
-        &["blame", "--line-porcelain", "--", &file],
-    ) else {
+    let Some(lines) = read_blame(Path::new(&root), &file) else {
         return Vec::new();
     };
-
-    let lines = parse_blame_porcelain(&out);
 
     if let Ok(mut map) = cache.0.lock() {
         // ponytail: clear-all eviction at the cap — blame recomputes lazily on the
@@ -84,6 +79,14 @@ pub fn git_blame(cache: State<BlameCache>, root: String, file: String) -> Vec<Bl
         );
     }
     lines
+}
+
+fn read_blame(root: &Path, file: &str) -> Option<Vec<BlameLine>> {
+    run_git_raw(
+        root,
+        &["blame", "--no-textconv", "--line-porcelain", "--", file],
+    )
+    .map(|out| parse_blame_porcelain(&out))
 }
 
 /// De-serialise `git blame --line-porcelain` into one `BlameLine` per source
@@ -135,6 +138,17 @@ fn parse_blame_porcelain(out: &str) -> Vec<BlameLine> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blame_does_not_run_textconv() {
+        use crate::git::diff_tests::{DiffRepo, Driver};
+
+        let repo = DiffRepo::new(Driver::Textconv);
+        let lines = read_blame(repo.path(), "tracked.txt").unwrap();
+        repo.assert_driver_not_run();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[1].hash, "00000000");
+    }
 
     #[test]
     fn parses_blame_porcelain() {
