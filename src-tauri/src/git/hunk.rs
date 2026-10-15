@@ -81,6 +81,10 @@ fn split_hunk_lines(
         // Offset of this line on the new side: context lines before it, plus one.
         let mut line = new_start;
         for (i, l) in body.iter().enumerate() {
+            // The newline marker belongs to the preceding line.
+            if l.starts_with('\\') && i > 0 && body[i - 1].starts_with('+') && i - 1 != keep {
+                continue;
+            }
             // Keep every context line, and exactly one of the additions: the
             // other `+` lines are what this patch is deliberately leaving behind.
             if i == keep || !l.starts_with('+') {
@@ -309,6 +313,30 @@ mod tests {
         let lines = &split_hunks(ADDITIONS)[0].line_patches;
         assert_eq!(lines[0].line, 2);
         assert_eq!(lines[1].line, 3);
+    }
+
+    #[test]
+    fn staging_one_line_preserves_its_newline() {
+        let dir = crate::git::test_support::repo("line-staging-newline");
+        let root = dir.to_string_lossy().into_owned();
+        let working = "one\ntwo\nthree";
+        std::fs::write(dir.join("a.txt"), working).unwrap();
+        let hunks = git_file_hunks(root.clone(), "a.txt".into(), false);
+        assert_eq!(hunks.len(), 1);
+        assert_eq!(hunks[0].line_patches.len(), 2);
+
+        for (line, expected) in hunks[0]
+            .line_patches
+            .iter()
+            .zip(["one\ntwo\n", "one\nthree"])
+        {
+            git_apply_patch(root.clone(), line.patch.clone(), true, false).unwrap();
+            assert_eq!(run_git_raw(&dir, &["show", ":a.txt"]).unwrap(), expected);
+            git_apply_patch(root.clone(), line.patch.clone(), true, true).unwrap();
+            assert_eq!(run_git_raw(&dir, &["show", ":a.txt"]).unwrap(), "one\n");
+            assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), working);
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
