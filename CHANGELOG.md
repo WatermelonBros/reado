@@ -11,6 +11,11 @@ commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve filenames containing ` -> `, quotes, tabs or newlines in Source Control
+  and guided review file lists.
+
 ### Added
 
 - Specialized diff previews on macOS and Linux: inspect a configured text converter
