@@ -747,7 +747,29 @@
     "noChanges": "Keine Änderungen gegenüber der gewählten Basis.",
     "prevChange": "Vorherige Änderung (Alt+Auf)",
     "nextChange": "Nächste Änderung (Alt+Ab)",
-    "changes": "{count} Änderungen"
+    "changes": "{count} Änderungen",
+    "tools": {
+      "available": "Ein konfigurierter Diff-Befehl ist in der Standardansicht deaktiviert.",
+      "view": "Spezielle Vorschau",
+      "textconv": "Textkonvertierung",
+      "external": "Externer Diff",
+      "confirm": "Speziellen Diff ausführen?",
+      "consent": "Dieser Befehl wird mit den Berechtigungen deines Kontos ausgeführt. Erlaube ihn nur für diese Vorschau.",
+      "project": "Projekt",
+      "file": "Datei",
+      "savedHint": "Der Befehl vergleicht temporäre Kopien der ausgewählten Git-Versionen oder der gespeicherten Datei. Ungespeicherte Änderungen sind ausgeschlossen.",
+      "run": "Vorschau ausführen",
+      "running": "Vorschau wird ausgeführt…",
+      "result": "Spezieller Diff",
+      "readOnly": "Schreibgeschütztes Ergebnis. Staging und Anmerkungen verwenden die Originaldateien.",
+      "truncated": "Ausgabe auf die ersten 2 MiB begrenzt.",
+      "changed": "Der konfigurierte Befehl hat sich geändert. Prüfe ihn vor der Ausführung erneut.",
+      "timeout": "Die Vorschau hat das Zeitlimit von 20 Sekunden überschritten.",
+      "tooLarge": "Die Datei überschreitet das Vorschau-Limit von 64 MiB.",
+      "failed": "Der spezielle Diff konnte nicht ausgeführt werden.",
+      "inspectFailed": "Die konfigurierten Diff-Befehle konnten nicht geprüft werden.",
+      "noOutput": "Der Befehl wurde ohne Textausgabe beendet."
+    }
   },
   "conflict": {
     "remaining_one": "Noch {count} Konflikt in dieser Datei",

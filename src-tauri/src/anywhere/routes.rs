@@ -1,5 +1,4 @@
 use super::{AgentMirror, Api, Notice, ProjectMeta, RecentMeta};
-use crate::proc::command;
 use std::path::{Path, PathBuf};
 
 use axum::extract::{Query, State};
@@ -170,17 +169,20 @@ pub(super) async fn diff(
     Query(q): Query<DiffQuery>,
 ) -> Result<String, StatusCode> {
     let root = api.root(&q.project).ok_or(StatusCode::NOT_FOUND)?;
-    // Full-file context (huge -U) so the user can read the whole file, with the
-    // changes highlighted inline — not just the changed hunks.
-    let mut args = vec!["-C", &root, "diff", "--unified=100000", "HEAD"];
-    if !q.path.is_empty() {
-        if q.path.contains("..") {
+    project_diff(&root, &q.path)
+}
+
+fn project_diff(root: &str, path: &str) -> Result<String, StatusCode> {
+    // The phone renders the full file with inline changes.
+    let mut args = vec!["--unified=100000", "HEAD"];
+    if !path.is_empty() {
+        if path.contains("..") {
             return Err(StatusCode::BAD_REQUEST);
         }
         args.push("--");
-        args.push(&q.path);
+        args.push(path);
     }
-    let out = command("git")
+    let out = crate::git::diff_command(Path::new(root))
         .args(&args)
         .output()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -446,6 +448,30 @@ pub(super) async fn loop_get(State(api): State<Api>) -> impl axum::response::Int
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn phone_diff_ignores_executable_drivers() {
+        use crate::git::diff_tests::{DiffRepo, DRIVERS};
+
+        for driver in DRIVERS {
+            let repo = DiffRepo::new(driver);
+            for path in ["tracked.txt", ""] {
+                let diff = project_diff(&repo.root(), path).unwrap();
+                repo.assert_driver_not_run();
+                assert!(diff.contains("-two\n+changed\n"));
+                assert!(diff.contains(" one\n"));
+                assert!(diff.ends_with(" three\n"));
+            }
+        }
+    }
+
+    #[test]
+    fn phone_diff_rejects_parent_paths() {
+        assert_eq!(
+            project_diff("/missing", "../tracked.txt"),
+            Err(StatusCode::BAD_REQUEST)
+        );
+    }
 
     #[test]
     fn safe_join_confines_to_the_project() {

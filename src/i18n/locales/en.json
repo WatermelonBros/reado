@@ -747,7 +747,29 @@
     "noChanges": "No changes versus the selected base.",
     "prevChange": "Previous change (Alt+Up)",
     "nextChange": "Next change (Alt+Down)",
-    "changes": "{count} changes"
+    "changes": "{count} changes",
+    "tools": {
+      "available": "A configured diff command is disabled in the standard view.",
+      "view": "Specialized preview",
+      "textconv": "Text conversion",
+      "external": "External diff",
+      "confirm": "Run a specialized diff?",
+      "consent": "This command runs with your account’s permissions. Allow it for this preview only.",
+      "project": "Project",
+      "file": "File",
+      "savedHint": "The command compares temporary copies of the selected Git versions or the saved file. Unsaved edits are not included.",
+      "run": "Run preview",
+      "running": "Running preview…",
+      "result": "Specialized diff",
+      "readOnly": "Read-only output. Staging and annotations use the original files.",
+      "truncated": "Output limited to the first 2 MiB.",
+      "changed": "The configured command changed. Review it again before running.",
+      "timeout": "The preview exceeded its 20-second limit.",
+      "tooLarge": "The file exceeds the 64 MiB preview limit.",
+      "failed": "Could not run the specialized diff.",
+      "inspectFailed": "Could not inspect the configured diff commands.",
+      "noOutput": "The command finished without textual output."
+    }
   },
   "conflict": {
     "remaining_one": "{count} conflict left in this file",

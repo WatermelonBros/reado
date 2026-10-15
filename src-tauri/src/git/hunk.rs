@@ -166,7 +166,7 @@ fn split_hunks(diff: &str) -> Vec<Hunk> {
 /// commit would contain); otherwise the working tree against the index.
 #[tauri::command]
 pub fn git_file_hunks(root: String, file: String, staged: bool) -> Vec<Hunk> {
-    let mut args = vec!["diff", "--no-color", "--no-ext-diff", "--unified=3"];
+    let mut args = vec!["diff", "--no-color", "--unified=3"];
     if staged {
         args.push("--cached");
     }

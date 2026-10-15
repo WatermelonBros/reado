@@ -11,6 +11,17 @@ commit.
 
 ## [Unreleased]
 
+### Added
+
+- Specialized diff previews on macOS and Linux: inspect a configured text converter
+  or external diff command, then approve it for one preview. Results are read-only;
+  standard diffs and staging keep using the original contents with drivers disabled.
+
+### Fixed
+
+- **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
+  no longer executes external diff drivers or text converters configured by a repository.
+
 ## [1.33.2] — 2026-10-09
 
 ### Added
