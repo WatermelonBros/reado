@@ -36,40 +36,53 @@ pub enum Side {
 /// what the two sides wanted; parsing them here means the view and the resolver
 /// agree on the region boundaries by construction.
 fn parse_conflicts(text: &str) -> Vec<ConflictRegion> {
+    enum Section {
+        Outside,
+        Ours,
+        Base,
+        Theirs,
+    }
+
     let mut regions = Vec::new();
     let mut ours: Vec<&str> = Vec::new();
     let mut theirs: Vec<&str> = Vec::new();
-    let mut state = 0; // 0 = outside, 1 = in ours, 2 = in theirs
+    let mut section = Section::Outside;
     let mut start = 0u32;
     let mut ours_label = String::new();
 
     for (i, line) in text.lines().enumerate() {
         let no = i as u32 + 1;
         if let Some(label) = line.strip_prefix("<<<<<<< ") {
-            state = 1;
+            section = Section::Ours;
             start = no;
             ours_label = label.trim().to_string();
             ours.clear();
             theirs.clear();
-        } else if state == 1 && line.starts_with("=======") {
-            state = 2;
-        } else if state == 2 {
-            if let Some(label) = line.strip_prefix(">>>>>>> ") {
-                regions.push(ConflictRegion {
-                    index: regions.len(),
-                    start_line: start,
-                    end_line: no,
-                    ours_label: ours_label.clone(),
-                    theirs_label: label.trim().to_string(),
-                    ours: ours.join("\n"),
-                    theirs: theirs.join("\n"),
-                });
-                state = 0;
-            } else {
-                theirs.push(line);
+            continue;
+        }
+        match section {
+            Section::Ours if line.starts_with("|||||||") => section = Section::Base,
+            Section::Ours | Section::Base if line.starts_with("=======") => {
+                section = Section::Theirs;
             }
-        } else if state == 1 {
-            ours.push(line);
+            Section::Theirs => {
+                if let Some(label) = line.strip_prefix(">>>>>>> ") {
+                    regions.push(ConflictRegion {
+                        index: regions.len(),
+                        start_line: start,
+                        end_line: no,
+                        ours_label: ours_label.clone(),
+                        theirs_label: label.trim().to_string(),
+                        ours: ours.join("\n"),
+                        theirs: theirs.join("\n"),
+                    });
+                    section = Section::Outside;
+                } else {
+                    theirs.push(line);
+                }
+            }
+            Section::Ours => ours.push(line),
+            Section::Base | Section::Outside => {}
         }
     }
     regions
@@ -157,6 +170,29 @@ mod tests {
         assert_eq!(r.theirs_label, "feature");
         assert_eq!(r.ours, "ours line");
         assert_eq!(r.theirs, "theirs line");
+    }
+
+    const DIFF3: &str = "before\n<<<<<<< HEAD\nours line\n||||||| base\nbase line\n=======\ntheirs line\n>>>>>>> feature\nafter\n";
+
+    #[test]
+    fn parses_diff3_without_including_the_base_in_ours() {
+        let regions = parse_conflicts(DIFF3);
+        assert_eq!(regions.len(), 1);
+        assert_eq!(regions[0].ours, "ours line");
+        assert_eq!(regions[0].theirs, "theirs line");
+        assert_eq!(regions[0].start_line, 2);
+        assert_eq!(regions[0].end_line, 8);
+    }
+
+    #[test]
+    fn resolving_diff3_drops_the_base_for_every_side() {
+        for (side, expected) in [
+            (Side::Ours, "before\nours line\nafter\n"),
+            (Side::Theirs, "before\ntheirs line\nafter\n"),
+            (Side::Both, "before\nours line\ntheirs line\nafter\n"),
+        ] {
+            assert_eq!(resolve_in(DIFF3, 0, side).unwrap(), expected);
+        }
     }
 
     #[test]

@@ -23,6 +23,8 @@ commit.
 
 ### Fixed
 
+- Exclude the base section when resolving diff3 conflicts.
+
 - **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
   no longer executes external diff drivers or text converters configured by a repository.
 - **Security:** Reado's own reads of a repository (status, diff, blame) no longer run the
