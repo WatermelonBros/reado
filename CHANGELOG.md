@@ -25,6 +25,10 @@ commit.
 
 - **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
   no longer executes external diff drivers or text converters configured by a repository.
+- **Security:** Reado's own reads of a repository (status, diff, blame) no longer run the
+  clean/smudge filter drivers its config sets up, so opening a folder can't run code
+  that way. Git LFS and git-crypt keep working, and staging or committing still uses
+  every filter.
 - The status bar said "Agent idle" while an agent you started yourself in a terminal (typing `claude`, or resuming after a restart) was working. Reado now notices it from the terminal and shows it as working.
 
 ## [1.33.2] — 2026-10-09

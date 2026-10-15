@@ -35,17 +35,100 @@ pub use stash::*;
 pub use status::*;
 pub use worktree::*;
 
-use crate::proc::command;
-use std::path::Path;
+use crate::proc::{command, GIT_NO_DIFF_DRIVERS};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
-/// Build a diff without executable drivers or text conversion.
+/// Build a diff without executable drivers, text conversion or untrusted filters.
 pub(crate) fn diff_command(root: &Path) -> Command {
     let mut cmd = command("git");
     cmd.arg("-C")
         .arg(root)
-        .args(["diff", "--no-ext-diff", "--no-textconv"]);
+        .args(filter_overrides(root))
+        .arg("diff")
+        .args(GIT_NO_DIFF_DRIVERS);
     cmd
+}
+
+/// The subcommands Reado runs on its own to read a repository. Only these get
+/// [`filter_overrides`]: a write (`add`, `commit`, `stash`, `checkout`…) must keep the
+/// repository's filters, or git-crypt would commit plaintext and LFS the raw file.
+const READS: [&str; 6] = ["status", "diff", "blame", "log", "ls-files", "show"];
+
+/// Filter programs a read may still run: tools the user installed, matched by bare
+/// name so a repository can't swap in a script of its own under the same role.
+const TRUSTED_FILTERS: [&str; 2] = ["git-lfs", "git-crypt"];
+
+type FilterCache = Mutex<HashMap<PathBuf, (Instant, Vec<String>)>>;
+
+/// `-c` overrides that switch off every clean/smudge/process filter driver the
+/// repository configures, except [`TRUSTED_FILTERS`]. `git status` and `git diff`
+/// run a file's filter to compare the work tree, so without this a folder received as
+/// a zip could run code just by being opened (the GitSpawn class, via filters).
+///
+/// ponytail: cached per root for a few seconds, since status polls often. A filter
+/// already configured when a folder is opened is caught on the first read; one added
+/// to the config afterwards is caught once the entry expires.
+pub(crate) fn filter_overrides(root: &Path) -> Vec<String> {
+    const TTL: Duration = Duration::from_secs(5);
+    static CACHE: OnceLock<FilterCache> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some((at, overrides)) = cache.lock().ok().and_then(|c| c.get(root).cloned()) {
+        if at.elapsed() < TTL {
+            return overrides;
+        }
+    }
+    let config = command("git")
+        .arg("-C")
+        .arg(root)
+        .args([
+            "config",
+            "--get-regexp",
+            r"^filter\..*\.(clean|smudge|process)$",
+        ])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    let overrides = untrusted_filter_overrides(&config);
+    if let Ok(mut c) = cache.lock() {
+        c.insert(root.to_path_buf(), (Instant::now(), overrides.clone()));
+    }
+    overrides
+}
+
+/// The overrides for `git config --get-regexp` output (`filter.<name>.<kind> <cmd>`).
+fn untrusted_filter_overrides(config: &str) -> Vec<String> {
+    let mut untrusted: Vec<&str> = Vec::new();
+    for line in config.lines() {
+        let (key, value) = line.split_once(' ').unwrap_or((line, ""));
+        let Some((name, _kind)) = key.strip_prefix("filter.").and_then(|k| k.rsplit_once('.'))
+        else {
+            continue;
+        };
+        if !TRUSTED_FILTERS.contains(&program(value)) && !untrusted.contains(&name) {
+            untrusted.push(name);
+        }
+    }
+    untrusted
+        .into_iter()
+        .flat_map(|name| {
+            ["clean=", "smudge=", "process=", "required=false"]
+                .map(|setting| ["-c".to_string(), format!("filter.{name}.{setting}")])
+        })
+        .flatten()
+        .collect()
+}
+
+/// The program a filter command runs: its first word, unquoted (`"git-crypt" clean`).
+fn program(command: &str) -> &str {
+    let command = command.trim();
+    match command.strip_prefix('"') {
+        Some(rest) => rest.split('"').next().unwrap_or(""),
+        None => command.split_whitespace().next().unwrap_or(""),
+    }
 }
 
 /// Reado's own files inside the project: `.reado/` (local history, index,
@@ -77,7 +160,11 @@ fn run_git_raw(root: &Path, args: &[&str]) -> Option<String> {
         cmd
     } else {
         let mut cmd = command("git");
-        cmd.arg("-C").arg(root).args(args);
+        cmd.arg("-C").arg(root);
+        if args.first().is_some_and(|sub| READS.contains(sub)) {
+            cmd.args(filter_overrides(root));
+        }
+        cmd.args(args);
         cmd
     };
     // Background reads must not contend with the user's index lock.
@@ -213,6 +300,65 @@ mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn untrusted_filters_are_switched_off_and_trusted_tools_kept() {
+        let config = "filter.lfs.clean git-lfs clean -- %f\n\
+                      filter.lfs.process git-lfs filter-process\n\
+                      filter.git-crypt.clean \"git-crypt\" clean\n\
+                      filter.evil.clean sh -c 'touch pwned'\n\
+                      filter.fake-lfs.process ./git-lfs filter-process\n";
+        let overrides = untrusted_filter_overrides(config);
+        assert!(overrides.contains(&"filter.evil.clean=".to_string()));
+        assert!(overrides.contains(&"filter.evil.process=".to_string()));
+        assert!(overrides.contains(&"filter.fake-lfs.required=false".to_string()));
+        assert!(!overrides
+            .iter()
+            .any(|o| o.contains("filter.lfs.") || o.contains("git-crypt")));
+        assert_eq!(overrides.len(), 2 * 8);
+    }
+
+    #[test]
+    fn reads_do_not_run_a_repository_filter_but_writes_still_do() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let git = |args: &[&str]| {
+            assert!(command("git")
+                .arg("-C")
+                .arg(root)
+                .args(args)
+                .status()
+                .unwrap()
+                .success())
+        };
+        git(&["init", "-q"]);
+        git(&["config", "user.email", "t@t"]);
+        git(&["config", "user.name", "t"]);
+        std::fs::write(root.join(".gitattributes"), "*.txt filter=evil\n").unwrap();
+        std::fs::write(root.join("f.txt"), "a\nb\n").unwrap();
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "init"]);
+        git(&["config", "filter.evil.clean", "touch filter-ran; cat"]);
+        git(&[
+            "config",
+            "filter.evil.process",
+            "sh -c 'touch filter-ran; exit 1'",
+        ]);
+        std::fs::write(root.join("f.txt"), "a\nc\n").unwrap();
+        let ran = root.join("filter-ran");
+
+        assert!(run_git(root, &["status", "--porcelain"])
+            .unwrap()
+            .contains("f.txt"));
+        assert!(!ran.exists(), "status ran the repository's filter");
+        let diff = diff_command(root).arg("HEAD").output().unwrap();
+        assert!(String::from_utf8_lossy(&diff.stdout).contains("+c"));
+        assert!(!ran.exists(), "diff ran the repository's filter");
+
+        // A write keeps the repository's filters: that's what they are for.
+        run_git(root, &["add", "f.txt"]);
+        assert!(ran.exists());
+    }
 
     #[test]
     fn pull_error_drops_fetch_noise_and_keeps_reason() {

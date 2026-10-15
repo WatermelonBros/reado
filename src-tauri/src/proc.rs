@@ -134,9 +134,16 @@ pub fn command(program: impl AsRef<OsStr>) -> Command {
 /// whenever git reads the work tree — and Reado runs `git status`/`diff`/`blame` on
 /// its own as soon as a folder is opened. A folder received as a zip could otherwise
 /// run code just by being opened ("GitSpawn", Manifold Security, Oct 2026).
-/// ponytail: covers core.fsmonitor, the published vector; clean/smudge filter drivers
-/// and diff textconv are the remaining sinks — a trust prompt on first open if needed.
+/// This covers `core.fsmonitor`, which applies to every git command. The other sinks
+/// are per command and live with the reads that hit them: [`GIT_NO_DIFF_DRIVERS`] on
+/// every diff and blame, and `git::filter_overrides` for the clean/smudge filter
+/// drivers a read would otherwise run.
 const GIT_HARDENING: [&str; 2] = ["-c", "core.fsmonitor=false"];
+
+/// Diff options that stop a repository's external diff command (`diff.external`,
+/// `diff.<driver>.command`, `GIT_EXTERNAL_DIFF`) and text converters
+/// (`diff.<driver>.textconv`) from running when Reado computes a diff on its own.
+pub const GIT_NO_DIFF_DRIVERS: [&str; 2] = ["--no-ext-diff", "--no-textconv"];
 
 /// Apply the no-window flag to an existing command (Windows only; no-op elsewhere).
 pub fn no_window(cmd: &mut Command) {
