@@ -351,6 +351,10 @@ mod tests {
             .unwrap()
             .contains("f.txt"));
         assert!(!ran.exists(), "status ran the repository's filter");
+        // The arguments Source Control and the badge really use, not a stand-in:
+        // a leading `-c` there once hid status from the read check above.
+        assert_eq!(status::status_entries(root).unwrap().len(), 1);
+        assert!(!ran.exists(), "Source Control's status ran the filter");
         let diff = diff_command(root).arg("HEAD").output().unwrap();
         assert!(String::from_utf8_lossy(&diff.stdout).contains("+c"));
         assert!(!ran.exists(), "diff ran the repository's filter");

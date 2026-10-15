@@ -27,7 +27,14 @@ pub struct GitInfo {
     pub changed_files: u32,
 }
 
-// NUL delimiters preserve paths verbatim; renames include a second path.
+/// Working-tree status, one NUL-terminated record per path. `-z` hands paths over
+/// verbatim — no quoting, no octal escapes, no ` -> ` between a rename's two
+/// names — so a filename containing any of those can't be misread; a rename or
+/// copy record is followed by a second one, its source. `-uall` lists individual
+/// untracked files instead of collapsing an untracked directory to one entry.
+///
+/// `status` must stay the first argument: `run_git_raw` recognises a read by its
+/// subcommand and only then switches the repository's filter drivers off.
 const STATUS_ARGS: [&str; 4] = ["status", "--porcelain=v1", "-z", "-uall"];
 
 /// Project-relative paths changed for a guided-review scope. With no `base`,
@@ -158,6 +165,9 @@ fn categorize_char(c: char) -> &'static str {
     }
 }
 
+/// Split `git status --porcelain=v1 -z` output into `(XY status code, path)`
+/// pairs, a rename or copy reported once, under its new path. The two status
+/// chars are X (index) and Y (working tree).
 fn parse_status(out: &str) -> Vec<(&str, &str)> {
     let mut records = out.split('\0');
     let mut entries = Vec::new();
@@ -180,6 +190,8 @@ fn parse_status(out: &str) -> Vec<(&str, &str)> {
     entries
 }
 
+/// Expand one status entry into its staged/unstaged changes: "MM path" yields
+/// both a staged and an unstaged change, mirroring how SCM UIs present it.
 fn expand_status_entry(code: &str, path: &str) -> Vec<GitChange> {
     let bytes = code.as_bytes();
     let (x, y) = (bytes[0] as char, bytes[1] as char);

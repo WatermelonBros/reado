@@ -11,11 +11,6 @@ commit.
 
 ## [Unreleased]
 
-### Fixed
-
-- Preserve filenames containing ` -> `, quotes, tabs or newlines in Source Control
-  and guided review file lists.
-
 ### Added
 
 - Specialized diff previews on macOS and Linux: inspect a configured text converter
@@ -38,6 +33,11 @@ commit.
 - Clicking a link in a rendered README or other Markdown loaded the page inside Reado's own
   window, with no way back but quitting. Web links now open in your browser; a relative
   link or an `#anchor` no longer takes the window (or the open project) away.
+- Files whose names contain ` -> `, quotes, tabs, newlines or leading/trailing spaces
+  showed up truncated, escaped or as a rename in Source Control and in guided review
+  scopes. Their names now come through exactly as they are on disk.
+- **Security:** `git status` was missing from the reads that run with a repository's
+  filter drivers switched off; it now runs without them too.
 
 ## [1.33.2] — 2026-10-09
 
