@@ -13,7 +13,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 import { MascotWindow } from "./components/pages/MascotWindow"
 import { reportCrash, startCrashReports } from "./lib/crashReports"
 import { log } from "./lib/logger"
-import { guardNavigationKeys } from "./lib/navGuard"
+import { guardLinkClicks, guardNavigationKeys } from "./lib/navGuard"
 import "./i18n" // initialize i18next before any component renders
 import "./lib/fonts" // ships the code faces the picker offers
 import "@xterm/xterm/css/xterm.css"
@@ -47,6 +47,7 @@ export function boot() {
   // Reado's only page throws the whole session away. Cancelled before anything else
   // can see it.
   guardNavigationKeys()
+  guardLinkClicks()
 
   // Capture anything that escapes a component so a crash leaves a trail in the log
   // file the user can send back to us.

@@ -1,7 +1,12 @@
 // The keys a webview reads as navigation. Getting this wrong either loses the
 // whole session (Backspace escaping) or breaks typing (Backspace swallowed).
 import { describe, expect, it } from "vitest"
-import { guardNavigationKeys, isNavigationKey } from "@/lib/navGuard"
+import {
+  guardLinkClicks,
+  guardNavigationKeys,
+  isNavigationKey,
+  linkDestination,
+} from "@/lib/navGuard"
 
 /** A keydown aimed at `target`, dispatched for real so `target` is set. */
 function press(target: Element, init: KeyboardEventInit): KeyboardEvent {
@@ -46,5 +51,56 @@ describe("the navigation-key guard", () => {
     expect(isNavigationKey(press(div, { key: "ArrowLeft", altKey: true, metaKey: true }))).toBe(
       false,
     )
+  })
+})
+
+describe("the link-click guard", () => {
+  const origin = "tauri://localhost/"
+
+  it("sends web and mail links out, keeps app-relative ones and anchors home", () => {
+    expect(linkDestination("https://github.com/x/y", origin)).toBe("external")
+    expect(linkDestination("mailto:a@b.c", origin)).toBe("external")
+    expect(linkDestination("docs/guide.md", origin)).toBe("stay")
+    expect(linkDestination("javascript:alert(1)", origin)).toBe("stay")
+    expect(linkDestination("#install", origin)).toBe("anchor")
+    // On Windows the app itself is served from http://tauri.localhost.
+    expect(linkDestination("/x.md", "http://tauri.localhost/")).toBe("stay")
+  })
+
+  it("opens a clicked web link outside and keeps the window where it is", () => {
+    const opened: string[] = []
+    guardLinkClicks(window, (u) => opened.push(u))
+    const a = mount("a", { href: "https://github.com/WatermelonBros/reado" })
+    const span = document.createElement("span")
+    a.appendChild(span)
+    const e = new MouseEvent("click", { bubbles: true, cancelable: true })
+    span.dispatchEvent(e)
+    expect(e.defaultPrevented).toBe(true)
+    expect(opened).toEqual(["https://github.com/WatermelonBros/reado"])
+  })
+
+  it("scrolls to an anchor without touching the hash, which is Reado's route", () => {
+    guardLinkClicks(window, () => {})
+    const hash = location.hash
+    const target = mount("h2", { id: "user-content-install" })
+    let scrolled = false
+    target.scrollIntoView = () => {
+      scrolled = true
+    }
+    const a = mount("a", { href: "#install" })
+    const e = new MouseEvent("click", { bubbles: true, cancelable: true })
+    a.dispatchEvent(e)
+    expect(e.defaultPrevented).toBe(true)
+    expect(location.hash).toBe(hash)
+    expect(scrolled).toBe(true)
+  })
+
+  it("leaves a click some handler already took", () => {
+    const opened: string[] = []
+    guardLinkClicks(window, (u) => opened.push(u))
+    const a = mount("a", { href: "https://example.com" })
+    a.addEventListener("click", (e) => e.preventDefault())
+    a.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    expect(opened).toEqual([])
   })
 })

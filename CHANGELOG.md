@@ -30,6 +30,9 @@ commit.
   that way. Git LFS and git-crypt keep working, and staging or committing still uses
   every filter.
 - The status bar said "Agent idle" while an agent you started yourself in a terminal (typing `claude`, or resuming after a restart) was working. Reado now notices it from the terminal and shows it as working.
+- Clicking a link in a rendered README or other Markdown loaded the page inside Reado's own
+  window, with no way back but quitting. Web links now open in your browser; a relative
+  link or an `#anchor` no longer takes the window (or the open project) away.
 
 ## [1.33.2] — 2026-10-09
 

@@ -1,3 +1,5 @@
+import { openUrl } from "@tauri-apps/plugin-opener"
+
 /**
  * Keys the webview treats as browser navigation, which Reado is not.
  *
@@ -43,4 +45,49 @@ export function guardNavigationKeys(win: Window = window): void {
     },
     true,
   )
+}
+
+/** Where a click on this link must go instead of the webview: `"external"` for a
+ *  web or mail link (the system browser), `"anchor"` for an in-page `#heading`,
+ *  `"stay"` for anything else that would load a page (a relative README link
+ *  resolves against the app's own origin). */
+export function linkDestination(href: string, page: string): "external" | "anchor" | "stay" {
+  if (href.startsWith("#")) return "anchor"
+  try {
+    const url = new URL(href, page)
+    const here = new URL(page)
+    // Compared by hand: a custom scheme's origin (tauri://, mailto:) is "null".
+    if (url.protocol === here.protocol && url.host === here.host) return "stay"
+    return /^(https?|mailto):$/.test(url.protocol) ? "external" : "stay"
+  } catch {
+    return "stay"
+  }
+}
+
+/** A link clicked anywhere in the window — a README preview, a comment, release
+ *  notes — would load its page *in place of Reado*, with no way back but quitting.
+ *  Web links go to the system browser, `#anchors` scroll, anything else stays put. A handler
+ *  that already dealt with the click (`preventDefault`) wins: this listens on the
+ *  window, after React's own. Middle-click (`auxclick`) too. */
+export function guardLinkClicks(win: Window = window, open: (url: string) => unknown = openUrl) {
+  const app = win.location.href // the app's own page, read before any link could move it
+  const onClick = (e: MouseEvent) => {
+    if (e.defaultPrevented) return
+    const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null
+    if (!a) return
+    const href = a.getAttribute("href") ?? ""
+    const where = linkDestination(href, app)
+    e.preventDefault()
+    if (where === "external") void open(a.href)
+    // Not through the URL: the hash is Reado's own route (`#project=…`), and a
+    // README's `#install` in its place drops the open project. Rendered markdown
+    // prefixes ids with `user-content-`.
+    if (where === "anchor") {
+      const id = decodeURIComponent(href.slice(1))
+      const doc = win.document
+      ;(doc.getElementById(id) ?? doc.getElementById(`user-content-${id}`))?.scrollIntoView()
+    }
+  }
+  win.addEventListener("click", onClick)
+  win.addEventListener("auxclick", onClick)
 }
