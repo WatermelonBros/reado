@@ -27,17 +27,8 @@ pub struct GitInfo {
     pub changed_files: u32,
 }
 
-/// Working-tree status, one line per path. `-uall` lists individual untracked
-/// files instead of collapsing an untracked directory to a single folder entry;
-/// `-c core.quotepath=false` stops git octal-escaping non-ASCII bytes (e.g.
-/// `na\303\257ve.rs`), so the paths match the real files on disk.
-const STATUS_ARGS: [&str; 5] = [
-    "-c",
-    "core.quotepath=false",
-    "status",
-    "--porcelain",
-    "-uall",
-];
+// NUL delimiters preserve paths verbatim; renames include a second path.
+const STATUS_ARGS: [&str; 4] = ["status", "--porcelain=v1", "-z", "-uall"];
 
 /// Project-relative paths changed for a guided-review scope. With no `base`,
 /// the working-tree changes (tracked edits + untracked files) against HEAD; with
@@ -49,8 +40,7 @@ pub fn git_changed_files(root: String, base: Option<String>) -> Vec<String> {
     let mut files: Vec<String> = Vec::new();
     let mut push = |s: Option<String>| {
         if let Some(out) = s {
-            for line in out.lines() {
-                let p = line.trim();
+            for p in out.split('\0') {
                 if !p.is_empty() && !is_reado_own(p) && !files.iter().any(|f| f == p) {
                     files.push(p.to_string());
                 }
@@ -67,14 +57,14 @@ pub fn git_changed_files(root: String, base: Option<String>) -> Vec<String> {
         Some(base) => {
             // Branch scope: what this branch changed relative to its base.
             let range = format!("{base}...HEAD");
-            push(run_git(root, &["diff", "--name-only", &range]));
+            push(run_git_raw(root, &["diff", "--name-only", "-z", &range]));
         }
         None => {
             // Diff scope: the working tree vs HEAD, plus untracked files.
-            push(run_git(root, &["diff", "--name-only", "HEAD"]));
-            push(run_git(
+            push(run_git_raw(root, &["diff", "--name-only", "-z", "HEAD"]));
+            push(run_git_raw(
                 root,
-                &["ls-files", "--others", "--exclude-standard"],
+                &["ls-files", "-z", "--others", "--exclude-standard"],
             ));
         }
     }
@@ -168,31 +158,32 @@ fn categorize_char(c: char) -> &'static str {
     }
 }
 
-/// The path a porcelain status line names — rename target, unquoted — or empty
-/// for a line too short to carry one. Shared so the badge count and the change
-/// list read the same path out of the same line.
-fn status_line_path(line: &str) -> String {
-    if line.len() <= 3 {
-        return String::new();
+fn parse_status(out: &str) -> Vec<(&str, &str)> {
+    let mut records = out.split('\0');
+    let mut entries = Vec::new();
+    while let Some(record) = records.next() {
+        if record.len() <= 3 {
+            continue;
+        }
+        let Some(code) = record.get(..2) else {
+            continue;
+        };
+        let Some(path) = record.get(3..) else {
+            continue;
+        };
+        // In -z format, the destination precedes the rename/copy source.
+        if code.contains(['R', 'C']) {
+            records.next();
+        }
+        entries.push((code, path));
     }
-    let mut path = line[3..].to_string();
-    // Renames are "old -> new"; keep the new path.
-    if let Some(idx) = path.find(" -> ") {
-        path = path[idx + 4..].to_string();
-    }
-    path.trim_matches('"').to_string()
+    entries
 }
 
-/// Expand one `git status --porcelain` line into its staged/unstaged entries.
-/// The two status chars are X (index) and Y (working tree); "MM path" yields
-/// both a staged and an unstaged change, mirroring how SCM UIs present it.
-fn expand_status_line(line: &str) -> Vec<GitChange> {
-    if line.len() <= 3 {
-        return Vec::new();
-    }
-    let bytes = line.as_bytes();
+fn expand_status_entry(code: &str, path: &str) -> Vec<GitChange> {
+    let bytes = code.as_bytes();
     let (x, y) = (bytes[0] as char, bytes[1] as char);
-    let path = status_line_path(line);
+    let path = path.to_string();
 
     if x == '?' {
         return vec![GitChange {
@@ -229,32 +220,32 @@ fn expand_status_line(line: &str) -> Vec<GitChange> {
     out
 }
 
-/// The working tree's changed files, one per porcelain line (a rename is one
-/// line), as `(XY status code, path)` with Reado's own files left out; `None`
+/// The working tree's changed files as `(XY status code, path)`, with one entry
+/// per file and Reado's own files left out; `None`
 /// when git fails. The badge count and the Anywhere phone's change list both
 /// read it, so they agree with each other and with [`git_status`].
 pub(crate) fn status_entries(root: &Path) -> Option<Vec<(String, String)>> {
     let out = run_git_raw(root, &STATUS_ARGS)?;
     Some(
-        out.lines()
-            .filter(|l| l.len() > 3)
-            .map(|l| (l[..2].to_string(), status_line_path(l)))
+        parse_status(&out)
+            .into_iter()
             .filter(|(_, path)| !is_reado_own(path))
+            .map(|(code, path)| (code.to_string(), path.to_string()))
             .collect(),
     )
 }
 
 /// The working-tree status for the Source Control view, split into staged and
-/// unstaged entries. (Raw, untrimmed output: porcelain lines begin with the
-/// two status columns, so the leading space of an unstaged-only change matters.)
+/// unstaged entries.
 /// `async` for the same reason as `git_info`: polled, and slow on a big tree.
 #[tauri::command(async)]
 pub fn git_status(root: String) -> Vec<GitChange> {
     let Some(out) = run_git_raw(Path::new(&root), &STATUS_ARGS) else {
         return Vec::new();
     };
-    out.lines()
-        .flat_map(expand_status_line)
+    parse_status(&out)
+        .into_iter()
+        .flat_map(|(code, path)| expand_status_entry(code, path))
         .filter(|c| !is_reado_own(&c.path))
         .collect()
 }
@@ -350,6 +341,81 @@ mod tests {
     use crate::git::test_support::repo;
 
     #[test]
+    fn status_preserves_special_paths_and_rename_destinations() {
+        let dir = repo("status-special-paths");
+        let root = dir.to_string_lossy().into_owned();
+        let names = vec!["before -> after.txt", "space name.txt"];
+        #[cfg(unix)]
+        let names = {
+            let mut names = names;
+            names.extend([
+                "tab\tname.txt",
+                "line\nbreak.txt",
+                " spaced.txt ",
+                "\"quoted\".txt",
+                "back\\slash.txt",
+            ]);
+            names
+        };
+        for name in &names {
+            std::fs::write(dir.join(name), "new\n").unwrap();
+        }
+        let destination = "renamed -> target.txt";
+        run_git_checked(&root, &["mv", "a.txt", destination]).unwrap();
+
+        let changes = git_status(root.clone());
+        let mut actual: Vec<_> = changes.iter().map(|c| c.path.as_str()).collect();
+        let mut expected = names.clone();
+        expected.push(destination);
+        actual.sort();
+        expected.sort();
+        assert_eq!(actual, expected);
+        let renamed = changes.iter().find(|c| c.path == destination).unwrap();
+        assert_eq!(renamed.status, "renamed");
+        assert!(renamed.staged);
+
+        let mut entries: Vec<_> = status_entries(&dir)
+            .unwrap()
+            .into_iter()
+            .map(|(_, p)| p)
+            .collect();
+        entries.sort();
+        assert_eq!(entries, expected);
+        assert_eq!(git_info(root).changed_files as usize, expected.len());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn review_scope_preserves_special_paths() {
+        let dir = repo("scope-special-paths");
+        let root = dir.to_string_lossy().into_owned();
+        let names = vec!["before -> after.txt", "space name.txt"];
+        #[cfg(unix)]
+        let names = {
+            let mut names = names;
+            names.extend([
+                "tab\tname.txt",
+                "line\nbreak.txt",
+                " spaced.txt ",
+                "\"quoted\".txt",
+                "back\\slash.txt",
+            ]);
+            names
+        };
+        for name in &names {
+            std::fs::write(dir.join(name), "new\n").unwrap();
+        }
+        let mut names = names;
+        names.sort();
+        assert_eq!(git_changed_files(root.clone(), None), names);
+        run_git_checked(&root, &["add", "--all"]).unwrap();
+        assert_eq!(git_changed_files(root.clone(), None), names);
+        run_git_checked(&root, &["commit", "-qm", "special paths"]).unwrap();
+        assert_eq!(git_changed_files(root, Some("HEAD~1".into())), names);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn reados_own_files_never_count_as_the_users_changes() {
         let dir = repo("reado-own");
         let root = dir.to_string_lossy().into_owned();
@@ -438,42 +504,42 @@ mod tests {
     }
 
     #[test]
-    fn expands_status_lines() {
-        let unstaged = expand_status_line(" M src/main.rs");
+    fn expands_status_entries() {
+        let unstaged = expand_status_entry(" M", "src/main.rs");
         assert_eq!(unstaged.len(), 1);
         assert_eq!(unstaged[0].path, "src/main.rs");
         assert_eq!(unstaged[0].status, "modified");
         assert!(!unstaged[0].staged);
 
-        let staged = expand_status_line("A  new.rs");
+        let staged = expand_status_entry("A ", "new.rs");
         assert_eq!(staged.len(), 1);
         assert!(staged[0].staged);
         assert_eq!(staged[0].status, "added");
 
         // Both index and working tree changed → two entries.
-        let both = expand_status_line("MM both.rs");
+        let both = expand_status_entry("MM", "both.rs");
         assert_eq!(both.len(), 2);
         assert!(both[0].staged && !both[1].staged);
 
         // Unmerged (conflict) states collapse to a single `conflicted` entry,
         // never a staged "modified" one.
-        let conflict = expand_status_line("UU both.rs");
+        let conflict = expand_status_entry("UU", "both.rs");
         assert_eq!(conflict.len(), 1);
         assert_eq!(conflict[0].status, "conflicted");
         assert!(!conflict[0].staged);
-        assert_eq!(expand_status_line("AA x.rs")[0].status, "conflicted");
-        assert_eq!(expand_status_line("DU y.rs")[0].status, "conflicted");
+        assert_eq!(expand_status_entry("AA", "x.rs")[0].status, "conflicted");
+        assert_eq!(expand_status_entry("DU", "y.rs")[0].status, "conflicted");
 
-        let rename = expand_status_line("R  old.rs -> new.rs");
+        let rename = expand_status_entry("R ", "new.rs");
         assert_eq!(rename[0].path, "new.rs");
         assert_eq!(rename[0].status, "renamed");
         assert!(rename[0].staged);
 
-        let untracked = expand_status_line("?? \"weird name.rs\"");
+        let untracked = expand_status_entry("??", "weird name.rs");
         assert_eq!(untracked[0].path, "weird name.rs");
         assert_eq!(untracked[0].status, "untracked");
         assert!(!untracked[0].staged);
 
-        assert!(expand_status_line("").is_empty());
+        assert!(parse_status("").is_empty());
     }
 }
