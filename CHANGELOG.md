@@ -23,8 +23,6 @@ commit.
 
 ### Fixed
 
-- Preserve newlines when staging individual added lines in files without a final newline.
-
 - **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
   no longer executes external diff drivers or text converters configured by a repository.
 - **Security:** Reado's own reads of a repository (status, diff, blame) no longer run the
@@ -40,6 +38,8 @@ commit.
   scopes. Their names now come through exactly as they are on disk.
 - **Security:** `git status` was missing from the reads that run with a repository's
   filter drivers switched off; it now runs without them too.
+- Staging a single added line in a file with no newline at the end could drop the
+  newline after another line. Each line now stages exactly as it is.
 
 ## [1.33.2] — 2026-10-09
 
