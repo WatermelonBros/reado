@@ -23,8 +23,6 @@ commit.
 
 ### Fixed
 
-- Exclude the base section when resolving diff3 conflicts.
-
 - **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
   no longer executes external diff drivers or text converters configured by a repository.
 - **Security:** Reado's own reads of a repository (status, diff, blame) no longer run the
@@ -38,10 +36,11 @@ commit.
 - Files whose names contain ` -> `, quotes, tabs, newlines or leading/trailing spaces
   showed up truncated, escaped or as a rename in Source Control and in guided review
   scopes. Their names now come through exactly as they are on disk.
-- **Security:** `git status` was missing from the reads that run with a repository's
-  filter drivers switched off; it now runs without them too.
 - Staging a single added line in a file with no newline at the end could drop the
   newline after another line. Each line now stages exactly as it is.
+- With `merge.conflictStyle` set to `diff3` or `zdiff3`, resolving a conflict kept the
+  common ancestor's text along with your side. Only the side (or sides) you pick are
+  kept now.
 
 ## [1.33.2] — 2026-10-09
 
