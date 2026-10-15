@@ -17,10 +17,15 @@ commit.
   or external diff command, then approve it for one preview. Results are read-only;
   standard diffs and staging keep using the original contents with drivers disabled.
 
+### Changed
+
+- Clicking a path in the terminal to a file outside the open project now opens it in Reado, at its own project, the way "Open with Reado" from Finder does. It used to show the file in Finder.
+
 ### Fixed
 
 - **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
   no longer executes external diff drivers or text converters configured by a repository.
+- The status bar said "Agent idle" while an agent you started yourself in a terminal (typing `claude`, or resuming after a restart) was working. Reado now notices it from the terminal and shows it as working.
 
 ## [1.33.2] — 2026-10-09
 

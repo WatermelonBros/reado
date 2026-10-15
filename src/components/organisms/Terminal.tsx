@@ -18,7 +18,7 @@ import {
   readText as clipboardReadText,
   writeText as clipboardWriteText,
 } from "@tauri-apps/plugin-clipboard-manager"
-import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener"
+import { openUrl } from "@tauri-apps/plugin-opener"
 import { FitAddon } from "@xterm/addon-fit"
 import { SearchAddon } from "@xterm/addon-search"
 import { WebLinksAddon } from "@xterm/addon-web-links"
@@ -28,9 +28,11 @@ import { useTranslation } from "react-i18next"
 import { IconButton } from "@/components/atoms/IconButton"
 import { Input } from "@/components/atoms/Input"
 import { ChevronIcon, CloseIcon, SearchIcon } from "@/components/atoms/icons"
+import { terminalAgent } from "@/lib/agents"
 import {
   anywherePublishAgent,
   clipboardImageToTemp,
+  fileOpenTarget,
   onPtyExit,
   onPtyOutput,
   ptyKill,
@@ -45,7 +47,7 @@ import { nextPaint } from "@/lib/nextPaint"
 import { notify, notifyError } from "@/lib/notice"
 import { useProject, useSettings } from "@/lib/store"
 import { offSafe, shellQuote, terminalLinks, useTerminals } from "@/lib/terminals"
-import { onFileDrop } from "@/lib/window"
+import { onFileDrop, openPathTarget } from "@/lib/window"
 import { xtermFontFamily, xtermLinkColor, xtermTheme } from "@/lib/xtermTheme"
 
 const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
@@ -63,6 +65,9 @@ interface Props {
 /** The mirrored tail, per terminal. Bounded: a phone wants the last screenful of
  *  an agent working, not an unbounded transcript. */
 const MIRROR_CHARS = 8000
+/** How often an unmarked pane that is printing asks its tty whether an agent
+ *  runs in it. Output streams many times a second; one `ps` every few is plenty. */
+const PROBE_MS = 5000
 const mirrorTail = new Map<string, string>()
 let mirrorPending: ReturnType<typeof setTimeout> | null = null
 
@@ -170,10 +175,12 @@ export function Terminal({ id, cwd, active, profile }: Props) {
               .then((abs) => {
                 if (abs) return useProject.getState().open(abs, l.line)
                 // Outside the project: the editor only opens files under the
-                // root, so an absolute path elsewhere on disk goes to the file
-                // manager instead of dead-ending on "isn't in this project".
-                // A path that doesn't exist rejects, and lands in the catch.
-                if (/^(?:\/|[A-Za-z]:[\\/])/.test(path)) return revealItemInDir(path)
+                // root, so an absolute path elsewhere on disk opens at its own
+                // project, as "open with Reado" from Finder would, instead of
+                // dead-ending on "isn't in this project". A path that isn't a
+                // file rejects, and lands in the catch.
+                if (/^(?:\/|[A-Za-z]:[\\/])/.test(path))
+                  return fileOpenTarget(path).then((to) => openPathTarget(to.root, to.file))
                 notify("info", t("terminal.noFile", { path }))
               })
               .catch((e) => notifyError("terminal", t("terminal.noFile", { path }), e))
@@ -248,6 +255,7 @@ export function Terminal({ id, cwd, active, profile }: Props) {
 
     const unlisten: UnlistenFn[] = []
     let disposed = false
+    let lastProbe = 0
 
     // Start on the next painted frame — that is when the container has a size
     // and `fit()` can pick real rows/cols — but never *only* on it: see
@@ -295,6 +303,13 @@ export function Terminal({ id, cwd, active, profile }: Props) {
             // the only "it started" Reado gets for a session the user drives by
             // hand — `session_done` reports the end, never the beginning.
             agentIsBusy()
+          } else if (Date.now() - lastProbe > PROBE_MS) {
+            // A pane nobody marked can still be running an agent: one the user
+            // started by typing `claude`, or resumed after a restart. Its tty
+            // knows, and asking marks it — so the status bar and the companion
+            // stop calling a working agent idle.
+            lastProbe = Date.now()
+            void terminalAgent(id)
           }
         }),
       )

@@ -305,6 +305,7 @@ pub fn run_with(extend: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builde
             log::log_set_config,
             proc::agent_installed,
             fileopen::drain_open_targets,
+            fileopen::file_open_target,
             defaults::set_default_handler,
             preview::preview_open,
             preview::preview_set_bounds,

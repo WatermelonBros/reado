@@ -17,8 +17,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 // Reado subscribes to the drop event itself: Tauri's `onDragDropEvent` hands
 // back a composite unlisten that ignores the four promises it creates.
 let onDrop: ((paths: string[], position: { x: number; y: number }) => void) | null = null
+const openPathTarget = vi.fn<(root: string, file: string) => Promise<void>>(async () => {})
 vi.mock("@/lib/window", async (orig) => ({
   ...(await orig<typeof import("@/lib/window")>()),
+  openPathTarget: (root: string, file: string) => openPathTarget(root, file),
   onFileDrop: (cb: (paths: string[], position: { x: number; y: number }) => void) => {
     onDrop = cb
     return Promise.resolve(() => {})
@@ -32,10 +34,8 @@ vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
   writeText: (s: string) => clipboardWrite(s),
 }))
 const openUrl = vi.fn<(u: string) => Promise<void>>(async () => {})
-const revealItemInDir = vi.fn<(p: string) => Promise<void>>(async () => {})
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: (u: string) => openUrl(u),
-  revealItemInDir: (p: string) => revealItemInDir(p),
 }))
 
 // The search addon is xterm's; stub it so "what did the search box ask for" is
@@ -63,6 +63,8 @@ const ptyResize = vi.fn(async (..._a: unknown[]) => {})
 const anywherePublishAgent = vi.fn(async (_id: string, _text: string) => {})
 const clipboardImageToTemp = vi.fn<() => Promise<string | null>>(async () => null)
 const resolvePath = vi.fn<(...a: unknown[]) => Promise<string | null>>(async () => "/repo/src/a.ts")
+const ptyForeground = vi.fn<(id: string) => Promise<string | null>>(async () => null)
+const fileOpenTarget = vi.fn(async (path: string) => ({ root: "/Users/me/notes", file: path }))
 vi.mock("../../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../../lib/api")>()),
   ptySpawn: (...a: unknown[]) => ptySpawn(...a),
@@ -72,6 +74,8 @@ vi.mock("../../../lib/api", async (orig) => ({
   anywherePublishAgent: (id: string, text: string) => anywherePublishAgent(id, text),
   clipboardImageToTemp: () => clipboardImageToTemp(),
   resolvePath: (...a: unknown[]) => resolvePath(...(a as [])),
+  fileOpenTarget: (path: string) => fileOpenTarget(path),
+  ptyForeground: (id: string) => ptyForeground(id),
 }))
 
 import { type ILink, type ILinkProvider, Terminal as XTerm } from "@xterm/xterm"
@@ -219,9 +223,10 @@ describe("output", () => {
     vi.useRealTimers()
   })
 
-  it("reveals a path outside the project in the file manager, rather than failing", async () => {
+  it("opens a path outside the project at its own project, rather than failing", async () => {
     // The editor only opens files under the root, so `resolve_path` returns
     // null for anything else — a dead end for a path the shell just printed.
+    // It opens where Finder's "open with Reado" would: its own project.
     const providers: ILinkProvider[] = []
     const spy = vi.spyOn(XTerm.prototype, "registerLinkProvider").mockImplementation((p) => {
       providers.push(p)
@@ -230,7 +235,7 @@ describe("output", () => {
     resolvePath.mockResolvedValue(null)
     render(<Terminal id="t1" cwd="/repo" active />)
     await waitFor(() => expect(listeners.has("pty-output-t1")).toBe(true))
-    listeners.get("pty-output-t1")?.({ payload: b64("wrote /Users/me/Desktop/notes.md") })
+    listeners.get("pty-output-t1")?.({ payload: b64("wrote /Users/me/notes/plan.md") })
     const links = await waitFor(async () => {
       // WebLinksAddon registers one too; ours is the last in.
       const found = await new Promise<ILink[] | undefined>((res) =>
@@ -240,8 +245,20 @@ describe("output", () => {
       return found as ILink[]
     })
     links[0].activate(new MouseEvent("click"), links[0].text)
-    await waitFor(() => expect(revealItemInDir).toHaveBeenCalledWith("/Users/me/Desktop/notes.md"))
+    await waitFor(() =>
+      expect(openPathTarget).toHaveBeenCalledWith("/Users/me/notes", "/Users/me/notes/plan.md"),
+    )
     spy.mockRestore()
+  })
+
+  it("notices an agent the user started by hand, from its tty", async () => {
+    // Reado only marked panes it launched an agent in, so a `claude` typed into
+    // a shell (or resumed after a restart) read as "agent idle" while it worked.
+    ptyForeground.mockResolvedValue("claude --continue")
+    render(<Terminal id="t1" cwd="/repo" active />)
+    await waitFor(() => expect(listeners.has("pty-output-t1")).toBe(true))
+    listeners.get("pty-output-t1")?.({ payload: b64("Thinking…") })
+    await waitFor(() => expect(useTerminals.getState().agentTerminals).toContain("t1"))
   })
 
   it("doesn't mirror a plain shell pane", async () => {

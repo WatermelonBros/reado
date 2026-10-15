@@ -90,6 +90,12 @@ export const agentInstalled = (bin: string) => invoke<boolean>("agent_installed"
  * (cold launch via a file association). Each is a resolved {root, file} pair. */
 export const drainOpenTargets = () => invoke<{ root: string; file: string }[]>("drain_open_targets")
 
+/** Where a file outside the current project opens: its git root (or directory)
+ * and canonical path, as an OS "open with Reado" would resolve it. Rejects for
+ * anything that isn't an existing file. */
+export const fileOpenTarget = (path: string) =>
+  invoke<{ root: string; file: string }>("file_open_target", { path })
+
 /** Make Reado the default app for the given file extensions. On macOS this sets
  * the handlers directly (`kind: "set"`); on Windows it opens the OS chooser
  * (`kind: "settings"`); elsewhere it may report `"manual"`. */

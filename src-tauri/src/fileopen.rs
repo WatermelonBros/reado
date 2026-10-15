@@ -88,6 +88,14 @@ pub fn open_from_args(app: &AppHandle) {
     }
 }
 
+/// Where `path` opens as a file: its project root and canonical path, resolved
+/// as an OS "open with Reado" would be. For links in the app to files outside
+/// the current project, which the editor can't open in place.
+#[tauri::command]
+pub fn file_open_target(path: String) -> Result<OpenTarget, String> {
+    resolve_target(Path::new(&path)).ok_or_else(|| format!("{path} is not a file"))
+}
+
 /// Drain (and clear) any file-opens queued before the UI was ready, and mark the
 /// UI ready so subsequent opens are emitted live. Called once by the frontend on
 /// the main window's mount.
