@@ -155,6 +155,15 @@ pub fn search_text(
         Err(e) => return Err(Error::Io(e)),
     };
 
+    if !output.status.success() && output.status.code() != Some(1) {
+        let message = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(Error::Other(if message.is_empty() {
+            "search failed".into()
+        } else {
+            message
+        }));
+    }
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     let matches = parse_rg_json(&stdout);
 
@@ -740,6 +749,44 @@ mod tests {
                 hits.len()
             );
         }
+    }
+
+    #[test]
+    fn invalid_regex_returns_a_search_error() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "foo\n").unwrap();
+        for query in ["[a", "ripgrep[a"] {
+            let error = search_text(
+                dir.path().to_string_lossy().into_owned(),
+                query.into(),
+                vec![],
+                vec![],
+                false,
+                false,
+                true,
+                None,
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("unclosed character class"));
+        }
+    }
+
+    #[test]
+    fn a_valid_regex_with_no_matches_succeeds() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "foo\n").unwrap();
+        let hits = search_text(
+            dir.path().to_string_lossy().into_owned(),
+            "missing.*".into(),
+            vec![],
+            vec![],
+            false,
+            false,
+            true,
+            None,
+        )
+        .unwrap();
+        assert!(hits.is_empty());
     }
 
     #[test]
