@@ -23,6 +23,7 @@ commit.
 
 ### Fixed
 
+- Check out the selected remote branch when multiple remotes have the same branch name.
 - **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
   no longer executes external diff drivers or text converters configured by a repository.
 - **Security:** Reado's own reads of a repository (status, diff, blame) no longer run the
