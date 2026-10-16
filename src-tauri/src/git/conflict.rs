@@ -100,7 +100,7 @@ pub fn git_conflict_regions(root: String, file: String) -> Result<Vec<ConflictRe
 fn resolve_in(text: &str, index: usize, side: Side) -> Option<String> {
     let regions = parse_conflicts(text);
     let region = regions.get(index)?;
-    let lines: Vec<&str> = text.lines().collect();
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
     let kept = match side {
         Side::Ours => region.ours.clone(),
         Side::Theirs => region.theirs.clone(),
@@ -111,16 +111,20 @@ fn resolve_in(text: &str, index: usize, side: Side) -> Option<String> {
 
     let before = &lines[..(region.start_line as usize - 1)];
     let after = &lines[region.end_line as usize..];
-    let mut out: Vec<&str> = before.to_vec();
+    let newline = if lines[region.start_line as usize - 1].ends_with("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let mut joined = before.concat();
     if !kept.is_empty() {
-        out.extend(kept.lines());
+        joined.push_str(&kept.replace('\n', newline));
+        joined.push_str(newline);
     }
-    out.extend_from_slice(after);
-    let mut joined = out.join("\n");
-    // Preserve the file's trailing newline: dropping it would show as a spurious
-    // one-line diff on every resolve.
-    if text.ends_with('\n') {
-        joined.push('\n');
+    joined.extend(after.iter().copied());
+    // Preserve the absence of a final newline.
+    if after.is_empty() && !text.ends_with('\n') && joined.ends_with(newline) {
+        joined.truncate(joined.len() - newline.len());
     }
     Some(joined)
 }
@@ -249,6 +253,35 @@ mod tests {
         let without = "a\n<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> b";
         assert!(!resolve_in(without, 0, Side::Ours).unwrap().ends_with('\n'));
         assert!(resolve_in(CONFLICT, 0, Side::Ours).unwrap().ends_with('\n'));
+    }
+
+    #[test]
+    fn resolving_preserves_crlf_for_every_side() {
+        for trailing_newline in [false, true] {
+            let conflict = CONFLICT.replace('\n', "\r\n");
+            let conflict = if trailing_newline {
+                conflict.as_str()
+            } else {
+                conflict.trim_end_matches("\r\n")
+            };
+            for (side, kept) in [
+                (Side::Ours, "ours line"),
+                (Side::Theirs, "theirs line"),
+                (Side::Both, "ours line\r\ntheirs line"),
+            ] {
+                let ending = if trailing_newline { "\r\n" } else { "" };
+                let expected = format!("before\r\n{kept}\r\nafter{ending}");
+                assert_eq!(resolve_in(conflict, 0, side).unwrap(), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn resolving_preserves_line_endings_outside_the_region() {
+        let conflict = CONFLICT.replace('\n', "\r\n");
+        let text = format!("prefix\n{conflict}{conflict}suffix\n");
+        let expected = format!("prefix\nbefore\r\nours line\r\nafter\r\n{conflict}suffix\n");
+        assert_eq!(resolve_in(&text, 0, Side::Ours).unwrap(), expected);
     }
 
     #[test]
