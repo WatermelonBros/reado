@@ -134,7 +134,7 @@ pub fn search_text(
             cmd.arg("-g").arg(format!("!{g}"));
         }
     }
-    cmd.arg(&query);
+    cmd.arg("--").arg(&query);
     // The search path, when scoped. Passed as ripgrep's path argument (with the
     // cwd still at the root) so result paths keep the same shape as an unscoped
     // search — the frontend resolves them the same way either way.
@@ -154,6 +154,15 @@ pub fn search_text(
         }
         Err(e) => return Err(Error::Io(e)),
     };
+
+    if !output.status.success() && output.status.code() != Some(1) {
+        let message = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(Error::Other(if message.is_empty() {
+            "search failed".into()
+        } else {
+            message
+        }));
+    }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let matches = parse_rg_json(&stdout);
@@ -740,6 +749,77 @@ mod tests {
                 hits.len()
             );
         }
+    }
+
+    #[test]
+    fn queries_starting_with_a_dash_are_searched_as_patterns() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("sub");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("a.txt"), "run --help\npass -foo\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        for query in ["--help", "-foo"] {
+            for regex in [false, true] {
+                for scoped in [false, true] {
+                    let hits = search_text(
+                        root.clone(),
+                        query.into(),
+                        vec![],
+                        vec![],
+                        false,
+                        false,
+                        regex,
+                        scoped.then(|| folder.to_string_lossy().into_owned()),
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        hits.len(),
+                        1,
+                        "query={query:?}, regex={regex}, scoped={scoped}"
+                    );
+                    assert!(hits[0].text.contains(query));
+                    assert!(hits[0].path.ends_with("a.txt"));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_regex_returns_a_search_error() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "foo\n").unwrap();
+        for query in ["[a", "ripgrep[a"] {
+            let error = search_text(
+                dir.path().to_string_lossy().into_owned(),
+                query.into(),
+                vec![],
+                vec![],
+                false,
+                false,
+                true,
+                None,
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("unclosed character class"));
+        }
+    }
+
+    #[test]
+    fn a_valid_regex_with_no_matches_succeeds() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "foo\n").unwrap();
+        let hits = search_text(
+            dir.path().to_string_lossy().into_owned(),
+            "missing.*".into(),
+            vec![],
+            vec![],
+            false,
+            false,
+            true,
+            None,
+        )
+        .unwrap();
+        assert!(hits.is_empty());
     }
 
     #[test]

@@ -23,7 +23,7 @@ import { toRelative } from "@/lib/comments"
 import { useFileUndo } from "@/lib/fileUndo"
 import { mod } from "@/lib/shortcuts"
 import { useProject, useWorkspace } from "@/lib/store"
-import { acrossRoots, rootFor, workspaceRoots } from "@/lib/workspace"
+import { rootFor, workspaceRoots } from "@/lib/workspace"
 
 /** Enter searches live; Shift+Enter inserts a newline (multi-line snippets). */
 const multilineKeys = (e: React.KeyboardEvent) => {
@@ -116,7 +116,14 @@ export function SearchPanel() {
   /** Re-run the current search — after a rewrite the old result list is a lie. */
   // Search covers every folder in the workspace: "search the project" has to
   // mean the project you have open, not the first folder of it.
-  const runSearch = () => acrossRoots(workspaceRoots(), (r) => searchText(r, query, opts))
+  const runSearch = async () => {
+    const results = await Promise.allSettled(
+      workspaceRoots().map((r) => searchText(r, query, opts)),
+    )
+    const failure = results.find((r) => r.status === "rejected")
+    if (failure && results.every((r) => r.status === "rejected")) throw failure.reason
+    return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []))
+  }
   const refresh = async () => setMatches(await runSearch())
 
   // Project-wide replace, behind a confirm step and recorded as one undoable
@@ -387,9 +394,7 @@ export function SearchPanel() {
       </div>
       <div className="flex-1 overflow-y-auto">
         {error ? (
-          <p className="px-4 py-4 text-xs text-marker">
-            {error.includes("ripgrep") ? t("search.ripgrepMissing") : error}
-          </p>
+          <p className="px-4 py-4 text-xs text-marker">{error}</p>
         ) : searching && query.trim().length >= 2 ? (
           <p className="px-4 py-6 text-xs leading-relaxed text-faint">{t("search.searching")}</p>
         ) : matches.length === 0 ? (

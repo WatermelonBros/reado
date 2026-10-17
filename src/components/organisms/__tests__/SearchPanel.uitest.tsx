@@ -38,7 +38,7 @@ function seed() {
   // Results preview: walking a list is browsing, so each click lands in the tab
   // the next one replaces rather than adding to the strip.
   const open = vi.fn()
-  useProject.setState({ root: ROOT, openPreview: open })
+  useProject.setState({ root: ROOT, roots: [ROOT], openPreview: open })
   return { open }
 }
 
@@ -52,6 +52,32 @@ beforeEach(() => {
 })
 
 describe("SearchPanel", () => {
+  it("shows regex errors containing ripgrep without treating it as missing", async () => {
+    const error = "regex parse error: ripgrep[a: unclosed character class"
+    searchText.mockRejectedValue(error)
+    seed()
+    useWorkspace.setState({ searchQuery: "ripgrep[a" })
+    render(<SearchPanel />)
+    await userEvent.click(screen.getByRole("button", { name: "search.regex" }))
+
+    expect(await screen.findByText(error)).toBeInTheDocument()
+    expect(screen.queryByText("search.ripgrepMissing")).not.toBeInTheDocument()
+    expect(screen.queryByText("search.noResults")).not.toBeInTheDocument()
+  })
+
+  it("keeps results from available workspace folders when another fails", async () => {
+    seed()
+    useProject.setState({ roots: [ROOT, "/unavailable"] })
+    searchText.mockImplementation((root: string) =>
+      root === ROOT ? Promise.resolve(MATCHES) : Promise.reject("folder unavailable"),
+    )
+    render(<SearchPanel />)
+    await userEvent.type(screen.getByPlaceholderText("search.placeholder"), "foo")
+
+    expect(await screen.findByText("const foo = 1;")).toBeInTheDocument()
+    expect(screen.queryByText("folder unavailable")).not.toBeInTheDocument()
+  })
+
   it("typing a query runs searchText and renders the grouped results", async () => {
     seed()
     render(<SearchPanel />)
