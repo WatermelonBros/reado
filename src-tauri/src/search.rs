@@ -134,7 +134,7 @@ pub fn search_text(
             cmd.arg("-g").arg(format!("!{g}"));
         }
     }
-    cmd.arg(&query);
+    cmd.arg("--").arg(&query);
     // The search path, when scoped. Passed as ripgrep's path argument (with the
     // cwd still at the root) so result paths keep the same shape as an unscoped
     // search — the frontend resolves them the same way either way.
@@ -739,6 +739,39 @@ mod tests {
                 "blank query {q:?} returned {} hits",
                 hits.len()
             );
+        }
+    }
+
+    #[test]
+    fn queries_starting_with_a_dash_are_searched_as_patterns() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("sub");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("a.txt"), "run --help\npass -foo\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+        for query in ["--help", "-foo"] {
+            for regex in [false, true] {
+                for scoped in [false, true] {
+                    let hits = search_text(
+                        root.clone(),
+                        query.into(),
+                        vec![],
+                        vec![],
+                        false,
+                        false,
+                        regex,
+                        scoped.then(|| folder.to_string_lossy().into_owned()),
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        hits.len(),
+                        1,
+                        "query={query:?}, regex={regex}, scoped={scoped}"
+                    );
+                    assert!(hits[0].text.contains(query));
+                    assert!(hits[0].path.ends_with("a.txt"));
+                }
+            }
         }
     }
 
