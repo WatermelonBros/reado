@@ -23,6 +23,7 @@ commit.
 
 ### Fixed
 
+- Preserve CRLF line endings when resolving merge conflicts.
 - Find search queries starting with a dash, such as `--help` or `-foo`.
 - **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
   no longer executes external diff drivers or text converters configured by a repository.
