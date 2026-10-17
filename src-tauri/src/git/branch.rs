@@ -43,19 +43,31 @@ pub fn git_branches(root: String) -> GitBranches {
     }
 }
 
-/// Check out a branch. For a remote branch ("origin/feat") the remote prefix is
-/// stripped so git's DWIM creates a local tracking branch.
+/// Check out a local branch or one tracking the selected remote ref.
 #[tauri::command]
 pub fn git_checkout(root: String, branch: String, remote: bool) -> Result<(), String> {
-    let target = if remote {
-        branch
-            .split_once('/')
-            .map(|(_, b)| b.to_string())
-            .unwrap_or_else(|| branch.clone())
-    } else {
-        branch.clone()
-    };
-    run_git_checked(&root, &["checkout", &target])
+    if !remote {
+        return run_git_checked(&root, &["checkout", &branch]);
+    }
+    let upstream = format!("refs/remotes/{branch}");
+    let local = run_git(
+        Path::new(&root),
+        &[
+            "for-each-ref",
+            "--format=%(refname:lstrip=2)%09%(upstream)",
+            "refs/heads/",
+        ],
+    )
+    .and_then(|branches| {
+        branches.lines().find_map(|entry| {
+            let (name, tracking) = entry.split_once('\t')?;
+            (tracking == upstream).then(|| name.to_string())
+        })
+    });
+    match local {
+        Some(local) => run_git_checked(&root, &["checkout", &local]),
+        None => run_git_checked(&root, &["checkout", "--track", &branch]),
+    }
 }
 
 /// Create and switch to a new branch (`git checkout -b`).
@@ -105,6 +117,92 @@ pub fn git_tag_delete(root: String, name: String) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::git::test_support::repo;
+
+    fn repo_with_remote_branches(name: &str) -> std::path::PathBuf {
+        let dir = repo(name);
+        let root = dir.to_string_lossy().into_owned();
+        for remote in ["origin", "upstream"] {
+            run_git_checked(&root, &["remote", "add", remote, "."]).unwrap();
+        }
+        run_git_checked(
+            &root,
+            &["update-ref", "refs/remotes/origin/feature/nested", "HEAD"],
+        )
+        .unwrap();
+        run_git_checked(&root, &["commit", "--allow-empty", "-qm", "upstream tip"]).unwrap();
+        run_git_checked(
+            &root,
+            &["update-ref", "refs/remotes/upstream/feature/nested", "HEAD"],
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn remote_checkout_uses_the_selected_remote() {
+        for prefer_origin in [false, true] {
+            let dir = repo_with_remote_branches(if prefer_origin {
+                "checkout-preferred-remote"
+            } else {
+                "checkout-ambiguous-remote"
+            });
+            let root = dir.to_string_lossy().into_owned();
+            if prefer_origin {
+                run_git_checked(&root, &["config", "checkout.defaultRemote", "origin"]).unwrap();
+            }
+            git_checkout(root, "upstream/feature/nested".into(), true).unwrap();
+            assert_eq!(
+                run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"]).as_deref(),
+                Some("feature/nested")
+            );
+            assert_eq!(
+                run_git(&dir, &["rev-parse", "--abbrev-ref", "@{upstream}"]).as_deref(),
+                Some("upstream/feature/nested")
+            );
+            assert_eq!(
+                run_git(&dir, &["rev-parse", "HEAD"]),
+                run_git(&dir, &["rev-parse", "refs/remotes/upstream/feature/nested"])
+            );
+            let root = dir.to_string_lossy().into_owned();
+            git_checkout(root.clone(), "main".into(), false).unwrap();
+            git_checkout(root, "upstream/feature/nested".into(), true).unwrap();
+            assert_eq!(
+                run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"]).as_deref(),
+                Some("feature/nested")
+            );
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn remote_checkout_does_not_replace_an_existing_local_branch() {
+        let dir = repo_with_remote_branches("checkout-existing-local");
+        let root = dir.to_string_lossy().into_owned();
+        run_git_checked(
+            &root,
+            &[
+                "branch",
+                "--track",
+                "feature/nested",
+                "origin/feature/nested",
+            ],
+        )
+        .unwrap();
+        assert!(git_checkout(root, "upstream/feature/nested".into(), true).is_err());
+        assert_eq!(
+            run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"]).as_deref(),
+            Some("main")
+        );
+        assert_eq!(
+            run_git(&dir, &["rev-parse", "refs/heads/feature/nested"]),
+            run_git(&dir, &["rev-parse", "refs/remotes/origin/feature/nested"])
+        );
+        assert_eq!(
+            run_git(&dir, &["config", "branch.feature/nested.remote"]).as_deref(),
+            Some("origin")
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn tags_are_listed_created_and_deleted() {
