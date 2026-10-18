@@ -27,6 +27,10 @@ commit.
 - Find search queries starting with a dash, such as `--help` or `-foo`.
 - Show invalid regular expression errors in project search instead of reporting no matches.
 - Check out the selected remote branch when multiple remotes have the same branch name.
+- **Security:** the browser pane opens only `http` and `https` pages. A design comment
+  in a cloned repository's `.reado/` could point it at a `file:` or `data:` URL.
+- **Security:** an agent command already waiting in `.reado/` when the browser pane
+  opens is no longer run. Only commands sent while the pane is open are.
 - **Security:** reading diffs in the editor, review, staging panel or Reado Anywhere
   no longer executes external diff drivers or text converters configured by a repository.
 - **Security:** Reado's own reads of a repository (status, diff, blame) no longer run the

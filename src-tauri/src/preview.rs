@@ -363,6 +363,20 @@ fn screen_rect<R: Runtime>(
     Ok((pos, size))
 }
 
+/// The pane is a web browser: it loads `http`/`https` pages and nothing else.
+/// URLs reach it from places a cloned repository controls (design comments in
+/// `.reado/`, agent commands), and a `file://` or `data:` page there would run its
+/// own script with the disk one `fetch()` away. One check here covers every way in.
+fn web_url(url: &str) -> Result<tauri::Url, String> {
+    let parsed = tauri::Url::parse(url).map_err(|e| e.to_string())?;
+    match parsed.scheme() {
+        "http" | "https" => Ok(parsed),
+        other => Err(format!(
+            "the preview only opens web pages, not {other}: URLs"
+        )),
+    }
+}
+
 /// Open the preview at `url` over the given pane rect, or navigate + reposition an
 /// existing one. Called by the frontend when the user opens/moves the pane.
 #[tauri::command]
@@ -374,7 +388,7 @@ pub fn preview_open<R: Runtime>(
     w: f64,
     h: f64,
 ) -> Result<(), String> {
-    let parsed = tauri::Url::parse(&url).map_err(|e| e.to_string())?;
+    let parsed = web_url(&url)?;
     let (pos, size) = screen_rect(&window, x, y, w, h)?;
     if let Some(pv) = find_preview(&window) {
         pv.navigate(parsed).map_err(|e| e.to_string())?;
@@ -652,7 +666,7 @@ pub fn preview_detach<R: Runtime>(
     if let Some(wv) = find_preview(&window) {
         let _ = wv.destroy();
     }
-    let parsed = tauri::Url::parse(&url).map_err(|e| e.to_string())?;
+    let parsed = web_url(&url)?;
     let label = format!("previewwin::{}", window.label());
     tauri::WebviewWindowBuilder::new(&app, label, WebviewUrl::External(parsed))
         .title("Preview — Reado")
@@ -693,7 +707,7 @@ pub fn preview_set_bounds<R: Runtime>(
 /// Navigate the open preview to a new URL (URL-bar / agent navigation).
 #[tauri::command]
 pub fn preview_navigate<R: Runtime>(window: Window<R>, url: String) -> Result<(), String> {
-    let parsed = tauri::Url::parse(&url).map_err(|e| e.to_string())?;
+    let parsed = web_url(&url)?;
     if let Some(wv) = find_preview(&window) {
         wv.navigate(parsed).map_err(|e| e.to_string())?;
     }
@@ -764,6 +778,20 @@ pub async fn host_resolves(name: String) -> bool {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+
+    #[test]
+    fn the_pane_opens_web_pages_only() {
+        assert!(web_url("http://localhost:5173/").is_ok());
+        assert!(web_url("https://example.com/x").is_ok());
+        for url in [
+            "file:///Users/me/.ssh/id_ed25519",
+            "data:text/html,<script>alert(1)</script>",
+            "javascript:alert(1)",
+            "blob:http://localhost/1",
+        ] {
+            assert!(web_url(url).is_err(), "{url}");
+        }
+    }
 
     #[tokio::test]
     async fn a_name_that_resolves_is_a_host_and_one_that_does_not_is_a_search() {

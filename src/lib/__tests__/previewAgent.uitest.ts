@@ -44,7 +44,7 @@ const lastResult = () =>
 const ranScripts = () =>
   api.previewEval.mock.calls.map(([s]) => s).filter((s) => s !== PAGE_STATE_JS)
 
-let memo: { lastCmdId: string; askedFor: string }
+let memo: { lastCmdId: string | null; askedFor: string }
 const run = () => runPendingAgentCommand(ROOT, memo, () => undefined)
 
 beforeEach(() => {
@@ -106,6 +106,20 @@ describe("the agent command gate", () => {
     await run()
     expect(ranScripts()).toEqual(["x"])
     expect(api.previewPutResult).toHaveBeenCalledTimes(1)
+  })
+
+  it("never runs a command that was already there when the pane opened", async () => {
+    // .reado/ can arrive with a cloned repository, command file included.
+    memo = { lastCmdId: null, askedFor: "" }
+    page({ hasSecret: false, href: PAGE })
+    queue({ id: "shipped", op: "eval", arg: "steal()" })
+    await run()
+    await run()
+    expect(ranScripts()).toEqual([])
+    // The agent's next command, written after the pane opened, does run.
+    queue({ id: "c1", op: "eval", arg: "document.title" })
+    await run()
+    expect(ranScripts()).toEqual(["document.title"])
   })
 
   it("takes nothing from the queue while agent access is off", async () => {

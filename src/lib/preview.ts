@@ -198,8 +198,14 @@ export const usePreview = create<PreviewState>()(
       // Turning the agent off revokes what it was granted: the toggle is the one
       // control that has to mean "and nothing it was allowed before, either".
       setAgentAccess: (on) => set(on ? { agentAccess: true } : { agentAccess: false, grants: {} }),
+      // "null" is the origin of every file:, data: and blob: URL: allowing it once
+      // would allow all of them.
       addAllowedOrigin: (origin) =>
-        set((s) => (s.allowlist.includes(origin) ? s : { allowlist: [...s.allowlist, origin] })),
+        set((s) =>
+          origin === "null" || s.allowlist.includes(origin)
+            ? s
+            : { allowlist: [...s.allowlist, origin] },
+        ),
       addSecret: (value) =>
         set((s) => (s.secrets.includes(value) ? s : { secrets: [...s.secrets, value] })),
       grantPage: (url) =>

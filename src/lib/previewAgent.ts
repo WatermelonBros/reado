@@ -42,10 +42,14 @@ export function mirrorPreviewState(root: string, memo: { lastPersisted: string }
  * `memo` carries the last command id run (a command is run once) and the origin
  * an access request was last put up for. `frameRect` is the pane's on-screen
  * rectangle, for a frame capture.
+ *
+ * `lastCmdId` starts `null`: the first read only records what is already there.
+ * The command file lives in `.reado/`, which a cloned repository can ship, so a
+ * command that predates this pane was not sent to it and must never run.
  */
 export async function runPendingAgentCommand(
   root: string,
-  memo: { lastCmdId: string; askedFor: string },
+  memo: { lastCmdId: string | null; askedFor: string },
   frameRect: () => DOMRect | undefined,
 ): Promise<void> {
   const s = usePreview.getState()
@@ -53,6 +57,10 @@ export async function runPendingAgentCommand(
   try {
     const raw = await previewTakeCmd(root)
     const cmd = raw ? (JSON.parse(raw) as { id?: string; op?: string; arg?: string }) : null
+    if (memo.lastCmdId === null) {
+      memo.lastCmdId = cmd?.id ?? ""
+      return
+    }
     if (cmd?.id && cmd.id !== memo.lastCmdId) {
       memo.lastCmdId = cmd.id
       let ok = true

@@ -133,6 +133,11 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
+/** An agent command written after the pane opened: the pane's first read finds
+ *  the queue empty, so the command is new to it (one already there never runs). */
+const sendCmd = (json: string) =>
+  api.previewTakeCmd.mockResolvedValueOnce(null).mockResolvedValue(json)
+
 describe("parking the native webview", () => {
   it("opens it over the placeholder, at the placeholder's rect", async () => {
     render(<BrowserPanel />)
@@ -401,13 +406,12 @@ describe("draining the page bridge", () => {
 describe("running the agent's commands", () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
-  const tick = () => vi.advanceTimersByTimeAsync(750)
+  /** Two polls: the first finds the queue as the pane opened, the second the command. */
+  const tick = () => vi.advanceTimersByTimeAsync(1450)
 
   it("evaluates its script in the page and reports the result", async () => {
     usePreview.setState({ agentAccess: true })
-    api.previewTakeCmd.mockResolvedValue(
-      JSON.stringify({ id: "1", op: "eval", arg: "document.title" }),
-    )
+    sendCmd(JSON.stringify({ id: "1", op: "eval", arg: "document.title" }))
     api.previewEval.mockImplementation(async (s: string) =>
       s.includes("drain()") ? "null" : "My page",
     )
@@ -421,9 +425,7 @@ describe("running the agent's commands", () => {
 
   it("resolves a relative navigation against the current URL", async () => {
     usePreview.setState({ agentAccess: true })
-    api.previewTakeCmd.mockResolvedValue(
-      JSON.stringify({ id: "2", op: "navigate", arg: "/roadmap" }),
-    )
+    sendCmd(JSON.stringify({ id: "2", op: "navigate", arg: "/roadmap" }))
     render(<BrowserPanel />)
     await tick()
     expect(api.previewNavigate).toHaveBeenCalledWith("http://localhost:5173/roadmap")
@@ -432,9 +434,7 @@ describe("running the agent's commands", () => {
 
   it("refuses to navigate off the allowlist", async () => {
     usePreview.setState({ agentAccess: true })
-    api.previewTakeCmd.mockResolvedValue(
-      JSON.stringify({ id: "3", op: "navigate", arg: "https://evil.example" }),
-    )
+    sendCmd(JSON.stringify({ id: "3", op: "navigate", arg: "https://evil.example" }))
     render(<BrowserPanel />)
     await tick()
     expect(api.previewNavigate).not.toHaveBeenCalled()
@@ -446,7 +446,7 @@ describe("running the agent's commands", () => {
 
   it("reports an unknown op rather than guessing", async () => {
     usePreview.setState({ agentAccess: true })
-    api.previewTakeCmd.mockResolvedValue(JSON.stringify({ id: "4", op: "teleport" }))
+    sendCmd(JSON.stringify({ id: "4", op: "teleport" }))
     render(<BrowserPanel />)
     await tick()
     expect(api.previewPutResult).toHaveBeenCalledWith(
@@ -457,14 +457,14 @@ describe("running the agent's commands", () => {
 
   it("captures a frame of the pane", async () => {
     usePreview.setState({ agentAccess: true })
-    api.previewTakeCmd.mockResolvedValue(JSON.stringify({ id: "5", op: "frame" }))
+    sendCmd(JSON.stringify({ id: "5", op: "frame" }))
     render(<BrowserPanel />)
     await tick()
     expect(api.previewCaptureFrame).toHaveBeenCalledWith(100, 50, 800, 600)
   })
 
   it("runs nothing while agent access is off", async () => {
-    api.previewTakeCmd.mockResolvedValue(JSON.stringify({ id: "6", op: "eval", arg: "1" }))
+    sendCmd(JSON.stringify({ id: "6", op: "eval", arg: "1" }))
     render(<BrowserPanel />)
     await tick()
     // The poll itself must be alive — it is only the agent queue that is gated.
@@ -567,7 +567,7 @@ describe("finding the dev server", () => {
 describe("more of the page bridge", () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
-  const tick = () => vi.advanceTimersByTimeAsync(750)
+  const tick = () => vi.advanceTimersByTimeAsync(1450) // two polls: see sendCmd
 
   it("recreates the webview when it vanished under an open pane", async () => {
     api.previewEval.mockRejectedValue(new Error("no preview for this window"))
@@ -725,7 +725,7 @@ describe("more of the page bridge", () => {
 
   it("captures the pane's own rect, whatever it currently measures", async () => {
     usePreview.setState({ agentAccess: true })
-    api.previewTakeCmd.mockResolvedValue(JSON.stringify({ id: "9", op: "frame" }))
+    sendCmd(JSON.stringify({ id: "9", op: "frame" }))
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
       width: 300,
       height: 200,
@@ -739,12 +739,13 @@ describe("more of the page bridge", () => {
     } as DOMRect)
     render(<BrowserPanel />)
     await tick()
+    await tick()
     expect(api.previewCaptureFrame).toHaveBeenCalledWith(7, 5, 300, 200)
   })
 
   it("reports an eval that threw inside the page", async () => {
     usePreview.setState({ agentAccess: true })
-    api.previewTakeCmd.mockResolvedValue(JSON.stringify({ id: "10", op: "eval", arg: "boom" }))
+    sendCmd(JSON.stringify({ id: "10", op: "eval", arg: "boom" }))
     api.previewEval.mockImplementation(async (s: string) => {
       if (s.includes("drain()")) return "null"
       throw new Error("ReferenceError: boom")
@@ -760,7 +761,7 @@ describe("more of the page bridge", () => {
 
   it("runs a command only once, however often it is polled", async () => {
     usePreview.setState({ agentAccess: true })
-    api.previewTakeCmd.mockResolvedValue(JSON.stringify({ id: "11", op: "eval", arg: "1" }))
+    sendCmd(JSON.stringify({ id: "11", op: "eval", arg: "1" }))
     render(<BrowserPanel />)
     await tick()
     await tick()
@@ -885,7 +886,7 @@ describe("a comment clicked in the list", () => {
 describe("a page holding a credential", () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
-  const tick = () => vi.advanceTimersByTimeAsync(750)
+  const tick = () => vi.advanceTimersByTimeAsync(1450) // two polls: see sendCmd
 
   /** The page answers the gate probe; anything else is the command's own script. */
   const pageHolds = (hasSecret: boolean, href = "http://localhost:5173/login") =>
@@ -896,9 +897,7 @@ describe("a page holding a credential", () => {
     })
 
   const command = () =>
-    api.previewTakeCmd.mockResolvedValue(
-      JSON.stringify({ id: "9", op: "eval", arg: "document.querySelector('input').value" }),
-    )
+    sendCmd(JSON.stringify({ id: "9", op: "eval", arg: "document.querySelector('input').value" }))
 
   it("refuses the agent's command and asks the user instead", async () => {
     usePreview.setState({ agentAccess: true })
@@ -963,7 +962,7 @@ describe("a page holding a credential", () => {
     render(<BrowserPanel />)
     await tick()
     usePreview.getState().setAccessRequest(null) // the user said "not now"
-    api.previewTakeCmd.mockResolvedValue(JSON.stringify({ id: "10", op: "eval", arg: "x" }))
+    sendCmd(JSON.stringify({ id: "10", op: "eval", arg: "x" }))
     await tick()
     expect(usePreview.getState().accessRequest).toBeNull()
   })
@@ -971,9 +970,7 @@ describe("a page holding a credential", () => {
   it("offers the agent no way to reach the vault", async () => {
     usePreview.setState({ agentAccess: true })
     pageHolds(false)
-    api.previewTakeCmd.mockResolvedValue(
-      JSON.stringify({ id: "11", op: "vault_lookup", arg: "https://example.com" }),
-    )
+    sendCmd(JSON.stringify({ id: "11", op: "vault_lookup", arg: "https://example.com" }))
     render(<BrowserPanel />)
     await tick()
     expect(api.previewPutResult).toHaveBeenCalledWith(ROOT, expect.stringContaining("unknown op"))

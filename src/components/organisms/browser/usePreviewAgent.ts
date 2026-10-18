@@ -17,8 +17,11 @@ export function usePreviewAgentCommands(
 ): () => Promise<void> {
   // The last command run, and the page we've already put an access request up
   // for — so a refused agent that keeps trying doesn't re-prompt the user who
-  // already said "not now".
-  const memo = useRef({ lastCmdId: "", askedFor: "" })
+  // already said "not now". `null` until the first read (see runPendingAgentCommand).
+  const memo = useRef<{ lastCmdId: string | null; askedFor: string }>({
+    lastCmdId: null,
+    askedFor: "",
+  })
   return () =>
     runPendingAgentCommand(root, memo.current, () => bodyRef.current?.getBoundingClientRect())
 }
