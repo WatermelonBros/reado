@@ -16,9 +16,13 @@ commit.
 - Specialized diff previews on macOS and Linux: inspect a configured text converter
   or external diff command, then approve it for one preview. Results are read-only;
   standard diffs and staging keep using the original contents with drivers disabled.
+- macOS: right-clicking Reado in the Dock offers **New Window**, as VS Code does.
 
 ### Changed
 
+- The Files panel shows its read progress on a row of its own, with a progress bar, so
+  it no longer crowds the header actions. In a narrow sidebar those actions fold into
+  a single "More actions" menu instead of being cut off.
 - Clicking a path in the terminal to a file outside the open project now opens it in Reado, at its own project, the way "Open with Reado" from Finder does. It used to show the file in Finder.
 
 ### Fixed

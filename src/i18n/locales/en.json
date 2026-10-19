@@ -44,6 +44,7 @@
     "remove": "Remove from list"
   },
   "tree": {
+    "more": "More actions",
     "deleteMany": "Delete {count} items",
     "selected": "{count} selected",
     "findInFolder": "Find in Folder…",

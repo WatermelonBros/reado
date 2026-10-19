@@ -297,9 +297,12 @@ describe("the workbench layout", () => {
     render(<ProjectView root={ROOT} />)
     await waitFor(() => expect(api.listFiles).toHaveBeenCalled())
     useReadProgress.setState({ read: new Set(["src/a.ts"]) })
-    // The count is three text nodes ("1", "/", "2"), so match the element.
+    // The count is three text nodes ("1", "/", "2"), so match the element — the
+    // span, not the progress row around it.
     expect(
-      await screen.findByText((_, el) => el?.textContent?.trim().startsWith("1/2") === true),
+      await screen.findByText(
+        (_, el) => el?.tagName === "SPAN" && el.textContent?.trim().startsWith("1/2") === true,
+      ),
     ).toBeInTheDocument()
   })
 

@@ -44,6 +44,7 @@
     "remove": "Rimuovi dalla lista"
   },
   "tree": {
+    "more": "Altre azioni",
     "deleteMany": "Elimina {count} elementi",
     "selected": "{count} selezionati",
     "findInFolder": "Cerca nella cartella…",

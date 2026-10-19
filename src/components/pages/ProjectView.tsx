@@ -7,13 +7,14 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
-import { ContextMenu } from "@/components/atoms/ContextMenu"
+import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { IconButton } from "@/components/atoms/IconButton"
 import {
   CloseIcon,
   CollapseAllIcon,
   EyeIcon,
   EyeOffIcon,
+  MoreIcon,
   NewFileIcon,
   NewFolderIcon,
   RefreshIcon,
@@ -64,6 +65,9 @@ const MIN_EDITOR_WIDTH = 360
 // layout), the sidebar went down to 40px — file names gone, its header cut.
 // There, the two share the space instead.
 const MIN_SIDEBAR_WIDTH = 180
+/** Below this sidebar width the Files header can't fit its six actions beside
+ *  the title, so they fold into one "more" menu instead of being clipped. */
+const FILES_ACTIONS_INLINE_WIDTH = 240
 
 export function ProjectView({ root }: { root: string }) {
   const splitPath = useProject((s) => s.splitPath)
@@ -119,6 +123,7 @@ export function ProjectView({ root }: { root: string }) {
   useProjectWatcher(root)
 
   const [toolMenu, setToolMenu] = useState<{ x: number; y: number; tool: Tool } | null>(null)
+  const [filesMenu, setFilesMenu] = useState<{ x: number; y: number } | null>(null)
   const onRight = useSettings((s) => s.sidebarSide) === "right"
   const selectedTool = useWorkspace((s) => s.tool)
   // A tool the user has docked renders there, not here — otherwise the same
@@ -236,6 +241,46 @@ export function ProjectView({ root }: { root: string }) {
     Math.min(dragWidth ?? sidebarWidth, layoutWidth - MIN_EDITOR_WIDTH),
   )
 
+  const icon = "h-[15px] w-[15px]"
+  const filesActions: ContextMenuItem[] = [
+    {
+      label: t("file.newFile"),
+      onSelect: () => void newFile(),
+      icon: <NewFileIcon className={icon} />,
+    },
+    {
+      label: t("tree.newFolder"),
+      onSelect: () => void newFolder(),
+      icon: <NewFolderIcon className={icon} />,
+    },
+    {
+      label: t("tree.filter"),
+      checked: filterOpen,
+      onSelect: () => useTreeFilter.getState().toggle(),
+      icon: <SearchIcon className={icon} />,
+    },
+    {
+      label: t("tree.refresh"),
+      onSelect: () => useProject.getState().bumpTree(),
+      icon: <RefreshIcon className={icon} />,
+    },
+    {
+      label: t("tree.collapseAll"),
+      onSelect: () => useProject.getState().collapseTree(),
+      icon: <CollapseAllIcon className={icon} />,
+    },
+    {
+      label: t("tree.showHidden"),
+      checked: showHidden,
+      onSelect: () => setShowHidden(!showHidden),
+      icon: showHidden ? (
+        <EyeIcon className={icon} weight="duotone" />
+      ) : (
+        <EyeOffIcon className={icon} />
+      ),
+    },
+  ]
+
   const { columns, rowRegions, rowPanel } = workbenchColumns({
     showActivityBar,
     onRight,
@@ -306,74 +351,58 @@ export function ProjectView({ root }: { root: string }) {
                 onRight ? "-left-1" : "-right-1"
               }`}
             />
-            <header className="flex h-9 flex-none items-center justify-between border-b border-line pr-2 pl-3 text-xs font-medium tracking-wide text-muted uppercase">
-              <span className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  title={t("dock.menu")}
-                  className="-ml-1 px-1 text-inherit uppercase"
-                  onClick={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect()
-                    setToolMenu({ x: r.left, y: r.bottom, tool })
-                  }}
-                >
-                  {t(TOOL_TITLE[tool])}
-                </Button>
-                {tool === "files" && totalFiles > 0 && (
-                  <span className="text-[10px] font-normal normal-case text-faint">
-                    {readCount}/{totalFiles} {t("progress.read")}
+            <header className="flex h-9 flex-none items-center justify-between gap-2 border-b border-line pr-2 pl-3 text-xs font-medium tracking-wide text-muted uppercase">
+              <Button
+                size="sm"
+                title={t("dock.menu")}
+                className="-ml-1 min-w-0 truncate px-1 text-inherit uppercase"
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect()
+                  setToolMenu({ x: r.left, y: r.bottom, tool })
+                }}
+              >
+                {t(TOOL_TITLE[tool])}
+              </Button>
+              {tool === "files" &&
+                (appliedSidebarWidth < FILES_ACTIONS_INLINE_WIDTH ? (
+                  <IconButton
+                    size="sm"
+                    label={t("tree.more")}
+                    active={!!filesMenu}
+                    onClick={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect()
+                      setFilesMenu({ x: r.left, y: r.bottom })
+                    }}
+                    icon={<MoreIcon className="h-[15px] w-[15px]" />}
+                  />
+                ) : (
+                  <span className="flex flex-none items-center gap-0.5">
+                    {filesActions.map((a) => (
+                      <IconButton
+                        key={a.label}
+                        size="sm"
+                        label={a.label}
+                        active={a.checked}
+                        onClick={a.onSelect}
+                        icon={a.icon}
+                      />
+                    ))}
                   </span>
-                )}
-              </span>
-              {tool === "files" && (
-                <span className="flex items-center gap-0.5">
-                  <IconButton
-                    size="sm"
-                    label={t("file.newFile")}
-                    onClick={() => void newFile()}
-                    icon={<NewFileIcon className="h-[15px] w-[15px]" />}
-                  />
-                  <IconButton
-                    size="sm"
-                    label={t("tree.newFolder")}
-                    onClick={() => void newFolder()}
-                    icon={<NewFolderIcon className="h-[15px] w-[15px]" />}
-                  />
-                  <IconButton
-                    size="sm"
-                    label={t("tree.filter")}
-                    active={filterOpen}
-                    onClick={() => useTreeFilter.getState().toggle()}
-                    icon={<SearchIcon className="h-[15px] w-[15px]" />}
-                  />
-                  <IconButton
-                    size="sm"
-                    label={t("tree.refresh")}
-                    onClick={() => useProject.getState().bumpTree()}
-                    icon={<RefreshIcon className="h-[15px] w-[15px]" />}
-                  />
-                  <IconButton
-                    size="sm"
-                    label={t("tree.collapseAll")}
-                    onClick={() => useProject.getState().collapseTree()}
-                    icon={<CollapseAllIcon className="h-[15px] w-[15px]" />}
-                  />
-                  <IconButton
-                    size="sm"
-                    label={t("tree.showHidden")}
-                    active={showHidden}
-                    onClick={() => setShowHidden(!showHidden)}
-                    icon={
-                      showHidden ? (
-                        <EyeIcon className="h-[15px] w-[15px]" weight="duotone" />
-                      ) : (
-                        <EyeOffIcon className="h-[15px] w-[15px]" />
-                      )
-                    }
+                ))}
+            </header>
+            {tool === "files" && totalFiles > 0 && (
+              <div className="flex flex-none items-center gap-2 border-b border-line px-3 py-1 text-[10px] text-faint">
+                <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-line">
+                  <span
+                    className="block h-full bg-accent"
+                    style={{ width: `${Math.min(100, (readCount / totalFiles) * 100)}%` }}
                   />
                 </span>
-              )}
-            </header>
+                <span className="flex-none tabular-nums">
+                  {readCount}/{totalFiles} {t("progress.read")}
+                </span>
+              </div>
+            )}
             <div className="min-h-0 flex-1 overflow-hidden">
               <ToolPanelBody tool={tool} />
             </div>
@@ -490,6 +519,14 @@ export function ProjectView({ root }: { root: string }) {
                   setToolMenu(null)
                 },
               }))}
+          />
+        )}
+        {filesMenu && (
+          <ContextMenu
+            x={filesMenu.x}
+            y={filesMenu.y}
+            onClose={() => setFilesMenu(null)}
+            items={filesActions}
           />
         )}
         <GitignorePrompt />
