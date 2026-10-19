@@ -154,7 +154,7 @@ it.each(COMBOS)(
     usePalette.getState().toggleSettings(true)
     const drawer = await screen.findByRole("dialog")
     for (const tab of visible(
-      drawer.querySelectorAll('[data-scope="segment-group"][data-part="item"]'),
+      drawer.querySelectorAll('[data-scope="segmented-control"][data-part="item"]'),
     )) {
       await userEvent.click(tab, { timeout: 3000 })
       await wait(150)

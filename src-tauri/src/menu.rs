@@ -75,6 +75,8 @@ fn forward_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
 }
 
 /// Send a menu command id to the window it is meant for (see above).
+/// macOS-only: the app menu and the Dock menu are its two callers.
+#[cfg(target_os = "macos")]
 fn forward_menu_id(app: &tauri::AppHandle, id: String) {
     use tauri::{Emitter, Manager};
 
