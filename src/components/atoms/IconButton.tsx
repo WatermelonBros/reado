@@ -5,7 +5,7 @@
  * site.
  *
  * `label` is required: it is both the accessible name (`aria-label`) and the
- * tooltip text (via the Ark-based `Tooltip`). A toggle passes `active` (rendered
+ * tooltip text (via the rind-based `Tooltip`). A toggle passes `active` (rendered
  * accent-tinted, `aria-pressed`); a destructive action passes `danger`.
  */
 import { type ButtonHTMLAttributes, cloneElement, isValidElement, type ReactNode } from "react"

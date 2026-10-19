@@ -34,7 +34,7 @@ describe("OutputPanel", () => {
     // (twice: the record's own tag, and the channel picker's option)
     expect(screen.getAllByText("lsp:typescript").length).toBeGreaterThan(0)
     // Both pickers are there to narrow it; what they select is `filterRecords`,
-    // which has its own tests (an Ark Select cannot be opened in this DOM).
+    // which has its own tests (a rind Select cannot be opened in this DOM).
     expect(screen.getByLabelText("output.channel")).toBeInTheDocument()
     expect(screen.getByLabelText("output.level")).toBeInTheDocument()
   })

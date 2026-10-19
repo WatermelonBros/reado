@@ -179,13 +179,21 @@ describe("the paired devices", () => {
 describe("the security preferences", () => {
   it("binds to a chosen interface, and back to automatic", async () => {
     render(<AnywhereDialog />)
-    await userEvent.click(await screen.findByRole("combobox", { name: "anywhere.iface" }))
-    // Ark renders the listbox in a portal; pick the interface by its own label.
-    await userEvent.click(await screen.findByText("en0 · 192.168.1.5"))
+    // By keyboard: the dialog's initial focus is programmatic, which rind reads
+    // as assistive-tech input, and happy-dom's synthetic pointer never resets it
+    // (a real click works — checked in the app).
+    const iface = await screen.findByRole("combobox", { name: "anywhere.iface" })
+    iface.focus()
+    await userEvent.keyboard("{Enter}")
+    // rind renders the listbox in a portal; pick the interface by its own label.
+    await screen.findByRole("option", { name: "en0 · 192.168.1.5" })
+    await userEvent.keyboard("{ArrowDown}{Enter}")
     await waitFor(() => expect(api.anywhereSetBind).toHaveBeenCalledWith("192.168.1.5"))
 
-    await userEvent.click(screen.getByRole("combobox", { name: "anywhere.iface" }))
-    await userEvent.click((await screen.findAllByText("anywhere.ifaceAuto"))[0])
+    iface.focus()
+    await userEvent.keyboard("{Enter}")
+    await screen.findByRole("option", { name: "anywhere.ifaceAuto" })
+    await userEvent.keyboard("{ArrowUp}{Enter}")
     await waitFor(() => expect(api.anywhereSetBind).toHaveBeenLastCalledWith(null))
   })
 
@@ -201,7 +209,9 @@ describe("the security preferences", () => {
     api.anywhereSetMdns.mockRejectedValue(new Error("read-only config"))
     render(<AnywhereDialog />)
     const mdns = await screen.findByRole("checkbox", { name: /anywhere\.mdns/ })
-    await userEvent.click(mdns)
+    // By keyboard, for the reason given in the interface test above.
+    mdns.focus()
+    await userEvent.keyboard(" ")
     expect(await screen.findByText(/read-only config/)).toBeInTheDocument()
   })
 

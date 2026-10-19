@@ -5,7 +5,7 @@
  * there is something to choose — pick up where you left off, another tour, an
  * added entry — it opens a short menu instead.
  */
-import { Menu } from "@ark-ui/react/menu"
+import { Menu } from "@rind-ui/react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/atoms/Button"
 import { Dropdown, MenuRow } from "@/components/atoms/Dropdown"

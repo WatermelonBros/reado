@@ -1,7 +1,7 @@
-// The Settings drawer (Ark Dialog + a vertical SegmentedControl of tabs). i18n is
+// The Settings drawer (rind Dialog + a vertical SegmentedControl of tabs). i18n is
 // stubbed globally (t(k) => k). The settings/palette stores are the real ones —
 // we assert against them — while every Tauri/lib side effect the component pulls
-// in is mocked so import never touches a missing webview host. Ark's dialog
+// in is mocked so import never touches a missing webview host. rind's dialog
 // content only mounts under REAL timers, so we open it and `await findBy…`.
 
 import { render, screen } from "@testing-library/react"
@@ -55,7 +55,7 @@ describe("Settings", () => {
   it("renders the tab rail and the Appearance tab by default when open", async () => {
     render(<Settings />)
 
-    // The drawer header mounts (real timers → Ark dialog content is present).
+    // The drawer header mounts (real timers → rind dialog content is present).
     expect(await screen.findByRole("heading", { name: "settings.title" })).toBeInTheDocument()
 
     // The vertical tab rail carries every tab label.

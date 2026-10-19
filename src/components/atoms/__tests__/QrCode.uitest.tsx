@@ -1,4 +1,4 @@
-// The QrCode atom (Ark QrCode): renders a labelled SVG at the requested size
+// The QrCode atom (rind QrCode): renders a labelled SVG at the requested size
 // encoding the given value. (i18n is globally mocked to echo the key.)
 
 import { render, screen } from "@testing-library/react"

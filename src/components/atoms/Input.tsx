@@ -14,7 +14,7 @@ import { cn } from "@/lib/cn"
 export type InputVariant = "bordered" | "filled" | "plain"
 
 const VARIANT: Record<InputVariant, string> = {
-  bordered: "border border-line bg-surface focus:border-line-strong",
+  bordered: "border border-line bg-surface shadow-[var(--control-shadow)] focus:border-line-strong",
   // A filled field has no border to darken on focus, so it says so with a ring
   // instead. Every field you can tab into has to show that you have.
   filled: "bg-surface focus:ring-1 focus:ring-line-strong",
@@ -48,7 +48,7 @@ export function Input({
     <input
       type={type}
       className={cn(
-        "w-full rounded-md px-2.5 py-1 text-sm text-ink outline-none placeholder:text-faint",
+        "min-h-[var(--field-h)] w-full rounded-md px-2.5 py-1 text-sm text-ink outline-none placeholder:text-faint",
         VARIANT[variant],
         icon ? "pl-7" : undefined,
         trailing ? "pr-7" : undefined,

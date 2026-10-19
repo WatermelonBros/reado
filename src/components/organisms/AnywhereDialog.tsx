@@ -227,7 +227,7 @@ export function AnywhereDialog() {
               type="button"
               onClick={copyUrl}
               title={t("anywhere.copy")}
-              className="mt-4 max-w-full truncate rounded-md border border-line bg-canvas px-3 py-1.5 font-mono text-xs text-ink transition-colors hover:border-line-strong"
+              className="mt-4 max-w-full shrink-0 truncate rounded-md border border-line bg-canvas px-3 py-1.5 font-mono text-xs text-ink transition-colors hover:border-line-strong"
             >
               {copied ? t("anywhere.copied") : (info.remoteUrl ?? info.url)}
             </button>
@@ -317,7 +317,8 @@ export function AnywhereDialog() {
               {t("anywhere.security")}
             </h3>
 
-            <label className="mt-3 flex items-center justify-between gap-3 text-sm text-ink">
+            {/* A div, not a label: a label re-clicks the trigger and shuts the listbox. */}
+            <div className="mt-3 flex items-center justify-between gap-3 text-sm text-ink">
               <span className="min-w-0">{t("anywhere.iface")}</span>
               <Select
                 value={config.bind ?? AUTO}
@@ -331,7 +332,7 @@ export function AnywhereDialog() {
                   void patch({ bind }, () => anywhereSetBind(bind))
                 }}
               />
-            </label>
+            </div>
             <p className="mt-1 text-[10px] leading-relaxed text-faint">{t("anywhere.ifaceHint")}</p>
 
             <div className="mt-4 flex items-center gap-3">

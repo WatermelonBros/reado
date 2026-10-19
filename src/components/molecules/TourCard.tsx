@@ -1,18 +1,26 @@
 /**
- * The card an Ark UI tour step shows: title, description, "3 of 12", the step's
+ * The card a rind tour step shows: title, description, "3 of 12", the step's
  * actions and a close. Shared by the app's first-run tour and project tours.
  */
-import { Tour } from "@ark-ui/react"
+import { Tour } from "@rind-ui/react"
 import type { TFunction } from "i18next"
 import { useTranslation } from "react-i18next"
 import { CloseIcon } from "@/components/atoms/icons"
 import { cn } from "@/lib/cn"
 
-/** "3 of 12", in the app's language, for `useTour({ translations })`. */
-export const tourTranslations = (t: TFunction) => ({
+/** "3 of 12", in the app's language, for `useTour({ messages })` (rind's `current` is 1-based). */
+export const tourMessages = (t: TFunction) => ({
   progressText: ({ current, total }: { current: number; total: number }) =>
-    t("projectTour.progress", { current: current + 1, total }),
+    t("projectTour.progress", { current, total }),
 })
+
+type Side = "top" | "right" | "bottom" | "left"
+
+/** A floating-ui style `"right-start"` plus offsets, as a rind step's placement fields. */
+export const placeAt = (placement: string, sideOffset = 0, alignOffset = 0) => {
+  const [side, align = "center"] = placement.split("-") as [Side, "start" | "center" | "end"]
+  return { side, align, sideOffset, alignOffset }
+}
 
 export function TourCard({
   className,
@@ -37,9 +45,9 @@ export function TourCard({
           <Tour.Actions>
             {(actions) => (
               <div className="flex gap-1.5">
-                {actions.map((a) => (
+                {actions.map((a, i) => (
                   <Tour.ActionTrigger
-                    key={a.label}
+                    key={i}
                     action={a}
                     className="rounded-md border border-line px-2.5 py-1 text-xs text-ink transition-colors hover:border-accent hover:bg-surface focus-visible:outline-1 focus-visible:outline-accent"
                   >

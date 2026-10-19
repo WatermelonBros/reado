@@ -2,12 +2,14 @@
 
 ## UI components
 
-**Build on Ark UI, not from scratch.** [`@ark-ui/react`](https://ark-ui.com) is a
-dependency; use its headless primitives for any interactive base component
-(dialogs, menus, tooltips, segmented controls, selects, checkboxes, QR codes, …)
-and style them with our Tailwind tokens. Don't hand-roll focus traps, keyboard
-nav, positioning, or ARIA that Ark already provides. Import per component, e.g.
-`import { Tooltip } from "@ark-ui/react/tooltip"`.
+**Build on rind-ui, not from scratch.** [`@rind-ui/react`](https://rind.watermelon-studio.it)
+is a dependency; use its headless primitives for any interactive base component
+(dialogs, menus, tooltips, segmented controls, selects, checkboxes, QR codes,
+tours, colour pickers, …) and style them with our Tailwind tokens. Don't hand-roll
+focus traps, keyboard nav, positioning, or ARIA that rind already provides. Import
+from the package root, e.g. `import { Tooltip } from "@rind-ui/react"`. Parts carry
+`data-scope` / `data-part` / `data-state`; floating parts position themselves with
+inline styles, so don't override their `position`/`transform` in CSS.
 
 **Reach for the shared atoms before writing raw markup.** Common UI is a
 component, not a copy-pasted `<button className="…">`:
@@ -17,14 +19,14 @@ component, not a copy-pasted `<button className="…">`:
   text action.
 - **`IconButton`** (`atoms/IconButton.tsx`) — every clickable icon. `label` is
   required (it is both `aria-label` and the tooltip); pass `active` for toggles,
-  `danger` for destructive actions. It carries an Ark-based `Tooltip`, so a
+  `danger` for destructive actions. It carries a rind-based `Tooltip`, so a
   migrated icon button needs no `title`.
-- **`Tooltip`** (`atoms/Tooltip.tsx`) — Ark tooltip; `IconButton` uses it.
+- **`Tooltip`** (`atoms/Tooltip.tsx`) — rind tooltip; `IconButton` uses it.
   `GlobalTooltip` (the legacy `title`-scraping singleton) is the interim fallback
   for buttons not yet on `IconButton`; prefer `IconButton`/`Tooltip` for new code
   and migrate old buttons toward them.
 
-If a component isn't trivial and Ark has it, use Ark. If clickable UI repeats,
+If a component isn't trivial and rind has it, use rind. If clickable UI repeats,
 promote it to an atom rather than duplicating classes.
 
 **Anything that floats over the app must portal to `document.body`** (or be

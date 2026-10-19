@@ -43,7 +43,7 @@ describe("Button", () => {
   it("applies the size and defaults to ghost variant", () => {
     render(<Button size="sm">S</Button>)
     const btn = screen.getByRole("button", { name: "S" })
-    expect(btn.className).toContain("h-6") // sm
+    expect(btn.className).toContain("h-[var(--control-sm)]") // sm: the theme sets the height
     expect(btn.className).toContain("text-muted") // ghost default
   })
 

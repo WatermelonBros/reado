@@ -99,7 +99,7 @@ export function TestsPanel() {
   /** Where the list is scrolled to — the only input the window needs. */
   const [scrollTop, setScrollTop] = useState(0)
   /** The row under the pointer, which is the only row that draws a run button.
-   *  Measured: an `IconButton` carries an Ark tooltip, and three hundred of them
+   *  Measured: an `IconButton` carries a rind tooltip, and three hundred of them
    *  cost ~90ms to render — five frames, which a flick of the trackpad outruns
    *  and leaves the list blank. One is free. */
   const [hovered, setHovered] = useState<string | null>(null)

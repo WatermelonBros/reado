@@ -1,4 +1,4 @@
-// The SegmentedControl atom (Ark SegmentGroup): renders each segment, marks the
+// The SegmentedControl atom (rind SegmentedControl): renders each segment, marks the
 // active one, and reports a selection through onChange.
 
 import { render, screen } from "@testing-library/react"

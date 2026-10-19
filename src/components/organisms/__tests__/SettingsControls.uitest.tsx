@@ -104,7 +104,7 @@ describe("every checkbox writes to the store", () => {
 describe("the selects write to the store", () => {
   /** Open the select whose current value reads `showing`, then pick `option`. */
   async function pick(showing: string, option: string) {
-    // Ark's own trigger — the hidden native <select> it renders alongside also
+    // rind's own trigger — the hidden native <select> it renders alongside also
     // has role combobox, and its text contains every option label.
     const trigger = Array.from(
       document.querySelectorAll<HTMLElement>('[data-scope="select"][data-part="trigger"]'),

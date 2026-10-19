@@ -26,7 +26,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@ark-ui/react": "^5.37.2",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.7.1",
     "@codemirror/language": "^6.10.8",
@@ -45,6 +44,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "@replit/codemirror-indentation-markers": "^6.5.3",
     "@replit/codemirror-lang-solidity": "^6.0.2",
+    "@rind-ui/react": "^0.4.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-dialog": "^2",

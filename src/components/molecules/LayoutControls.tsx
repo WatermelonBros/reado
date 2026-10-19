@@ -14,9 +14,8 @@
  * replacing it. Every control drives a setting that already existed, so a change
  * made here and one made in Settings are the same change, not two copies of it.
  */
-import { Menu } from "@ark-ui/react/menu"
-import { Portal } from "@ark-ui/react/portal"
-import type { ReactNode } from "react"
+import { Menu } from "@rind-ui/react"
+import { type ReactNode, useId } from "react"
 import { useTranslation } from "react-i18next"
 import { IconButton } from "@/components/atoms/IconButton"
 import {
@@ -173,17 +172,25 @@ function Choice({
   onChange: (value: string) => void
   options: { value: string; label: string; icon: ReactNode }[]
 }) {
+  // Item values are keys across the whole menu, and two groups both offer
+  // "left"/"center": scope each group's values by its own id.
+  const ns = `${useId()}:`
   return (
-    <Menu.RadioItemGroup value={value} onValueChange={(e) => onChange(e.value)}>
-      <Menu.ItemGroupLabel className={GROUP}>{label}</Menu.ItemGroupLabel>
-      {options.map((o) => (
-        <Menu.RadioItem key={o.value} value={o.value} closeOnSelect={false} className={ROW}>
-          <span className="grid h-4 w-4 flex-none place-items-center text-muted">{o.icon}</span>
-          <Menu.ItemText className="flex-1">{o.label}</Menu.ItemText>
-          <Indicator />
-        </Menu.RadioItem>
-      ))}
-    </Menu.RadioItemGroup>
+    <Menu.Group>
+      <Menu.GroupLabel className={GROUP}>{label}</Menu.GroupLabel>
+      <Menu.RadioGroup
+        value={ns + value}
+        onValueChange={(v) => v !== null && onChange(v.slice(ns.length))}
+      >
+        {options.map((o) => (
+          <Menu.RadioItem key={o.value} value={ns + o.value} closeOnSelect={false} className={ROW}>
+            <span className="grid h-4 w-4 flex-none place-items-center text-muted">{o.icon}</span>
+            <Menu.ItemText className="flex-1">{o.label}</Menu.ItemText>
+            <Indicator />
+          </Menu.RadioItem>
+        ))}
+      </Menu.RadioGroup>
+    </Menu.Group>
   )
 }
 
@@ -221,7 +228,8 @@ export function LayoutControls() {
         onClick={() => toggleDockArea("right")}
       />
 
-      <Menu.Root positioning={{ placement: "bottom-end" }}>
+      {/* Not modal, as before: the window behind stays live while the menu is up. */}
+      <Menu.Root modal={false} positioning={{ side: "bottom", align: "end", sideOffset: 8 }}>
         <Menu.Trigger
           title={t("layout.more")}
           aria-label={t("layout.more")}
@@ -229,13 +237,13 @@ export function LayoutControls() {
         >
           <LayoutIcon className="h-3.5 w-3.5" />
         </Menu.Trigger>
-        <Portal>
-          <Menu.Positioner>
+        <Menu.Portal>
+          {/* The positioner is the stacking context (it carries the transform), so
+            the layer's z-index belongs on it, not only on the content inside. */}
+          <Menu.Positioner className="z-[200]">
             <Menu.Content className="z-[200] min-w-60 rounded-lg border border-line bg-overlay p-1 shadow-[var(--shadow)] focus:outline-none">
-              <Menu.ItemGroup>
-                <Menu.ItemGroupLabel className={GROUP}>
-                  {t("layout.visibility")}
-                </Menu.ItemGroupLabel>
+              <Menu.Group>
+                <Menu.GroupLabel className={GROUP}>{t("layout.visibility")}</Menu.GroupLabel>
                 <VisibilityItem
                   value="primarySidebar"
                   checked={tool !== null}
@@ -285,7 +293,7 @@ export function LayoutControls() {
                   side="top"
                   thin
                 />
-              </Menu.ItemGroup>
+              </Menu.Group>
 
               <Choice
                 label={t("layout.sidebarSide")}
@@ -324,8 +332,8 @@ export function LayoutControls() {
 
               {/* Modes, not regions: each one moves several of the switches
                 above at once, so they carry a tick rather than an eye. */}
-              <Menu.ItemGroup>
-                <Menu.ItemGroupLabel className={GROUP}>{t("layout.modes")}</Menu.ItemGroupLabel>
+              <Menu.Group>
+                <Menu.GroupLabel className={GROUP}>{t("layout.modes")}</Menu.GroupLabel>
                 <ModeItem
                   value="fullScreen"
                   checked={fullscreen}
@@ -346,10 +354,10 @@ export function LayoutControls() {
                   onChange={(v) => settings.set({ centeredLayout: v })}
                   label={t("layout.centeredLayout")}
                 />
-              </Menu.ItemGroup>
+              </Menu.Group>
             </Menu.Content>
           </Menu.Positioner>
-        </Portal>
+        </Menu.Portal>
       </Menu.Root>
     </div>
   )

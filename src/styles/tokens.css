@@ -27,6 +27,25 @@
   --radius-md: 7px;
   --radius-lg: 12px;
 
+  /* Shape: what a theme may change beyond colour. Defaults are today's look, so
+     a theme that sets none of them renders exactly as before. Tailwind's
+     `rounded-*` and `border*` read these (app.css), and the atoms read the
+     control heights and the hard shadow. */
+  --ui-radius-sm: 4px;
+  --ui-radius-md: 7px;
+  --ui-radius-lg: 12px;
+  --ui-border: 1px;
+  --control-sm: 24px;
+  --control-md: 32px;
+  /* Single-line fields and select triggers; 0 = sized by their padding. */
+  --field-h: 0px;
+  /* The solid offset shadow under buttons and fields; none by default. */
+  --control-shadow: none;
+  /* The border of a filled (primary) button; invisible by default. */
+  --control-outline: transparent;
+  --control-weight: 500;
+  --check-size: 14px;
+
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   /* Configurable in settings; the default favours 0/O and 1/l/I disambiguation. */
   --font-code:
@@ -298,4 +317,126 @@
   --diff-add-soft: oklch(0.52 0.12 150 / 0.14);
   --diff-del: oklch(0.53 0.18 25);
   --diff-del-soft: oklch(0.53 0.18 25 / 0.14);
+}
+
+/* ---- Reado Acid — loud dark: violet-black ink, acid lime, hot pink ------- */
+/* The rind-ui site's palette taken to night: a lime accent you can't miss, a
+   pink that shouts control flow, and hard offset shadows instead of blur. Loud
+   on the chrome, still AA on every text rank — loud is not illegible. */
+[data-theme="reado-acid"] {
+  --bracket-l: 0.84;
+  --bracket-c: 0.19;
+  color-scheme: dark;
+
+  --bg: oklch(0.16 0.035 300);
+  --bg-elevated: oklch(0.2 0.05 300);
+  --bg-overlay: oklch(0.23 0.06 300);
+  --border: oklch(0.34 0.08 300);
+  --border-strong: oklch(0.62 0.2 340);
+  --text: oklch(0.95 0.02 120);
+  --text-muted: oklch(0.82 0.04 300);
+  --text-faint: oklch(0.68 0.06 300);
+
+  --accent: oklch(0.91 0.22 124);
+  --accent-contrast: oklch(0.18 0.04 300);
+
+  --syn-control: oklch(0.72 0.24 355);
+  --syn-keyword: oklch(0.88 0.2 124);
+  --syn-definition: oklch(0.86 0.16 200);
+  --ok: oklch(0.86 0.2 145);
+
+  --syn-string: oklch(0.85 0.16 85);
+  --syn-number: oklch(0.76 0.2 40);
+  --syn-comment: oklch(0.66 0.08 300);
+  --syn-punctuation: oklch(0.7 0.1 330);
+
+  --marker: oklch(0.74 0.23 15);
+  --marker-soft: oklch(0.74 0.23 15 / 0.2);
+
+  --diag-error: oklch(0.7 0.24 20);
+  --diag-warn: oklch(0.86 0.17 90);
+  --diag-info: oklch(0.8 0.14 220);
+
+  --landing: oklch(0.91 0.22 124 / 0.16);
+  --selection: oklch(0.72 0.24 355 / 0.34);
+  --shadow: 6px 6px 0 oklch(0.91 0.22 124 / 0.85);
+
+  --diff-add: oklch(0.86 0.2 145);
+  --diff-add-soft: oklch(0.86 0.2 145 / 0.16);
+  --diff-del: oklch(0.72 0.24 20);
+  --diff-del-soft: oklch(0.72 0.24 20 / 0.18);
+
+  /* Shape: chunky and brutal — taller controls, 2px ink borders, hard shadows. */
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 10px;
+  --ui-radius-lg: 16px;
+  --ui-border: 2px;
+  --control-sm: 30px;
+  --control-md: 40px;
+  --field-h: 36px;
+  --control-shadow: 3px 3px 0 var(--border-strong);
+  --control-outline: var(--border-strong);
+  --control-weight: 700;
+  --check-size: 18px;
+}
+
+/* ---- Reado Pop — loud light: lime paper, ink borders, brutalist shadows --- */
+/* White cards on lime, black ink lines and a solid black offset shadow, a pink
+   accent: the rind-ui site's day look. Syntax is dark and saturated so it holds
+   AA on the tinted paper. */
+[data-theme="reado-pop"] {
+  --bracket-l: 0.48;
+  --bracket-c: 0.2;
+  color-scheme: light;
+
+  --bg: oklch(0.93 0.17 122);
+  --bg-elevated: oklch(0.99 0.02 115);
+  --bg-overlay: oklch(1 0 0);
+  --border: oklch(0.3 0.02 290);
+  --border-strong: oklch(0.16 0.01 290);
+  --text: oklch(0.17 0.01 290);
+  --text-muted: oklch(0.3 0.03 290);
+  --text-faint: oklch(0.42 0.05 290);
+
+  --accent: oklch(0.54 0.24 0);
+  --accent-contrast: oklch(1 0 0);
+
+  --syn-control: oklch(0.5 0.25 355);
+  --syn-keyword: oklch(0.42 0.22 290);
+  --syn-definition: oklch(0.42 0.12 230);
+  --ok: oklch(0.45 0.15 150);
+
+  --syn-string: oklch(0.45 0.15 150);
+  --syn-number: oklch(0.5 0.19 40);
+  --syn-comment: oklch(0.45 0.06 290);
+  --syn-punctuation: oklch(0.35 0.04 290);
+
+  --marker: oklch(0.5 0.22 30);
+  --marker-soft: oklch(0.5 0.22 30 / 0.16);
+
+  --diag-error: oklch(0.48 0.22 20);
+  --diag-warn: oklch(0.5 0.14 70);
+  --diag-info: oklch(0.45 0.17 250);
+
+  --landing: oklch(0.54 0.24 0 / 0.14);
+  --selection: oklch(0.54 0.24 0 / 0.24);
+  --shadow: 5px 5px 0 oklch(0.16 0.01 290);
+
+  --diff-add: oklch(0.45 0.15 150);
+  --diff-add-soft: oklch(0.45 0.15 150 / 0.16);
+  --diff-del: oklch(0.5 0.22 25);
+  --diff-del-soft: oklch(0.5 0.22 25 / 0.16);
+
+  /* Shape: chunky and brutal — taller controls, 2px ink borders, hard shadows. */
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 10px;
+  --ui-radius-lg: 16px;
+  --ui-border: 2px;
+  --control-sm: 30px;
+  --control-md: 40px;
+  --field-h: 36px;
+  --control-shadow: 3px 3px 0 var(--border-strong);
+  --control-outline: var(--border-strong);
+  --control-weight: 700;
+  --check-size: 18px;
 }

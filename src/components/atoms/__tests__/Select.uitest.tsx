@@ -1,4 +1,4 @@
-// The themed select wraps Ark UI's headless Select (listbox semantics via a
+// The themed select wraps rind's headless Select (listbox semantics via a
 // Portal into document.body). We assert the trigger shows the current value's
 // label, opening reveals the options, and choosing one fires onChange.
 

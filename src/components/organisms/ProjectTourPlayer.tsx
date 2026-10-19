@@ -1,5 +1,5 @@
 /**
- * Plays a project tour (`tour.json`) with Ark UI's Tour: each step opens its file,
+ * Plays a project tour (`tour.json`) with rind's Tour: each step opens its file,
  * brings its code to the middle of the editor, lights exactly that span and
  * explains it in a card beside it.
  *
@@ -8,14 +8,14 @@
  * its own ancestor-scroll tracking; the shared scrim cuts the backdrop around
  * both. A whole-file step targets the scroller.
  */
-import { Portal, Tour, useTour } from "@ark-ui/react"
-import type { TourStepDetails, TourStepEffectArgs } from "@ark-ui/react/tour"
+
 import { EditorView } from "@codemirror/view"
+import { Tour, useTour } from "@rind-ui/react"
 import { useEffect, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { TourCard, tourTranslations } from "@/components/molecules/TourCard"
+import { placeAt, TourCard, tourMessages } from "@/components/molecules/TourCard"
 import { TOUR_LAYOUT, TourScrim } from "@/components/molecules/TourScrim"
 import { liveViews } from "@/lib/liveViews"
 import {
@@ -31,7 +31,7 @@ import { useProject } from "@/lib/store"
 const SCOPE = "project-tour"
 /** Card width + a margin: pulls a "right-start" card back inside its target.
  *  ponytail: tied to `w-[380px]` below. */
-const INSIDE = { mainAxis: -(380 + 16), crossAxis: 16 }
+const INSIDE = [-(380 + 16), 16] as const
 /** How long a step waits for its file's editor before showing anyway. */
 const OPEN_TIMEOUT_MS = 4000
 
@@ -164,11 +164,11 @@ function Player({
           title: step.title,
           description: <StepBody step={step} placed />,
           // Under the code by default: beside a block as wide as the editor there
-          // is no room, and zag doesn't shift a card back on screen.
-          placement: (step.placement && step.placement !== "auto"
-            ? step.placement
-            : "bottom-start") as TourStepDetails["placement"],
-          offset: { mainAxis: 14 },
+          // is no room.
+          ...placeAt(
+            step.placement && step.placement !== "auto" ? step.placement : "bottom-start",
+            14,
+          ),
           target: () => target.current,
           actions: [
             ...(i > 0 ? [{ label: t("tour.back"), action: "prev" as const }] : []),
@@ -177,7 +177,7 @@ function Player({
               action: (last ? "dismiss" : "next") as "dismiss" | "next",
             },
           ],
-          effect: ({ show, update }: TourStepEffectArgs) => {
+          effect: ({ show, update }: { show: () => void; update: (p: object) => void }) => {
             let stop = () => {}
             let live = true
             void reveal(root, step).then((r) => {
@@ -188,7 +188,7 @@ function Player({
                 ...(r.placed ? {} : { description: <StepBody step={step} placed={false} /> }),
                 // The whole editor is the target: no room beside it, so the card
                 // sits inside its right edge instead.
-                ...(r.whole ? { placement: "right-start", offset: INSIDE } : {}),
+                ...(r.whole ? placeAt("right-start", ...INSIDE) : {}),
               })
               show()
             })
@@ -212,15 +212,15 @@ function Player({
   const api = useTour({
     steps,
     keyboardNavigation: true,
-    translations: tourTranslations(t),
-    closeOnInteractOutside: false,
-    onStepChange: ({ stepIndex }) => {
+    messages: tourMessages(t),
+    closeOnOutsidePress: false,
+    onStepChange: (_, { stepIndex }) => {
       if (stepIndex > index.current) markRead(index.current)
       index.current = stepIndex
       if (!preview) saveStep(root, tour, stepIndex)
     },
-    onStatusChange: ({ status }) => {
-      if (status !== "dismissed" && status !== "completed" && status !== "skipped") return
+    onOpenChange: (open) => {
+      if (open) return
       const finished = index.current === tour.steps.length - 1
       if (finished && !preview) {
         markRead(index.current)
@@ -231,12 +231,12 @@ function Player({
   })
 
   useEffect(() => {
-    api.start(`step-${start}`)
+    api.start({ stepId: `step-${start}` })
   }, [])
 
   return (
     <Tour.Root tour={api}>
-      <Portal>
+      <Tour.Portal>
         <div data-tour-scope={SCOPE}>
           <TourScrim
             open={api.open}
@@ -246,7 +246,7 @@ function Player({
           />
           <TourCard className="w-[380px]" />
         </div>
-      </Portal>
+      </Tour.Portal>
     </Tour.Root>
   )
 }

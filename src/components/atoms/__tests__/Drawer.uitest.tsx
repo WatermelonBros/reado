@@ -1,4 +1,4 @@
-// The right-side drawer wraps Ark UI's headless Dialog with unmountOnExit, so
+// The right-side drawer wraps rind's headless Dialog with unmountOnExit, so
 // content only exists in the tree while open. We assert both states and the
 // dismissal contract.
 

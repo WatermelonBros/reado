@@ -1,6 +1,6 @@
 // UI test: the file-/folder-/project-scoped comment dialog opened from the tree
-// context menu. It renders inside the Ark `Modal` (a headless dialog portal), so
-// content is asserted with real timers + `await screen.findBy…` — Ark's dialog
+// context menu. It renders inside the rind `Modal` (a headless dialog portal), so
+// content is asserted with real timers + `await screen.findBy…` — rind's dialog
 // machine does not mount its content under Vitest fake timers. The comment-create
 // edge is the `useComments.create` store action, stubbed via setState with a
 // vi.fn. i18n is mocked to keys globally.

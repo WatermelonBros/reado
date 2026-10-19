@@ -1623,6 +1623,8 @@
     "reado-light": "Reado Light",
     "reado-high-contrast": "Reado High-Contrast",
     "reado-sepia": "Reado Sepia",
+    "reado-acid": "Reado Acid",
+    "reado-pop": "Reado Pop",
     "extMissing": "That theme's extension is no longer installed — switched to a built-in theme.",
     "fromExtension": "From extensions",
     "contrastPass": "Meets AA contrast ({ratio}:1)",

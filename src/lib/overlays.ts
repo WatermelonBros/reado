@@ -13,7 +13,7 @@
  * bar. So nothing registers. This reads it off the DOM instead, from the two
  * shapes a floating layer can have in Reado, neither of which is optional:
  *
- * - **It is portalled out of the app's own tree**, to `<body>`. Ark's menus,
+ * - **It is portalled out of the app's own tree**, to `<body>`. rind's menus,
  *   popovers, selects, dialogs and tooltips do, and so does `ContextMenu` — they
  *   have to: the app root carries the interface-zoom transform, and a transform
  *   makes that element the containing block for `position: fixed` descendants,
@@ -83,7 +83,7 @@ export function overlaysCover(el: Element): boolean {
  * rectangle?" changes. Returns the unsubscribe.
  *
  * One observer for the whole app. It watches `<body>` for layers arriving and
- * leaving, and for the attributes Ark flips on a layer that stays mounted
+ * leaving, and for the attributes rind flips on a layer that stays mounted
  * (`data-state`, `hidden`) — a menu that is mounted-but-closed has no size, so
  * opening it is a change in geometry rather than in the tree.
  */
@@ -103,7 +103,7 @@ export function watchOverlays(
   }
   // Coalesced to one check per frame — the app mutates constantly (an editor, a
   // terminal) and this must cost nothing when nothing is floating. The second,
-  // later check is for a layer that is positioned *after* it mounts: Ark places
+  // later check is for a layer that is positioned *after* it mounts: rind places
   // its panels once they have a size, which is a frame or two after they appear.
   const schedule = () => {
     cancelAnimationFrame(frame)

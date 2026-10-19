@@ -268,6 +268,8 @@ export const APP_MENUS: Menu[] = [
       { id: "theme:reado-light", label: "Light" },
       { id: "theme:reado-high-contrast", label: "High Contrast" },
       { id: "theme:reado-sepia", label: "Sepia" },
+      { id: "theme:reado-acid", label: "Acid" },
+      { id: "theme:reado-pop", label: "Pop" },
       { sep: true },
       { id: "zoom:in", label: "Zoom In" },
       { id: "zoom:out", label: "Zoom Out" },

@@ -3,7 +3,7 @@
 // The side effects are mocked: `submitToTerminal` (api), `composeAuditPrompt`
 // (review) and the terminals store. i18n is stubbed globally (t(k) => k).
 //
-// Ark's dialog only mounts its portal content under real timers, so we never
+// rind's dialog only mounts its portal content under real timers, so we never
 // hold fake timers here — the modal renders synchronously on `open` and we read
 // it with `await screen.findBy…`.
 

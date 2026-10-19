@@ -1,12 +1,11 @@
 /**
- * Themed modal dialog built on Ark UI's headless `Dialog`.
+ * Themed modal dialog built on Rind's headless `Dialog`.
  *
- * Ark handles the hard parts (focus trap, scroll lock, Escape, outside-click
+ * Rind handles the hard parts (focus trap, scroll lock, Escape, outside-click
  * dismissal, ARIA); we style the backdrop and content surface. Children render
  * the dialog body; pass `ariaLabel` or include a `Dialog.Title` inside.
  */
-import { Dialog } from "@ark-ui/react/dialog"
-import { Portal } from "@ark-ui/react/portal"
+import { Dialog } from "@rind-ui/react"
 
 interface ModalProps {
   open: boolean
@@ -21,8 +20,8 @@ export function Modal({ open, onOpenChange, ariaLabel, className = "", children 
   // The native preview webview paints over all DOM — tell it to hide while we are up.
 
   return (
-    <Dialog.Root open={open} onOpenChange={(d) => onOpenChange(d.open)} lazyMount unmountOnExit>
-      <Portal>
+    <Dialog.Root open={open} onOpenChange={(o) => onOpenChange(o)}>
+      <Dialog.Portal>
         <Dialog.Backdrop className="animate-fade fixed inset-0 z-[110] reado-scrim" />
         <Dialog.Positioner className="fixed inset-0 z-[110] grid place-items-center p-4">
           <Dialog.Content
@@ -32,7 +31,7 @@ export function Modal({ open, onOpenChange, ariaLabel, className = "", children 
             {children}
           </Dialog.Content>
         </Dialog.Positioner>
-      </Portal>
+      </Dialog.Portal>
     </Dialog.Root>
   )
 }

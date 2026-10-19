@@ -1,4 +1,4 @@
-// The themed checkbox wraps Ark UI's headless control. We assert the accessible
+// The themed checkbox wraps rind's headless control. We assert the accessible
 // checkbox role, label association and the controlled onChange contract.
 
 import { render, screen } from "@testing-library/react"

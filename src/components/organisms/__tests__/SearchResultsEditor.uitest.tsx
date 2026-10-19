@@ -1,5 +1,5 @@
 // UI test: the results editor is a CodeMirror view created into a host that
-// `Modal` (Ark, `lazyMount`) mounts a commit *after* `open` turns true. Keying
+// `Modal` (rind, mounted lazily) mounts a commit *after* `open` turns true. Keying
 // its creation on a `useRef` meant it was never created at all — the dialog
 // opened with a header, a hint and "Apply 0 changes" over an empty box.
 //

@@ -15,6 +15,7 @@ import { runMenuCommand } from "./menu"
 import { notify } from "./notice"
 import { isMacUA } from "./shortcuts"
 import { type BuiltinTheme, isExtTheme, type ThemeName, useProject, useSettings } from "./store"
+import { DARK_THEMES } from "./store/settings"
 import { checkForUpdates } from "./updater"
 
 /** Context names already reported as unknown, so a held-down key does not raise
@@ -58,9 +59,6 @@ function sidewaysScroller(el: EventTarget | null): Element | null {
   }
   return null
 }
-
-/** The dark Reado themes — used to match the native window (title bar) chrome. */
-const DARK_THEMES: BuiltinTheme[] = ["reado-dark", "reado-high-contrast"]
 
 /** Resolve the active theme from settings, OS preference and time of day. */
 function resolveTheme(

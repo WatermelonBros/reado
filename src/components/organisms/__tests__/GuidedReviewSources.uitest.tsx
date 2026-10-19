@@ -50,7 +50,7 @@ const readyForge = {
   submit,
 }
 
-/** Pick a value from one of the panel's Ark selects, by its accessible name. */
+/** Pick a value from one of the panel's rind selects, by its accessible name. */
 async function choose(field: string, option: string) {
   await userEvent.click(screen.getByRole("combobox", { name: field }))
   await userEvent.click(await screen.findByRole("option", { name: option }))

@@ -4,7 +4,7 @@
 // the side-effect edges — the terminals store and the resolve loop — are mocked
 // so nothing real dispatches. i18n is stubbed globally (t(k) => k).
 //
-// Ark's dialog only mounts its portal under real timers, so we never hold fake
+// rind's dialog only mounts its portal under real timers, so we never hold fake
 // timers here and read the open modal with `await screen.findBy…`.
 
 import { render, screen } from "@testing-library/react"

@@ -1,7 +1,13 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
-export type BuiltinTheme = "reado-dark" | "reado-light" | "reado-high-contrast" | "reado-sepia"
+export type BuiltinTheme =
+  | "reado-dark"
+  | "reado-light"
+  | "reado-high-contrast"
+  | "reado-sepia"
+  | "reado-acid"
+  | "reado-pop"
 
 /** A theme contributed by an installed extension: `ext:{extensionId}:{label}`.
  *  Kept as a template literal type so it stays distinguishable from a built-in
@@ -20,6 +26,16 @@ export const THEMES: BuiltinTheme[] = [
   "reado-light",
   "reado-high-contrast",
   "reado-sepia",
+  "reado-acid",
+  "reado-pop",
+]
+
+/** The dark built-ins: the native window chrome and the System / Trust Reado
+ *  dark slot follow this list; everything else is light. */
+export const DARK_THEMES: readonly BuiltinTheme[] = [
+  "reado-dark",
+  "reado-high-contrast",
+  "reado-acid",
 ]
 
 /** Legible bounds for the editor's numeric reading controls. */

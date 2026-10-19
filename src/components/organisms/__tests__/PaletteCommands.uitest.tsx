@@ -788,6 +788,10 @@ describe("running a command", () => {
         expect(useSettings.getState().theme).toBe("reado-high-contrast"),
       "settings.theme: theme.reado-sepia": () =>
         expect(useSettings.getState().theme).toBe("reado-sepia"),
+      "settings.theme: theme.reado-acid": () =>
+        expect(useSettings.getState().theme).toBe("reado-acid"),
+      "settings.theme: theme.reado-pop": () =>
+        expect(useSettings.getState().theme).toBe("reado-pop"),
     }
 
     // Longest prefix wins, so "symbols.gotoWorkspace" isn't eaten by

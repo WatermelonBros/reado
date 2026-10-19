@@ -2,7 +2,7 @@
  * A menu hung off a control: the status bar's indent / endings / encoding /
  * language / branch pickers, and the breadcrumb's folder and symbol lists.
  *
- * Ark's menu, not a hand-rolled panel — it brings the arrow-key roving focus,
+ * Rind's menu, not a hand-rolled panel — it brings the arrow-key roving focus,
  * typeahead, `aria-haspopup`/`aria-expanded`, focus return to the trigger on
  * close, and collision-aware placement that the previous version had none of.
  * Portalled, so a menu opened from the status bar is not clipped by it.
@@ -11,9 +11,8 @@
  * right for a right-click and wrong for a dropdown that has to stay attached to
  * the control that opened it.
  */
-import { Menu } from "@ark-ui/react/menu"
-import { Portal } from "@ark-ui/react/portal"
-import type { ReactNode } from "react"
+import { Menu } from "@rind-ui/react"
+import type { ReactElement, ReactNode } from "react"
 import { CheckIcon } from "./icons"
 
 interface DropdownProps {
@@ -64,33 +63,35 @@ export function Dropdown({
 }: DropdownProps) {
   return (
     <Menu.Root
-      positioning={{ placement: `${placement}-${align}` }}
+      positioning={{ side: placement, align, sideOffset: 8 }}
       open={open}
-      onOpenChange={(e) => {
-        if (e.open) onOpen?.()
-        onOpenChange?.(e.open)
+      onOpenChange={(next) => {
+        if (next) onOpen?.()
+        onOpenChange?.(next)
       }}
-      // A closed menu should be gone, not merely hidden: its rows are stale the
-      // moment it shuts, and a hidden row is still a tab stop.
-      lazyMount
-      unmountOnExit
+      // Not modal: a press outside closes the menu and still reaches its target.
+      // A closed menu is gone, not merely hidden (Rind's default): its rows are
+      // stale the moment it shuts, and a hidden row is still a tab stop.
+      modal={false}
     >
       {triggerAsChild ? (
-        <Menu.Trigger asChild>{trigger}</Menu.Trigger>
+        <Menu.Trigger render={trigger as ReactElement} />
       ) : (
         <Menu.Trigger title={label} className={triggerClassName}>
           {trigger}
         </Menu.Trigger>
       )}
-      <Portal>
-        <Menu.Positioner>
+      <Menu.Portal>
+        {/* The positioner is translated, so it is the stacking context the
+            content's z-index lives in; it takes the z-index itself. */}
+        <Menu.Positioner className="z-[200]">
           <Menu.Content
             className={`z-[200] min-w-[120px] rounded-md border border-line-strong bg-overlay py-1 shadow-[var(--shadow)] focus:outline-none ${className}`}
           >
             {children}
           </Menu.Content>
         </Menu.Positioner>
-      </Portal>
+      </Menu.Portal>
     </Menu.Root>
   )
 }
@@ -123,7 +124,7 @@ export function MenuRow({
   return (
     <Menu.Item
       value={value ?? label}
-      onSelect={onClick}
+      onSelect={() => onClick()}
       disabled={disabled}
       className={`flex cursor-default items-center justify-between gap-4 px-3 py-1.5 text-left text-sm data-[disabled]:opacity-40 data-[highlighted]:bg-surface ${
         danger ? "text-marker" : checked ? "text-ink" : "text-muted"

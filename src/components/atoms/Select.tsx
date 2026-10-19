@@ -1,13 +1,12 @@
 /**
- * Themed single-select built on Ark UI's headless `Select`.
+ * Themed single-select built on Rind's headless `Select`.
  *
- * Ark provides the tested accessibility (listbox semantics, keyboard nav, focus
+ * Rind provides the tested accessibility (listbox semantics, keyboard nav, focus
  * management, dismissal); we provide the Reado styling via Tailwind. The public
  * API stays simple — `value`, `options`, `onChange` — so call sites read well.
  */
 
-import { Portal } from "@ark-ui/react/portal"
-import { Select as ArkSelect, createListCollection } from "@ark-ui/react/select"
+import { Select as RindSelect } from "@rind-ui/react"
 import { ChevronIcon } from "./icons"
 
 export interface SelectOption<T extends string> {
@@ -28,11 +27,17 @@ interface SelectProps<T extends string> {
   className?: string
 }
 
+/** Rind keys are prefixed: its selection uses the bare string `"all"` to mean
+ *  "every item", so an option whose value is "all" (the filters' default)
+ *  would read as everything selected and ignore picks. ponytail: drop once rind
+ *  stops overloading the key space. */
+const KEY = "opt:"
+
 const TRIGGER_BASE =
   "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink transition-colors"
 const TRIGGER_VARIANT = {
   default:
-    "border border-line bg-surface hover:border-line-strong data-[state=open]:border-line-strong",
+    "min-h-[var(--field-h)] border border-line bg-surface shadow-[var(--control-shadow)] hover:border-line-strong data-[state=open]:border-line-strong",
   ghost: "border border-transparent hover:bg-surface data-[state=open]:bg-surface",
 } as const
 
@@ -44,59 +49,56 @@ export function Select<T extends string>({
   variant = "default",
   className = "",
 }: SelectProps<T>) {
-  const collection = createListCollection({
-    items: options,
-    itemToString: (item) => item.label,
-    itemToValue: (item) => item.value,
-  })
+  const items = options.map((o) => ({ key: KEY + o.value, label: o.label }))
   const selected = options.find((o) => o.value === value)
 
   return (
-    <ArkSelect.Root
-      collection={collection}
-      value={[value]}
-      // Length, not truthiness: "" is a legitimate value (the "built-in" /
+    <RindSelect.Root
+      items={items}
+      value={KEY + value}
+      // Null, not falsiness: "" is a legitimate value (the "built-in" /
       // "auto" option several call sites use), so only a genuinely empty
-      // selection from Ark is ignored.
-      onValueChange={(d) => d.value.length > 0 && onChange(d.value[0] as T)}
-      positioning={{ gutter: 4, placement: "bottom-start", sameWidth: true }}
+      // selection is ignored.
+      onValueChange={(v) => v !== null && onChange(v.slice(KEY.length) as T)}
+      modal={false}
+      positioning={{ side: "bottom", align: "start", sideOffset: 4 }}
     >
-      <ArkSelect.Control>
-        <ArkSelect.Trigger
-          aria-label={ariaLabel}
-          className={`${TRIGGER_BASE} ${TRIGGER_VARIANT[variant]} ${className}`}
-        >
-          {selected?.color && (
-            <span
-              className="h-2 w-2 flex-none rounded-full"
-              style={{ background: selected.color }}
-            />
-          )}
-          <ArkSelect.ValueText className="truncate" placeholder="" />
-          <ChevronIcon className="ml-auto h-3.5 w-3.5 flex-none rotate-90 text-faint transition-transform data-[state=open]:-rotate-90" />
-        </ArkSelect.Trigger>
-      </ArkSelect.Control>
-      <Portal>
-        <ArkSelect.Positioner>
-          <ArkSelect.Content className="animate-fade z-[200] max-h-[min(60vh,20rem)] min-w-[11rem] overflow-y-auto rounded-md border border-line-strong bg-overlay p-1 shadow-[var(--shadow)] focus:outline-none">
-            {options.map((opt) => (
-              <ArkSelect.Item
-                key={opt.value}
-                item={opt}
-                className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-1.5 text-sm whitespace-nowrap text-muted data-[highlighted]:bg-selection data-[highlighted]:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink"
-              >
-                {opt.color && (
-                  <span
-                    className="h-2 w-2 flex-none rounded-full"
-                    style={{ background: opt.color }}
-                  />
-                )}
-                <ArkSelect.ItemText>{opt.label}</ArkSelect.ItemText>
-              </ArkSelect.Item>
-            ))}
-          </ArkSelect.Content>
-        </ArkSelect.Positioner>
-      </Portal>
-    </ArkSelect.Root>
+      <RindSelect.Trigger
+        aria-label={ariaLabel}
+        className={`${TRIGGER_BASE} ${TRIGGER_VARIANT[variant]} ${className}`}
+      >
+        {selected?.color && (
+          <span className="h-2 w-2 flex-none rounded-full" style={{ background: selected.color }} />
+        )}
+        <RindSelect.ValueText className="truncate" />
+        <ChevronIcon className="ml-auto h-3.5 w-3.5 flex-none rotate-90 text-faint transition-transform data-[state=open]:-rotate-90" />
+      </RindSelect.Trigger>
+      <RindSelect.Portal>
+        {/* The positioner is translated, so it is the stacking context the content's
+            z-index lives in; it takes the z-index itself. Pinned to the trigger's width
+            (the content's min-width can still widen it). */}
+        <RindSelect.Positioner className="z-[200] w-[var(--rind-anchor-width)]">
+          <RindSelect.Content className="animate-fade z-[200] max-h-[min(60vh,20rem)] min-w-[11rem] overflow-y-auto rounded-md border border-line-strong bg-overlay p-1 shadow-[var(--shadow)] focus:outline-none">
+            <RindSelect.List>
+              {options.map((opt) => (
+                <RindSelect.Item
+                  key={opt.value}
+                  value={KEY + opt.value}
+                  className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-1.5 text-sm whitespace-nowrap text-muted data-[highlighted]:bg-selection data-[highlighted]:text-ink data-[selected]:font-medium data-[selected]:text-ink"
+                >
+                  {opt.color && (
+                    <span
+                      className="h-2 w-2 flex-none rounded-full"
+                      style={{ background: opt.color }}
+                    />
+                  )}
+                  <RindSelect.ItemText>{opt.label}</RindSelect.ItemText>
+                </RindSelect.Item>
+              ))}
+            </RindSelect.List>
+          </RindSelect.Content>
+        </RindSelect.Positioner>
+      </RindSelect.Portal>
+    </RindSelect.Root>
   )
 }

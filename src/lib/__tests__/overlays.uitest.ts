@@ -78,7 +78,7 @@ describe("what floats over the pane", () => {
 
   it("does not count a layer that is mounted but closed", () => {
     const pane = app()
-    portal() // an Ark menu kept mounted: present in the tree, zero-size, invisible
+    portal() // a rind menu kept mounted: present in the tree, zero-size, invisible
     expect(overlaysCover(pane)).toBe(false)
   })
 

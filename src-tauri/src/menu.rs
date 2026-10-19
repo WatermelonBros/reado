@@ -286,6 +286,8 @@ fn init_macos(app: &App) -> tauri::Result<()> {
         .text("theme:reado-light", "Light")
         .text("theme:reado-high-contrast", "High Contrast")
         .text("theme:reado-sepia", "Sepia")
+        .text("theme:reado-acid", "Acid")
+        .text("theme:reado-pop", "Pop")
         .build()?;
 
     let open_view_menu = SubmenuBuilder::new(app, "Open View")

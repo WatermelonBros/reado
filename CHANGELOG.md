@@ -17,9 +17,16 @@ commit.
   or external diff command, then approve it for one preview. Results are read-only;
   standard diffs and staging keep using the original contents with drivers disabled.
 - macOS: right-clicking Reado in the Dock offers **New Window**, as VS Code does.
+- Two louder built-in themes: **Reado Acid** (dark: violet-black, acid lime, hot pink,
+  solid offset shadows) and **Reado Pop** (light: lime paper, white cards, ink borders,
+  a pink accent). Both keep every text rank at WCAG AA, and both go further than
+  colour: taller buttons and fields, 2px borders across the app, rounder corners,
+  bold button labels and a solid offset shadow under every control.
 
 ### Changed
 
+- Interactive components (dialogs, menus, selects, tooltips, tours, colour picker,
+  segmented controls, checkboxes, QR codes) are now built on rind-ui instead of Ark UI.
 - The Files panel shows its read progress on a row of its own, with a progress bar, so
   it no longer crowds the header actions. In a narrow sidebar those actions fold into
   a single "More actions" menu instead of being cut off.
@@ -27,6 +34,9 @@ commit.
 
 ### Fixed
 
+- The colour picker's hue and opacity knobs sit centred on their tracks.
+- The URL button under the Reado Anywhere QR code no longer gets squashed to a sliver
+  when the dialog scrolls.
 - Preserve CRLF line endings when resolving merge conflicts.
 - Find search queries starting with a dash, such as `--help` or `-foo`.
 - Show invalid regular expression errors in project search instead of reporting no matches.

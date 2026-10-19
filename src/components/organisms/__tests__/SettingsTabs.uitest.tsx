@@ -89,7 +89,7 @@ describe("the Interface tab", () => {
 
   it("applies a colour-vision mode to the store", async () => {
     await openTab("interface")
-    // An Ark listbox, not a native <select>: the current label shows on the
+    // A rind listbox, not a native <select>: the current label shows on the
     // trigger *and* on its item, so go through the trigger's role to open it.
     const trigger = (await screen.findAllByRole("combobox")).find((el) =>
       el.textContent?.includes("settings.colorVisionNormal"),

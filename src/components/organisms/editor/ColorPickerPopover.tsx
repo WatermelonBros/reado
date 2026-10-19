@@ -1,5 +1,5 @@
 /**
- * The picker that opens over a colour swatch. Ark's headless colour picker in
+ * The picker that opens over a colour swatch. Rind's headless colour picker in
  * our tokens, positioned at the swatch and writing back through a callback.
  *
  * The value it hands back is always sRGB; turning that into the notation the
@@ -7,7 +7,7 @@
  * dialect instead of being converted to hex on the first edit.
  */
 
-import { ColorPicker, parseColor } from "@ark-ui/react/color-picker"
+import { ColorPicker } from "@rind-ui/react"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { IconButton } from "@/components/atoms/IconButton"
@@ -69,22 +69,13 @@ export function ColorPickerPopover({
       <ColorPicker.Root
         open
         inline
-        // Ark parses/serialises sRGB; the source's own notation is restored on
-        // the way out, in `onValueChange`.
-        value={parseColor(`rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${rgb.a})`)}
-        onValueChange={(d) => {
-          const c = d.value.toFormat("rgba")
-          onChange(
-            formatColor(
-              {
-                r: Math.round(c.getChannelValue("red")),
-                g: Math.round(c.getChannelValue("green")),
-                b: Math.round(c.getChannelValue("blue")),
-                a: c.getChannelValue("alpha"),
-              },
-              hit.format,
-            ),
-          )
+        // Rind reads and (in `rgb` format) writes sRGB text; the source's own
+        // notation is restored on the way out, in `onValueChange`.
+        format="rgb"
+        value={`rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${rgb.a})`}
+        onValueChange={(_, d) => {
+          const c = parseColorLiteral(d.valueAsString)
+          if (c) onChange(formatColor(c, hit.format))
         }}
       >
         <ColorPicker.Content className="flex flex-col gap-2">
@@ -102,11 +93,11 @@ export function ColorPickerPopover({
           </ColorPicker.Area>
           <ColorPicker.ChannelSlider channel="hue" className="h-3 w-full rounded-full">
             <ColorPicker.ChannelSliderTrack className="h-full w-full rounded-full" />
-            <ColorPicker.ChannelSliderThumb className="h-3 w-3 rounded-full border-2 border-white shadow" />
+            <ColorPicker.ChannelSliderThumb className="top-1/2 -mt-1.5 h-3 w-3 rounded-full border-2 border-white shadow" />
           </ColorPicker.ChannelSlider>
           <ColorPicker.ChannelSlider channel="alpha" className="h-3 w-full rounded-full">
             <ColorPicker.ChannelSliderTrack className="h-full w-full rounded-full" />
-            <ColorPicker.ChannelSliderThumb className="h-3 w-3 rounded-full border-2 border-white shadow" />
+            <ColorPicker.ChannelSliderThumb className="top-1/2 -mt-1.5 h-3 w-3 rounded-full border-2 border-white shadow" />
           </ColorPicker.ChannelSlider>
         </ColorPicker.Content>
       </ColorPicker.Root>

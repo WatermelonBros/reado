@@ -1,12 +1,12 @@
 /**
- * A QR code rendered as a crisp SVG, built on Ark UI's headless `QrCode`.
+ * A QR code rendered as a crisp SVG, built on rind-ui's headless `QrCode`.
  *
  * Always dark-on-light (regardless of theme) so a phone camera reads it reliably:
  * the pattern is filled with `--qr-ink` and the caller places it on a light tile
- * that doubles as the quiet zone. Ark generates and lays out the modules; we only
+ * that doubles as the quiet zone (so rind's built-in quiet zone is off). Rind generates and lays out the modules; we only
  * style the surface.
  */
-import { QrCode as ArkQrCode } from "@ark-ui/react/qr-code"
+import { QrCode as RindQrCode } from "@rind-ui/react"
 import { useTranslation } from "react-i18next"
 
 interface Props {
@@ -19,16 +19,16 @@ interface Props {
 export function QrCode({ value, size = 220 }: Props) {
   const { t } = useTranslation()
   return (
-    <ArkQrCode.Root value={value} encoding={{ ecc: "M" }}>
-      <ArkQrCode.Frame
+    <RindQrCode.Root value={value} encoding={{ ecc: "M", quietZone: 0 }}>
+      <RindQrCode.Frame
         width={size}
         height={size}
         shapeRendering="crispEdges"
         role="img"
         aria-label={t("anywhere.qrLabel")}
       >
-        <ArkQrCode.Pattern fill="var(--qr-ink)" />
-      </ArkQrCode.Frame>
-    </ArkQrCode.Root>
+        <RindQrCode.Pattern fill="var(--qr-ink)" />
+      </RindQrCode.Frame>
+    </RindQrCode.Root>
   )
 }

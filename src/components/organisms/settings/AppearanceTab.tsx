@@ -5,7 +5,7 @@ import { Select } from "@/components/atoms/Select"
 import { LOCALES, type Locale, type MessageKey, useLocale } from "@/i18n"
 import { type ExtThemePreview, loadExtThemePreviews } from "@/lib/extThemes"
 import { useMarketplace } from "@/lib/marketplace"
-import { THEMES, type ThemeMode, type ThemeName, useSettings } from "@/lib/store"
+import { DARK_THEMES, THEMES, type ThemeMode, type ThemeName, useSettings } from "@/lib/store"
 import { Field, Section } from "./fields"
 
 export function AppearanceTab() {
@@ -107,11 +107,7 @@ function ThemeChoice({
   t: TFunction
 }) {
   const options = polarity
-    ? THEMES.filter((theme) =>
-        polarity === "light"
-          ? theme.includes("light") || theme.includes("sepia")
-          : theme.includes("dark") || theme.includes("contrast"),
-      )
+    ? THEMES.filter((theme) => DARK_THEMES.includes(theme) === (polarity === "dark"))
     : THEMES
 
   // Themes contributed by installed extensions, loaded and measured once. The

@@ -1,7 +1,7 @@
-// The Tooltip atom (Ark-backed). We assert the safe, deterministic behaviours:
+// The Tooltip atom (rind-backed). We assert the safe, deterministic behaviours:
 // an empty label renders the child bare (no tooltip machinery), and with a label
 // the trigger child still renders and stays interactive. (The hover bubble itself
-// is Ark/portal + delay driven and not asserted here.)
+// is rind/portal + delay driven and not asserted here.)
 
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -17,7 +17,7 @@ describe("Tooltip", () => {
     )
     const btn = screen.getByRole("button", { name: "Hi" })
     expect(btn).toBeInTheDocument()
-    // No Ark tooltip trigger wiring when there's no label.
+    // No rind tooltip trigger wiring when there's no label.
     expect(btn).not.toHaveAttribute("data-scope", "tooltip")
   })
 
@@ -31,7 +31,7 @@ describe("Tooltip", () => {
       </Tooltip>,
     )
     const btn = screen.getByRole("button", { name: "Trigger" })
-    // With a label the child becomes Ark's tooltip trigger (mirror of the
+    // With a label the child becomes rind's tooltip trigger (mirror of the
     // negative assertion above): the anatomy data-attributes are wired onto it.
     expect(btn).toHaveAttribute("data-scope", "tooltip")
     expect(btn).toHaveAttribute("data-part", "trigger")

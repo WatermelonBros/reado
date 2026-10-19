@@ -1,5 +1,5 @@
 /**
- * The dimmed backdrop of an Ark UI tour, cut out around the card and the target.
+ * The dimmed backdrop of a rind tour, cut out around the card and the target.
  * Shared by the app's own first-run tour and project tours: each wraps its parts
  * in `data-tour-scope` so the scrim measures its own tour's card, not the other's.
  */
@@ -37,14 +37,14 @@ function scrimPath(scope: string, target?: () => Element | null): string | null 
   const card = q("content")
   if (!card) return null
   const cr = card.getBoundingClientRect()
-  // Reject the garbage rect zag reports for a frame before it applies the
+  // Reject the garbage rect the tour reports for a frame before it applies the
   // transform — the real card is never zero-sized nor pinned to the corner.
   if (cr.width <= 1 || cr.height <= 1 || (cr.x < 2 && cr.y < 2)) return null
   const W = window.innerWidth,
     H = window.innerHeight
   const holes: string[] = []
   // A tour that knows its target hands it over (it may scroll inside an editor);
-  // otherwise zag's spotlight, which it sizes to the target.
+  // otherwise the tour's spotlight, which it sizes to the target.
   const spot = target?.() ?? q("spotlight")
   const sr = spot?.getBoundingClientRect()
   // Spotlight is hidden on target-less (dialog) steps.
@@ -60,12 +60,12 @@ function scrimPath(scope: string, target?: () => Element | null): string | null 
 }
 
 /**
- * Full-screen scrim with cut-outs. Unlike Ark's backdrop (one hole, none on
+ * Full-screen scrim with cut-outs. Unlike rind's backdrop (one hole, none on
  * dialog steps), this dims the whole app on *every* step and punches holes around
  * the card and the highlighted target — both read as lit while the rest recedes.
  *
  * Re-cut is event-driven (step change, resize, scroll), NOT a 60fps loop: polling
- * getBoundingClientRect every frame forced reflows that fought zag's positioning
+ * getBoundingClientRect every frame forced reflows that fought the tour's positioning
  * and made the card flash at the origin. After each trigger we poll only until the
  * path holds steady for two frames, then stop touching the DOM.
  */

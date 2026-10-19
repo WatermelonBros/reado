@@ -86,7 +86,7 @@ function mount(s: Session) {
   return render(<GuidedReviewPanel />)
 }
 
-/** Open an overflow menu — the current file's, or the `nth` proposal's. Ark's
+/** Open an overflow menu — the current file's, or the `nth` proposal's. rind's
  *  trigger listens on pointerdown, so a bare `.click()` would not open it. */
 async function openMenu(nth = 0) {
   const triggers = screen.getAllByRole("button", { name: "guided.moreActions" })

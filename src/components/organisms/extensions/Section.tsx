@@ -5,10 +5,10 @@
  * aren't looking at are pure scroll cost. Each section remembers whether you
  * left it open, so the shape you arrange once is the shape you get back.
  *
- * Built on Ark's Collapsible: it owns the disclosure semantics and the
+ * Built on rind's Collapsible: it owns the disclosure semantics and the
  * height animation, and the header stays a real button for the keyboard.
  */
-import { Collapsible } from "@ark-ui/react/collapsible"
+import { Collapsible } from "@rind-ui/react"
 import type { ReactNode } from "react"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
@@ -54,7 +54,12 @@ export function Section({
   const open = forceOpen || (remembered ?? true)
 
   return (
-    <Collapsible.Root open={open} onOpenChange={(e) => toggle(id, e.open)}>
+    <Collapsible.Root
+      open={open}
+      onOpenChange={(next) => toggle(id, next)}
+      // Plain `hidden` rather than `until-found`.
+      closedContent="hidden"
+    >
       <div className="sticky top-0 z-10 flex h-7 items-center gap-1 border-b border-line bg-canvas pr-3 pl-1">
         <Collapsible.Trigger className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left">
           <ChevronIcon

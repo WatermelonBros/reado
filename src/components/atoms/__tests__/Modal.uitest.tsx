@@ -1,4 +1,4 @@
-// The themed modal wraps Ark UI's headless Dialog with unmountOnExit, so its
+// The themed modal wraps rind's headless Dialog with unmountOnExit, so its
 // content only exists in the tree while open (via a Portal into document.body).
 // We assert both render states and the dismissal contract.
 

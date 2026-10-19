@@ -1,5 +1,5 @@
 // UI test: the first-run tour — when it auto-starts, when it doesn't, replaying
-// it from Settings, and walking its steps. Ark's Tour is real; the surrounding
+// it from Settings, and walking its steps. rind's Tour is real; the surrounding
 // gates (a project being open, the once-per-machine flag) are what's asserted.
 import { fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -11,7 +11,7 @@ import { useTourGuide } from "@/lib/tour"
 const SEEN_KEY = "reado.tour.seen"
 
 beforeEach(() => {
-  // Ark's positioner reaches for it; happy-dom has no visual viewport.
+  // The positioner reaches for it; happy-dom has no visual viewport.
   vi.stubGlobal("visualViewport", {
     width: 1280,
     height: 800,
@@ -87,7 +87,13 @@ describe("walking the steps", () => {
   })
 
   it("advances to the reading step", async () => {
-    render(<OnboardingTour />)
+    // rind skips a step whose target is missing, so mount the one it points at.
+    render(
+      <>
+        <div data-tour="files" />
+        <OnboardingTour />
+      </>,
+    )
     await settle()
     fireEvent.click(screen.getByText("tour.next"))
     await vi.advanceTimersByTimeAsync(50)

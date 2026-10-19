@@ -21,7 +21,7 @@ import { DefaultAppPrompt } from "@/components/organisms/DefaultAppPrompt"
 import { useSettings } from "@/lib/store"
 
 // Fire the ~1.5s mount timer under fake timers, then hand back to real timers so
-// Ark's dialog machine mounts the portal content (it doesn't advance under faked
+// rind's dialog machine mounts the portal content (it doesn't advance under faked
 // timers). Interactions/assertions then run against the open modal.
 async function renderAndOpen() {
   render(<DefaultAppPrompt />)

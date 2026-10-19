@@ -1,12 +1,11 @@
 /**
- * Right-side drawer built on Ark UI's headless `Dialog`.
+ * Right-side drawer built on Rind's headless `Dialog`.
  *
  * Used for surfaces that benefit from staying anchored to the edge rather than
- * floating in a centred modal (e.g. Settings). Ark handles focus trap, Escape
+ * floating in a centred modal (e.g. Settings). Rind handles focus trap, Escape
  * and dismissal; the slide animation lives in app.css (`.drawer-content`).
  */
-import { Dialog } from "@ark-ui/react/dialog"
-import { Portal } from "@ark-ui/react/portal"
+import { Dialog } from "@rind-ui/react"
 
 interface DrawerProps {
   open: boolean
@@ -21,8 +20,8 @@ export function Drawer({ open, onOpenChange, ariaLabel, className = "", children
   // The native preview webview paints over all DOM — tell it to hide while we are up.
 
   return (
-    <Dialog.Root open={open} onOpenChange={(d) => onOpenChange(d.open)} unmountOnExit lazyMount>
-      <Portal>
+    <Dialog.Root open={open} onOpenChange={(o) => onOpenChange(o)}>
+      <Dialog.Portal>
         <Dialog.Backdrop className="drawer-backdrop reado-scrim fixed inset-0 z-[110]" />
         <Dialog.Positioner className="fixed inset-y-0 right-0 z-[110] flex">
           <Dialog.Content
@@ -32,7 +31,7 @@ export function Drawer({ open, onOpenChange, ariaLabel, className = "", children
             {children}
           </Dialog.Content>
         </Dialog.Positioner>
-      </Portal>
+      </Dialog.Portal>
     </Dialog.Root>
   )
 }

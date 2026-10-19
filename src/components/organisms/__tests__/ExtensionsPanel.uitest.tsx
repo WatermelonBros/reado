@@ -63,7 +63,7 @@ function tsRow() {
   return within(screen.getByText(TS).closest("li") as HTMLElement)
 }
 
-/** The rows inside one section, by its title. Ark marks the trigger and the
+/** The rows inside one section, by its title. rind marks the trigger and the
  *  content it controls, so the section's body is found through that link. */
 function section(title: string) {
   const trigger = screen.getByText(title).closest("button") as HTMLElement

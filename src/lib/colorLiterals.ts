@@ -112,7 +112,7 @@ function parseHsl(s: string): Rgb | null {
 }
 
 // ---- OKLCH ------------------------------------------------------------------
-// Zag's colour utils (behind Ark's picker) handle hex/rgb/hsl but not oklch,
+// rind's colour picker reads hex/rgb/hsl but not oklch,
 // which is the notation this project's own theme tokens are written in — so the
 // conversion lives here. Björn Ottosson's Oklab, with the sRGB transfer function.
 

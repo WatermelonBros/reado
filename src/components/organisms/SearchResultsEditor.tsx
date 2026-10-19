@@ -36,7 +36,7 @@ interface Props {
 
 export function SearchResultsEditor({ matches, open, onClose, onApplied }: Props) {
   const { t } = useTranslation()
-  // A callback ref, not a `useRef`: `Modal` is an Ark dialog with `lazyMount`,
+  // A callback ref, not a `useRef`: `Modal` is a rind dialog that mounts lazily,
   // so this host is mounted a commit *after* `open` flips. An effect keyed on
   // `open` therefore ran while the ref was still null, bailed, and — its deps
   // unchanged — never ran again. The dialog opened empty: no results, no

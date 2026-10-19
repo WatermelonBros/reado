@@ -4,3 +4,6 @@
 # false preserves exactly the behaviour the lockfile and CI were green on.
 allowBuilds:
   esbuild: false
+minimumReleaseAgeExclude:
+  - '@rind-ui/core@0.4.0'
+  - '@rind-ui/react@0.4.0'

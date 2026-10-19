@@ -4,9 +4,8 @@
  * run status. Some items are clickable (go to line, convert line endings), in
  * the spirit of VS Code's status bar.
  */
-import { Popover } from "@ark-ui/react/popover"
-import { Portal } from "@ark-ui/react/portal"
-import { useState } from "react"
+import { Popover, type PopoverActions } from "@rind-ui/react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ContextMenu, type ContextMenuItem } from "@/components/atoms/ContextMenu"
 import { Input } from "@/components/atoms/Input"
@@ -34,6 +33,7 @@ export function StatusBar() {
 
   const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null)
   const [gotoValue, setGotoValue] = useState("")
+  const gotoPopover = useRef<PopoverActions>(null)
 
   const rel = relativePath(root, active)
   // Which of the optional indicators are showing. The file path and the caret
@@ -96,39 +96,40 @@ export function StatusBar() {
           <bdi>{rel ?? t("status.noFile")}</bdi>
         </span>
         {active && (
-          <Popover.Root positioning={{ placement: "top-start" }} lazyMount unmountOnExit>
+          <Popover.Root
+            actionsRef={gotoPopover}
+            positioning={{ side: "top", align: "start" }}
+            // A jump hands focus to the editor; closing must not pull it back.
+            finalFocus={(reason) => (reason === "api" ? false : null)}
+          >
             <Popover.Trigger title={t("status.goToLine")} className={ITEM}>
               Ln {line}, Col {col}
             </Popover.Trigger>
-            <Portal>
-              <Popover.Positioner>
+            <Popover.Portal>
+              <Popover.Positioner className="z-[200]">
                 <Popover.Content className="z-[200] rounded-md border border-line-strong bg-overlay p-1 shadow-[var(--shadow)] focus:outline-none">
-                  <Popover.Context>
-                    {(api) => (
-                      <Input
-                        variant="plain"
-                        value={gotoValue}
-                        inputMode="numeric"
-                        onChange={(e) => setGotoValue(e.target.value.replace(/[^0-9]/g, ""))}
-                        onKeyDown={(e) => {
-                          if (e.key !== "Enter") return
-                          // Prevent the Enter from reaching the editor once
-                          // goToLine refocuses it — otherwise it inserts a
-                          // newline (shifting the target line by one and marking
-                          // the file dirty).
-                          e.preventDefault()
-                          submitGoto()
-                          api.setOpen(false)
-                        }}
-                        placeholder={t("status.goToLinePlaceholder")}
-                        aria-label={t("status.goToLinePlaceholder")}
-                        className="block w-[160px]"
-                      />
-                    )}
-                  </Popover.Context>
+                  <Input
+                    variant="plain"
+                    value={gotoValue}
+                    inputMode="numeric"
+                    onChange={(e) => setGotoValue(e.target.value.replace(/[^0-9]/g, ""))}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return
+                      // Prevent the Enter from reaching the editor once
+                      // goToLine refocuses it — otherwise it inserts a
+                      // newline (shifting the target line by one and marking
+                      // the file dirty).
+                      e.preventDefault()
+                      submitGoto()
+                      gotoPopover.current?.close()
+                    }}
+                    placeholder={t("status.goToLinePlaceholder")}
+                    aria-label={t("status.goToLinePlaceholder")}
+                    className="block w-[160px]"
+                  />
                 </Popover.Content>
               </Popover.Positioner>
-            </Portal>
+            </Popover.Portal>
           </Popover.Root>
         )}
       </div>

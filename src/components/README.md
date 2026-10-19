@@ -7,8 +7,8 @@ from smallest to largest:
   `Tooltip`, `Input`, `Textarea`, `Badge`, `Checkbox`, `Select`,
   `SegmentedControl`, `Modal`, `Drawer`, `ContextMenu`, `QrCode`, the `icons` set,
   and the shared comment metadata (`commentMeta`: type colors and the `Dot`).
-  Interactive atoms are built on [Ark UI](https://ark-ui.com) — use it rather than
-  hand-rolling. Every clickable icon is an `IconButton` (label + Ark tooltip);
+  Interactive atoms are built on [rind-ui](https://rind.watermelon-studio.it) — use it
+  rather than hand-rolling. Every clickable icon is an `IconButton` (label + rind tooltip);
   every text action is a `Button`; single-/multi-line fields are `Input`/`Textarea`.
   Atoms carry full default styling and merge a caller's `className` via `cn()`
   (`lib/cn.ts`, tailwind-merge), so overrides never fight class order.
