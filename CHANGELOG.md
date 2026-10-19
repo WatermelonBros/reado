@@ -11,6 +11,8 @@ commit.
 
 ## [Unreleased]
 
+## [1.34.0] — 2026-10-19
+
 ### Added
 
 - Specialized diff previews on macOS and Linux: inspect a configured text converter
@@ -3128,7 +3130,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.33.2...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.34.0...HEAD
+[1.34.0]: https://github.com/WatermelonBros/reado/compare/v1.33.2...v1.34.0
 [1.33.2]: https://github.com/WatermelonBros/reado/compare/v1.33.1...v1.33.2
 [1.33.1]: https://github.com/WatermelonBros/reado/compare/v1.33.0...v1.33.1
 [1.33.0]: https://github.com/WatermelonBros/reado/compare/v1.32.0...v1.33.0
