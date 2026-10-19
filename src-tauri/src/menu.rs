@@ -67,13 +67,17 @@ macro_rules! acc {
 /// Forward a custom menu item's click to the frontend as a `menu` event.
 #[cfg(target_os = "macos")]
 fn forward_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
-    use tauri::{Emitter, Manager};
-
     // Predefined items are handled natively; forward our custom ids so the
     // frontend can run the matching command. Send to the *focused* window
     // only — otherwise, with multiple windows open, one menu action would
     // fire in every window.
-    let id = event.id().0.clone();
+    forward_menu_id(app, event.id().0.clone());
+}
+
+/// Send a menu command id to the window it is meant for (see above).
+fn forward_menu_id(app: &tauri::AppHandle, id: String) {
+    use tauri::{Emitter, Manager};
+
     // Prefer the last-focused window (tracked on focus); fall back to whichever
     // currently reports focus, then to a broadcast.
     let last_label = app
@@ -402,8 +406,104 @@ fn init_macos(app: &App) -> tauri::Result<()> {
     window_menu.set_as_windows_menu_for_nsapp()?;
 
     app.on_menu_event(forward_menu_event);
+    dock::install(app.handle());
 
     Ok(())
+}
+
+/// The Dock icon's right-click menu. Tauri has no API for it, so this answers
+/// AppKit's `applicationDockMenu:` on tao's app delegate directly. AppKit puts
+/// the window list above whatever this returns, so it carries only the actions
+/// VS Code puts there: New Window.
+#[cfg(target_os = "macos")]
+mod dock {
+    use std::cell::OnceCell;
+    use std::sync::OnceLock;
+
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyObject, Imp, NSObject, Sel};
+    use objc2::{define_class, ffi, msg_send, sel, MainThreadMarker, MainThreadOnly};
+    use objc2_app_kit::{NSApplication, NSMenu, NSMenuItem};
+    use objc2_foundation::ns_string;
+
+    static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+
+    thread_local! {
+        // An item holds its target weakly, so both live here for the app's life.
+        static MENU: OnceCell<(Retained<NSMenu>, Retained<DockTarget>)> = const { OnceCell::new() };
+    }
+
+    define_class!(
+        #[unsafe(super(NSObject))]
+        #[thread_kind = MainThreadOnly]
+        #[name = "ReadoDockTarget"]
+        struct DockTarget;
+
+        impl DockTarget {
+            #[unsafe(method(newWindow:))]
+            fn new_window(&self, _sender: Option<&AnyObject>) {
+                if let Some(app) = APP.get() {
+                    super::forward_menu_id(app, "window:new".into());
+                }
+            }
+        }
+    );
+
+    extern "C-unwind" fn dock_menu(
+        _this: *mut AnyObject,
+        _cmd: Sel,
+        _app: *mut AnyObject,
+    ) -> *mut NSMenu {
+        MENU.with(|m| {
+            m.get().map_or(std::ptr::null_mut(), |(menu, _)| {
+                Retained::as_ptr(menu) as *mut NSMenu
+            })
+        })
+    }
+
+    pub fn install(app: &tauri::AppHandle) {
+        let _ = APP.set(app.clone());
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let Some(delegate) = NSApplication::sharedApplication(mtm).delegate() else {
+            return;
+        };
+
+        let target: Retained<DockTarget> = unsafe { msg_send![DockTarget::alloc(mtm), init] };
+        let menu = NSMenu::new(mtm);
+        // Safety: a plain item whose action `target` implements; both are kept alive in MENU.
+        unsafe {
+            let item = NSMenuItem::initWithTitle_action_keyEquivalent(
+                NSMenuItem::alloc(mtm),
+                ns_string!("New Window"),
+                Some(sel!(newWindow:)),
+                ns_string!(""),
+            );
+            item.setTarget(Some(&target));
+            menu.addItem(&item);
+        }
+        MENU.with(|m| {
+            let _ = m.set((menu, target));
+        });
+
+        let obj: &AnyObject = delegate.as_ref();
+        // Safety: tao's delegate class does not implement this selector (so the
+        // add can't clobber anything), and `dock_menu` matches `@@:@` —
+        // `-(NSMenu *)applicationDockMenu:(NSApplication *)sender`, returned +0.
+        unsafe {
+            let imp: Imp = std::mem::transmute(
+                dock_menu
+                    as extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject) -> *mut NSMenu,
+            );
+            ffi::class_addMethod(
+                obj.class() as *const _ as *mut _,
+                sel!(applicationDockMenu:),
+                imp,
+                c"@@:@".as_ptr(),
+            );
+        }
+    }
 }
 
 /// Keep the window's title *string* while hiding the text macOS would draw.
