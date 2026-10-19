@@ -88,7 +88,9 @@ const SCREENS: Screen[] = [
     open: async () => {
       usePalette.getState().toggleSettings(true)
       const drawer = await screen.findByRole("dialog")
-      const item = [...drawer.querySelectorAll('[data-scope="segmented-control"][data-part="item"]')]
+      const item = [
+        ...drawer.querySelectorAll('[data-scope="segmented-control"][data-part="item"]'),
+      ]
         .map((el) => el as HTMLElement)
         .find((el) => el.textContent?.trim() === tab)
       if (!item) throw new Error(`no "${tab}" tab in Settings`)
