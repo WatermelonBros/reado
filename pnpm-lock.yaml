@@ -63,8 +63,8 @@ importers:
         specifier: ^6.0.2
         version: 6.0.2(@codemirror/language@6.12.3)
       '@rind-ui/react':
-        specifier: ^0.4.0
-        version: 0.4.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        specifier: ^0.5.0
+        version: 0.5.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tauri-apps/api':
         specifier: ^2
         version: 2.11.1
@@ -816,11 +816,11 @@ packages:
     peerDependencies:
       '@codemirror/language': ^6.0.0
 
-  '@rind-ui/core@0.4.0':
-    resolution: {integrity: sha512-Rg+mjh+5UhhHJ8kBSkTFBP8+jwAtYbYQ2i6oA5PU+mTfkP8FoTeI8ioVYvsi/RdmSkebLHZbi4tzy4vlLOnIyA==}
+  '@rind-ui/core@0.5.0':
+    resolution: {integrity: sha512-akMP3AA7YKvHC+xRdWjn7rUWf0zEsW2PI10c2YEYg2qzW6Yvd5jPkAnh0kYosxoOHnCCUrBuTCLq2f41YANGgw==}
 
-  '@rind-ui/react@0.4.0':
-    resolution: {integrity: sha512-coy8iFfxm86ahUGt3DrbomUO1XYyM/w/v4UBMN2zPsz+aGayhvaWd7C5TBld+zBN2jexXy1pWL0gjUHbtiThsA==}
+  '@rind-ui/react@0.5.0':
+    resolution: {integrity: sha512-dEnLrNlpNWIb0wmr7LyoyFrNL5t9Zke6uAP+h20r9BXrSLdfjTkdNEqH7YKcps971QzERNpl1qKS7ZhZVN9dAw==}
     peerDependencies:
       react: '>=19'
       react-dom: '>=19'
@@ -3147,15 +3147,15 @@ snapshots:
       '@codemirror/language': 6.12.3
       '@lezer/highlight': 1.2.3
 
-  '@rind-ui/core@0.4.0':
+  '@rind-ui/core@0.5.0':
     dependencies:
       '@floating-ui/dom': 1.8.0
       '@internationalized/date': 3.12.4
       '@internationalized/number': 3.6.9
 
-  '@rind-ui/react@0.4.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@rind-ui/react@0.5.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
-      '@rind-ui/core': 0.4.0
+      '@rind-ui/core': 0.5.0
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 

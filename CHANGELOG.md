@@ -11,6 +11,11 @@ commit.
 
 ## [Unreleased]
 
+### Changed
+
+- rind-ui 0.5.0: the app ships only the components it uses, about 480 kB (136 kB gzip)
+  less JavaScript to load.
+
 ## [1.34.0] — 2026-10-19
 
 ### Added
