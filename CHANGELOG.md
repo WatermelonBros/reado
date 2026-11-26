@@ -11,10 +11,25 @@ commit.
 
 ## [Unreleased]
 
+## [1.34.1] — 2026-11-26
+
 ### Changed
 
 - rind-ui 0.5.0: the app ships only the components it uses, about 480 kB (136 kB gzip)
   less JavaScript to load.
+
+### Fixed
+
+- With more than one window open, only the project opened last stayed live: the others
+  stopped seeing changes made outside Reado (a commit or push in the terminal, files
+  and folders created or deleted) until the window was refocused. Each window now
+  keeps its own watcher, and hears only its own project's changes.
+- An open diff now follows a commit, push or checkout made elsewhere instead of
+  comparing against the ref it was opened on.
+- A folder created or removed outside Reado now shows in the file tree.
+- macOS: dropping files from Finder onto the terminal types their paths again. The
+  drop was hit-tested at half its real position, so it missed any pane right of or
+  below the window's middle.
 
 ## [1.34.0] — 2026-10-19
 
@@ -3135,7 +3150,8 @@ Initial public releases (0.1.0 – 0.1.19).
 - Full-width status bar with a left-truncated path.
 - Persist terminal dock position and size across restarts.
 
-[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.34.0...HEAD
+[Unreleased]: https://github.com/WatermelonBros/reado/compare/v1.34.1...HEAD
+[1.34.1]: https://github.com/WatermelonBros/reado/compare/v1.34.0...v1.34.1
 [1.34.0]: https://github.com/WatermelonBros/reado/compare/v1.33.2...v1.34.0
 [1.33.2]: https://github.com/WatermelonBros/reado/compare/v1.33.1...v1.33.2
 [1.33.1]: https://github.com/WatermelonBros/reado/compare/v1.33.0...v1.33.1
