@@ -91,6 +91,8 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
   const [head, setHead] = useState<string | null | undefined>(undefined)
   // Bumped when a hunk moves, so the base is re-read and the diff redraws.
   const [refresh, setRefresh] = useState(0)
+  // A commit, push or checkout done elsewhere moves the ref this compares to.
+  const gitNonce = useProject((s) => s.gitNonce)
   // Delta mode: diff against the last-read snapshot rather than a git ref.
   const isDelta = base === LAST_READ_BASE
   // "Compare with Saved": the base is the file on disk, not a git ref — so this
@@ -103,9 +105,16 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
   const historyStamp = base.startsWith(HISTORY_BASE) ? base.slice(HISTORY_BASE.length) : null
 
   // Fetch the base version whenever the file or chosen base changes.
+  // Only a different file or base shows "loading": a re-read of the same one
+  // (the ref moved) keeps the old diff up until the new base arrives.
+  const shown = useRef("")
   useEffect(() => {
     let cancelled = false
-    setHead(undefined)
+    const key = `${root}\0${relPath}\0${base}`
+    if (shown.current !== key) {
+      shown.current = key
+      setHead(undefined)
+    }
     // `gitDiffBase`, not `gitShowRef`: a file added since the base is not "no
     // base", it's an empty one — so a new file reads as an all-added diff.
     const fetchBase = historyStamp
@@ -121,7 +130,7 @@ export function DiffView({ relPath, text, base: baseOverride }: Props) {
     return () => {
       cancelled = true
     }
-  }, [root, relPath, base, isDelta, isSaved, otherFile, historyStamp, refresh])
+  }, [root, relPath, base, isDelta, isSaved, otherFile, historyStamp, refresh, gitNonce])
 
   // "Mark reviewed": re-snapshot the current content as read and leave the delta.
   const markReviewed = () => {

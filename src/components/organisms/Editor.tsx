@@ -11,7 +11,6 @@
  * Syntax highlighting and the editor theme come from `lib/codemirror.ts`.
  */
 
-import { listen } from "@tauri-apps/api/event"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/atoms/Badge"
@@ -31,6 +30,7 @@ import { isNotebook } from "@/lib/notebook"
 import { SAVED_BASE, useEditorActions, useProject, useSettings } from "@/lib/store"
 import { useTextView } from "@/lib/textView"
 import { isUntitled, useUntitled } from "@/lib/untitled"
+import { listenHere } from "@/lib/window"
 import { rootFor } from "@/lib/workspace"
 import { CodeView } from "./editor/CodeView"
 import { human, isMarkdown, PLACEHOLDER } from "./editor/extensions"
@@ -164,7 +164,7 @@ export function Editor({ paneFile }: { paneFile?: string } = {}) {
     if (!active || isUntitled(active)) return
     let cancelled = false
     const rel = toRelative(root, active)
-    const un = listen<{ file: string }>("file-changed", (e) => {
+    const un = listenHere<{ file: string }>("file-changed", (e) => {
       // In PR mode the shown bytes come from the ref, not disk — ignore writes.
       if (e.payload.file !== rel || useEditorActions.getState().isDirty(rel) || prRef) return
       readFile(root, active, forceText.has(active), guardBytes)

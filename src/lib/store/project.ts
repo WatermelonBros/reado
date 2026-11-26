@@ -49,6 +49,10 @@ interface ProjectState {
   /** Bumped to make the file tree re-list directories (external/internal changes). */
   treeNonce: number
   bumpTree: () => void
+  /** Bumped when git state moves on disk (commit, push, checkout, stage), so
+   *  views that compare against a ref re-read it. */
+  gitNonce: number
+  bumpGit: () => void
   /** Bumped to collapse every expanded folder in the tree. */
   collapseNonce: number
   collapseTree: () => void
@@ -140,6 +144,8 @@ export const useProject = create<ProjectState>((set, get) => ({
   landing: null,
   treeNonce: 0,
   bumpTree: () => set((s) => ({ treeNonce: s.treeNonce + 1 })),
+  gitNonce: 0,
+  bumpGit: () => set((s) => ({ gitNonce: s.gitNonce + 1 })),
   collapseNonce: 0,
   collapseTree: () => set((s) => ({ collapseNonce: s.collapseNonce + 1, expandedDirs: [] })),
   expandedDirs: [],

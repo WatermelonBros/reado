@@ -7,7 +7,7 @@
  * hashchange — so a new window pointed at `#project=…` boots straight into it.
  */
 
-import { listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event"
+import { type EventCallback, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event"
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog"
@@ -232,6 +232,21 @@ export function useFullscreen(): [boolean, (on?: boolean) => void] {
 }
 
 /**
+ * `listen`, but only to events addressed to *this* window.
+ *
+ * Every window runs in one process, and Tauri hands an event sent with
+ * `emit_to(window)` to every window's untargeted `listen` as well. The watcher
+ * reports paths relative to one window's project, and a drop lands in one
+ * window — heard everywhere, another window would act on paths that are not its
+ * own.
+ */
+export function listenHere<T>(event: string, handler: EventCallback<T>): Promise<UnlistenFn> {
+  return listen<T>(event, handler, {
+    target: { kind: "WebviewWindow", label: getCurrentWindow().label },
+  })
+}
+
+/**
  * Subscribe to file drops on this webview, and be able to stop cleanly.
  *
  * Tauri's own `onDragDropEvent` subscribes to four events and hands back a
@@ -255,7 +270,7 @@ export function useFullscreen(): [boolean, (on?: boolean) => void] {
 export function onFileDrop(
   handler: (paths: string[], position: { x: number; y: number }) => void,
 ): Promise<UnlistenFn> {
-  return listen<{ paths: string[]; position: { x: number; y: number } }>(
+  return listenHere<{ paths: string[]; position: { x: number; y: number } }>(
     TauriEvent.DRAG_DROP,
     (e) => handler(e.payload.paths, e.payload.position),
   )

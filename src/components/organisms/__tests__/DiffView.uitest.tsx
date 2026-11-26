@@ -1,7 +1,7 @@
 // UI test: the opt-in diff view — against a git ref, and against the last-read
 // snapshot (the "delta" a changed file leaves behind). The base fetch is mocked;
 // CodeMirror's merge view is real.
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -67,6 +67,18 @@ describe("fetching the base", () => {
     gitDiffBase.mockResolvedValue(null)
     render(<DiffView relPath={REL} text={"new\n"} />)
     expect(await screen.findByText("diff.noBase")).toBeInTheDocument()
+  })
+
+  it("re-reads the base when git moves it elsewhere, without flashing loading", async () => {
+    // A commit or push in the terminal moves HEAD or origin/main under an open
+    // diff; it used to keep comparing against the old one until reopened.
+    render(<DiffView relPath={REL} text={"new\n"} base="origin/main" />)
+    expect(await screen.findByText("diff.changes")).toBeInTheDocument()
+    gitDiffBase.mockResolvedValue("new\n")
+    act(() => useProject.getState().bumpGit())
+    expect(screen.queryByText("common.loading")).not.toBeInTheDocument()
+    expect(await screen.findByText("diff.noChanges")).toBeInTheDocument()
+    expect(gitDiffBase).toHaveBeenCalledTimes(2)
   })
 
   it("honours an explicit base — a PR diffs against its own base ref", async () => {

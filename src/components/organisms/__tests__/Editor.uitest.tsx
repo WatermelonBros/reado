@@ -2,6 +2,8 @@
 // the large-file guard, the markdown source/prose toggle, and the PR-review path
 // that reads bytes from a git ref instead of the working tree. Every viewer is
 // stubbed; what's asserted is which one the editor chooses, and with what.
+
+import { mockWindows } from "@tauri-apps/api/mocks"
 import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -70,6 +72,8 @@ const FILE = "/repo/src/a.ts"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // The file-changed listener is scoped to this window, so it needs one.
+  mockWindows("main")
   fileChanged = null
   readFile.mockResolvedValue({ kind: "text", text: "const x = 1" })
   gitShowRef.mockResolvedValue(null)

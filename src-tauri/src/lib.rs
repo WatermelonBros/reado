@@ -417,6 +417,11 @@ fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             &window.app_handle().state::<pty::PtyState>(),
             window.label(),
         );
+        // And its filesystem watcher, which would otherwise outlive it.
+        watcher::stop_watching(
+            &window.app_handle().state::<watcher::WatcherState>(),
+            window.label(),
+        );
     }
 }
 

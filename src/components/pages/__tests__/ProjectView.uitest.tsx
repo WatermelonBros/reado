@@ -211,8 +211,22 @@ describe("reacting to the backend", () => {
     render(<ProjectView root={ROOT} />)
     await waitFor(() => expect(listeners.has("git-changed")).toBe(true))
     api.gitInfo.mockClear()
+    const nonce = useProject.getState().gitNonce
     emit("git-changed")
     expect(api.gitInfo).toHaveBeenCalledWith(ROOT)
+    // An open diff compares against a ref the commit or push just moved.
+    expect(useProject.getState().gitNonce).toBe(nonce + 1)
+  })
+
+  it("re-lists the tree when a folder appears on disk", async () => {
+    vi.useFakeTimers()
+    render(<ProjectView root={ROOT} />)
+    await vi.waitFor(() => expect(listeners.has("tree-changed")).toBe(true))
+    const before = useProject.getState().treeNonce
+    emit("tree-changed")
+    await vi.advanceTimersByTimeAsync(300)
+    expect(useProject.getState().treeNonce).toBe(before + 1)
+    vi.useRealTimers()
   })
 
   it("reloads comments when the agent mutates them through the CLI", async () => {

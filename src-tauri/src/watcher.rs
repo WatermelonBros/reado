@@ -19,7 +19,7 @@ use ignore::WalkBuilder;
 use notify::event::{ModifyKind, RenameMode};
 use notify::{EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, EventTarget, State};
 
 /// Debounce window: changes are coalesced over this quiet period before firing.
 const DEBOUNCE: Duration = Duration::from_millis(250);
@@ -206,14 +206,27 @@ fn relative(root: &Path, path: &Path) -> Option<String> {
     Some(rel.to_string_lossy().replace('\\', "/"))
 }
 
-/// The live watchers, keyed by the root each one watches.
+/// The live watchers, keyed by the window each one reports to, with the root it
+/// watches.
 ///
 /// The handles live here rather than inside their threads so they can be
 /// dropped: each thread's loop exits on `Disconnected`, which is what dropping
 /// the watcher (and with it the event sender) produces. Without somewhere to
 /// hold them, a watcher could never be stopped.
+///
+/// Keyed by window, not by root: every window lives in this one process, so a
+/// map that kept only the last root opened silently stopped the watcher of every
+/// other open project — its tree, Source Control and diffs froze until a focus
+/// or poll happened to catch up.
 #[derive(Default)]
-pub struct WatcherState(Mutex<HashMap<PathBuf, notify::RecommendedWatcher>>);
+pub struct WatcherState(Mutex<HashMap<String, (PathBuf, notify::RecommendedWatcher)>>);
+
+/// Stop the watcher reporting to `window`, if any: called when it closes.
+pub fn stop_watching(state: &WatcherState, window: &str) {
+    if let Ok(mut live) = state.0.lock() {
+        live.remove(window);
+    }
+}
 
 /// A predicate on a changed path.
 type PathTest = fn(&Path) -> bool;
@@ -244,6 +257,12 @@ const SIGNALS: &[(PathTest, &str)] = &[
 /// The event a moved file's comments raise.
 const COMMENTS_CHANGED: &str = "comments-changed";
 
+/// The event a directory created, removed or renamed on disk raises. A file
+/// change already re-lists the tree through `file-changed`; a folder made with
+/// `mkdir` (or an empty one deleted) brings no file with it, so without this the
+/// tree never showed it.
+const TREE_CHANGED: &str = "tree-changed";
+
 /// One coalescing window of filesystem events, between two flushes.
 #[derive(Default)]
 struct Batch {
@@ -263,7 +282,7 @@ struct Batch {
 struct Flushed {
     /// Project-relative files whose contents changed, for `file-changed`.
     files: Vec<String>,
-    /// Events to raise, once each, in [`SIGNALS`] order.
+    /// Events to raise, once each, in [`SIGNALS`] order, then [`TREE_CHANGED`].
     signals: Vec<&'static str>,
 }
 
@@ -372,7 +391,11 @@ impl Batch {
                 raised.insert(event);
                 continue;
             }
-            if path.is_dir() || is_ignored(matchers, &path) {
+            if is_ignored(matchers, &path) {
+                continue;
+            }
+            if path.is_dir() {
+                raised.insert(TREE_CHANGED);
                 continue;
             }
             if let Some(rel) = relative(root, &path) {
@@ -384,6 +407,7 @@ impl Batch {
             signals: SIGNALS
                 .iter()
                 .map(|(_, event)| *event)
+                .chain([TREE_CHANGED])
                 .filter(|event| raised.contains(event))
                 .collect(),
         }
@@ -429,30 +453,38 @@ fn pair_rename(
     (from != to && looks_like_rename).then_some((from, to))
 }
 
-/// Start watching `root`, and stop watching anything else.
+/// Start watching `root` for the calling window, replacing what it watched before.
 ///
-/// The window shows one project at a time and remounts its view on a switch, so
-/// this is called again for each project opened. It is idempotent per root, and
-/// retires the previous project's watcher: left running, that thread would go on
-/// emitting `file-changed` with paths relative to the *old* root, which the new
-/// project's listener would take for its own — on top of leaking a thread and a
-/// recursive filesystem registration per project opened.
+/// A window shows one project at a time and remounts its view on a switch, so
+/// this is called again for each project opened. It is idempotent per window and
+/// root, and retires that window's previous watcher: left running, that thread
+/// would go on emitting `file-changed` with paths relative to the *old* root,
+/// which the new project's listener would take for its own — on top of leaking a
+/// thread and a recursive filesystem registration per project opened.
+///
+/// Events go to the calling window only (`emit_to`): another window has its own
+/// project, and a path relative to this root means nothing there.
 #[tauri::command]
 pub fn start_watching(
     app: AppHandle,
+    window: tauri::WebviewWindow,
     watchers: State<'_, WatcherState>,
     root: String,
 ) -> Result<(), String> {
     let root = PathBuf::from(&root);
+    let label = window.label().to_string();
 
     {
-        // Dropping the stale watchers ends their threads. Done before the new
-        // one is registered so a re-entry for the same root is a no-op.
+        // Dropping the stale watcher ends its thread. Done before the new one is
+        // registered so a re-entry for the same root is a no-op.
         let mut live = watchers.0.lock().map_err(|e| e.to_string())?;
-        live.retain(|watched, _| watched == &root);
-        if live.contains_key(&root) {
+        if live
+            .get(&label)
+            .is_some_and(|(watched, _)| watched == &root)
+        {
             return Ok(());
         }
+        live.remove(&label);
     }
 
     let (tx, rx) = channel();
@@ -472,7 +504,8 @@ pub fn start_watching(
         .0
         .lock()
         .map_err(|e| e.to_string())?
-        .insert(root.clone(), watcher);
+        .insert(label.clone(), (root.clone(), watcher));
+    let target = EventTarget::webview_window(label);
 
     std::thread::spawn(move || {
         // Built here, not in the command: collecting the ignore files walks the
@@ -490,7 +523,7 @@ pub fn start_watching(
                             .unwrap_or(0)
                             > 0
                         {
-                            let _ = app.emit(COMMENTS_CHANGED, ());
+                            let _ = app.emit_to(target.clone(), COMMENTS_CHANGED, ());
                         }
                     }
                 }
@@ -510,10 +543,10 @@ pub fn start_watching(
                             "file changed (reanchor)",
                             serde_json::json!({ "file": file }),
                         );
-                        let _ = app.emit("file-changed", FileChanged { file });
+                        let _ = app.emit_to(target.clone(), "file-changed", FileChanged { file });
                     }
                     for event in flushed.signals {
-                        let _ = app.emit(event, ());
+                        let _ = app.emit_to(target.clone(), event, ());
                     }
                 }
                 Err(RecvTimeoutError::Disconnected) => break,
@@ -742,9 +775,13 @@ mod tests {
             ],
         ));
         let flushed = batch.flush(root, &mut ignore_matchers(root));
-        // Two git files, one event; a directory and git's objects are nothing.
+        // Two git files, one event; a directory is a tree change, not a file;
+        // git's objects are nothing.
         assert_eq!(flushed.files, vec!["src/a.ts".to_string()]);
-        assert_eq!(flushed.signals, vec!["sessions-changed", "git-changed"]);
+        assert_eq!(
+            flushed.signals,
+            vec!["sessions-changed", "git-changed", "tree-changed"]
+        );
         assert!(batch.pending.is_empty() && batch.window_start.is_none());
     }
 

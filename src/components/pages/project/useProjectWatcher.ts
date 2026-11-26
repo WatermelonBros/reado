@@ -1,4 +1,3 @@
-import { listen } from "@tauri-apps/api/event"
 import { useEffect } from "react"
 import { t as translate } from "@/i18n"
 import {
@@ -23,6 +22,7 @@ import { useReadProgress, wasSelfWrite } from "@/lib/readProgress"
 import { useReasoning } from "@/lib/reasoning"
 import { useResolveLoop } from "@/lib/resolveLoop"
 import { useProject } from "@/lib/store"
+import { listenHere as listen } from "@/lib/window"
 
 const log = createLogger("project")
 
@@ -154,7 +154,12 @@ export function useProjectWatcher(root: string): void {
         gitInfo(root)
           .then(setGit)
           .catch((e) => log.warn("git info failed", { error: safeError(e) }))
+        // A commit or push moves the ref an open diff compares against.
+        useProject.getState().bumpGit()
       }),
+      // A folder was made or removed on disk: no file came with it, so no
+      // `file-changed` re-lists the tree.
+      listen("tree-changed", bumpTreeSoon),
     ]
     return () => {
       if (treeTimer) clearTimeout(treeTimer)
